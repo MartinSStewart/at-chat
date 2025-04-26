@@ -19,7 +19,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import Hex
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -107,6 +107,8 @@ init =
                         }
                       )
                     ]
+            , members = SeqDict.fromList []
+            , owner = adminUserId
             }
     in
     ( { users =
@@ -147,6 +149,8 @@ init =
                                 }
                               )
                             ]
+                    , members = SeqDict.fromList []
+                    , owner = adminUserId
                     }
                   )
                 ]
@@ -614,6 +618,17 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
 
+sendMessage :
+    BackendModel
+    -> Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Id GuildId
+    -> Id ChannelId
+    -> NonemptyString
+    -> Id UserId
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
 sendMessage model time clientId changeId guildId channelId text userId user =
     case SeqDict.get guildId model.guilds of
         Just guild ->

@@ -26,7 +26,7 @@ import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
@@ -45,6 +45,8 @@ type alias Guild =
     , name : GuildName
     , icon : Maybe Image
     , channels : SeqDict (Id ChannelId) Channel
+    , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+    , owner : Id UserId
     }
 
 

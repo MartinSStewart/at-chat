@@ -1,4 +1,4 @@
-module GuildIcon exposing (size, view)
+module GuildIcon exposing (view)
 
 import GuildName
 import Image
@@ -6,11 +6,10 @@ import LocalState exposing (Guild)
 import MyUi
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Shadow
 
 
-view : Bool -> Guild -> Element msg
-view isSelected portfolio =
+view : Bool -> Int -> Guild -> Element msg
+view isSelected size portfolio =
     case portfolio.icon of
         Just icon ->
             Ui.image
@@ -38,7 +37,7 @@ view isSelected portfolio =
                 |> Ui.el
                     [ Ui.contentCenterX
                     , Ui.contentCenterY
-                    , Ui.rounded 8
+                    , Ui.rounded (round (toFloat size * 8 / 50))
                     , MyUi.montserrat
                     , Ui.Font.weight 600
                     , Ui.height Ui.fill
@@ -48,9 +47,5 @@ view isSelected portfolio =
                     , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
                     , Ui.Font.size 18
+                    , Ui.Font.color (Ui.rgb 20 20 20)
                     ]
-
-
-size : number
-size =
-    50

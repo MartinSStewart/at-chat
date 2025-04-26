@@ -1186,7 +1186,7 @@ guildColumn selectedGuild _ local =
                 Ui.el
                     [ Ui.Input.button (PressedGuildIcon guildId)
                     ]
-                    (GuildIcon.view (selectedGuild == Just guildId) guild)
+                    (GuildIcon.view (selectedGuild == Just guildId) 50 guild)
             )
             (SeqDict.toList local.guilds)
         )
@@ -1330,14 +1330,17 @@ channelColumn guildId guild =
         , Ui.widthMin 200
         , Ui.widthMax 300
         ]
-        [ Ui.el
+        [ Ui.row
             [ Ui.Font.bold
-            , Ui.paddingXY 8 16
+            , Ui.paddingXY 4 4
+            , Ui.spacing 8
             , Ui.Font.color font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor border1
             ]
-            (Ui.text (GuildName.toString guild.name))
+            [ GuildIcon.view False 40 guild
+            , Ui.text (GuildName.toString guild.name)
+            ]
         , Ui.column
             [ Ui.paddingXY 0 8, Ui.scrollable ]
             (List.map
@@ -1352,6 +1355,21 @@ channelColumn guildId guild =
                 (SeqDict.toList guild.channels)
             )
         ]
+
+
+
+--
+--memberlistView : LocalState -> Guild -> Element FrontendMsg
+--memberlistView local guild =
+--    Ui.column
+--        [ Ui.height Ui.fill ]
+--        (List.map
+--            (\( userId, _ ) ->
+--
+--                Ui.text (PersonName.toString local.guilds)
+--            )
+--            (SeqDict.toList guild.members)
+--        )
 
 
 font1 : Ui.Color
