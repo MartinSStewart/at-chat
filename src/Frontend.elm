@@ -365,10 +365,7 @@ routeRequest model =
                         )
                         model
 
-        GuildRoute _ ->
-            ( model, Command.none )
-
-        ChannelRoute _ _ ->
+        GuildRoute _ _ ->
             ( model, Command.none )
 
 
@@ -384,10 +381,7 @@ routeRequiresLogin route =
         UserOverviewRoute _ ->
             True
 
-        GuildRoute _ ->
-            True
-
-        ChannelRoute _ _ ->
+        GuildRoute _ _ ->
             True
 
 
@@ -547,12 +541,12 @@ updateLoaded msg model =
 
         PressedGuildIcon guildId ->
             ( model
-            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId))
+            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId Nothing))
             )
 
         PressedChannelName guildId channelId ->
             ( model
-            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (ChannelRoute guildId channelId))
+            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId (Just channelId)))
             )
 
         TypedMessage guildId channelId text ->
@@ -789,10 +783,7 @@ updateLoadedFromBackend msg model =
                             UserOverviewRoute _ ->
                                 Command.none
 
-                            GuildRoute _ ->
-                                Command.none
-
-                            ChannelRoute _ _ ->
+                            GuildRoute _ _ ->
                                 Command.none
                         ]
                     )
@@ -1045,7 +1036,7 @@ layout model attributes child =
 
 view : FrontendModel -> Browser.Document FrontendMsg
 view model =
-    { title = Env.companyName
+    { title = "AtChat"
     , body =
         [ case model of
             Loading loading ->
@@ -1172,18 +1163,14 @@ view model =
                                     |> Ui.map UserOverviewMsg
                             )
 
-                    GuildRoute guildId ->
-                        requiresLogin (guildView guildId)
-
-                    ChannelRoute guildId channelId ->
-                        requiresLogin
-                            (channelView guildId channelId)
+                    GuildRoute guildId maybeChannelId ->
+                        requiresLogin (guildView guildId maybeChannelId)
         ]
     }
 
 
-guildColumn : LoggedIn2 -> LocalState -> Element FrontendMsg
-guildColumn _ local =
+guildColumn : Maybe (Id GuildId) -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildColumn selectedGuild _ local =
     Ui.column
         [ Ui.spacing 4
         , Ui.padding 6
@@ -1192,13 +1179,14 @@ guildColumn _ local =
         , Ui.background background1
         , Ui.borderColor border1
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
+        , Ui.scrollable
         ]
         (List.map
             (\( guildId, guild ) ->
                 Ui.el
                     [ Ui.Input.button (PressedGuildIcon guildId)
                     ]
-                    (GuildIcon.view guild)
+                    (GuildIcon.view (selectedGuild == Just guildId) guild)
             )
             (SeqDict.toList local.guilds)
         )
@@ -1209,33 +1197,19 @@ homePageLoggedInView loggedIn local =
     Ui.row
         [ Ui.height Ui.fill
         ]
-        [ guildColumn loggedIn local
+        [ guildColumn Nothing loggedIn local
         ]
 
 
-guildView : Id GuildId -> LoggedIn2 -> LocalState -> Element FrontendMsg
-guildView guildId loggedIn local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
-            Ui.row
-                [ Ui.height Ui.fill ]
-                [ guildColumn loggedIn local
-                , channelColumn guildId guild
-                ]
-
-        Nothing ->
-            homePageLoggedInView loggedIn local
-
-
-channelView : Id GuildId -> Id ChannelId -> LoggedIn2 -> LocalState -> Element FrontendMsg
-channelView guildId channelId loggedIn local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
+guildView : Id GuildId -> Maybe (Id ChannelId) -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildView guildId maybeChannelId loggedIn local =
+    case ( SeqDict.get guildId local.guilds, maybeChannelId ) of
+        ( Just guild, Just channelId ) ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     Ui.row
                         [ Ui.height Ui.fill ]
-                        [ guildColumn loggedIn local
+                        [ guildColumn (Just guildId) loggedIn local
                         , channelColumn guildId guild
                         , conversationView guildId channelId loggedIn local channel
                         ]
@@ -1243,8 +1217,15 @@ channelView guildId channelId loggedIn local =
                 Nothing ->
                     Ui.text "Channel does not exist"
 
-        Nothing ->
-            guildView guildId loggedIn local
+        ( Just guild, Nothing ) ->
+            Ui.row
+                [ Ui.height Ui.fill ]
+                [ guildColumn (Just guildId) loggedIn local
+                , channelColumn guildId guild
+                ]
+
+        ( Nothing, _ ) ->
+            homePageLoggedInView loggedIn local
 
 
 conversationView :
@@ -1268,7 +1249,7 @@ conversationView guildId channelId loggedIn local channel =
     Ui.column
         [ Ui.height Ui.fill, Ui.background background3 ]
         [ Ui.column
-            [ Ui.height Ui.fill, Ui.paddingXY 8 16 ]
+            [ Ui.height Ui.fill, Ui.paddingXY 8 16, Ui.scrollable ]
             (List.map
                 (messageView local)
                 (Array.toList channel.messages)
@@ -1329,14 +1310,14 @@ messageView local message =
             [ Ui.Font.bold ]
             (case LocalState.getUser message.createdBy local of
                 Just user ->
-                    Ui.text (PersonName.toString user.name ++ " ")
+                    Ui.text (PersonName.toString user.name)
 
                 Nothing ->
                     Ui.text "<missing> "
             )
         , Ui.el
             [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
-            (Ui.text (String.Nonempty.toString message.content))
+            (Ui.text ("  " ++ String.Nonempty.toString message.content))
         ]
 
 
@@ -1358,7 +1339,7 @@ channelColumn guildId guild =
             ]
             (Ui.text (GuildName.toString guild.name))
         , Ui.column
-            [ Ui.paddingXY 0 8 ]
+            [ Ui.paddingXY 0 8, Ui.scrollable ]
             (List.map
                 (\( channelId, channel ) ->
                     Ui.el

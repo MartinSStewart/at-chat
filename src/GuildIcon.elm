@@ -6,10 +6,11 @@ import LocalState exposing (Guild)
 import MyUi
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Shadow
 
 
-view : Guild -> Element msg
-view portfolio =
+view : Bool -> Guild -> Element msg
+view isSelected portfolio =
     case portfolio.icon of
         Just icon ->
             Ui.image
@@ -46,6 +47,7 @@ view portfolio =
                     , Ui.borderColor MyUi.secondaryGrayBorder
                     , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
+                    , Ui.Font.size 18
                     ]
 
 

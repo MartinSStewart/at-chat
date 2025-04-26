@@ -449,68 +449,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
-                            case SeqDict.get guildId model.guilds of
-                                Just guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
-                                            ( { model
-                                                | guilds =
-                                                    SeqDict.insert
-                                                        guildId
-                                                        { guild
-                                                            | channels =
-                                                                SeqDict.insert
-                                                                    channelId
-                                                                    (LocalState.createMessage
-                                                                        time
-                                                                        userId
-                                                                        text
-                                                                        channel
-                                                                    )
-                                                                    guild.channels
-                                                        }
-                                                        model.guilds
-                                              }
-                                            , Command.batch
-                                                [ LocalChangeResponse
-                                                    changeId
-                                                    (SendMessage time guildId channelId text)
-                                                    |> Lamdera.sendToFrontend clientId
-                                                , List.filterMap
-                                                    (\( otherUserId, _ ) ->
-                                                        if otherUserId == userId then
-                                                            Nothing
-
-                                                        else
-                                                            Server_SendMessage
-                                                                userId
-                                                                time
-                                                                guildId
-                                                                channelId
-                                                                text
-                                                                |> ServerChange
-                                                                |> ChangeBroadcast
-                                                                |> Lamdera.sendToFrontend clientId
-                                                                |> Just
-                                                    )
-                                                    (NonemptyDict.toList model.users)
-                                                    |> Command.batch
-                                                ]
-                                            )
-
-                                        Nothing ->
-                                            ( model2
-                                            , LocalChangeResponse changeId InvalidChange
-                                                |> Lamdera.sendToFrontend clientId
-                                            )
-
-                                Nothing ->
-                                    ( model2
-                                    , LocalChangeResponse changeId InvalidChange
-                                        |> Lamdera.sendToFrontend clientId
-                                    )
-                        )
+                        (sendMessage model2 time clientId changeId guildId channelId text)
 
         UserOverviewToBackend toBackend2 ->
             asUser
@@ -672,6 +611,62 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                 , broadcastToOtherAdmins clientId model2 (LocalChange userId localMsg)
                 ]
+            )
+
+
+sendMessage model time clientId changeId guildId channelId text userId user =
+    case SeqDict.get guildId model.guilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    ( { model
+                        | guilds =
+                            SeqDict.insert
+                                guildId
+                                { guild
+                                    | channels =
+                                        SeqDict.insert
+                                            channelId
+                                            (LocalState.createMessage time userId text channel)
+                                            guild.channels
+                                }
+                                model.guilds
+                      }
+                    , Command.batch
+                        [ LocalChangeResponse changeId (SendMessage time guildId channelId text)
+                            |> Lamdera.sendToFrontend clientId
+                        , List.concatMap
+                            (\( _, otherClientIds ) ->
+                                NonemptyDict.keys otherClientIds
+                                    |> List.Nonempty.toList
+                                    |> List.filterMap
+                                        (\otherClientId ->
+                                            if clientId == otherClientId then
+                                                Nothing
+
+                                            else
+                                                Server_SendMessage userId time guildId channelId text
+                                                    |> ServerChange
+                                                    |> ChangeBroadcast
+                                                    |> Lamdera.sendToFrontend otherClientId
+                                                    |> Just
+                                        )
+                            )
+                            (SeqDict.toList model.connections)
+                            |> Command.batch
+                        ]
+                    )
+
+                Nothing ->
+                    ( model
+                    , LocalChangeResponse changeId InvalidChange
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
+        Nothing ->
+            ( model
+            , LocalChangeResponse changeId InvalidChange
+                |> Lamdera.sendToFrontend clientId
             )
 
 

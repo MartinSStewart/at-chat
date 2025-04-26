@@ -18,8 +18,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | UserOverviewRoute UserOverviewRouteData
-    | GuildRoute (Id GuildId)
-    | ChannelRoute (Id GuildId) (Id ChannelId)
+    | GuildRoute (Id GuildId) (Maybe (Id ChannelId))
 
 
 type UserOverviewRouteData
@@ -53,10 +52,10 @@ decode url =
             UserOverviewRoute (SpecificUserRoute (Id.fromString userId)) |> Just
 
         [ "channels", guildId ] ->
-            GuildRoute (Id.fromString guildId) |> Just
+            GuildRoute (Id.fromString guildId) Nothing |> Just
 
         [ "channels", guildId, channelId ] ->
-            ChannelRoute (Id.fromString guildId) (Id.fromString channelId) |> Just
+            GuildRoute (Id.fromString guildId) (Just (Id.fromString channelId)) |> Just
 
         [] ->
             Just HomePageRoute
@@ -95,11 +94,17 @@ encode route =
                     , []
                     )
 
-                GuildRoute guildId ->
-                    ( [ "channels", Id.toString guildId ], [] )
+                GuildRoute guildId maybeChannelId ->
+                    ( [ "channels", Id.toString guildId ]
+                        ++ (case maybeChannelId of
+                                Just channelId ->
+                                    [ Id.toString channelId ]
 
-                ChannelRoute guildId channelId ->
-                    ( [ "channels", Id.toString guildId, Id.toString channelId ], [] )
+                                Nothing ->
+                                    []
+                           )
+                    , []
+                    )
     in
     Url.Builder.absolute path query
 
