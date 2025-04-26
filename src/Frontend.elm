@@ -37,6 +37,8 @@ import PersonName
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
+import Svg
+import Svg.Attributes
 import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -239,6 +241,7 @@ loadedInitHelper time loginData loading =
                     |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
+            , channelNameHover = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -627,6 +630,29 @@ updateLoaded msg model =
                               }
                             , Command.none
                             )
+                )
+                model
+
+        MouseEnteredChannelName guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | channelNameHover = Just ( guildId, channelId ) }, Command.none )
+                )
+                model
+
+        MouseExitedChannelName guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | channelNameHover =
+                            if loggedIn.channelNameHover == Just ( guildId, channelId ) then
+                                Nothing
+
+                            else
+                                loggedIn.channelNameHover
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -1271,7 +1297,7 @@ guildView guildId channelRoute loggedIn local =
             Ui.row
                 [ Ui.height Ui.fill, Ui.background background3 ]
                 [ guildColumn (Just guildId) loggedIn local
-                , channelColumn local guildId guild channelRoute
+                , channelColumn local guildId guild channelRoute loggedIn.channelNameHover
                 , case channelRoute of
                     ChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
@@ -1288,6 +1314,14 @@ guildView guildId channelRoute loggedIn local =
 
                     NoChannelRoute ->
                         Ui.none
+
+                    EditChannelRoute channelId ->
+                        case SeqDict.get channelId guild.channels of
+                            Just channel ->
+                                editChannelFormView guildId channelId channel
+
+                            Nothing ->
+                                Ui.text "Channel does not exist"
                 , memberColumn local guild
                 ]
 
@@ -1388,8 +1422,14 @@ messageView local message =
         ]
 
 
-channelColumn : LocalState -> Id GuildId -> Guild -> ChannelRoute -> Element FrontendMsg
-channelColumn local guildId guild channelRoute =
+channelColumn :
+    LocalState
+    -> Id GuildId
+    -> Guild
+    -> ChannelRoute
+    -> Maybe ( Id GuildId, Id ChannelId )
+    -> Element FrontendMsg
+channelColumn local guildId guild channelRoute channelNameHover =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background background2
@@ -1415,18 +1455,51 @@ channelColumn local guildId guild channelRoute =
                     let
                         isSelected =
                             channelRoute == ChannelRoute channelId
+
+                        isHover =
+                            channelNameHover == Just ( guildId, channelId )
                     in
-                    Ui.el
-                        [ Ui.paddingXY 8 8
-                        , if isSelected then
+                    Ui.row
+                        [ if isSelected then
                             Ui.Font.color font1
 
                           else
                             Ui.Font.color font2
-                        , Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId)))
                         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                        , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId)
+                        , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
                         ]
-                        (Ui.text ("# " ++ ChannelName.toString channel.name))
+                        [ Ui.el
+                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId)))
+                            , Ui.paddingWith
+                                { left = 8
+                                , right =
+                                    if isHover then
+                                        0
+
+                                    else
+                                        8
+                                , top = 8
+                                , bottom = 8
+                                }
+                            ]
+                            (Ui.text ("# " ++ ChannelName.toString channel.name))
+                        , if isHover then
+                            Ui.el
+                                [ Ui.alignRight
+                                , Ui.width (Ui.px 26)
+                                , Ui.contentCenterY
+                                , Ui.height Ui.fill
+                                , Ui.paddingXY 4 0
+                                , Ui.Font.color font3
+                                , Ui.Input.button
+                                    (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
+                                ]
+                                (Ui.html gearIcon)
+
+                          else
+                            Ui.none
+                        ]
                 )
                 (SeqDict.toList guild.channels)
                 ++ [ if local.userId == guild.owner then
@@ -1451,6 +1524,29 @@ channelColumn local guildId guild channelRoute =
                         Ui.none
                    ]
             )
+        ]
+
+
+gearIcon : Html msg
+gearIcon =
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+            ]
+            []
+        , Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+            ]
+            []
         ]
 
 
@@ -1498,6 +1594,15 @@ memberLabel local userId =
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
     { name = " ", pressedSubmit = False }
+
+
+editChannelFormView : Id GuildId -> Id ChannelId -> Channel -> Element FrontendMsg
+editChannelFormView guildId channelId channel =
+    Ui.column
+        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
+        , Ui.text ""
+        ]
 
 
 newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg

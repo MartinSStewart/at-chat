@@ -27,6 +27,7 @@ type ChannelRoute
     = ChannelRoute (Id ChannelId)
     | NewChannelRoute
     | NoChannelRoute
+    | EditChannelRoute (Id ChannelId)
 
 
 type UserOverviewRouteData
@@ -68,29 +69,31 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
-        [ "g", guildId ] ->
+        "g" :: guildId :: rest ->
             case Id.fromString guildId of
                 Just guildId2 ->
-                    GuildRoute guildId2 NoChannelRoute
+                    case rest of
+                        [ "c", channelId ] ->
+                            case Id.fromString channelId of
+                                Just channelId2 ->
+                                    GuildRoute guildId2 (ChannelRoute channelId2)
 
-                Nothing ->
-                    HomePageRoute
+                                Nothing ->
+                                    GuildRoute guildId2 NoChannelRoute
 
-        [ "g", guildId, "c", channelId ] ->
-            case ( Id.fromString guildId, Id.fromString channelId ) of
-                ( Just guildId2, Just channelId2 ) ->
-                    GuildRoute guildId2 (ChannelRoute channelId2)
+                        [ "c", channelId, "edit" ] ->
+                            case Id.fromString channelId of
+                                Just channelId2 ->
+                                    GuildRoute guildId2 (EditChannelRoute channelId2)
 
-                ( Just guildId2, Nothing ) ->
-                    GuildRoute guildId2 NoChannelRoute
+                                Nothing ->
+                                    GuildRoute guildId2 NoChannelRoute
 
-                ( Nothing, _ ) ->
-                    HomePageRoute
+                        [ "new" ] ->
+                            GuildRoute guildId2 NewChannelRoute
 
-        [ "g", guildId, "new" ] ->
-            case Id.fromString guildId of
-                Just guildId2 ->
-                    GuildRoute guildId2 NewChannelRoute
+                        _ ->
+                            GuildRoute guildId2 NoChannelRoute
 
                 Nothing ->
                     HomePageRoute
@@ -134,6 +137,9 @@ encode route =
                         ++ (case maybeChannelId of
                                 ChannelRoute channelId ->
                                     [ "c", Id.toString channelId ]
+
+                                EditChannelRoute channelId ->
+                                    [ "c", Id.toString channelId, "edit" ]
 
                                 NoChannelRoute ->
                                     []

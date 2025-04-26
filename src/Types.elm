@@ -89,6 +89,7 @@ type alias LoggedIn2 =
     , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
+    , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     }
 
 
@@ -145,6 +146,8 @@ type FrontendMsg
     | PressedSendMessage (Id GuildId) (Id ChannelId) NonemptyString
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
+    | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
+    | MouseExitedChannelName (Id GuildId) (Id ChannelId)
 
 
 type alias NewChannelForm =
