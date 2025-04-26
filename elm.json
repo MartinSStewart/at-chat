@@ -1,0 +1,69 @@
+{
+    "type": "application",
+    "source-directories": [
+        "src",
+        "end-to-end-tests",
+        "vendored/mdgriffith/elm-ui/2.0.0/src",
+        "vendored/mdgriffith/elm-animator/2.0.0/src",
+        "vendored/MartinSStewart/elm-email/1.0.0/src"
+    ],
+    "elm-version": "0.19.1",
+    "dependencies": {
+        "direct": {
+            "MartinSStewart/elm-nonempty-string": "2.0.0",
+            "avh4/elm-color": "1.0.0",
+            "bburdette/toop": "1.2.0",
+            "billstclair/elm-sha256": "1.0.9",
+            "choonkeat/elm-totp": "1.1.1",
+            "elm/browser": "1.0.2",
+            "elm/bytes": "1.0.8",
+            "elm/core": "1.0.5",
+            "elm/html": "1.0.0",
+            "elm/http": "2.0.0",
+            "elm/json": "1.1.3",
+            "elm/parser": "1.1.0",
+            "elm/time": "1.0.0",
+            "elm/url": "1.0.0",
+            "elm/virtual-dom": "1.0.3",
+            "elm-explorations/test": "2.1.1",
+            "elmcraft/core-extra": "2.0.0",
+            "ianmackenzie/elm-units": "2.10.0",
+            "lamdera/codecs": "1.0.0",
+            "lamdera/containers": "1.0.0",
+            "lamdera/core": "1.0.0",
+            "lamdera/program-test": "3.0.0",
+            "mdgriffith/elm-bezier": "1.0.0",
+            "mgold/elm-nonempty-list": "4.2.0",
+            "mpizenberg/elm-pointer-events": "5.0.0",
+            "myrho/elm-round": "1.0.5",
+            "pablohirafuji/elm-qrcode": "4.0.2",
+            "phosphor-icons/phosphor-elm": "2.1.0",
+            "rtfeldman/elm-hex": "1.0.0"
+        },
+        "indirect": {
+            "TSFoster/elm-bytes-extra": "1.3.0",
+            "TSFoster/elm-sha1": "2.1.1",
+            "danfishgold/base64-bytes": "1.1.0",
+            "elm/file": "1.0.5",
+            "elm/random": "1.0.0",
+            "elm/regex": "1.0.0",
+            "elm/svg": "1.0.1",
+            "elm-community/list-extra": "8.7.0",
+            "elm-community/result-extra": "2.4.0",
+            "elm-community/string-extra": "4.0.1",
+            "elm-explorations/linear-algebra": "1.0.3",
+            "elm-explorations/webgl": "1.1.3",
+            "folkertdev/elm-flate": "2.0.5",
+            "folkertdev/elm-sha2": "1.0.0",
+            "justgook/elm-image": "5.0.0",
+            "ktonon/elm-crypto": "1.1.2",
+            "ktonon/elm-word": "2.1.2",
+            "rlopzc/elm-hmac-sha1": "1.0.0",
+            "waratuman/elm-coder": "3.0.1"
+        }
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}

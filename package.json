@@ -1,0 +1,23 @@
+{
+  "scripts": {
+    "tests": "elm-test-rs --compiler $(which lamdera) && npx elm-review --fix-all",
+    "check": "lamdera check && elm-test-rs --compiler $(which lamdera) && npx elm-review --fix-all",
+    "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
+    "end-to-end-tests": "lamdera make end-to-end-tests/EndToEndTestsRunner.elm --output end-to-end-tests/EndToEndTestsRunnerElm.js && cd end-to-end-tests && node EndToEndTestsRunner.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "elm-codegen": "^0.5.3",
+    "elm-format": "^0.8.7",
+    "elm-open-api": "^0.7.0",
+    "elm-pages": "^3.0.16",
+    "elm-review": "^2.12.0",
+    "elm-test-rs": "^3.0.0-5",
+    "elm-watch": "^2.0.0-beta.3",
+    "lamdera": "^0.19.1-1.3.2"
+  },
+  "resolutions": {
+    "**/wrap-ansi": "^7.0.0"
+  },
+  "license": "UNLICENSED"
+}

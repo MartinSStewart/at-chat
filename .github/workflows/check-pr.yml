@@ -1,0 +1,117 @@
+name: Check code
+
+on:
+  pull_request:
+jobs:
+  Review:
+    name: Check code with elm-format and elm-review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # Re-use node_modules between runs until yarn.lock changes.
+      - name: Cache node_modules
+        id: cache-node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ hashFiles('yarn.lock') }}
+
+      # Re-use ~/.elm between runs until elm.json, elm-tooling.json or
+      # review/elm.json changes. The Elm compiler saves downloaded Elm packages
+      # to ~/.elm, and elm-tooling saves downloaded tool executables there.
+      - name: Cache ~/.elm
+        id: cache-elm
+        uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: elm-${{ hashFiles('elm.json', 'review/elm.json') }}
+
+      - name: install yarn
+        run: npm install -g yarn
+
+      # Install npm packages, unless we restored them from cache.
+      - name: yarn
+        if: steps.cache-node_modules.outputs.cache-hit != 'true'
+        run: yarn --frozen-lockfile
+
+      - name: Fetch lamdera-1.3.2
+        run: |
+          curl https://static.lamdera.com/bin/lamdera-1.3.2-linux-x86_64 > node_modules/.bin/lamdera
+          chmod +x node_modules/.bin/lamdera
+
+      # Build, to fetch elm packages, unless we restored them from cache.
+      - name: Build project
+        if: steps.cache-elm.outputs.cache-hit != 'true'
+        run: yarn lamdera make src/LamderaRPC.elm
+
+      - name: Add elm-review, elm and elm-format to path
+        run: yarn bin >> $GITHUB_PATH
+
+      - uses: sparksp/elm-format-action@v1
+
+      - name: Elm-review check
+        run: yarn elm-review --compiler node_modules/.bin/lamdera
+  Test:
+    name: Compile the code and run tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # Re-use node_modules between runs until yarn.lock changes.
+      - name: Cache node_modules
+        id: cache-node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ hashFiles('yarn.lock') }}
+
+      # Re-use ~/.elm between runs until elm.json, elm-tooling.json or
+      # review/elm.json changes. The Elm compiler saves downloaded Elm packages
+      # to ~/.elm, and elm-tooling saves downloaded tool executables there.
+      - name: Cache ~/.elm
+        uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: elm-${{ hashFiles('elm.json', 'review/elm.json') }}
+
+      - name: install yarn
+        run: npm install -g yarn
+
+      # Install npm packages, unless we restored them from cache.
+      - name: yarn
+        if: steps.cache-node_modules.outputs.cache-hit != 'true'
+        run: yarn --frozen-lockfile
+
+      - name: Fetch lamdera-1.3.2
+        run: |
+          curl https://static.lamdera.com/bin/lamdera-1.3.2-linux-x86_64 > node_modules/.bin/lamdera
+          chmod +x node_modules/.bin/lamdera
+
+      - name: Build project
+        id: build
+        run: |
+          yarn lamdera make src/Frontend.elm src/Backend.elm src/LamderaRPC.elm | tee lamdera.log
+          echo "time=$(grep "Done in" < lamdera.log | grep -o '[0-9.]*s')" >> $GITHUB_OUTPUT
+
+      - name: Tests (elm-test)
+        run: yarn elm-test-rs --compiler node_modules/.bin/lamdera
+
+      - name: Tests (end-to-end)
+        run: yarn end-to-end-tests
+
+      - name: Report compile time
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          comment_tag: execution
+          mode: recreate
+          message: |
+            The compile time was ${{ steps.build.outputs.time }}

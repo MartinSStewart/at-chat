@@ -1,0 +1,876 @@
+module Backend exposing
+    ( adminUser
+    , app
+    , app_
+    , emailToNotifyWhenErrorsAreLogged
+    , loginEmailContent
+    , loginEmailSubject
+    )
+
+import Array
+import Duration
+import Effect.Command as Command exposing (BackendOnly, Command)
+import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Subscription as Subscription exposing (Subscription)
+import Effect.Task as Task
+import Effect.Time as Time
+import Email.Html
+import Email.Html.Attributes
+import EmailAddress exposing (EmailAddress)
+import Env
+import Hex
+import Id exposing (Id, UserId)
+import Lamdera as LamderaCore
+import List.Extra
+import List.Nonempty exposing (Nonempty(..))
+import Local exposing (ChangeId)
+import LocalState
+import Log exposing (Log)
+import LoginForm
+import NonemptyDict
+import Pages.Admin exposing (InitAdminData)
+import Pages.UserOverview
+import Pagination
+import Postmark
+import Quantity
+import SeqDict
+import SeqSet
+import Sha256
+import String.Nonempty exposing (NonemptyString(..))
+import TOTP.Key
+import TwoFactorAuthentication
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
+import Unsafe
+import User exposing (BackendUser)
+
+
+app :
+    { init : ( BackendModel, Cmd BackendMsg )
+    , update : BackendMsg -> BackendModel -> ( BackendModel, Cmd BackendMsg )
+    , updateFromFrontend : String -> String -> ToBackend -> BackendModel -> ( BackendModel, Cmd BackendMsg )
+    , subscriptions : BackendModel -> Sub BackendMsg
+    }
+app =
+    Lamdera.backend LamderaCore.broadcast LamderaCore.sendToFrontend app_
+
+
+app_ :
+    { init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+    , update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+    , updateFromFrontend : SessionId -> ClientId -> ToBackend -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+    , subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
+    }
+app_ =
+    { init = init
+    , update = update
+    , updateFromFrontend = updateFromFrontend
+    , subscriptions = subscriptions
+    }
+
+
+adminUserId : Id UserId
+adminUserId =
+    Id.fromString "userId0"
+
+
+adminUser : BackendUser
+adminUser =
+    LocalState.createNewUser
+        (Time.millisToPosix 0)
+        (Unsafe.personName "Sven Svensson")
+        (Unsafe.emailAddress "sven@email.com")
+        True
+
+
+init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+init =
+    ( { users =
+            Nonempty ( adminUserId, adminUser ) []
+                |> NonemptyDict.fromNonemptyList
+      , sessions = SeqDict.empty
+      , connections = SeqDict.empty
+      , secretCounter = 0
+      , pendingLogins = SeqDict.empty
+      , logs = Array.empty
+      , emailNotificationsEnabled = True
+      , lastErrorLogEmail = Time.millisToPosix -10000000000
+      , twoFactorAuthentication = SeqDict.empty
+      , twoFactorAuthenticationSetup = SeqDict.empty
+      }
+    , Command.none
+    )
+
+
+adminData : BackendModel -> Int -> InitAdminData
+adminData model lastLogPageViewed =
+    { lastLogPageViewed = lastLogPageViewed
+    , users = model.users
+    , emailNotificationsEnabled = model.emailNotificationsEnabled
+    , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
+    }
+
+
+subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
+subscriptions _ =
+    Subscription.batch
+        [ Lamdera.onConnect Connected
+        , Lamdera.onDisconnect Disconnected
+        ]
+
+
+update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+update msg model =
+    case msg of
+        Connected sessionId clientId ->
+            ( { model
+                | connections =
+                    SeqDict.update
+                        sessionId
+                        (\maybeValue ->
+                            case maybeValue of
+                                Just value ->
+                                    NonemptyDict.insert clientId NoRequestsMade value |> Just
+
+                                Nothing ->
+                                    NonemptyDict.singleton clientId NoRequestsMade |> Just
+                        )
+                        model.connections
+              }
+            , Command.none
+            )
+
+        Disconnected sessionId clientId ->
+            ( { model
+                | connections =
+                    SeqDict.update
+                        sessionId
+                        (Maybe.andThen
+                            (\value ->
+                                NonemptyDict.toSeqDict value
+                                    |> SeqDict.remove clientId
+                                    |> NonemptyDict.fromSeqDict
+                            )
+                        )
+                        model.connections
+              }
+            , Command.none
+            )
+
+        BackendGotTime sessionId clientId toBackend time ->
+            updateFromFrontendWithTime time sessionId clientId toBackend model
+
+        SentLoginEmail time emailAddress result ->
+            addLog time (Log.LoginEmail result emailAddress) model
+
+        SentLogErrorEmail time email result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.SendLogErrorEmailFailed error email) model
+
+
+updateFromFrontend :
+    SessionId
+    -> ClientId
+    -> ToBackend
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+updateFromFrontend sessionId clientId msg model =
+    ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
+
+
+getLoginData : Id UserId -> BackendUser -> BackendModel -> LoginData
+getLoginData userId user model =
+    { userId = userId
+    , adminData =
+        if user.isAdmin then
+            IsAdminLoginData (adminData model user.lastLogPageViewed)
+
+        else
+            IsNotAdminLoginData
+                { user = user
+                , otherUsers =
+                    NonemptyDict.toList model.users
+                        |> List.filterMap
+                            (\( otherUserId, otherUser ) ->
+                                if otherUserId == userId then
+                                    Nothing
+
+                                else
+                                    Just ( otherUserId, User.backendToFrontendForUser otherUser )
+                            )
+                        |> SeqDict.fromList
+                }
+    , twoFactorAuthenticationEnabled =
+        SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
+    }
+
+
+updateFromFrontendWithTime :
+    Time.Posix
+    -> SessionId
+    -> ClientId
+    -> ToBackend
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+updateFromFrontendWithTime time sessionId clientId msg model =
+    let
+        model2 : BackendModel
+        model2 =
+            { model
+                | connections =
+                    SeqDict.updateIfExists
+                        sessionId
+                        (NonemptyDict.updateIfExists clientId (\_ -> LastRequest time))
+                        model.connections
+            }
+    in
+    case msg of
+        CheckLoginRequest ->
+            ( model2
+            , case getUserFromSessionId sessionId model2 of
+                Just ( userId, user ) ->
+                    getLoginData userId user model2
+                        |> Ok
+                        |> CheckLoginResponse
+                        |> Lamdera.sendToFrontend clientId
+
+                Nothing ->
+                    CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
+            )
+
+        LoginWithTokenRequest loginCode ->
+            loginWithToken time sessionId clientId loginCode model2
+
+        LoginWithTwoFactorRequest loginCode ->
+            case SeqDict.get sessionId model2.pendingLogins of
+                Just (WaitingForTwoFactorToken pendingLogin) ->
+                    if
+                        (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
+                            && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
+                    then
+                        case
+                            ( NonemptyDict.get pendingLogin.userId model2.users
+                            , SeqDict.get pendingLogin.userId model2.twoFactorAuthentication
+                            )
+                        of
+                            ( Just user, Just { secret } ) ->
+                                if TwoFactorAuthentication.isValidCode time loginCode secret then
+                                    ( { model2
+                                        | sessions = SeqDict.insert sessionId pendingLogin.userId model2.sessions
+                                        , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
+                                      }
+                                    , getLoginData pendingLogin.userId user model2
+                                        |> LoginSuccess
+                                        |> LoginWithTokenResponse
+                                        |> Lamdera.sendToFrontends sessionId
+                                    )
+
+                                else
+                                    ( { model2
+                                        | pendingLogins =
+                                            SeqDict.insert
+                                                sessionId
+                                                (WaitingForTwoFactorToken
+                                                    { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 }
+                                                )
+                                                model2.pendingLogins
+                                      }
+                                    , LoginTokenInvalid loginCode
+                                        |> LoginWithTokenResponse
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+
+                            _ ->
+                                ( model2
+                                , LoginTokenInvalid loginCode
+                                    |> LoginWithTokenResponse
+                                    |> Lamdera.sendToFrontend clientId
+                                )
+
+                    else
+                        ( model2
+                        , LoginTokenInvalid loginCode
+                            |> LoginWithTokenResponse
+                            |> Lamdera.sendToFrontend clientId
+                        )
+
+                _ ->
+                    ( model2
+                    , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
+                    )
+
+        GetLoginTokenRequest email ->
+            let
+                ( model3, result ) =
+                    getLoginCode time model2
+            in
+            case
+                ( NonemptyDict.toList model3.users |> List.Extra.find (\( _, user ) -> user.email == email)
+                , result
+                )
+            of
+                ( Just ( userId, user ), Ok loginCode ) ->
+                    if shouldRateLimit time user then
+                        let
+                            ( model4, cmd ) =
+                                addLog time (Log.LoginsRateLimited userId) model3
+                        in
+                        ( model4
+                        , Command.batch [ cmd, Lamdera.sendToFrontend clientId GetLoginTokenRateLimited ]
+                        )
+
+                    else
+                        ( { model3
+                            | pendingLogins =
+                                SeqDict.insert
+                                    sessionId
+                                    (WaitingForLoginToken
+                                        { creationTime = time
+                                        , userId = userId
+                                        , loginAttempts = 0
+                                        , loginCode = loginCode
+                                        }
+                                    )
+                                    model3.pendingLogins
+                            , users =
+                                NonemptyDict.insert
+                                    userId
+                                    { user | recentLoginEmails = time :: List.take 100 user.recentLoginEmails }
+                                    model3.users
+                          }
+                        , sendLoginEmail (SentLoginEmail time email) email loginCode
+                        )
+
+                ( Nothing, Ok _ ) ->
+                    ( model3, Command.none )
+
+                ( _, Err () ) ->
+                    ( model3, Command.none )
+
+        AdminToBackend adminToBackend ->
+            asAdmin
+                model2
+                sessionId
+                (\_ _ -> updateFromFrontendAdmin clientId adminToBackend model2)
+
+        LogOutRequest ->
+            ( { model2 | sessions = SeqDict.remove sessionId model2.sessions }
+            , Lamdera.sendToFrontends sessionId LoggedOutSession
+            )
+
+        LocalModelChangeRequest changeId localMsg ->
+            case localMsg of
+                InvalidChange ->
+                    ( model2, invalidChangeResponse changeId clientId )
+
+                AdminChange adminChange ->
+                    asAdmin
+                        model2
+                        sessionId
+                        (adminChangeUpdate clientId changeId adminChange model2 time)
+
+                UserOverviewChange userOverviewChange ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            case userOverviewChange of
+                                Pages.UserOverview.EmailNotificationsChange emailNotifications ->
+                                    ( { model2
+                                        | users =
+                                            NonemptyDict.insert
+                                                userId
+                                                { user | emailNotifications = emailNotifications }
+                                                model2.users
+                                      }
+                                    , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
+
+        UserOverviewToBackend toBackend2 ->
+            asUser
+                model2
+                sessionId
+                (\userId user ->
+                    userOverviewUpdateFromFrontend clientId time userId user toBackend2 model2
+                )
+
+
+userOverviewUpdateFromFrontend :
+    ClientId
+    -> Time.Posix
+    -> Id UserId
+    -> BackendUser
+    -> Pages.UserOverview.ToBackend
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+userOverviewUpdateFromFrontend clientId time userId user toBackend model =
+    case toBackend of
+        Pages.UserOverview.EnableTwoFactorAuthenticationRequest ->
+            let
+                ( model2, secret ) =
+                    getUniqueId time model
+            in
+            case TwoFactorAuthentication.getConfig (EmailAddress.toString user.email) secret of
+                Ok key ->
+                    ( { model2
+                        | twoFactorAuthenticationSetup =
+                            SeqDict.insert
+                                userId
+                                { startedAt = time, secret = secret }
+                                model2.twoFactorAuthenticationSetup
+                      }
+                    , Pages.UserOverview.EnableTwoFactorAuthenticationResponse
+                        { qrCodeUrl =
+                            TOTP.Key.toString key
+                                -- https://github.com/choonkeat/elm-totp/issues/3
+                                |> String.replace "%3D" ""
+                        }
+                        |> UserOverviewToFrontend
+                        |> Lamdera.sendToFrontend clientId
+                    )
+
+                Err _ ->
+                    ( model2, Command.none )
+
+        Pages.UserOverview.ConfirmTwoFactorAuthenticationRequest code ->
+            case SeqDict.get userId model.twoFactorAuthenticationSetup of
+                Just data ->
+                    if Duration.from data.startedAt time |> Quantity.lessThan Duration.hour then
+                        if TwoFactorAuthentication.isValidCode time code data.secret then
+                            ( { model
+                                | twoFactorAuthentication =
+                                    SeqDict.insert
+                                        userId
+                                        { finishedAt = time, secret = data.secret }
+                                        model.twoFactorAuthentication
+                                , twoFactorAuthenticationSetup =
+                                    SeqDict.remove userId model.twoFactorAuthenticationSetup
+                              }
+                            , Pages.UserOverview.ConfirmTwoFactorAuthenticationResponse code True
+                                |> UserOverviewToFrontend
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                        else
+                            ( model
+                            , Pages.UserOverview.ConfirmTwoFactorAuthenticationResponse code False
+                                |> UserOverviewToFrontend
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                    else
+                        ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+
+adminChangeUpdate :
+    ClientId
+    -> ChangeId
+    -> Pages.Admin.AdminChange
+    -> BackendModel
+    -> Time.Posix
+    -> Id UserId
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+adminChangeUpdate clientId changeId adminChange model time userId user =
+    let
+        localMsg =
+            AdminChange adminChange
+    in
+    case adminChange of
+        Pages.Admin.ChangeUsers changes ->
+            case Pages.Admin.applyChangesToBackendUsers userId changes model.users of
+                Ok newUsers ->
+                    let
+                        model2 : BackendModel
+                        model2 =
+                            Log.addLog time (Log.ChangedUsers userId) model
+                    in
+                    ( { model2
+                        | users = newUsers
+                        , sessions =
+                            SeqDict.filter
+                                (\_ sessionUserId -> SeqSet.member sessionUserId changes.deletedUsers |> not)
+                                model2.sessions
+                      }
+                    , Command.batch
+                        [ Pages.Admin.ChangeUsers { changes | time = time }
+                            |> AdminChange
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , broadcastToOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        ]
+                    )
+
+                Err _ ->
+                    ( model, invalidChangeResponse changeId clientId )
+
+        Pages.Admin.ExpandSection section ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedSections = SeqSet.insert section user.expandedSections }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.CollapseSection section ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedSections = SeqSet.remove section user.expandedSections }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.LogPageChanged logPageIndex ->
+            ( { model
+                | users = NonemptyDict.insert userId { user | lastLogPageViewed = logPageIndex } model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetEmailNotificationsEnabled isEnabled ->
+            let
+                model2 =
+                    { model | emailNotificationsEnabled = isEnabled }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , broadcastToOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+
+broadcastToOtherAdmins : ClientId -> BackendModel -> LocalMsg -> Command BackendOnly ToFrontend msg
+broadcastToOtherAdmins currentClientId model broadcastMsg =
+    List.concatMap
+        (\( sessionId, clientIds ) ->
+            case getUserFromSessionId sessionId model of
+                Just ( _, user ) ->
+                    if user.isAdmin then
+                        NonemptyDict.toList clientIds
+                            |> List.filterMap
+                                (\( clientId2, _ ) ->
+                                    if clientId2 == currentClientId then
+                                        Nothing
+
+                                    else
+                                        ChangeBroadcast broadcastMsg
+                                            |> Lamdera.sendToFrontend clientId2
+                                            |> Just
+                                )
+
+                    else
+                        []
+
+                Nothing ->
+                    []
+        )
+        (SeqDict.toList model.connections)
+        |> Command.batch
+
+
+invalidChangeResponse : ChangeId -> ClientId -> Command BackendOnly ToFrontend backendMsg
+invalidChangeResponse changeId clientId =
+    LocalChangeResponse changeId InvalidChange
+        |> Lamdera.sendToFrontend clientId
+
+
+shouldRateLimit : Time.Posix -> BackendUser -> Bool
+shouldRateLimit time user =
+    let
+        loginsInLast5Minutes : Int
+        loginsInLast5Minutes =
+            List.Extra.count
+                (\loginTime -> Duration.from loginTime time |> Quantity.lessThan (Duration.minutes 5))
+                user.recentLoginEmails
+
+        loginsInLast120Minutes : Int
+        loginsInLast120Minutes =
+            List.Extra.count
+                (\loginTime -> Duration.from loginTime time |> Quantity.lessThan (Duration.minutes 120))
+                user.recentLoginEmails
+    in
+    loginsInLast5Minutes > 5 || loginsInLast120Minutes > 10
+
+
+updateFromFrontendAdmin :
+    ClientId
+    -> Pages.Admin.ToBackend
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+updateFromFrontendAdmin clientId toBackend model =
+    case toBackend of
+        Pages.Admin.LogPaginationToBackend a ->
+            ( model
+            , Pagination.updateFromFrontend clientId a model.logs
+                |> Command.map
+                    (\toMsg -> Pages.Admin.LogPaginationToFrontend toMsg |> AdminToFrontend)
+                    identity
+            )
+
+
+asUser :
+    BackendModel
+    -> SessionId
+    -> (Id UserId -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asUser model sessionId func =
+    case SeqDict.get sessionId model.sessions of
+        Just userId ->
+            case NonemptyDict.get userId model.users of
+                Just user ->
+                    func userId user
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+asAdmin :
+    BackendModel
+    -> SessionId
+    -> (Id UserId -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asAdmin model sessionId func =
+    asUser
+        model
+        sessionId
+        (\userId user ->
+            if user.isAdmin then
+                func userId user
+
+            else
+                ( model, Command.none )
+        )
+
+
+getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Id b )
+getUniqueId time model =
+    ( { model | secretCounter = model.secretCounter + 1 }
+    , Env.secretKey
+        ++ ":"
+        ++ String.fromInt model.secretCounter
+        ++ ":"
+        ++ (if Env.isProduction then
+                String.fromInt (Time.posixToMillis time)
+
+            else
+                ""
+           )
+        |> Sha256.sha256
+        |> Id.fromString
+    )
+
+
+getLoginCode : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Result () Int )
+getLoginCode time model =
+    let
+        ( model2, id ) =
+            getUniqueId time model
+    in
+    ( model2
+    , case Id.toString id |> String.left LoginForm.loginCodeLength |> Hex.fromString of
+        Ok int ->
+            case String.fromInt int |> String.left LoginForm.loginCodeLength |> String.toInt of
+                Just int2 ->
+                    Ok int2
+
+                Nothing ->
+                    Err ()
+
+        Err _ ->
+            Err ()
+    )
+
+
+sendLoginEmail :
+    (Result Postmark.SendEmailError () -> backendMsg)
+    -> EmailAddress
+    -> Int
+    -> Command BackendOnly toFrontend backendMsg
+sendLoginEmail msg emailAddress loginCode =
+    let
+        _ =
+            Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
+    in
+    { from = { name = "", email = Env.noReplyEmailAddress }
+    , to = List.Nonempty.fromElement { name = "", email = emailAddress }
+    , subject = loginEmailSubject
+    , body =
+        Postmark.BodyBoth
+            (loginEmailContent loginCode)
+            ("Here is your code " ++ String.fromInt loginCode ++ "\n\nPlease type it in the login page you were previously on.\n\nIf you weren't expecting this email you can safely ignore it.")
+    , messageStream = "outbound"
+    }
+        |> Postmark.sendEmail msg Env.postmarkServerToken
+
+
+loginEmailContent : Int -> Email.Html.Html
+loginEmailContent loginCode =
+    Email.Html.div
+        [ Email.Html.Attributes.padding "8px" ]
+        [ Email.Html.div [] [ Email.Html.text "Here is your code." ]
+        , Email.Html.div
+            [ Email.Html.Attributes.fontSize "36px"
+            , Email.Html.Attributes.fontFamily "monospace"
+            ]
+            (String.fromInt loginCode
+                |> String.toList
+                |> List.map
+                    (\char ->
+                        Email.Html.span
+                            [ Email.Html.Attributes.padding "0px 3px 0px 4px" ]
+                            [ Email.Html.text (String.fromChar char) ]
+                    )
+                |> (\a ->
+                        List.take (LoginForm.loginCodeLength // 2) a
+                            ++ [ Email.Html.span
+                                    [ Email.Html.Attributes.backgroundColor "black"
+                                    , Email.Html.Attributes.padding "0px 4px 0px 5px"
+                                    , Email.Html.Attributes.style "vertical-align" "middle"
+                                    , Email.Html.Attributes.fontSize "2px"
+                                    ]
+                                    []
+                               ]
+                            ++ List.drop (LoginForm.loginCodeLength // 2) a
+                   )
+            )
+        , Email.Html.text "Please type it in the login page you were previously on."
+        , Email.Html.br [] []
+        , Email.Html.br [] []
+        , Email.Html.text "If you weren't expecting this email you can safely ignore it."
+        ]
+
+
+loginEmailSubject : NonemptyString
+loginEmailSubject =
+    NonemptyString 'L' "ogin code"
+
+
+loginWithToken :
+    Time.Posix
+    -> SessionId
+    -> ClientId
+    -> Int
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+loginWithToken time sessionId clientId loginCode model =
+    case SeqDict.get sessionId model.pendingLogins of
+        Just (WaitingForLoginToken pendingLogin) ->
+            if
+                (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
+                    && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
+            then
+                if loginCode == pendingLogin.loginCode then
+                    case
+                        ( NonemptyDict.get pendingLogin.userId model.users
+                        , SeqDict.get pendingLogin.userId model.twoFactorAuthentication
+                        )
+                    of
+                        ( Just _, Just _ ) ->
+                            ( { model
+                                | pendingLogins =
+                                    SeqDict.insert
+                                        sessionId
+                                        (WaitingForTwoFactorToken
+                                            { creationTime = pendingLogin.creationTime
+                                            , userId = pendingLogin.userId
+                                            , loginAttempts = 0
+                                            }
+                                        )
+                                        model.pendingLogins
+                              }
+                            , NeedsTwoFactorToken
+                                |> LoginWithTokenResponse
+                                |> Lamdera.sendToFrontends sessionId
+                            )
+
+                        ( Just user, Nothing ) ->
+                            ( { model
+                                | sessions = SeqDict.insert sessionId pendingLogin.userId model.sessions
+                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                              }
+                            , getLoginData pendingLogin.userId user model
+                                |> LoginSuccess
+                                |> LoginWithTokenResponse
+                                |> Lamdera.sendToFrontends sessionId
+                            )
+
+                        ( Nothing, _ ) ->
+                            ( model
+                            , LoginTokenInvalid loginCode
+                                |> LoginWithTokenResponse
+                                |> Lamdera.sendToFrontend clientId
+                            )
+
+                else
+                    ( { model
+                        | pendingLogins =
+                            SeqDict.insert
+                                sessionId
+                                (WaitingForLoginToken { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 })
+                                model.pendingLogins
+                      }
+                    , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
+                    )
+
+            else
+                ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
+
+        _ ->
+            ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
+
+
+getUserFromSessionId : SessionId -> BackendModel -> Maybe ( Id UserId, BackendUser )
+getUserFromSessionId sessionId model =
+    SeqDict.get sessionId model.sessions
+        |> Maybe.andThen (\userId -> NonemptyDict.get userId model.users |> Maybe.map (Tuple.pair userId))
+
+
+emailToNotifyWhenErrorsAreLogged : EmailAddress
+emailToNotifyWhenErrorsAreLogged =
+    Unsafe.emailAddress "martinsstewart@gmail.com"
+
+
+addLog : Time.Posix -> Log -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addLog time log model =
+    let
+        model2 : BackendModel
+        model2 =
+            { model | logs = Array.push { time = time, log = log } model.logs }
+    in
+    case
+        ( Log.shouldNotifyAdmin log
+        , Duration.from model2.lastErrorLogEmail time |> Quantity.lessThan (Duration.minutes 30)
+        )
+    of
+        ( Just text, False ) ->
+            ( { model2 | lastErrorLogEmail = time }
+            , Postmark.sendEmailTask
+                Env.postmarkServerToken
+                { from = { name = "", email = Env.noReplyEmailAddress }
+                , to = Nonempty { name = "", email = emailToNotifyWhenErrorsAreLogged } []
+                , subject = NonemptyString 'A' "n error was logged that needs attention"
+                , body = "The following error was logged: " ++ text ++ ". Note that any additional errors logged for the next 30 minutes will be ignored to avoid spamming emails." |> Postmark.BodyText
+                , messageStream = "outbound"
+                }
+                |> Task.attempt (SentLogErrorEmail time emailToNotifyWhenErrorsAreLogged)
+            )
+
+        _ ->
+            ( model2, Command.none )
