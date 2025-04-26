@@ -15,6 +15,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , NewChannelForm
     , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
@@ -87,6 +88,7 @@ type alias LoggedIn2 =
     , admin : Maybe Pages.Admin.Model
     , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
+    , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     }
 
 
@@ -139,10 +141,16 @@ type FrontendMsg
     | ScrolledToLogSection
     | PressedLink Route
     | UserOverviewMsg Pages.UserOverview.Msg
-    | PressedGuildIcon (Id GuildId)
-    | PressedChannelName (Id GuildId) (Id ChannelId)
     | TypedMessage (Id GuildId) (Id ChannelId) String
     | PressedSendMessage (Id GuildId) (Id ChannelId) NonemptyString
+    | NewChannelFormChanged (Id GuildId) NewChannelForm
+    | PressedSubmitNewChannel (Id GuildId) NewChannelForm
+
+
+type alias NewChannelForm =
+    { name : String
+    , pressedSubmit : Bool
+    }
 
 
 type ToBackend
@@ -207,4 +215,5 @@ type LocalChange
     = InvalidChange
     | AdminChange AdminChange
     | UserOverviewChange Pages.UserOverview.Change
-    | SendMessage Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    | SendMessageChange Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    | NewChannelChange Time.Posix (Id GuildId) ChannelName

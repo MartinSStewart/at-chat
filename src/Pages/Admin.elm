@@ -1387,13 +1387,13 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                                 getId : Int -> Id UserId
                                 getId id =
                                     if
-                                        NonemptyDict.member (Id.fromString (String.fromInt id)) users
-                                            || SeqDict.member (Id.fromString (String.fromInt id)) dict
+                                        NonemptyDict.member (Id.fromInt id) users
+                                            || SeqDict.member (Id.fromInt id) dict
                                     then
                                         getId (id + 1)
 
                                     else
-                                        Id.fromString (String.fromInt id)
+                                        Id.fromInt id
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))

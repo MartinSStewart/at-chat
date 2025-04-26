@@ -46,6 +46,6 @@ view isSelected size portfolio =
                     , Ui.borderColor MyUi.secondaryGrayBorder
                     , Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
-                    , Ui.Font.size 18
+                    , Ui.Font.size (round (toFloat size * 18 / 50))
                     , Ui.Font.color (Ui.rgb 20 20 20)
                     ]

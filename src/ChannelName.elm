@@ -16,7 +16,7 @@ fromString : String -> Result String ChannelName
 fromString text =
     case String.trim text |> String.Nonempty.fromString of
         Just nonempty ->
-            if String.Nonempty.length nonempty > 100 then
+            if String.Nonempty.length nonempty > 50 then
                 Err "Too long"
 
             else

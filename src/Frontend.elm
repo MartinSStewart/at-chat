@@ -34,10 +34,10 @@ import Pages.Home
 import Pages.UserOverview
 import Pagination
 import PersonName
-import Route exposing (Route(..), UserOverviewRouteData(..))
+import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -109,7 +109,7 @@ init url key =
     let
         route : Route
         route =
-            Route.decode url |> Maybe.withDefault HomePageRoute
+            Route.decode url
     in
     ( Loading
         { navigationKey = key
@@ -238,6 +238,7 @@ loadedInitHelper time loginData loading =
                     (LocalState.currentUser localState |> Just)
                     |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
+            , newChannelForm = SeqDict.empty
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -393,7 +394,7 @@ updateLoaded msg model =
                 Internal url ->
                     let
                         route =
-                            Route.decode url |> Maybe.withDefault HomePageRoute
+                            Route.decode url
                     in
                     ( model
                     , if model.route == route then
@@ -410,7 +411,7 @@ updateLoaded msg model =
             let
                 route : Route
                 route =
-                    Route.decode url |> Maybe.withDefault HomePageRoute
+                    Route.decode url
 
                 ( model2, cmd ) =
                     routeRequest { model | route = route }
@@ -539,16 +540,6 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedGuildIcon guildId ->
-            ( model
-            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId Nothing))
-            )
-
-        PressedChannelName guildId channelId ->
-            ( model
-            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId (Just channelId)))
-            )
-
         TypedMessage guildId channelId text ->
             updateLoggedIn
                 (\loggedIn ->
@@ -571,12 +562,71 @@ updateLoaded msg model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (SendMessage model.time guildId channelId text |> Just)
+                        (SendMessageChange model.time guildId channelId text |> Just)
                         { loggedIn
                             | drafts =
                                 SeqDict.remove ( guildId, channelId ) loggedIn.drafts
                         }
                         Command.none
+                )
+                model
+
+        NewChannelFormChanged guildId newChannelForm ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | newChannelForm =
+                            SeqDict.insert guildId newChannelForm loggedIn.newChannelForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitNewChannel guildId newChannelForm ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case ChannelName.fromString newChannelForm.name of
+                        Ok channelName ->
+                            let
+                                ( loggedIn2, cmd ) =
+                                    handleLocalChange
+                                        model.time
+                                        (NewChannelChange model.time guildId channelName |> Just)
+                                        { loggedIn
+                                            | newChannelForm =
+                                                SeqDict.remove guildId loggedIn.newChannelForm
+                                        }
+                                        Command.none
+
+                                nextChannelId : Id ChannelId
+                                nextChannelId =
+                                    case SeqDict.get guildId (Local.model loggedIn.localState).guilds of
+                                        Just guild ->
+                                            Id.nextId guild.channels
+
+                                        Nothing ->
+                                            Id.fromInt 0
+                            in
+                            ( loggedIn2
+                            , Command.batch
+                                [ Route.push
+                                    model.navigationKey
+                                    (GuildRoute guildId (ChannelRoute nextChannelId))
+                                , cmd
+                                ]
+                            )
+
+                        Err _ ->
+                            ( { loggedIn
+                                | newChannelForm =
+                                    SeqDict.insert
+                                        guildId
+                                        { newChannelForm | pressedSubmit = True }
+                                        loggedIn.newChannelForm
+                              }
+                            , Command.none
+                            )
                 )
                 model
 
@@ -629,7 +679,7 @@ changeUpdate localMsg local =
                                 (\user -> { user | emailNotifications = emailNotifications })
                                 local
 
-                SendMessage createdAt guildId channelId text ->
+                SendMessageChange createdAt guildId channelId text ->
                     case SeqDict.get guildId local.guilds of
                         Just guild ->
                             case SeqDict.get channelId guild.channels of
@@ -658,6 +708,15 @@ changeUpdate localMsg local =
 
                         Nothing ->
                             local
+
+                NewChannelChange time guildId channelName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.createChannel time local.userId channelName)
+                                local.guilds
+                    }
 
         ServerChange serverChange ->
             case serverChange of
@@ -994,8 +1053,11 @@ pendingChangesText localChange =
         UserOverviewChange _ ->
             "Changed user profile"
 
-        SendMessage _ _ _ _ ->
+        SendMessageChange _ _ _ _ ->
             "Sent a message"
+
+        NewChannelChange posix id channelName ->
+            "Created new channel"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1097,7 +1159,7 @@ view model =
                     HomePageRoute ->
                         layout
                             loaded
-                            [ Ui.background background2 ]
+                            []
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     let
@@ -1184,7 +1246,7 @@ guildColumn selectedGuild _ local =
         (List.map
             (\( guildId, guild ) ->
                 Ui.el
-                    [ Ui.Input.button (PressedGuildIcon guildId)
+                    [ Ui.Input.button (PressedLink (GuildRoute guildId NoChannelRoute))
                     ]
                     (GuildIcon.view (selectedGuild == Just guildId) 50 guild)
             )
@@ -1196,35 +1258,40 @@ homePageLoggedInView : LoggedIn2 -> LocalState -> Element FrontendMsg
 homePageLoggedInView loggedIn local =
     Ui.row
         [ Ui.height Ui.fill
+        , Ui.background background3
         ]
         [ guildColumn Nothing loggedIn local
         ]
 
 
-guildView : Id GuildId -> Maybe (Id ChannelId) -> LoggedIn2 -> LocalState -> Element FrontendMsg
-guildView guildId maybeChannelId loggedIn local =
-    case ( SeqDict.get guildId local.guilds, maybeChannelId ) of
-        ( Just guild, Just channelId ) ->
-            case SeqDict.get channelId guild.channels of
-                Just channel ->
-                    Ui.row
-                        [ Ui.height Ui.fill ]
-                        [ guildColumn (Just guildId) loggedIn local
-                        , channelColumn guildId guild
-                        , conversationView guildId channelId loggedIn local channel
-                        ]
-
-                Nothing ->
-                    Ui.text "Channel does not exist"
-
-        ( Just guild, Nothing ) ->
+guildView : Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildView guildId channelRoute loggedIn local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
             Ui.row
-                [ Ui.height Ui.fill ]
+                [ Ui.height Ui.fill, Ui.background background3 ]
                 [ guildColumn (Just guildId) loggedIn local
-                , channelColumn guildId guild
+                , channelColumn local guildId guild channelRoute
+                , case channelRoute of
+                    ChannelRoute channelId ->
+                        case SeqDict.get channelId guild.channels of
+                            Just channel ->
+                                conversationView guildId channelId loggedIn local channel
+
+                            Nothing ->
+                                Ui.text "Channel does not exist"
+
+                    NewChannelRoute ->
+                        SeqDict.get guildId loggedIn.newChannelForm
+                            |> Maybe.withDefault newChannelFormInit
+                            |> newChannelFormView guildId
+
+                    NoChannelRoute ->
+                        Ui.none
+                , memberColumn local guild
                 ]
 
-        ( Nothing, _ ) ->
+        Nothing ->
             homePageLoggedInView loggedIn local
 
 
@@ -1247,7 +1314,7 @@ conversationView guildId channelId loggedIn local channel =
                     ""
     in
     Ui.column
-        [ Ui.height Ui.fill, Ui.background background3 ]
+        [ Ui.height Ui.fill ]
         [ Ui.column
             [ Ui.height Ui.fill, Ui.paddingXY 8 16, Ui.scrollable ]
             (List.map
@@ -1321,8 +1388,8 @@ messageView local message =
         ]
 
 
-channelColumn : Id GuildId -> Guild -> Element FrontendMsg
-channelColumn guildId guild =
+channelColumn : LocalState -> Id GuildId -> Guild -> ChannelRoute -> Element FrontendMsg
+channelColumn local guildId guild channelRoute =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background background2
@@ -1345,31 +1412,155 @@ channelColumn guildId guild =
             [ Ui.paddingXY 0 8, Ui.scrollable ]
             (List.map
                 (\( channelId, channel ) ->
+                    let
+                        isSelected =
+                            channelRoute == ChannelRoute channelId
+                    in
                     Ui.el
                         [ Ui.paddingXY 8 8
-                        , Ui.Font.color font2
-                        , Ui.Input.button (PressedChannelName guildId channelId)
+                        , if isSelected then
+                            Ui.Font.color font1
+
+                          else
+                            Ui.Font.color font2
+                        , Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId)))
+                        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                         ]
                         (Ui.text ("# " ++ ChannelName.toString channel.name))
                 )
                 (SeqDict.toList guild.channels)
+                ++ [ if local.userId == guild.owner then
+                        let
+                            isSelected =
+                                channelRoute == NewChannelRoute
+                        in
+                        Ui.el
+                            [ Ui.paddingXY 8 8
+                            , Ui.Font.color font3
+                            , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
+                            , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                            , if isSelected then
+                                Ui.Font.color font1
+
+                              else
+                                Ui.Font.color font3
+                            ]
+                            (Ui.text "+ Add new channel")
+
+                     else
+                        Ui.none
+                   ]
             )
         ]
 
 
+memberColumn : LocalState -> Guild -> Element FrontendMsg
+memberColumn local guild =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.alignRight
+        , Ui.background background2
+        , Ui.Font.color font1
+        ]
+        [ Ui.column
+            [ Ui.paddingXY 4 4 ]
+            [ Ui.text "Owner"
+            , memberLabel local guild.owner
+            ]
+        , Ui.column
+            [ Ui.paddingXY 4 4 ]
+            [ Ui.text "Members"
+            , Ui.column
+                [ Ui.height Ui.fill ]
+                (List.map
+                    (\( userId, _ ) ->
+                        memberLabel local userId
+                    )
+                    (SeqDict.toList guild.members)
+                )
+            ]
+        ]
 
---
---memberlistView : LocalState -> Guild -> Element FrontendMsg
---memberlistView local guild =
---    Ui.column
---        [ Ui.height Ui.fill ]
---        (List.map
---            (\( userId, _ ) ->
---
---                Ui.text (PersonName.toString local.guilds)
---            )
---            (SeqDict.toList guild.members)
---        )
+
+memberLabel : LocalState -> Id UserId -> Element msg
+memberLabel local userId =
+    Ui.el
+        [ Ui.paddingXY 4 4 ]
+        (case LocalState.getUser userId local of
+            Just user ->
+                Ui.text (PersonName.toString user.name)
+
+            Nothing ->
+                Ui.none
+        )
+
+
+newChannelFormInit : NewChannelForm
+newChannelFormInit =
+    { name = " ", pressedSubmit = False }
+
+
+newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg
+newChannelFormView guildId form =
+    let
+        nameLabel =
+            Ui.Input.label
+                "newChannelName"
+                [ Ui.Font.color font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Channel name")
+    in
+    Ui.column
+        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
+        , Ui.column
+            []
+            [ nameLabel.element
+            , Ui.Input.text
+                [ Ui.padding 6
+                , Ui.background inputBackground
+                , Ui.borderColor inputBorder
+                , Ui.widthMax 500
+                ]
+                { onChange = \text -> NewChannelFormChanged guildId { form | name = text }
+                , text = form.name
+                , placeholder = Nothing
+                , label = nameLabel.id
+                }
+            , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
+                ( True, Err error ) ->
+                    Ui.el [ Ui.paddingXY 2 0, Ui.Font.color errorColor ] (Ui.text error)
+
+                _ ->
+                    Ui.none
+            ]
+        , Ui.el
+            [ Ui.Input.button (PressedSubmitNewChannel guildId form)
+            , Ui.paddingXY 16 8
+            , Ui.background buttonBackground
+            , Ui.width Ui.shrink
+            , Ui.rounded 8
+            , Ui.Font.color buttonFontColor
+            , Ui.Font.bold
+            , Ui.borderColor buttonBorder
+            , Ui.border 1
+            ]
+            (Ui.text "Create channel")
+        ]
+
+
+buttonBackground : Ui.Color
+buttonBackground =
+    Ui.rgb 220 230 240
+
+
+buttonBorder : Ui.Color
+buttonBorder =
+    Ui.rgb 10 20 30
+
+
+buttonFontColor : Ui.Color
+buttonFontColor =
+    Ui.rgb 0 0 0
 
 
 font1 : Ui.Color
@@ -1380,6 +1571,11 @@ font1 =
 font2 : Ui.Color
 font2 =
     Ui.rgb 220 220 220
+
+
+font3 : Ui.Color
+font3 =
+    Ui.rgb 200 200 200
 
 
 placeholderFont : Ui.Color
@@ -1402,6 +1598,19 @@ background3 =
     Ui.rgb 50 60 90
 
 
+inputBackground : Ui.Color
+inputBackground =
+    Ui.rgb 32 40 70
+
+
+inputBorder =
+    Ui.rgb 97 104 124
+
+
 border1 : Ui.Color
 border1 =
     Ui.rgb 60 70 100
+
+
+errorColor =
+    Ui.rgb 240 170 180

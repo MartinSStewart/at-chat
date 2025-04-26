@@ -1,7 +1,6 @@
 module TwoFactorAuthentication exposing
     ( TwoFactorAuthentication
     , TwoFactorAuthenticationSetup
-    , TwoFactorSecret
     , getCode
     , getConfig
     , isValidCode
@@ -16,27 +15,23 @@ import TOTP.Key
 
 
 type alias TwoFactorAuthentication =
-    { secret : Id TwoFactorSecret
+    { secret : String
     , finishedAt : Time.Posix
     }
 
 
 type alias TwoFactorAuthenticationSetup =
-    { secret : Id TwoFactorSecret
+    { secret : String
     , startedAt : Time.Posix
     }
 
 
-type TwoFactorSecret
-    = TwoFactorSecret Never
-
-
-getConfig : String -> Id TwoFactorSecret -> Result String TOTP.Key.Key
+getConfig : String -> String -> Result String TOTP.Key.Key
 getConfig user secret =
     TOTP.Key.init
         { issuer = Env.companyName
         , user = user
-        , rawSecret = Id.toString secret
+        , rawSecret = secret
         , outputLength =
             -- We can leave this as nothing since the default is 6 and not including it makes the QR code a bit smaller
             Nothing
@@ -56,7 +51,7 @@ periodSeconds =
     30
 
 
-isValidCode : Time.Posix -> Int -> Id TwoFactorSecret -> Bool
+isValidCode : Time.Posix -> Int -> String -> Bool
 isValidCode time code secret =
     case getConfig "" secret of
         Ok config ->

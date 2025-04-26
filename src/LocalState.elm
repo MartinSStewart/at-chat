@@ -7,6 +7,7 @@ module LocalState exposing
     , LogWithTime
     , Message
     , NotAdminData
+    , createChannel
     , createMessage
     , createNewUser
     , currentUser
@@ -177,4 +178,24 @@ createMessage createdAt userId text channel =
                 , content = text
                 }
                 channel.messages
+    }
+
+
+createChannel : Time.Posix -> Id UserId -> ChannelName -> Guild -> Guild
+createChannel time userId channelName guild =
+    let
+        channelId : Id ChannelId
+        channelId =
+            Id.nextId guild.channels
+    in
+    { guild
+        | channels =
+            SeqDict.insert
+                channelId
+                { createdAt = time
+                , createdBy = userId
+                , name = channelName
+                , messages = Array.empty
+                }
+                guild.channels
     }

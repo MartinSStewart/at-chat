@@ -1,24 +1,32 @@
 module Route exposing
-    ( Route(..)
+    ( ChannelRoute(..)
+    , Route(..)
     , UserOverviewRouteData(..)
     , decode
     , encode
+    , push
     )
 
 import AppUrl exposing (AppUrl)
 import Dict
+import Effect.Browser.Navigation as BrowserNavigation
+import Effect.Command exposing (Command, FrontendOnly)
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Url exposing (Url)
 import Url.Builder
-import Url.Parser exposing ((</>), (<?>))
-import Url.Parser.Query
 
 
 type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | UserOverviewRoute UserOverviewRouteData
-    | GuildRoute (Id GuildId) (Maybe (Id ChannelId))
+    | GuildRoute (Id GuildId) ChannelRoute
+
+
+type ChannelRoute
+    = ChannelRoute (Id ChannelId)
+    | NewChannelRoute
+    | NoChannelRoute
 
 
 type UserOverviewRouteData
@@ -26,7 +34,12 @@ type UserOverviewRouteData
     | SpecificUserRoute (Id UserId)
 
 
-decode : Url -> Maybe Route
+push : BrowserNavigation.Key -> Route -> Command FrontendOnly toMsg msg
+push navkey route =
+    BrowserNavigation.pushUrl navkey (encode route)
+
+
+decode : Url -> Route
 decode url =
     let
         url2 =
@@ -43,25 +56,47 @@ decode url =
                         _ ->
                             Nothing
                 }
-                |> Just
 
         [ "user-overview" ] ->
-            UserOverviewRoute PersonalRoute |> Just
+            UserOverviewRoute PersonalRoute
 
         [ "user-overview", userId ] ->
-            UserOverviewRoute (SpecificUserRoute (Id.fromString userId)) |> Just
+            case Id.fromString userId of
+                Just userId2 ->
+                    UserOverviewRoute (SpecificUserRoute userId2)
 
-        [ "channels", guildId ] ->
-            GuildRoute (Id.fromString guildId) Nothing |> Just
+                Nothing ->
+                    HomePageRoute
 
-        [ "channels", guildId, channelId ] ->
-            GuildRoute (Id.fromString guildId) (Just (Id.fromString channelId)) |> Just
+        [ "g", guildId ] ->
+            case Id.fromString guildId of
+                Just guildId2 ->
+                    GuildRoute guildId2 NoChannelRoute
 
-        [] ->
-            Just HomePageRoute
+                Nothing ->
+                    HomePageRoute
+
+        [ "g", guildId, "c", channelId ] ->
+            case ( Id.fromString guildId, Id.fromString channelId ) of
+                ( Just guildId2, Just channelId2 ) ->
+                    GuildRoute guildId2 (ChannelRoute channelId2)
+
+                ( Just guildId2, Nothing ) ->
+                    GuildRoute guildId2 NoChannelRoute
+
+                ( Nothing, _ ) ->
+                    HomePageRoute
+
+        [ "g", guildId, "new" ] ->
+            case Id.fromString guildId of
+                Just guildId2 ->
+                    GuildRoute guildId2 NewChannelRoute
+
+                Nothing ->
+                    HomePageRoute
 
         _ ->
-            Nothing
+            HomePageRoute
 
 
 encode : Route -> String
@@ -95,13 +130,16 @@ encode route =
                     )
 
                 GuildRoute guildId maybeChannelId ->
-                    ( [ "channels", Id.toString guildId ]
+                    ( [ "g", Id.toString guildId ]
                         ++ (case maybeChannelId of
-                                Just channelId ->
-                                    [ Id.toString channelId ]
+                                ChannelRoute channelId ->
+                                    [ "c", Id.toString channelId ]
 
-                                Nothing ->
+                                NoChannelRoute ->
                                     []
+
+                                NewChannelRoute ->
+                                    [ "new" ]
                            )
                     , []
                     )

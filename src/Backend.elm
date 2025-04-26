@@ -8,6 +8,7 @@ module Backend exposing
     )
 
 import Array
+import ChannelName exposing (ChannelName)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -40,6 +41,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import UInt64
 import Unsafe
 import User exposing (BackendUser)
 
@@ -70,7 +72,7 @@ app_ =
 
 adminUserId : Id UserId
 adminUserId =
-    Id.fromString "userId0"
+    Id.fromInt 0
 
 
 adminUser : BackendUser
@@ -93,7 +95,7 @@ init =
             , icon = Nothing
             , channels =
                 SeqDict.fromList
-                    [ ( Id.fromString "channel0"
+                    [ ( Id.fromInt 0
                       , { createdAt = Time.millisToPosix 0
                         , createdBy = adminUserId
                         , name = Unsafe.channelName "First Channel"
@@ -125,17 +127,17 @@ init =
       , twoFactorAuthenticationSetup = SeqDict.empty
       , guilds =
             SeqDict.fromList
-                [ ( Id.fromString "guild0"
+                [ ( Id.fromInt 0
                   , guild
                   )
-                , ( Id.fromString "guild1"
+                , ( Id.fromInt 1
                   , { createdAt = Time.millisToPosix 0
                     , createdBy = adminUserId
                     , name = Unsafe.guildName "Second Guild"
                     , icon = Nothing
                     , channels =
                         SeqDict.fromList
-                            [ ( Id.fromString "channel1"
+                            [ ( Id.fromInt 0
                               , { createdAt = Time.millisToPosix 0
                                 , createdBy = adminUserId
                                 , name = Unsafe.channelName "First Channel"
@@ -449,11 +451,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                         )
 
-                SendMessage _ guildId channelId text ->
-                    asUser
+                SendMessageChange _ guildId channelId text ->
+                    asGuildMember
                         model2
                         sessionId
+                        guildId
                         (sendMessage model2 time clientId changeId guildId channelId text)
+
+                NewChannelChange _ guildId channelName ->
+                    asGuildMember
+                        model2
+                        sessionId
+                        guildId
+                        (createNewChannel clientId changeId time guildId channelName model2)
 
         UserOverviewToBackend toBackend2 ->
             asUser
@@ -462,6 +472,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\userId user ->
                     userOverviewUpdateFromFrontend clientId time userId user toBackend2 model2
                 )
+
+
+createNewChannel :
+    ClientId
+    -> ChangeId
+    -> Time.Posix
+    -> Id GuildId
+    -> ChannelName
+    -> BackendModel
+    -> Id UserId
+    -> BackendUser
+    -> Guild
+    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
+createNewChannel clientId changeId time guildId channelName model userId user guild =
+    if userId == guild.owner then
+        ( { model
+            | guilds =
+                SeqDict.insert
+                    guildId
+                    (LocalState.createChannel time userId channelName guild)
+                    model.guilds
+          }
+        , NewChannelChange time guildId channelName
+            |> LocalChangeResponse changeId
+            |> Lamdera.sendToFrontend clientId
+        )
+
+    else
+        ( model, invalidChangeResponse changeId clientId )
 
 
 userOverviewUpdateFromFrontend :
@@ -628,61 +667,59 @@ sendMessage :
     -> NonemptyString
     -> Id UserId
     -> BackendUser
+    -> Guild
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
-sendMessage model time clientId changeId guildId channelId text userId user =
-    case SeqDict.get guildId model.guilds of
-        Just guild ->
-            case SeqDict.get channelId guild.channels of
-                Just channel ->
-                    ( { model
-                        | guilds =
-                            SeqDict.insert
-                                guildId
-                                { guild
-                                    | channels =
-                                        SeqDict.insert
-                                            channelId
-                                            (LocalState.createMessage time userId text channel)
-                                            guild.channels
-                                }
-                                model.guilds
-                      }
-                    , Command.batch
-                        [ LocalChangeResponse changeId (SendMessage time guildId channelId text)
-                            |> Lamdera.sendToFrontend clientId
-                        , List.concatMap
-                            (\( _, otherClientIds ) ->
-                                NonemptyDict.keys otherClientIds
-                                    |> List.Nonempty.toList
-                                    |> List.filterMap
-                                        (\otherClientId ->
-                                            if clientId == otherClientId then
-                                                Nothing
-
-                                            else
-                                                Server_SendMessage userId time guildId channelId text
-                                                    |> ServerChange
-                                                    |> ChangeBroadcast
-                                                    |> Lamdera.sendToFrontend otherClientId
-                                                    |> Just
-                                        )
-                            )
-                            (SeqDict.toList model.connections)
-                            |> Command.batch
-                        ]
-                    )
-
-                Nothing ->
-                    ( model
-                    , LocalChangeResponse changeId InvalidChange
-                        |> Lamdera.sendToFrontend clientId
-                    )
+sendMessage model time clientId changeId guildId channelId text userId user guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            ( { model
+                | guilds =
+                    SeqDict.insert
+                        guildId
+                        { guild
+                            | channels =
+                                SeqDict.insert
+                                    channelId
+                                    (LocalState.createMessage time userId text channel)
+                                    guild.channels
+                        }
+                        model.guilds
+              }
+            , Command.batch
+                [ LocalChangeResponse changeId (SendMessageChange time guildId channelId text)
+                    |> Lamdera.sendToFrontend clientId
+                , broadcastToGuild
+                    clientId
+                    (Server_SendMessage userId time guildId channelId text |> ServerChange)
+                    model
+                ]
+            )
 
         Nothing ->
             ( model
-            , LocalChangeResponse changeId InvalidChange
-                |> Lamdera.sendToFrontend clientId
+            , invalidChangeResponse changeId clientId
             )
+
+
+broadcastToGuild : ClientId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToGuild clientToSkip msg model =
+    List.concatMap
+        (\( _, otherClientIds ) ->
+            NonemptyDict.keys otherClientIds
+                |> List.Nonempty.toList
+                |> List.filterMap
+                    (\otherClientId ->
+                        if clientToSkip == otherClientId then
+                            Nothing
+
+                        else
+                            ChangeBroadcast msg
+                                |> Lamdera.sendToFrontend otherClientId
+                                |> Just
+                    )
+        )
+        (SeqDict.toList model.connections)
+        |> Command.batch
 
 
 broadcastToOtherAdmins : ClientId -> BackendModel -> LocalMsg -> Command BackendOnly ToFrontend msg
@@ -773,6 +810,26 @@ asUser model sessionId func =
             ( model, Command.none )
 
 
+asGuildMember :
+    BackendModel
+    -> SessionId
+    -> Id GuildId
+    -> (Id UserId -> BackendUser -> Guild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asGuildMember model sessionId guildId func =
+    case SeqDict.get sessionId model.sessions of
+        Just userId ->
+            case ( NonemptyDict.get userId model.users, SeqDict.get guildId model.guilds ) of
+                ( Just user, Just guild ) ->
+                    func userId user guild
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
 asAdmin :
     BackendModel
     -> SessionId
@@ -791,7 +848,7 @@ asAdmin model sessionId func =
         )
 
 
-getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Id b )
+getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, String )
 getUniqueId time model =
     ( { model | secretCounter = model.secretCounter + 1 }
     , Env.secretKey
@@ -805,7 +862,6 @@ getUniqueId time model =
                 ""
            )
         |> Sha256.sha256
-        |> Id.fromString
     )
 
 
@@ -816,7 +872,7 @@ getLoginCode time model =
             getUniqueId time model
     in
     ( model2
-    , case Id.toString id |> String.left LoginForm.loginCodeLength |> Hex.fromString of
+    , case String.left LoginForm.loginCodeLength id |> Hex.fromString of
         Ok int ->
             case String.fromInt int |> String.left LoginForm.loginCodeLength |> String.toInt of
                 Just int2 ->

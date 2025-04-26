@@ -3,9 +3,17 @@ module Id exposing
     , GuildId(..)
     , Id(..)
     , UserId(..)
+    , fromInt
     , fromString
+    , fromUInt64
+    , nextId
     , toString
+    , toUInt64
     )
+
+import List.Extra
+import SeqDict exposing (SeqDict)
+import UInt64 exposing (UInt64)
 
 
 type UserId
@@ -21,14 +29,39 @@ type ChannelId
 
 
 type Id a
-    = Id String
+    = Id UInt64
 
 
-fromString : String -> Id a
-fromString =
+nextId : SeqDict (Id a) b -> Id a
+nextId dict =
+    SeqDict.keys dict
+        |> List.Extra.maximumWith (\(Id a) (Id b) -> UInt64.compare a b)
+        |> Maybe.withDefault (Id UInt64.zero)
+        |> toUInt64
+        |> UInt64.increment
+        |> Id
+
+
+toUInt64 : Id a -> UInt64
+toUInt64 (Id a) =
+    a
+
+
+fromUInt64 : UInt64 -> Id a
+fromUInt64 =
     Id
+
+
+fromInt : Int -> Id a
+fromInt int =
+    UInt64.fromInt int |> Id
+
+
+fromString : String -> Maybe (Id a)
+fromString string =
+    UInt64.fromString string |> Maybe.map Id
 
 
 toString : Id a -> String
 toString (Id a) =
-    a
+    UInt64.toString a
