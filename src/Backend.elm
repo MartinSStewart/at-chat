@@ -24,7 +24,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState
+import LocalState exposing (Guild)
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
@@ -39,7 +39,7 @@ import Sha256
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), Guild, LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser)
 
@@ -89,7 +89,8 @@ init =
         guild =
             { createdAt = Time.millisToPosix 0
             , createdBy = adminUserId
-            , name = Unsafe.channelName "First Guild"
+            , name = Unsafe.guildName "First Guild"
+            , icon = Nothing
             , channels =
                 SeqDict.fromList
                     [ ( Id.fromString "channel0"
@@ -100,7 +101,7 @@ init =
                             Array.fromList
                                 [ { createdAt = Time.millisToPosix 0
                                   , createdBy = adminUserId
-                                  , content = "Hello!"
+                                  , content = NonemptyString 'H' "ello!"
                                   }
                                 ]
                         }
@@ -124,6 +125,29 @@ init =
             SeqDict.fromList
                 [ ( Id.fromString "guild0"
                   , guild
+                  )
+                , ( Id.fromString "guild1"
+                  , { createdAt = Time.millisToPosix 0
+                    , createdBy = adminUserId
+                    , name = Unsafe.guildName "Second Guild"
+                    , icon = Nothing
+                    , channels =
+                        SeqDict.fromList
+                            [ ( Id.fromString "channel1"
+                              , { createdAt = Time.millisToPosix 0
+                                , createdBy = adminUserId
+                                , name = Unsafe.channelName "First Channel"
+                                , messages =
+                                    Array.fromList
+                                        [ { createdAt = Time.millisToPosix 0
+                                          , createdBy = adminUserId
+                                          , content = NonemptyString 'H' "ello world!"
+                                          }
+                                        ]
+                                }
+                              )
+                            ]
+                    }
                   )
                 ]
       }
@@ -418,6 +442,73 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model2.users
                                       }
                                     , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
+
+                SendMessage _ guildId channelId text ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            case SeqDict.get guildId model.guilds of
+                                Just guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            ( { model
+                                                | guilds =
+                                                    SeqDict.insert
+                                                        guildId
+                                                        { guild
+                                                            | channels =
+                                                                SeqDict.insert
+                                                                    channelId
+                                                                    (LocalState.createMessage
+                                                                        time
+                                                                        userId
+                                                                        text
+                                                                        channel
+                                                                    )
+                                                                    guild.channels
+                                                        }
+                                                        model.guilds
+                                              }
+                                            , Command.batch
+                                                [ LocalChangeResponse
+                                                    changeId
+                                                    (SendMessage time guildId channelId text)
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , List.filterMap
+                                                    (\( otherUserId, _ ) ->
+                                                        if otherUserId == userId then
+                                                            Nothing
+
+                                                        else
+                                                            Server_SendMessage
+                                                                userId
+                                                                time
+                                                                guildId
+                                                                channelId
+                                                                text
+                                                                |> ServerChange
+                                                                |> ChangeBroadcast
+                                                                |> Lamdera.sendToFrontend clientId
+                                                                |> Just
+                                                    )
+                                                    (NonemptyDict.toList model.users)
+                                                    |> Command.batch
+                                                ]
+                                            )
+
+                                        Nothing ->
+                                            ( model2
+                                            , LocalChangeResponse changeId InvalidChange
+                                                |> Lamdera.sendToFrontend clientId
+                                            )
+
+                                Nothing ->
+                                    ( model2
+                                    , LocalChangeResponse changeId InvalidChange
+                                        |> Lamdera.sendToFrontend clientId
                                     )
                         )
 

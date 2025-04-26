@@ -3,7 +3,6 @@ module Route exposing
     , UserOverviewRouteData(..)
     , decode
     , encode
-    , isSamePage
     )
 
 import AppUrl exposing (AppUrl)
@@ -19,7 +18,8 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | UserOverviewRoute UserOverviewRouteData
-    | GuildRoute (Id GuildId) (Id ChannelId)
+    | GuildRoute (Id GuildId)
+    | ChannelRoute (Id GuildId) (Id ChannelId)
 
 
 type UserOverviewRouteData
@@ -52,8 +52,11 @@ decode url =
         [ "user-overview", userId ] ->
             UserOverviewRoute (SpecificUserRoute (Id.fromString userId)) |> Just
 
+        [ "channels", guildId ] ->
+            GuildRoute (Id.fromString guildId) |> Just
+
         [ "channels", guildId, channelId ] ->
-            GuildRoute (Id.fromString guildId) (Id.fromString channelId) |> Just
+            ChannelRoute (Id.fromString guildId) (Id.fromString channelId) |> Just
 
         [] ->
             Just HomePageRoute
@@ -92,7 +95,10 @@ encode route =
                     , []
                     )
 
-                GuildRoute guildId channelId ->
+                GuildRoute guildId ->
+                    ( [ "channels", Id.toString guildId ], [] )
+
+                ChannelRoute guildId channelId ->
                     ( [ "channels", Id.toString guildId, Id.toString channelId ], [] )
     in
     Url.Builder.absolute path query
@@ -101,24 +107,3 @@ encode route =
 idToPath : Id a -> String
 idToPath id =
     Id.toString id |> Url.percentEncode
-
-
-isSamePage : Route -> Route -> Bool
-isSamePage routeA routeB =
-    case routeA of
-        HomePageRoute ->
-            routeB == routeA
-
-        AdminRoute _ ->
-            case routeB of
-                AdminRoute _ ->
-                    True
-
-                _ ->
-                    False
-
-        UserOverviewRoute _ ->
-            routeB == routeA
-
-        GuildRoute _ _ ->
-            routeB == routeA

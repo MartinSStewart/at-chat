@@ -1,9 +1,13 @@
 module LocalState exposing
     ( AdminData
     , AdminStatus(..)
+    , Channel
+    , Guild
     , LocalState
     , LogWithTime
+    , Message
     , NotAdminData
+    , createMessage
     , createNewUser
     , currentUser
     , getUser
@@ -11,14 +15,19 @@ module LocalState exposing
     , updateUser
     )
 
+import Array exposing (Array)
+import ChannelName exposing (ChannelName)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Id exposing (Id, UserId)
+import GuildName exposing (GuildName)
+import Id exposing (ChannelId, GuildId, Id, UserId)
+import Image exposing (Image)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet
+import String.Nonempty exposing (NonemptyString)
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 
@@ -26,6 +35,31 @@ import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 type alias LocalState =
     { userId : Id UserId
     , adminData : AdminStatus
+    , guilds : SeqDict (Id GuildId) Guild
+    }
+
+
+type alias Guild =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , name : GuildName
+    , icon : Maybe Image
+    , channels : SeqDict (Id ChannelId) Channel
+    }
+
+
+type alias Channel =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , name : ChannelName
+    , messages : Array Message
+    }
+
+
+type alias Message =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , content : NonemptyString
     }
 
 
@@ -129,3 +163,16 @@ isAdmin { adminData } =
 
         IsNotAdmin _ ->
             False
+
+
+createMessage : Time.Posix -> Id UserId -> NonemptyString -> Channel -> Channel
+createMessage createdAt userId text channel =
+    { channel
+        | messages =
+            Array.push
+                { createdAt = createdAt
+                , createdBy = userId
+                , content = text
+                }
+                channel.messages
+    }

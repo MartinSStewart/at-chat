@@ -2,10 +2,8 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
-    , Channel
     , FrontendModel(..)
     , FrontendMsg(..)
-    , Guild
     , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -17,7 +15,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
-    , Message
+    , ServerChange(..)
     , ToBackend(..)
     , ToFrontend(..)
     )
@@ -29,9 +27,11 @@ import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, UserId)
+import Image exposing (Image)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (LocalState)
+import LocalState exposing (Guild, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import NonemptyDict exposing (NonemptyDict)
@@ -40,6 +40,7 @@ import Pages.UserOverview
 import Postmark
 import Route exposing (Route)
 import SeqDict exposing (SeqDict)
+import String.Nonempty exposing (NonemptyString)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
 import Ui.Anim
 import Url exposing (Url)
@@ -73,7 +74,6 @@ type alias LoadedFrontend =
     , windowSize : ( Int, Int )
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
-    , showMobileToolbar : Bool
     }
 
 
@@ -86,6 +86,7 @@ type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
     , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
+    , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     }
 
 
@@ -102,29 +103,6 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) Guild
-    }
-
-
-type alias Guild =
-    { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , name : ChannelName
-    , channels : SeqDict (Id ChannelId) Channel
-    }
-
-
-type alias Channel =
-    { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , name : ChannelName
-    , messages : Array Message
-    }
-
-
-type alias Message =
-    { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , content : String
     }
 
 
@@ -161,8 +139,10 @@ type FrontendMsg
     | ScrolledToLogSection
     | PressedLink Route
     | UserOverviewMsg Pages.UserOverview.Msg
-    | PressedCollapseToolbar
-    | PressedExpandToolbar
+    | PressedGuildIcon (Id GuildId)
+    | PressedChannelName (Id GuildId) (Id ChannelId)
+    | TypedMessage (Id GuildId) (Id ChannelId) String
+    | PressedSendMessage (Id GuildId) (Id ChannelId) NonemptyString
 
 
 type ToBackend
@@ -216,9 +196,15 @@ type AdminStatusLoginData
 
 type LocalMsg
     = LocalChange (Id UserId) LocalChange
+    | ServerChange ServerChange
+
+
+type ServerChange
+    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
 
 
 type LocalChange
     = InvalidChange
     | AdminChange AdminChange
     | UserOverviewChange Pages.UserOverview.Change
+    | SendMessage Time.Posix (Id GuildId) (Id ChannelId) NonemptyString

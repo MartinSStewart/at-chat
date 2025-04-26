@@ -1,7 +1,9 @@
 module Frontend exposing (app, app_)
 
+import Array
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
+import ChannelName
 import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Browser.Events
@@ -13,13 +15,17 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
+import GuildIcon
+import GuildName
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
+import Json.Decode
 import Lamdera as LamderaCore
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), LocalState)
+import LocalState exposing (AdminStatus(..), Channel, Guild, LocalState, Message)
 import LoginForm
 import MyUi
 import NonemptyDict
@@ -30,13 +36,15 @@ import Pagination
 import PersonName
 import Route exposing (Route(..), UserOverviewRouteData(..))
 import SeqDict
-import Toolbar
-import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), ToBackend(..), ToFrontend(..))
+import String.Nonempty
+import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
+import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Lazy
+import Ui.Prose
 import Ui.Shadow
 import Url exposing (Url)
 
@@ -146,7 +154,6 @@ initLoadedFrontend loading time loginResult =
             , windowSize = loading.windowSize
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
-            , showMobileToolbar = False
             }
 
         ( model2, cmdA ) =
@@ -183,6 +190,7 @@ loadedInitHelper time loginData loading =
 
                     IsNotAdminLoginData data ->
                         IsNotAdmin data
+            , guilds = loginData.guilds
             }
 
         localStateContainer : Local LocalMsg LocalState
@@ -229,6 +237,7 @@ loadedInitHelper time loginData loading =
                     loginData.twoFactorAuthenticationEnabled
                     (LocalState.currentUser localState |> Just)
                     |> SeqDict.singleton loginData.userId
+            , drafts = SeqDict.empty
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -356,7 +365,10 @@ routeRequest model =
                         )
                         model
 
-        GuildRoute _ _ ->
+        GuildRoute _ ->
+            ( model, Command.none )
+
+        ChannelRoute _ _ ->
             ( model, Command.none )
 
 
@@ -372,7 +384,10 @@ routeRequiresLogin route =
         UserOverviewRoute _ ->
             True
 
-        GuildRoute _ _ ->
+        GuildRoute _ ->
+            True
+
+        ChannelRoute _ _ ->
             True
 
 
@@ -399,10 +414,6 @@ updateLoaded msg model =
 
         UrlChanged url ->
             let
-                oldRoute : Route
-                oldRoute =
-                    model.route
-
                 route : Route
                 route =
                     Route.decode url |> Maybe.withDefault HomePageRoute
@@ -411,14 +422,7 @@ updateLoaded msg model =
                     routeRequest { model | route = route }
             in
             ( model2
-            , Command.batch
-                [ cmd
-                , if Route.isSamePage oldRoute route then
-                    Command.none
-
-                  else
-                    Dom.setViewport 0 0 |> Task.perform (\() -> ScrolledToTop)
-                ]
+            , cmd
             )
 
         GotTime time ->
@@ -508,7 +512,7 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            ( { model | showMobileToolbar = False }
+            ( model
             , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
             )
 
@@ -541,11 +545,46 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedCollapseToolbar ->
-            ( { model | showMobileToolbar = False }, Command.none )
+        PressedGuildIcon guildId ->
+            ( model
+            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (GuildRoute guildId))
+            )
 
-        PressedExpandToolbar ->
-            ( { model | showMobileToolbar = True }, Command.none )
+        PressedChannelName guildId channelId ->
+            ( model
+            , BrowserNavigation.pushUrl model.navigationKey (Route.encode (ChannelRoute guildId channelId))
+            )
+
+        TypedMessage guildId channelId text ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | drafts =
+                            case String.Nonempty.fromString text of
+                                Just nonempty ->
+                                    SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+
+                                Nothing ->
+                                    SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSendMessage guildId channelId text ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (SendMessage model.time guildId channelId text |> Just)
+                        { loggedIn
+                            | drafts =
+                                SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                        }
+                        Command.none
+                )
+                model
 
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
@@ -570,23 +609,23 @@ getUserOverview userId loggedIn =
 
 
 changeUpdate : LocalMsg -> LocalState -> LocalState
-changeUpdate localMsg localState =
+changeUpdate localMsg local =
     case localMsg of
         LocalChange changedBy localChange ->
             case localChange of
                 InvalidChange ->
-                    localState
+                    local
 
                 AdminChange adminChange ->
-                    case localState.adminData of
+                    case local.adminData of
                         IsAdmin adminData ->
-                            { localState
+                            { local
                                 | adminData =
                                     Pages.Admin.updateAdmin changedBy adminChange adminData |> IsAdmin
                             }
 
                         IsNotAdmin _ ->
-                            localState
+                            local
 
                 UserOverviewChange userOverviewChange ->
                     case userOverviewChange of
@@ -594,7 +633,69 @@ changeUpdate localMsg localState =
                             LocalState.updateUser
                                 changedBy
                                 (\user -> { user | emailNotifications = emailNotifications })
-                                localState
+                                local
+
+                SendMessage createdAt guildId channelId text ->
+                    case SeqDict.get guildId local.guilds of
+                        Just guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.insert
+                                                            channelId
+                                                            (LocalState.createMessage
+                                                                createdAt
+                                                                local.userId
+                                                                text
+                                                                channel
+                                                            )
+                                                            guild.channels
+                                                }
+                                                local.guilds
+                                    }
+
+                                Nothing ->
+                                    local
+
+                        Nothing ->
+                            local
+
+        ServerChange serverChange ->
+            case serverChange of
+                Server_SendMessage userId createdAt guildId channelId text ->
+                    case SeqDict.get guildId local.guilds of
+                        Just guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.insert
+                                                            channelId
+                                                            (LocalState.createMessage
+                                                                createdAt
+                                                                userId
+                                                                text
+                                                                channel
+                                                            )
+                                                            guild.channels
+                                                }
+                                                local.guilds
+                                    }
+
+                                Nothing ->
+                                    local
+
+                        Nothing ->
+                            local
 
 
 handleLocalChange :
@@ -680,9 +781,7 @@ updateLoadedFromBackend msg model =
                         , cmdB
                         , case model2.route of
                             HomePageRoute ->
-                                UserOverviewRoute PersonalRoute
-                                    |> Route.encode
-                                    |> BrowserNavigation.replaceUrl model2.navigationKey
+                                Command.none
 
                             AdminRoute _ ->
                                 Command.none
@@ -690,7 +789,10 @@ updateLoadedFromBackend msg model =
                             UserOverviewRoute _ ->
                                 Command.none
 
-                            GuildRoute _ _ ->
+                            GuildRoute _ ->
+                                Command.none
+
+                            ChannelRoute _ _ ->
                                 Command.none
                         ]
                     )
@@ -901,6 +1003,9 @@ pendingChangesText localChange =
         UserOverviewChange _ ->
             "Changed user profile"
 
+        SendMessage _ _ _ _ ->
+            "Sent a message"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -918,6 +1023,9 @@ layout model attributes child =
                             case change of
                                 LocalChange _ localChange ->
                                     pendingChangesText localChange
+
+                                ServerChange serverChange ->
+                                    ""
                         )
                         model.time
                         loggedIn.localState
@@ -979,32 +1087,14 @@ view model =
                     windowWidth =
                         Tuple.first loaded.windowSize
 
-                    loginOrPage : Element FrontendMsg -> Html FrontendMsg
-                    loginOrPage page =
-                        layout
-                            loaded
-                            [ Ui.inFront (Pages.Home.header windowWidth loaded.loginStatus) ]
-                            (case loaded.loginStatus of
-                                LoggedIn _ ->
-                                    page
-
-                                NotLoggedIn { loginForm } ->
-                                    case loginForm of
-                                        Just loginForm2 ->
-                                            LoginForm.view loginForm2 |> Ui.map LoginFormMsg
-
-                                        Nothing ->
-                                            page
-                            )
-
-                    requiresLogin : (LoggedIn2 -> Element FrontendMsg) -> Html FrontendMsg
+                    requiresLogin : (LoggedIn2 -> LocalState -> Element FrontendMsg) -> Html FrontendMsg
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
                                 layout
                                     loaded
                                     []
-                                    (page loggedIn)
+                                    (page loggedIn (Local.model loggedIn.localState))
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
@@ -1014,19 +1104,37 @@ view model =
                 in
                 case loaded.route of
                     HomePageRoute ->
-                        loginOrPage (Ui.Lazy.lazy Pages.Home.view windowWidth)
+                        layout
+                            loaded
+                            [ Ui.background background2 ]
+                            (case loaded.loginStatus of
+                                LoggedIn loggedIn ->
+                                    let
+                                        local =
+                                            Local.model loggedIn.localState
+                                    in
+                                    homePageLoggedInView loggedIn local
+
+                                NotLoggedIn { loginForm } ->
+                                    Ui.el
+                                        [ Ui.inFront (Pages.Home.header windowWidth loaded.loginStatus)
+                                        , Ui.height Ui.fill
+                                        ]
+                                        (case loginForm of
+                                            Just loginForm2 ->
+                                                LoginForm.view loginForm2 |> Ui.map LoginFormMsg
+
+                                            Nothing ->
+                                                Ui.Lazy.lazy Pages.Home.view windowWidth
+                                        )
+                            )
 
                     AdminRoute _ ->
                         requiresLogin
-                            (\loggedIn ->
-                                let
-                                    localState : LocalState
-                                    localState =
-                                        Local.model loggedIn.localState
-                                in
-                                case ( loggedIn.admin, localState.adminData ) of
+                            (\loggedIn local ->
+                                case ( loggedIn.admin, local.adminData ) of
                                     ( Just admin, IsAdmin adminData ) ->
-                                        case NonemptyDict.get localState.userId adminData.users of
+                                        case NonemptyDict.get local.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
                                                     adminData
@@ -1045,13 +1153,13 @@ view model =
 
                     UserOverviewRoute userOverviewData ->
                         requiresLogin
-                            (\loggedIn ->
+                            (\loggedIn local ->
                                 let
                                     userId : Id UserId
                                     userId =
                                         case userOverviewData of
                                             PersonalRoute ->
-                                                (Local.model loggedIn.localState).userId
+                                                local.userId
 
                                             SpecificUserRoute userId2 ->
                                                 userId2
@@ -1059,28 +1167,242 @@ view model =
                                 Pages.UserOverview.view
                                     loaded
                                     userId
-                                    (Local.model loggedIn.localState)
+                                    local
                                     (getUserOverview userId loggedIn)
                                     |> Ui.map UserOverviewMsg
                             )
 
-                    GuildRoute guildId channelId ->
+                    GuildRoute guildId ->
+                        requiresLogin (guildView guildId)
+
+                    ChannelRoute guildId channelId ->
                         requiresLogin
-                            (\loggedIn -> Ui.text "hi")
+                            (channelView guildId channelId)
         ]
     }
 
 
-line : Element msg
-line =
-    Ui.el
-        [ Ui.height (Ui.px 2)
-        , Ui.background (Ui.rgb 0 0 0)
-        , Ui.width (Ui.px 24)
+guildColumn : LoggedIn2 -> LocalState -> Element FrontendMsg
+guildColumn _ local =
+    Ui.column
+        [ Ui.spacing 4
+        , Ui.padding 6
+        , Ui.width Ui.shrink
+        , Ui.height Ui.fill
+        , Ui.background background1
+        , Ui.borderColor border1
+        , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         ]
-        Ui.none
+        (List.map
+            (\( guildId, guild ) ->
+                Ui.el
+                    [ Ui.Input.button (PressedGuildIcon guildId)
+                    ]
+                    (GuildIcon.view guild)
+            )
+            (SeqDict.toList local.guilds)
+        )
 
 
-isHeaderMobile : Int -> Bool
-isHeaderMobile windowSize =
-    windowSize < 750
+homePageLoggedInView : LoggedIn2 -> LocalState -> Element FrontendMsg
+homePageLoggedInView loggedIn local =
+    Ui.row
+        [ Ui.height Ui.fill
+        ]
+        [ guildColumn loggedIn local
+        ]
+
+
+guildView : Id GuildId -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildView guildId loggedIn local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
+            Ui.row
+                [ Ui.height Ui.fill ]
+                [ guildColumn loggedIn local
+                , channelColumn guildId guild
+                ]
+
+        Nothing ->
+            homePageLoggedInView loggedIn local
+
+
+channelView : Id GuildId -> Id ChannelId -> LoggedIn2 -> LocalState -> Element FrontendMsg
+channelView guildId channelId loggedIn local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    Ui.row
+                        [ Ui.height Ui.fill ]
+                        [ guildColumn loggedIn local
+                        , channelColumn guildId guild
+                        , conversationView guildId channelId loggedIn local channel
+                        ]
+
+                Nothing ->
+                    Ui.text "Channel does not exist"
+
+        Nothing ->
+            guildView guildId loggedIn local
+
+
+conversationView :
+    Id GuildId
+    -> Id ChannelId
+    -> LoggedIn2
+    -> LocalState
+    -> Channel
+    -> Element FrontendMsg
+conversationView guildId channelId loggedIn local channel =
+    let
+        text : String
+        text =
+            case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                Just nonempty ->
+                    String.Nonempty.toString nonempty
+
+                Nothing ->
+                    ""
+    in
+    Ui.column
+        [ Ui.height Ui.fill, Ui.background background3 ]
+        [ Ui.column
+            [ Ui.height Ui.fill, Ui.paddingXY 8 16 ]
+            (List.map
+                (messageView local)
+                (Array.toList channel.messages)
+            )
+        , Ui.el
+            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 8 } ]
+            (Ui.Input.multiline
+                [ Ui.Font.color
+                    (if text == "" then
+                        placeholderFont
+
+                     else
+                        font1
+                    )
+                , Ui.background background2
+                , Ui.borderColor border1
+                , Html.Events.preventDefaultOn
+                    "keydown"
+                    (Json.Decode.map2 Tuple.pair
+                        (Json.Decode.field "shiftKey" Json.Decode.bool)
+                        (Json.Decode.field "key" Json.Decode.string)
+                        |> Json.Decode.andThen
+                            (\( shiftHeld, key ) ->
+                                if key == "Enter" && not shiftHeld then
+                                    case String.Nonempty.fromString text of
+                                        Just nonempty ->
+                                            Json.Decode.succeed ( PressedSendMessage guildId channelId nonempty, True )
+
+                                        Nothing ->
+                                            Json.Decode.fail ""
+
+                                else
+                                    Json.Decode.fail ""
+                            )
+                    )
+                    |> Ui.htmlAttribute
+                ]
+                { onChange = TypedMessage guildId channelId
+                , text = text
+                , placeholder =
+                    "Write a message in #"
+                        ++ ChannelName.toString channel.name
+                        |> Just
+                , label = Ui.Input.labelHidden "Message input field"
+                , spellcheck = True
+                }
+            )
+        ]
+
+
+messageView : LocalState -> Message -> Element FrontendMsg
+messageView local message =
+    Ui.Prose.paragraph
+        [ Ui.Font.color font1
+        , Ui.paddingXY 0 10
+        ]
+        [ Ui.el
+            [ Ui.Font.bold ]
+            (case LocalState.getUser message.createdBy local of
+                Just user ->
+                    Ui.text (PersonName.toString user.name ++ " ")
+
+                Nothing ->
+                    Ui.text "<missing> "
+            )
+        , Ui.el
+            [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
+            (Ui.text (String.Nonempty.toString message.content))
+        ]
+
+
+channelColumn : Id GuildId -> Guild -> Element FrontendMsg
+channelColumn guildId guild =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.background background2
+        , Ui.width Ui.shrink
+        , Ui.widthMin 200
+        , Ui.widthMax 300
+        ]
+        [ Ui.el
+            [ Ui.Font.bold
+            , Ui.paddingXY 8 16
+            , Ui.Font.color font1
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor border1
+            ]
+            (Ui.text (GuildName.toString guild.name))
+        , Ui.column
+            [ Ui.paddingXY 0 8 ]
+            (List.map
+                (\( channelId, channel ) ->
+                    Ui.el
+                        [ Ui.paddingXY 8 8
+                        , Ui.Font.color font2
+                        , Ui.Input.button (PressedChannelName guildId channelId)
+                        ]
+                        (Ui.text ("# " ++ ChannelName.toString channel.name))
+                )
+                (SeqDict.toList guild.channels)
+            )
+        ]
+
+
+font1 : Ui.Color
+font1 =
+    Ui.rgb 255 255 255
+
+
+font2 : Ui.Color
+font2 =
+    Ui.rgb 220 220 220
+
+
+placeholderFont : Ui.Color
+placeholderFont =
+    Ui.rgb 180 180 180
+
+
+background1 : Ui.Color
+background1 =
+    Ui.rgb 14 20 40
+
+
+background2 : Ui.Color
+background2 =
+    Ui.rgb 32 40 70
+
+
+background3 : Ui.Color
+background3 =
+    Ui.rgb 50 60 90
+
+
+border1 : Ui.Color
+border1 =
+    Ui.rgb 60 70 100
