@@ -999,47 +999,12 @@ view model =
 
                     requiresLogin : (LoggedIn2 -> Element FrontendMsg) -> Html FrontendMsg
                     requiresLogin page =
-                        requiresLogin_
-                            (\loggedIn ->
+                        case loaded.loginStatus of
+                            LoggedIn loggedIn ->
                                 layout
                                     loaded
                                     []
-                                    (if isHeaderMobile (Tuple.first loaded.windowSize) then
-                                        Ui.column
-                                            [ if loaded.showMobileToolbar then
-                                                header
-                                                    loaded.windowSize
-                                                    loggedIn
-                                                    (Local.model loggedIn.localState)
-                                                    loaded
-                                                    |> Ui.inFront
-
-                                              else
-                                                Ui.noAttr
-                                            ]
-                                            [ mobileHeader
-                                                (LocalState.isAdmin (Local.model loggedIn.localState))
-                                            , page loggedIn
-                                            ]
-
-                                     else
-                                        Ui.column
-                                            [ Ui.height Ui.fill ]
-                                            [ header
-                                                loaded.windowSize
-                                                loggedIn
-                                                (Local.model loggedIn.localState)
-                                                loaded
-                                            , page loggedIn
-                                            ]
-                                    )
-                            )
-
-                    requiresLogin_ : (LoggedIn2 -> Html FrontendMsg) -> Html FrontendMsg
-                    requiresLogin_ page =
-                        case loaded.loginStatus of
-                            LoggedIn loggedIn ->
-                                page loggedIn
+                                    (page loggedIn)
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
@@ -1106,38 +1071,6 @@ view model =
     }
 
 
-mobileHeader : Bool -> Element FrontendMsg
-mobileHeader isAdmin =
-    Ui.row
-        ([ Ui.background MyUi.secondaryGray
-         , Ui.height
-            (Ui.px Toolbar.height)
-         ]
-            ++ headerBorder
-        )
-        [ if Env.isProduction && isAdmin then
-            Ui.el
-                [ Ui.paddingXY 8 0
-                , Ui.background MyUi.errorColor
-                , Ui.Font.color MyUi.white
-                , Ui.height Ui.fill
-                , Ui.width Ui.shrink
-                , Ui.contentCenterY
-                ]
-                (Ui.text "PROD")
-
-          else
-            Ui.none
-        , Ui.column
-            [ Ui.spacing 5
-            , Ui.Input.button PressedExpandToolbar
-            , Ui.padding 7
-            , Ui.alignRight
-            ]
-            [ line, line, line ]
-        ]
-
-
 line : Element msg
 line =
     Ui.el
@@ -1151,85 +1084,3 @@ line =
 isHeaderMobile : Int -> Bool
 isHeaderMobile windowSize =
     windowSize < 750
-
-
-header : ( Int, Int ) -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-header windowSize loggedIn localState model =
-    let
-        isMobile : Bool
-        isMobile =
-            isHeaderMobile (Tuple.first windowSize)
-
-        requiresAdmin : Element msg -> Element msg
-        requiresAdmin button =
-            case loggedIn.admin of
-                Just _ ->
-                    button
-
-                Nothing ->
-                    Ui.none
-
-        rightAlignedButtons : List (Element FrontendMsg)
-        rightAlignedButtons =
-            (Toolbar.link (Dom.id "toolbar_admin") PressedLink (AdminRoute { highlightLog = Nothing }) "Admin"
-                |> Toolbar.withIcon Icons.admin
-                |> Toolbar.view isMobile model.route
-                |> requiresAdmin
-            )
-                :: (if isMobile then
-                        [ Toolbar.link (Dom.id "toolbar_userOverview") PressedLink (UserOverviewRoute PersonalRoute) "User Overview"
-                            |> Toolbar.withIcon Icons.user
-                            |> Toolbar.view isMobile model.route
-                        ]
-
-                    else
-                        [ Ui.column
-                            [ Ui.centerY
-                            , Ui.Font.lineHeight 1
-                            , MyUi.internalLink (Route.UserOverviewRoute PersonalRoute)
-                            ]
-                            [ Ui.el [ Ui.Font.size 12 ] (Ui.text "Logged in as")
-                            , (LocalState.currentUser localState).name
-                                |> PersonName.toString
-                                |> Ui.text
-                                |> Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
-                            ]
-                        ]
-                   )
-                ++ [ Toolbar.msg (Dom.id "toolbar_logout") PressedLogOut "Logout"
-                        |> Toolbar.withIcon Icons.logout
-                        |> Toolbar.view isMobile model.route
-                   ]
-    in
-    if isMobile then
-        Ui.column
-            [ Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 6, color = Ui.rgba 0 0 0 0.2 } ] ]
-            (Ui.el
-                [ Ui.background MyUi.secondaryGray, Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }, Ui.borderColor MyUi.secondaryGrayBorder ]
-                (Ui.el
-                    [ Ui.alignRight
-                    , Ui.Input.button PressedCollapseToolbar
-                    , Ui.height Ui.fill
-                    , Ui.Font.size 24
-                    , Ui.paddingXY 8 4
-                    ]
-                    Icons.close
-                )
-                :: rightAlignedButtons
-            )
-
-    else
-        Ui.row
-            (Ui.spacing 24
-                :: headerBorder
-            )
-            [ MyUi.row [ Ui.height Ui.fill, Ui.alignRight ] rightAlignedButtons
-            ]
-
-
-headerBorder : List (Ui.Attribute msg)
-headerBorder =
-    [ Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-    , Ui.borderColor (Ui.rgb 200 200 200)
-    , Ui.Shadow.shadows [ { x = 0, y = 0, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.1 } ]
-    ]
