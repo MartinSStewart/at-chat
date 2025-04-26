@@ -39,7 +39,7 @@ import Sha256
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), Guild, LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser)
 
@@ -84,6 +84,30 @@ adminUser =
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 init =
+    let
+        guild : Guild
+        guild =
+            { createdAt = Time.millisToPosix 0
+            , createdBy = adminUserId
+            , name = Unsafe.channelName "First Guild"
+            , channels =
+                SeqDict.fromList
+                    [ ( Id.fromString "channel0"
+                      , { createdAt = Time.millisToPosix 0
+                        , createdBy = adminUserId
+                        , name = Unsafe.channelName "First Channel"
+                        , messages =
+                            Array.fromList
+                                [ { createdAt = Time.millisToPosix 0
+                                  , createdBy = adminUserId
+                                  , content = "Hello!"
+                                  }
+                                ]
+                        }
+                      )
+                    ]
+            }
+    in
     ( { users =
             Nonempty ( adminUserId, adminUser ) []
                 |> NonemptyDict.fromNonemptyList
@@ -96,6 +120,12 @@ init =
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
+      , guilds =
+            SeqDict.fromList
+                [ ( Id.fromString "guild0"
+                  , guild
+                  )
+                ]
       }
     , Command.none
     )
@@ -205,6 +235,7 @@ getLoginData userId user model =
                 }
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
+    , guilds = model.guilds
     }
 
 

@@ -356,6 +356,9 @@ routeRequest model =
                         )
                         model
 
+        GuildRoute _ _ ->
+            ( model, Command.none )
+
 
 routeRequiresLogin : Route -> Bool
 routeRequiresLogin route =
@@ -367,6 +370,9 @@ routeRequiresLogin route =
             True
 
         UserOverviewRoute _ ->
+            True
+
+        GuildRoute _ _ ->
             True
 
 
@@ -682,6 +688,9 @@ updateLoadedFromBackend msg model =
                                 Command.none
 
                             UserOverviewRoute _ ->
+                                Command.none
+
+                            GuildRoute _ _ ->
                                 Command.none
                         ]
                     )
@@ -1089,6 +1098,10 @@ view model =
                                     (getUserOverview userId loggedIn)
                                     |> Ui.map UserOverviewMsg
                             )
+
+                    GuildRoute guildId channelId ->
+                        requiresLogin
+                            (\loggedIn -> Ui.text "hi")
         ]
     }
 

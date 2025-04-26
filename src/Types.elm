@@ -2,8 +2,10 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , Channel
     , FrontendModel(..)
     , FrontendMsg(..)
+    , Guild
     , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -15,17 +17,19 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , Message
     , ToBackend(..)
     , ToFrontend(..)
     )
 
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
+import ChannelName exposing (ChannelName)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Id exposing (Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (LocalState)
 import Log exposing (Log)
@@ -97,6 +101,30 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
+    , guilds : SeqDict (Id GuildId) Guild
+    }
+
+
+type alias Guild =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , name : ChannelName
+    , channels : SeqDict (Id ChannelId) Channel
+    }
+
+
+type alias Channel =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , name : ChannelName
+    , messages : Array Message
+    }
+
+
+type alias Message =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , content : String
     }
 
 
@@ -177,6 +205,7 @@ type alias LoginData =
     { userId : Id UserId
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
+    , guilds : SeqDict (Id GuildId) Guild
     }
 
 

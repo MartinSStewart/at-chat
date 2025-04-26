@@ -1,5 +1,7 @@
 module Id exposing
-    ( Id(..)
+    ( ChannelId(..)
+    , GuildId(..)
+    , Id(..)
     , UserId(..)
     , fromString
     , toString
@@ -8,6 +10,14 @@ module Id exposing
 
 type UserId
     = UserId Never
+
+
+type GuildId
+    = GuildId Never
+
+
+type ChannelId
+    = ChannelId Never
 
 
 type Id a

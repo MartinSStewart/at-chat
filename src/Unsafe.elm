@@ -1,9 +1,11 @@
 module Unsafe exposing
-    ( emailAddress
+    ( channelName
+    , emailAddress
     , personName
     , url
     )
 
+import ChannelName exposing (ChannelName)
 import EmailAddress exposing (EmailAddress)
 import PersonName exposing (PersonName)
 import Url exposing (Url)
@@ -22,6 +24,16 @@ url urlText =
 personName : String -> PersonName
 personName a =
     case PersonName.fromString a of
+        Ok b ->
+            b
+
+        Err _ ->
+            unreachable 0
+
+
+channelName : String -> ChannelName
+channelName a =
+    case ChannelName.fromString a of
         Ok b ->
             b
 

@@ -6,7 +6,9 @@ module Route exposing
     , isSamePage
     )
 
-import Id exposing (Id, UserId)
+import AppUrl exposing (AppUrl)
+import Dict
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Url exposing (Url)
 import Url.Builder
 import Url.Parser exposing ((</>), (<?>))
@@ -17,6 +19,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | UserOverviewRoute UserOverviewRouteData
+    | GuildRoute (Id GuildId) (Id ChannelId)
 
 
 type UserOverviewRouteData
@@ -26,44 +29,37 @@ type UserOverviewRouteData
 
 decode : Url -> Maybe Route
 decode url =
-    Url.Parser.parse urlDecoder url
+    let
+        url2 =
+            AppUrl.fromUrl url
+    in
+    case url2.path of
+        [ "admin" ] ->
+            AdminRoute
+                { highlightLog =
+                    case Dict.get "highlight-log" url2.queryParameters of
+                        Just [ a ] ->
+                            String.toInt a
 
+                        _ ->
+                            Nothing
+                }
+                |> Just
 
-urlDecoder : Url.Parser.Parser (Route -> c) c
-urlDecoder =
-    Url.Parser.oneOf
-        [ Url.Parser.s adminPath <?> adminQuery |> Url.Parser.map (\a -> AdminRoute { highlightLog = a })
-        , Url.Parser.s userOverviewPath </> idPath |> Url.Parser.map (\a -> UserOverviewRoute (SpecificUserRoute a))
-        , Url.Parser.s userOverviewPath |> Url.Parser.map (UserOverviewRoute PersonalRoute)
-        , Url.Parser.top |> Url.Parser.map HomePageRoute
-        ]
+        [ "user-overview" ] ->
+            UserOverviewRoute PersonalRoute |> Just
 
+        [ "user-overview", userId ] ->
+            UserOverviewRoute (SpecificUserRoute (Id.fromString userId)) |> Just
 
-idPath : Url.Parser.Parser (Id id -> a) a
-idPath =
-    Url.Parser.map
-        (\text -> Url.percentDecode text |> Maybe.withDefault text |> Id.fromString)
-        Url.Parser.string
+        [ "channels", guildId, channelId ] ->
+            GuildRoute (Id.fromString guildId) (Id.fromString channelId) |> Just
 
+        [] ->
+            Just HomePageRoute
 
-adminQuery : Url.Parser.Query.Parser (Maybe Int)
-adminQuery =
-    Url.Parser.Query.int highlightLog
-
-
-highlightLog : String
-highlightLog =
-    "highlight-log"
-
-
-userOverviewPath : String
-userOverviewPath =
-    "user-overview"
-
-
-adminPath : String
-adminPath =
-    "admin"
+        _ ->
+            Nothing
 
 
 encode : Route -> String
@@ -75,17 +71,17 @@ encode route =
                     ( [], [] )
 
                 AdminRoute params ->
-                    ( [ adminPath ]
+                    ( [ "admin" ]
                     , case params.highlightLog of
                         Just a ->
-                            [ Url.Builder.int highlightLog a ]
+                            [ Url.Builder.int "highlight-log" a ]
 
                         Nothing ->
                             []
                     )
 
                 UserOverviewRoute maybeUserId ->
-                    ( userOverviewPath
+                    ( "user-overview"
                         :: (case maybeUserId of
                                 SpecificUserRoute userId ->
                                     [ idToPath userId ]
@@ -95,6 +91,9 @@ encode route =
                            )
                     , []
                     )
+
+                GuildRoute guildId channelId ->
+                    ( [ "channels", Id.toString guildId, Id.toString channelId ], [] )
     in
     Url.Builder.absolute path query
 
@@ -119,4 +118,7 @@ isSamePage routeA routeB =
                     False
 
         UserOverviewRoute _ ->
+            routeB == routeA
+
+        GuildRoute _ _ ->
             routeB == routeA
