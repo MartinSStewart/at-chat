@@ -25,7 +25,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (Guild)
+import LocalState exposing (BackendGuild, ChannelStatus(..))
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
@@ -87,7 +87,7 @@ adminUser =
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 init =
     let
-        guild : Guild
+        guild : BackendGuild
         guild =
             { createdAt = Time.millisToPosix 0
             , createdBy = adminUserId
@@ -106,6 +106,7 @@ init =
                                   , content = NonemptyString 'H' "ello!"
                                   }
                                 ]
+                        , status = ChannelActive
                         }
                       )
                     ]
@@ -148,6 +149,7 @@ init =
                                           , content = NonemptyString 'H' "ello world!"
                                           }
                                         ]
+                                , status = ChannelActive
                                 }
                               )
                             ]
@@ -265,7 +267,7 @@ getLoginData userId user model =
                 }
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
-    , guilds = model.guilds
+    , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontend userId guild) model.guilds
     }
 
 
@@ -459,11 +461,77 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (sendMessage model2 time clientId changeId guildId channelId text)
 
                 NewChannelChange _ guildId channelName ->
-                    asGuildMember
+                    asGuildOwner
                         model2
                         sessionId
                         guildId
-                        (createNewChannel clientId changeId time guildId channelName model2)
+                        (\userId user guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.createChannel time userId channelName guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ NewChannelChange time guildId channelName
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_NewChannel time guildId channelName |> ServerChange)
+                                    model2
+                                ]
+                            )
+                        )
+
+                EditChannelChange guildId channelId channelName ->
+                    asGuildOwner
+                        model2
+                        sessionId
+                        guildId
+                        (\userId user guild ->
+                            ( { model2
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.editChannel channelName channelId guild)
+                                        model2.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_EditChannel guildId channelId channelName |> ServerChange)
+                                    model2
+                                ]
+                            )
+                        )
+
+                DeleteChannelChange guildId channelId ->
+                    asGuildOwner
+                        model2
+                        sessionId
+                        guildId
+                        (\userId user guild ->
+                            ( { model2
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.deleteChannel time userId channelId guild)
+                                        model2.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_DeleteChannel guildId channelId |> ServerChange)
+                                    model2
+                                ]
+                            )
+                        )
 
         UserOverviewToBackend toBackend2 ->
             asUser
@@ -472,35 +540,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\userId user ->
                     userOverviewUpdateFromFrontend clientId time userId user toBackend2 model2
                 )
-
-
-createNewChannel :
-    ClientId
-    -> ChangeId
-    -> Time.Posix
-    -> Id GuildId
-    -> ChannelName
-    -> BackendModel
-    -> Id UserId
-    -> BackendUser
-    -> Guild
-    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
-createNewChannel clientId changeId time guildId channelName model userId user guild =
-    if userId == guild.owner then
-        ( { model
-            | guilds =
-                SeqDict.insert
-                    guildId
-                    (LocalState.createChannel time userId channelName guild)
-                    model.guilds
-          }
-        , NewChannelChange time guildId channelName
-            |> LocalChangeResponse changeId
-            |> Lamdera.sendToFrontend clientId
-        )
-
-    else
-        ( model, invalidChangeResponse changeId clientId )
 
 
 userOverviewUpdateFromFrontend :
@@ -667,7 +706,7 @@ sendMessage :
     -> NonemptyString
     -> Id UserId
     -> BackendUser
-    -> Guild
+    -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
 sendMessage model time clientId changeId guildId channelId text userId user guild =
     case SeqDict.get channelId guild.channels of
@@ -814,7 +853,7 @@ asGuildMember :
     BackendModel
     -> SessionId
     -> Id GuildId
-    -> (Id UserId -> BackendUser -> Guild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (Id UserId -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildMember model sessionId guildId func =
     case SeqDict.get sessionId model.sessions of
@@ -828,6 +867,25 @@ asGuildMember model sessionId guildId func =
 
         Nothing ->
             ( model, Command.none )
+
+
+asGuildOwner :
+    BackendModel
+    -> SessionId
+    -> Id GuildId
+    -> (Id UserId -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asGuildOwner model sessionId guildId func =
+    asGuildMember model
+        sessionId
+        guildId
+        (\userId user guild ->
+            if userId == guild.owner then
+                func userId user guild
+
+            else
+                ( model, Command.none )
+        )
 
 
 asAdmin :

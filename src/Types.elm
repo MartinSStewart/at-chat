@@ -32,7 +32,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Image exposing (Image)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (Guild, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import NonemptyDict exposing (NonemptyDict)
@@ -89,6 +89,7 @@ type alias LoggedIn2 =
     , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
+    , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     }
 
@@ -105,7 +106,7 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
-    , guilds : SeqDict (Id GuildId) Guild
+    , guilds : SeqDict (Id GuildId) BackendGuild
     }
 
 
@@ -148,6 +149,10 @@ type FrontendMsg
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
     | MouseExitedChannelName (Id GuildId) (Id ChannelId)
+    | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
+    | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
+    | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
+    | PressedDeleteChannel (Id GuildId) (Id ChannelId)
 
 
 type alias NewChannelForm =
@@ -196,7 +201,7 @@ type alias LoginData =
     { userId : Id UserId
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
-    , guilds : SeqDict (Id GuildId) Guild
+    , guilds : SeqDict (Id GuildId) FrontendGuild
     }
 
 
@@ -212,6 +217,9 @@ type LocalMsg
 
 type ServerChange
     = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    | Server_NewChannel Time.Posix (Id GuildId) ChannelName
+    | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
+    | Server_DeleteChannel (Id GuildId) (Id ChannelId)
 
 
 type LocalChange
@@ -220,3 +228,5 @@ type LocalChange
     | UserOverviewChange Pages.UserOverview.Change
     | SendMessageChange Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
     | NewChannelChange Time.Posix (Id GuildId) ChannelName
+    | EditChannelChange (Id GuildId) (Id ChannelId) ChannelName
+    | DeleteChannelChange (Id GuildId) (Id ChannelId)

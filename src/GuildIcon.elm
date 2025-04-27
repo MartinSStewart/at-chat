@@ -1,16 +1,16 @@
 module GuildIcon exposing (view)
 
-import GuildName
-import Image
-import LocalState exposing (Guild)
+import GuildName exposing (GuildName)
+import Image exposing (Image)
+import LocalState exposing (BackendGuild, FrontendGuild)
 import MyUi
 import Ui exposing (Element)
 import Ui.Font
 
 
-view : Bool -> Int -> Guild -> Element msg
-view isSelected size portfolio =
-    case portfolio.icon of
+view : Bool -> Int -> FrontendGuild -> Element msg
+view isSelected size guild =
+    case guild.icon of
         Just icon ->
             Ui.image
                 [ Ui.width (Ui.px size)
@@ -21,12 +21,12 @@ view isSelected size portfolio =
                 , Ui.borderColor MyUi.secondaryGrayBorder
                 ]
                 { source = Image.url icon
-                , description = GuildName.toString portfolio.name
+                , description = GuildName.toString guild.name
                 , onLoad = Nothing
                 }
 
         Nothing ->
-            GuildName.toString portfolio.name
+            GuildName.toString guild.name
                 |> String.replace "-" " "
                 |> String.filter (\char -> Char.isAlphaNum char || char == ' ')
                 |> String.words

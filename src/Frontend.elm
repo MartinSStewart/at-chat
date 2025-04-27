@@ -25,7 +25,7 @@ import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), Channel, Guild, LocalState, Message)
+import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message)
 import LoginForm
 import MyUi
 import NonemptyDict
@@ -241,6 +241,7 @@ loadedInitHelper time loginData loading =
                     |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
+            , editChannelForm = SeqDict.empty
             , channelNameHover = Nothing
             }
 
@@ -656,6 +657,75 @@ updateLoaded msg model =
                 )
                 model
 
+        EditChannelFormChanged guildId channelId newChannelForm ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editChannelForm =
+                            SeqDict.insert
+                                ( guildId, channelId )
+                                newChannelForm
+                                loggedIn.editChannelForm
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedCancelEditChannelChanges guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editChannelForm =
+                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                      }
+                    , Route.push model.navigationKey (GuildRoute guildId (ChannelRoute channelId))
+                    )
+                )
+                model
+
+        PressedSubmitEditChannelChanges guildId channelId form ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case ChannelName.fromString form.name of
+                        Ok channelName ->
+                            handleLocalChange
+                                model.time
+                                (EditChannelChange guildId channelId channelName |> Just)
+                                { loggedIn
+                                    | editChannelForm =
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                                }
+                                Command.none
+
+                        Err _ ->
+                            ( { loggedIn
+                                | editChannelForm =
+                                    SeqDict.insert
+                                        ( guildId, channelId )
+                                        { form | pressedSubmit = True }
+                                        loggedIn.editChannelForm
+                              }
+                            , Command.none
+                            )
+                )
+                model
+
+        PressedDeleteChannel guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (DeleteChannelChange guildId channelId |> Just)
+                        { loggedIn
+                            | drafts = SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                            , editChannelForm =
+                                SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                        }
+                        (Route.push model.navigationKey (GuildRoute guildId NoChannelRoute))
+                )
+                model
+
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
 getUserOverview userId loggedIn =
@@ -740,7 +810,25 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannel time local.userId channelName)
+                                (LocalState.createChannelFrontend time local.userId channelName)
+                                local.guilds
+                    }
+
+                EditChannelChange guildId channelId channelName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.editChannel channelName channelId)
+                                local.guilds
+                    }
+
+                DeleteChannelChange guildId channelId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.deleteChannelFrontend channelId)
                                 local.guilds
                     }
 
@@ -775,6 +863,33 @@ changeUpdate localMsg local =
 
                         Nothing ->
                             local
+
+                Server_NewChannel time guildId channelName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.createChannelFrontend time local.userId channelName)
+                                local.guilds
+                    }
+
+                Server_EditChannel guildId channelId channelName ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.editChannel channelName channelId)
+                                local.guilds
+                    }
+
+                Server_DeleteChannel guildId channelId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.deleteChannelFrontend channelId)
+                                local.guilds
+                    }
 
 
 handleLocalChange :
@@ -1085,6 +1200,12 @@ pendingChangesText localChange =
         NewChannelChange posix id channelName ->
             "Created new channel"
 
+        EditChannelChange id _ channelName ->
+            "Edited channel"
+
+        DeleteChannelChange _ id ->
+            "Deleted channel"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -1305,7 +1426,13 @@ guildView guildId channelRoute loggedIn local =
                                 conversationView guildId channelId loggedIn local channel
 
                             Nothing ->
-                                Ui.text "Channel does not exist"
+                                Ui.el
+                                    [ Ui.centerY
+                                    , Ui.Font.center
+                                    , Ui.Font.color font1
+                                    , Ui.Font.size 20
+                                    ]
+                                    (Ui.text "Channel does not exist")
 
                     NewChannelRoute ->
                         SeqDict.get guildId loggedIn.newChannelForm
@@ -1318,10 +1445,22 @@ guildView guildId channelRoute loggedIn local =
                     EditChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
                             Just channel ->
-                                editChannelFormView guildId channelId channel
+                                editChannelFormView
+                                    guildId
+                                    channelId
+                                    channel
+                                    (SeqDict.get ( guildId, channelId ) loggedIn.editChannelForm
+                                        |> Maybe.withDefault (editChannelFormInit channel)
+                                    )
 
                             Nothing ->
-                                Ui.text "Channel does not exist"
+                                Ui.el
+                                    [ Ui.centerY
+                                    , Ui.Font.center
+                                    , Ui.Font.color font1
+                                    , Ui.Font.size 20
+                                    ]
+                                    (Ui.text "Channel does not exist")
                 , memberColumn local guild
                 ]
 
@@ -1334,7 +1473,7 @@ conversationView :
     -> Id ChannelId
     -> LoggedIn2
     -> LocalState
-    -> Channel
+    -> FrontendChannel
     -> Element FrontendMsg
 conversationView guildId channelId loggedIn local channel =
     let
@@ -1425,7 +1564,7 @@ messageView local message =
 channelColumn :
     LocalState
     -> Id GuildId
-    -> Guild
+    -> FrontendGuild
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId )
     -> Element FrontendMsg
@@ -1550,7 +1689,7 @@ gearIcon =
         ]
 
 
-memberColumn : LocalState -> Guild -> Element FrontendMsg
+memberColumn : LocalState -> FrontendGuild -> Element FrontendMsg
 memberColumn local guild =
     Ui.column
         [ Ui.height Ui.fill
@@ -1593,20 +1732,83 @@ memberLabel local userId =
 
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
-    { name = " ", pressedSubmit = False }
+    { name = "", pressedSubmit = False }
 
 
-editChannelFormView : Id GuildId -> Id ChannelId -> Channel -> Element FrontendMsg
-editChannelFormView guildId channelId channel =
+editChannelFormInit : FrontendChannel -> NewChannelForm
+editChannelFormInit channel =
+    { name = ChannelName.toString channel.name, pressedSubmit = False }
+
+
+editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
+editChannelFormView guildId channelId channel form =
     Ui.column
         [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
-        , Ui.text ""
+        , channelNameInput guildId form |> Ui.map (EditChannelFormChanged guildId channelId)
+        , Ui.row
+            [ Ui.spacing 16 ]
+            [ Ui.el
+                [ Ui.Input.button (PressedCancelEditChannelChanges guildId channelId)
+                , Ui.paddingXY 16 8
+                , Ui.background cancelButtonBackground
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color buttonFontColor
+                , Ui.Font.bold
+                , Ui.borderColor buttonBorder
+                , Ui.border 1
+                ]
+                (Ui.text "Cancel")
+            , submitButton
+                (PressedSubmitEditChannelChanges guildId channelId form)
+                "Save changes"
+            ]
+
+        --, Ui.el [ Ui.height (Ui.px 1), Ui.background splitterColor ] Ui.none
+        , Ui.el
+            [ Ui.Input.button (PressedDeleteChannel guildId channelId)
+            , Ui.paddingXY 16 8
+            , Ui.background deleteButtonBackground
+            , Ui.width Ui.shrink
+            , Ui.rounded 8
+            , Ui.Font.color deleteButtonFont
+            , Ui.Font.bold
+            , Ui.borderColor buttonBorder
+            , Ui.border 1
+            ]
+            (Ui.text "Delete channel")
         ]
 
 
 newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView guildId form =
+    Ui.column
+        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
+        , channelNameInput guildId form |> Ui.map (NewChannelFormChanged guildId)
+        , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
+        ]
+
+
+submitButton : msg -> String -> Element msg
+submitButton onPress text =
+    Ui.el
+        [ Ui.Input.button onPress
+        , Ui.paddingXY 16 8
+        , Ui.background buttonBackground
+        , Ui.width Ui.shrink
+        , Ui.rounded 8
+        , Ui.Font.color buttonFontColor
+        , Ui.Font.bold
+        , Ui.borderColor buttonBorder
+        , Ui.border 1
+        ]
+        (Ui.text text)
+
+
+channelNameInput : Id GuildId -> NewChannelForm -> Element NewChannelForm
+channelNameInput guildId form =
     let
         nameLabel =
             Ui.Input.label
@@ -1615,47 +1817,49 @@ newChannelFormView guildId form =
                 (Ui.text "Channel name")
     in
     Ui.column
-        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
-        , Ui.column
-            []
-            [ nameLabel.element
-            , Ui.Input.text
-                [ Ui.padding 6
-                , Ui.background inputBackground
-                , Ui.borderColor inputBorder
-                , Ui.widthMax 500
-                ]
-                { onChange = \text -> NewChannelFormChanged guildId { form | name = text }
-                , text = form.name
-                , placeholder = Nothing
-                , label = nameLabel.id
-                }
-            , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
-                ( True, Err error ) ->
-                    Ui.el [ Ui.paddingXY 2 0, Ui.Font.color errorColor ] (Ui.text error)
+        []
+        [ nameLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background inputBackground
+            , Ui.borderColor inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | name = text }
+            , text = form.name
+            , placeholder = Nothing
+            , label = nameLabel.id
+            }
+        , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
+            ( True, Err error ) ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color errorColor ] (Ui.text error)
 
-                _ ->
-                    Ui.none
-            ]
-        , Ui.el
-            [ Ui.Input.button (PressedSubmitNewChannel guildId form)
-            , Ui.paddingXY 16 8
-            , Ui.background buttonBackground
-            , Ui.width Ui.shrink
-            , Ui.rounded 8
-            , Ui.Font.color buttonFontColor
-            , Ui.Font.bold
-            , Ui.borderColor buttonBorder
-            , Ui.border 1
-            ]
-            (Ui.text "Create channel")
+            _ ->
+                Ui.none
         ]
+
+
+splitterColor : Ui.Color
+splitterColor =
+    background1
 
 
 buttonBackground : Ui.Color
 buttonBackground =
     Ui.rgb 220 230 240
+
+
+cancelButtonBackground : Ui.Color
+cancelButtonBackground =
+    Ui.rgb 196 200 204
+
+
+deleteButtonBackground =
+    Ui.rgb 255 240 250
+
+
+deleteButtonFont =
+    Ui.rgb 255 0 0
 
 
 buttonBorder : Ui.Color
