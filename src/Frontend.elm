@@ -1444,7 +1444,7 @@ view model =
                                         local =
                                             Local.model loggedIn.localState
                                     in
-                                    homePageLoggedInView loggedIn local
+                                    homePageLoggedInView loaded loggedIn local
 
                                 NotLoggedIn { loginForm } ->
                                     Ui.el
@@ -1509,11 +1509,11 @@ view model =
     }
 
 
-guildColumn : Maybe (Id GuildId) -> LoggedIn2 -> LocalState -> Element FrontendMsg
-guildColumn selectedGuild _ local =
+guildColumn : Route -> LoggedIn2 -> LocalState -> Element FrontendMsg
+guildColumn route loggedIn local =
     Ui.column
         [ Ui.spacing 4
-        , Ui.padding 6
+        , Ui.paddingXY 0 6
         , Ui.width Ui.shrink
         , Ui.height Ui.fill
         , Ui.background background1
@@ -1521,21 +1521,30 @@ guildColumn selectedGuild _ local =
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         , Ui.scrollable
         ]
-        (GuildIcon.showFriendsButton (PressedLink HomePageRoute)
+        (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
             :: List.map
                 (\( guildId, guild ) ->
                     Ui.el
                         [ Ui.Input.button (PressedLink (GuildRoute guildId NoChannelRoute))
                         ]
-                        (GuildIcon.view (selectedGuild == Just guildId) 50 guild)
+                        (GuildIcon.view
+                            (case route of
+                                GuildRoute a _ ->
+                                    a == guildId
+
+                                _ ->
+                                    False
+                            )
+                            guild
+                        )
                 )
                 (SeqDict.toList local.guilds)
-            ++ [ GuildIcon.addGuildButton PressedCreateGuild ]
+            ++ [ GuildIcon.addGuildButton False PressedCreateGuild ]
         )
 
 
-homePageLoggedInView : LoggedIn2 -> LocalState -> Element FrontendMsg
-homePageLoggedInView loggedIn local =
+homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
+homePageLoggedInView model loggedIn local =
     Ui.row
         [ Ui.height Ui.fill
         , Ui.background background3
@@ -1544,7 +1553,7 @@ homePageLoggedInView loggedIn local =
             [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
             [ Ui.row
                 [ Ui.height Ui.fill ]
-                [ guildColumn Nothing loggedIn local
+                [ guildColumn model.route loggedIn local
                 , friendsColumn local
                 ]
             , loggedInAsView local
@@ -1588,7 +1597,7 @@ guildView model guildId channelRoute loggedIn local =
                     [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                     [ Ui.row
                         [ Ui.height Ui.fill ]
-                        [ guildColumn (Just guildId) loggedIn local
+                        [ guildColumn model.route loggedIn local
                         , channelColumn local guildId guild channelRoute loggedIn.channelNameHover
                         ]
                     , loggedInAsView local
@@ -1656,7 +1665,7 @@ guildView model guildId channelRoute loggedIn local =
                 ]
 
         Nothing ->
-            homePageLoggedInView loggedIn local
+            homePageLoggedInView model loggedIn local
 
 
 inviteLinkCreatorForm : LoadedFrontend -> Id GuildId -> FrontendGuild -> Element FrontendMsg
@@ -1875,21 +1884,20 @@ channelColumn local guildId guild channelRoute channelNameHover =
         ]
         [ Ui.row
             [ Ui.Font.bold
-            , Ui.paddingXY 4 4
+            , Ui.paddingWith { left = 8, right = 4, top = 0, bottom = 0 }
             , Ui.spacing 8
             , Ui.Font.color font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor border1
             ]
-            [ GuildIcon.view False 40 guild
-            , Ui.text (GuildName.toString guild.name)
+            [ Ui.text (GuildName.toString guild.name)
             , Ui.el
                 [ Ui.width Ui.shrink
                 , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
                 , Ui.Font.color font2
                 , Ui.width (Ui.px 40)
                 , Ui.alignRight
-                , Ui.paddingXY 8 0
+                , Ui.paddingXY 8 8
                 ]
                 (Ui.html Icons.inviteUserIcon)
             ]
@@ -1993,7 +2001,7 @@ friendsColumn local =
         ]
         [ Ui.el
             [ Ui.Font.bold
-            , Ui.paddingXY 4 4
+            , Ui.paddingXY 8 8
             , Ui.spacing 8
             , Ui.Font.color font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
