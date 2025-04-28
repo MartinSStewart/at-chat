@@ -25,7 +25,7 @@ import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message)
+import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..))
 import LoginForm
 import MyUi
 import NonemptyDict
@@ -841,9 +841,12 @@ changeUpdate localMsg local =
                                                         SeqDict.insert
                                                             channelId
                                                             (LocalState.createMessage
-                                                                createdAt
-                                                                local.userId
-                                                                text
+                                                                (UserTextMessage
+                                                                    { createdAt = createdAt
+                                                                    , createdBy = local.userId
+                                                                    , content = text
+                                                                    }
+                                                                )
                                                                 channel
                                                             )
                                                             guild.channels
@@ -914,9 +917,12 @@ changeUpdate localMsg local =
                                                         SeqDict.insert
                                                             channelId
                                                             (LocalState.createMessage
-                                                                createdAt
-                                                                userId
-                                                                text
+                                                                (UserTextMessage
+                                                                    { createdAt = createdAt
+                                                                    , createdBy = local.userId
+                                                                    , content = text
+                                                                    }
+                                                                )
                                                                 channel
                                                             )
                                                             guild.channels
@@ -1604,7 +1610,18 @@ guildView model guildId channelRoute loggedIn local =
                             |> newChannelFormView guildId
 
                     NoChannelRoute ->
-                        Ui.el [] Ui.none
+                        case SeqDict.get guild.announcementChannel guild.channels of
+                            Just channel ->
+                                conversationView guildId guild.announcementChannel loggedIn local channel
+
+                            Nothing ->
+                                Ui.el
+                                    [ Ui.centerY
+                                    , Ui.Font.center
+                                    , Ui.Font.color font1
+                                    , Ui.Font.size 20
+                                    ]
+                                    (Ui.text "Channel does not exist")
 
                     EditChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
@@ -1750,9 +1767,12 @@ conversationView guildId channelId loggedIn local channel =
         [ Ui.height Ui.fill ]
         [ Ui.column
             [ Ui.height Ui.fill, Ui.paddingXY 8 16, Ui.scrollable ]
-            (List.map
-                (messageView local)
-                (Array.toList channel.messages)
+            (Ui.el
+                [ Ui.Font.color font2 ]
+                (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
+                :: List.map
+                    (messageView local)
+                    (Array.toList channel.messages)
             )
         , Ui.el
             [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 8 } ]
@@ -1797,23 +1817,44 @@ conversationView guildId channelId loggedIn local channel =
 
 messageView : LocalState -> Message -> Element FrontendMsg
 messageView local message =
-    Ui.Prose.paragraph
-        [ Ui.Font.color font1
-        , Ui.paddingXY 0 10
-        ]
-        [ Ui.el
-            [ Ui.Font.bold ]
-            (case LocalState.getUser message.createdBy local of
-                Just user ->
-                    Ui.text (PersonName.toString user.name)
+    case message of
+        UserTextMessage message2 ->
+            Ui.Prose.paragraph
+                [ Ui.Font.color font1
+                , Ui.paddingXY 0 10
+                ]
+                [ Ui.el
+                    [ Ui.Font.bold ]
+                    (case LocalState.getUser message2.createdBy local of
+                        Just user ->
+                            Ui.text (PersonName.toString user.name)
 
-                Nothing ->
-                    Ui.text "<missing> "
-            )
-        , Ui.el
-            [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
-            (Ui.text ("  " ++ String.Nonempty.toString message.content))
-        ]
+                        Nothing ->
+                            Ui.text "<missing> "
+                    )
+                , Ui.el
+                    [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
+                    (Ui.text ("  " ++ String.Nonempty.toString message2.content))
+                ]
+
+        UserJoinedMessage _ userId ->
+            Ui.Prose.paragraph
+                [ Ui.Font.color font1
+                , Ui.paddingXY 0 10
+                ]
+                [ Ui.el
+                    [ Ui.Font.bold ]
+                    (case LocalState.getUser userId local of
+                        Just user ->
+                            Ui.text (PersonName.toString user.name)
+
+                        Nothing ->
+                            Ui.text "<missing> "
+                    )
+                , Ui.el
+                    []
+                    (Ui.text " joined!")
+                ]
 
 
 channelColumn :
@@ -1853,8 +1894,17 @@ channelColumn local guildId guild channelRoute channelNameHover =
             (List.map
                 (\( channelId, channel ) ->
                     let
+                        isSelected : Bool
                         isSelected =
-                            channelRoute == ChannelRoute channelId
+                            case channelRoute of
+                                ChannelRoute a ->
+                                    a == channelId
+
+                                NoChannelRoute ->
+                                    guild.announcementChannel == channelId
+
+                                _ ->
+                                    False
 
                         isHover =
                             channelNameHover == Just ( guildId, channelId )

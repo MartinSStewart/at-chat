@@ -9,7 +9,7 @@ module LocalState exposing
     , JoinGuildError(..)
     , LocalState
     , LogWithTime
-    , Message
+    , Message(..)
     , NotAdminData
     , addInvite
     , addMember
@@ -68,6 +68,7 @@ type alias BackendGuild =
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
+    , announcementChannel : Id ChannelId
     }
 
 
@@ -80,6 +81,7 @@ type alias FrontendGuild =
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
+    , announcementChannel : Id ChannelId
     }
 
 
@@ -94,6 +96,7 @@ guildToFrontend userId guild =
         , members = guild.members
         , owner = guild.owner
         , invites = guild.invites
+        , announcementChannel = guild.announcementChannel
         }
             |> Just
 
@@ -154,11 +157,13 @@ type ChannelStatus
     | ChannelDeleted { deletedAt : Time.Posix, deletedBy : Id UserId }
 
 
-type alias Message =
-    { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , content : NonemptyString
-    }
+type Message
+    = UserTextMessage
+        { createdAt : Time.Posix
+        , createdBy : Id UserId
+        , content : NonemptyString
+        }
+    | UserJoinedMessage Time.Posix (Id UserId)
 
 
 type AdminStatus
@@ -263,22 +268,9 @@ isAdmin { adminData } =
             False
 
 
-createMessage :
-    Time.Posix
-    -> Id UserId
-    -> NonemptyString
-    -> { d | messages : Array { createdAt : Time.Posix, createdBy : Id UserId, content : NonemptyString } }
-    -> { d | messages : Array { createdAt : Time.Posix, createdBy : Id UserId, content : NonemptyString } }
-createMessage createdAt userId text channel =
-    { channel
-        | messages =
-            Array.push
-                { createdAt = createdAt
-                , createdBy = userId
-                , content = text
-                }
-                channel.messages
-    }
+createMessage : Message -> { d | messages : Array Message } -> { d | messages : Array Message }
+createMessage message channel =
+    { channel | messages = Array.push message channel.messages }
 
 
 createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild -> BackendGuild
@@ -374,12 +366,33 @@ addInvite inviteId userId time guild =
 addMember :
     Time.Posix
     -> Id UserId
-    -> { c | owner : Id UserId, members : SeqDict (Id UserId) { joinedAt : Time.Posix } }
-    -> Result () { c | owner : Id UserId, members : SeqDict (Id UserId) { joinedAt : Time.Posix } }
+    ->
+        { a
+            | owner : Id UserId
+            , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+            , announcementChannel : Id ChannelId
+            , channels : SeqDict (Id ChannelId) { d | messages : Array Message }
+        }
+    ->
+        Result
+            ()
+            { a
+                | owner : Id UserId
+                , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+                , announcementChannel : Id ChannelId
+                , channels : SeqDict (Id ChannelId) { d | messages : Array Message }
+            }
 addMember time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
         Err ()
 
     else
-        { guild | members = SeqDict.insert userId { joinedAt = time } guild.members }
+        { guild
+            | members = SeqDict.insert userId { joinedAt = time } guild.members
+            , channels =
+                SeqDict.updateIfExists
+                    guild.announcementChannel
+                    (createMessage (UserJoinedMessage time userId))
+                    guild.channels
+        }
             |> Ok

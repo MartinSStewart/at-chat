@@ -25,7 +25,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..), JoinGuildError(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), JoinGuildError(..), Message(..))
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
@@ -117,11 +117,7 @@ init =
                         , name = Unsafe.channelName "First Channel"
                         , messages =
                             Array.fromList
-                                [ { createdAt = Time.millisToPosix 0
-                                  , createdBy = adminUserId
-                                  , content = NonemptyString 'H' "ello!"
-                                  }
-                                ]
+                                []
                         , status = ChannelActive
                         }
                       )
@@ -129,6 +125,7 @@ init =
             , members = SeqDict.fromList []
             , owner = adminUserId
             , invites = SeqDict.empty
+            , announcementChannel = Id.fromInt 0
             }
     in
     ( { users =
@@ -161,11 +158,7 @@ init =
                                 , name = Unsafe.channelName "First Channel"
                                 , messages =
                                     Array.fromList
-                                        [ { createdAt = Time.millisToPosix 0
-                                          , createdBy = adminUserId
-                                          , content = NonemptyString 'H' "ello world!"
-                                          }
-                                        ]
+                                        []
                                 , status = ChannelActive
                                 }
                               )
@@ -173,6 +166,7 @@ init =
                     , members = SeqDict.fromList []
                     , owner = adminUserId
                     , invites = SeqDict.empty
+                    , announcementChannel = Id.fromInt 0
                     }
                   )
                 ]
@@ -625,9 +619,11 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
             case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time userId guild ) of
                 ( Just _, Ok guild2 ) ->
                     let
+                        modelWithoutUser : BackendModel
                         modelWithoutUser =
                             model
 
+                        model2 : BackendModel
                         model2 =
                             { model
                                 | guilds = SeqDict.insert guildId guild2 model.guilds
@@ -872,7 +868,15 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                             | channels =
                                 SeqDict.insert
                                     channelId
-                                    (LocalState.createMessage time userId text channel)
+                                    (LocalState.createMessage
+                                        (UserTextMessage
+                                            { createdAt = time
+                                            , createdBy = userId
+                                            , content = text
+                                            }
+                                        )
+                                        channel
+                                    )
                                     guild.channels
                         }
                         model.guilds
