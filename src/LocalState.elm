@@ -10,6 +10,7 @@ module LocalState exposing
     , LogWithTime
     , Message
     , NotAdminData
+    , addInvite
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -30,11 +31,12 @@ import ChannelName exposing (ChannelName)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
@@ -57,6 +59,7 @@ type alias BackendGuild =
     , channels : SeqDict (Id ChannelId) BackendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
+    , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
 
@@ -68,6 +71,7 @@ type alias FrontendGuild =
     , channels : SeqDict (Id ChannelId) FrontendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
+    , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
 
@@ -81,6 +85,7 @@ guildToFrontend userId guild =
         , channels = SeqDict.filterMap (\_ channel -> channelToFrontend channel) guild.channels
         , members = guild.members
         , owner = guild.owner
+        , invites = guild.invites
         }
             |> Just
 
@@ -343,3 +348,16 @@ deleteChannel time userId channelId guild =
 deleteChannelFrontend : Id ChannelId -> FrontendGuild -> FrontendGuild
 deleteChannelFrontend channelId guild =
     { guild | channels = SeqDict.remove channelId guild.channels }
+
+
+addInvite :
+    SecretId InviteLinkId
+    -> Id UserId
+    -> Time.Posix
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+    -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
+addInvite inviteId userId time guild =
+    { guild
+        | invites =
+            SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites
+    }

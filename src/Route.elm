@@ -11,7 +11,8 @@ import AppUrl exposing (AppUrl)
 import Dict
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command exposing (Command, FrontendOnly)
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
 
@@ -28,6 +29,8 @@ type ChannelRoute
     | NewChannelRoute
     | NoChannelRoute
     | EditChannelRoute (Id ChannelId)
+    | InviteLinkCreatorRoute
+    | JoinRoute (SecretId InviteLinkId)
 
 
 type UserOverviewRouteData
@@ -72,28 +75,37 @@ decode url =
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
                 Just guildId2 ->
-                    case rest of
-                        [ "c", channelId ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2)
+                    GuildRoute
+                        guildId2
+                        (case rest of
+                            [ "c", channelId ] ->
+                                case Id.fromString channelId of
+                                    Just channelId2 ->
+                                        ChannelRoute channelId2
 
-                                Nothing ->
-                                    GuildRoute guildId2 NoChannelRoute
+                                    Nothing ->
+                                        NoChannelRoute
 
-                        [ "c", channelId, "edit" ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
-                                    GuildRoute guildId2 (EditChannelRoute channelId2)
+                            [ "c", channelId, "edit" ] ->
+                                case Id.fromString channelId of
+                                    Just channelId2 ->
+                                        EditChannelRoute channelId2
 
-                                Nothing ->
-                                    GuildRoute guildId2 NoChannelRoute
+                                    Nothing ->
+                                        NoChannelRoute
 
-                        [ "new" ] ->
-                            GuildRoute guildId2 NewChannelRoute
+                            [ "new" ] ->
+                                NewChannelRoute
 
-                        _ ->
-                            GuildRoute guildId2 NoChannelRoute
+                            [ "invite" ] ->
+                                InviteLinkCreatorRoute
+
+                            [ "join", inviteLinkId ] ->
+                                JoinRoute (SecretId.fromString inviteLinkId)
+
+                            _ ->
+                                NoChannelRoute
+                        )
 
                 Nothing ->
                     HomePageRoute
@@ -146,6 +158,12 @@ encode route =
 
                                 NewChannelRoute ->
                                     [ "new" ]
+
+                                InviteLinkCreatorRoute ->
+                                    [ "invite" ]
+
+                                JoinRoute inviteLinkId ->
+                                    [ "join", SecretId.toString inviteLinkId ]
                            )
                     , []
                     )

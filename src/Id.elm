@@ -2,10 +2,10 @@ module Id exposing
     ( ChannelId(..)
     , GuildId(..)
     , Id(..)
+    , InviteLinkId(..)
     , UserId(..)
     , fromInt
     , fromString
-    , fromUInt64
     , nextId
     , toString
     , toUInt64
@@ -28,6 +28,10 @@ type ChannelId
     = ChannelId Never
 
 
+type InviteLinkId
+    = InviteLinkId Never
+
+
 type Id a
     = Id UInt64
 
@@ -45,11 +49,6 @@ nextId dict =
 toUInt64 : Id a -> UInt64
 toUInt64 (Id a) =
     a
-
-
-fromUInt64 : UInt64 -> Id a
-fromUInt64 =
-    Id
 
 
 fromInt : Int -> Id a

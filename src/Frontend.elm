@@ -34,12 +34,15 @@ import Pages.Home
 import Pages.UserOverview
 import Pagination
 import PersonName
+import Ports
+import Quantity
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
+import SecretId
 import SeqDict
 import String.Nonempty
 import Svg
 import Svg.Attributes
-import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -156,6 +159,7 @@ initLoadedFrontend loading time loginResult =
             , windowSize = loading.windowSize
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
+            , lastCopied = Nothing
             }
 
         ( model2, cmdA ) =
@@ -726,6 +730,25 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedCreateInviteLink guildId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (NewInviteLinkChange model.time guildId EmptyPlaceholder |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        FrontendNoOp ->
+            ( model, Command.none )
+
+        PressedCopyText text ->
+            ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+            , Ports.copyToClipboard text
+            )
+
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
 getUserOverview userId loggedIn =
@@ -832,6 +855,20 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                NewInviteLinkChange time guildId inviteLinkId ->
+                    case inviteLinkId of
+                        EmptyPlaceholder ->
+                            local
+
+                        FilledInByBackend inviteLinkId2 ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.addInvite inviteLinkId2 local.userId time)
+                                        local.guilds
+                            }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text ->
@@ -888,6 +925,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.deleteChannelFrontend channelId)
+                                local.guilds
+                    }
+
+                Server_NewInviteLink time userId guildId inviteLinkId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.addInvite inviteLinkId userId time)
                                 local.guilds
                     }
 
@@ -1206,6 +1252,9 @@ pendingChangesText localChange =
         DeleteChannelChange _ id ->
             "Deleted channel"
 
+        NewInviteLinkChange posix id toBeFilledInByBackend ->
+            "Created invite link"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -1373,7 +1422,7 @@ view model =
                             )
 
                     GuildRoute guildId maybeChannelId ->
-                        requiresLogin (guildView guildId maybeChannelId)
+                        requiresLogin (guildView loaded guildId maybeChannelId)
         ]
     }
 
@@ -1411,8 +1460,14 @@ homePageLoggedInView loggedIn local =
         ]
 
 
-guildView : Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
-guildView guildId channelRoute loggedIn local =
+guildView :
+    LoadedFrontend
+    -> Id GuildId
+    -> ChannelRoute
+    -> LoggedIn2
+    -> LocalState
+    -> Element FrontendMsg
+guildView model guildId channelRoute loggedIn local =
     case SeqDict.get guildId local.guilds of
         Just guild ->
             Ui.row
@@ -1461,11 +1516,112 @@ guildView guildId channelRoute loggedIn local =
                                     , Ui.Font.size 20
                                     ]
                                     (Ui.text "Channel does not exist")
+
+                    InviteLinkCreatorRoute ->
+                        inviteLinkCreatorForm model guildId guild
+
+                    JoinRoute _ ->
+                        Ui.none
                 , memberColumn local guild
                 ]
 
         Nothing ->
             homePageLoggedInView loggedIn local
+
+
+inviteLinkCreatorForm : LoadedFrontend -> Id GuildId -> FrontendGuild -> Element FrontendMsg
+inviteLinkCreatorForm model guildId guild =
+    Ui.el
+        [ Ui.height Ui.fill ]
+        (Ui.column
+            [ Ui.Font.color font1
+            , Ui.padding 16
+            , Ui.alignTop
+            , Ui.spacing 16
+            , Ui.scrollable
+            ]
+            [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Invite member to guild")
+            , submitButton (PressedCreateInviteLink guildId) "Create invite link"
+            , Ui.el [ Ui.Font.bold ] (Ui.text "Existing invites")
+            , Ui.column
+                [ Ui.spacing 8 ]
+                (SeqDict.toList guild.invites
+                    |> List.sortBy (\( _, data ) -> -(Time.posixToMillis data.createdAt))
+                    |> List.map
+                        (\( inviteId, data ) ->
+                            let
+                                url : String
+                                url =
+                                    Route.encode (GuildRoute guildId (JoinRoute inviteId))
+                            in
+                            Ui.row
+                                [ Ui.spacing 16 ]
+                                [ Ui.el [ Ui.widthMax 300 ] (copyableText (Env.domain ++ url) model)
+                                , if Duration.from data.createdAt model.time |> Quantity.lessThan (Duration.minutes 5) then
+                                    Ui.text "Created just now!"
+
+                                  else
+                                    Ui.none
+                                ]
+                        )
+                )
+            ]
+        )
+
+
+copyableText : String -> LoadedFrontend -> Element FrontendMsg
+copyableText text model =
+    let
+        isCopied : Bool
+        isCopied =
+            case model.lastCopied of
+                Just copied ->
+                    (copied.copiedText == text)
+                        && (Duration.from copied.copiedAt model.time
+                                |> Quantity.lessThan (Duration.seconds 10)
+                           )
+
+                Nothing ->
+                    False
+    in
+    Ui.row
+        []
+        [ Ui.Input.text
+            [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
+            , Ui.border 1
+            , Ui.borderColor inputBorder
+            , Ui.paddingXY 4 4
+            , Ui.background inputBackground
+            ]
+            { text = text
+            , onChange = \_ -> FrontendNoOp
+            , placeholder = Nothing
+            , label = Ui.Input.labelHidden "Readonly text field"
+            }
+        , Ui.el
+            [ Ui.Input.button (PressedCopyText text)
+            , Ui.Font.color font2
+            , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
+            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+            , Ui.borderColor inputBorder
+            , Ui.paddingXY 6 0
+            , Ui.width Ui.shrink
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.Font.size 14
+            ]
+            (if isCopied then
+                Ui.text "Copied!"
+
+             else
+                Ui.el [ Ui.width (Ui.px 18) ] (Ui.html copyIcon)
+            )
+        ]
+
+
+copyIcon : Html msg
+copyIcon =
+    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.d "M7.5 3.375c0-1.036.84-1.875 1.875-1.875h.375a3.75 3.75 0 0 1 3.75 3.75v1.875C13.5 8.161 14.34 9 15.375 9h1.875A3.75 3.75 0 0 1 21 12.75v3.375C21 17.16 20.16 18 19.125 18h-9.75A1.875 1.875 0 0 1 7.5 16.125V3.375Z" ] [], Svg.path [ Svg.Attributes.d "M15 5.25a5.23 5.23 0 0 0-1.279-3.434 9.768 9.768 0 0 1 6.963 6.963A5.23 5.23 0 0 0 17.25 7.5h-1.875A.375.375 0 0 1 15 7.125V5.25ZM4.875 6H6v10.125A3.375 3.375 0 0 0 9.375 19.5H16.5v1.125c0 1.035-.84 1.875-1.875 1.875h-9.75A1.875 1.875 0 0 1 3 20.625V7.875C3 6.839 3.84 6 4.875 6Z" ] [] ]
 
 
 conversationView :
@@ -1561,6 +1717,11 @@ messageView local message =
         ]
 
 
+inviteUserIcon : Html msg
+inviteUserIcon =
+    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.d "M5.25 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM2.25 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM18.75 7.5a.75.75 0 0 0-1.5 0v2.25H15a.75.75 0 0 0 0 1.5h2.25v2.25a.75.75 0 0 0 1.5 0v-2.25H21a.75.75 0 0 0 0-1.5h-2.25V7.5Z" ] [] ]
+
+
 channelColumn :
     LocalState
     -> Id GuildId
@@ -1586,6 +1747,15 @@ channelColumn local guildId guild channelRoute channelNameHover =
             ]
             [ GuildIcon.view False 40 guild
             , Ui.text (GuildName.toString guild.name)
+            , Ui.el
+                [ Ui.width Ui.shrink
+                , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
+                , Ui.Font.color font2
+                , Ui.width (Ui.px 40)
+                , Ui.alignRight
+                , Ui.paddingXY 8 0
+                ]
+                (Ui.html inviteUserIcon)
             ]
         , Ui.column
             [ Ui.paddingXY 0 8, Ui.scrollable ]
@@ -1621,6 +1791,8 @@ channelColumn local guildId guild channelRoute channelNameHover =
                                 , top = 8
                                 , bottom = 8
                                 }
+                            , Ui.clipWithEllipsis
+                            , MyUi.hoverText (ChannelName.toString channel.name)
                             ]
                             (Ui.text ("# " ++ ChannelName.toString channel.name))
                         , if isHover then
@@ -1646,8 +1818,8 @@ channelColumn local guildId guild channelRoute channelNameHover =
                             isSelected =
                                 channelRoute == NewChannelRoute
                         in
-                        Ui.el
-                            [ Ui.paddingXY 8 8
+                        Ui.row
+                            [ Ui.paddingXY 4 8
                             , Ui.Font.color font3
                             , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
                             , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
@@ -1657,13 +1829,18 @@ channelColumn local guildId guild channelRoute channelNameHover =
                               else
                                 Ui.Font.color font3
                             ]
-                            (Ui.text "+ Add new channel")
+                            [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html plusIcon), Ui.text " Add new channel" ]
 
                      else
                         Ui.none
                    ]
             )
         ]
+
+
+plusIcon : Html msg
+plusIcon =
+    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.fillRule "evenodd", Svg.Attributes.d "M12 5.25a.75.75 0 0 1 .75.75v5.25H18a.75.75 0 0 1 0 1.5h-5.25V18a.75.75 0 0 1-1.5 0v-5.25H6a.75.75 0 0 1 0-1.5h5.25V6a.75.75 0 0 1 .75-.75Z", Svg.Attributes.clipRule "evenodd" ] [] ]
 
 
 gearIcon : Html msg

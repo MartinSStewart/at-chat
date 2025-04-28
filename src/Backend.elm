@@ -34,13 +34,14 @@ import Pages.UserOverview
 import Pagination
 import Postmark
 import Quantity
+import SecretId
 import SeqDict
 import SeqSet
 import Sha256
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import UInt64
 import Unsafe
 import User exposing (BackendUser)
@@ -112,6 +113,7 @@ init =
                     ]
             , members = SeqDict.fromList []
             , owner = adminUserId
+            , invites = SeqDict.empty
             }
     in
     ( { users =
@@ -155,6 +157,7 @@ init =
                             ]
                     , members = SeqDict.fromList []
                     , owner = adminUserId
+                    , invites = SeqDict.empty
                     }
                   )
                 ]
@@ -533,6 +536,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                NewInviteLinkChange _ guildId _ ->
+                    asGuildMember
+                        model2
+                        sessionId
+                        guildId
+                        (\userId user guild ->
+                            let
+                                ( model3, id ) =
+                                    SecretId.getShortUniqueId time model2
+                            in
+                            ( { model3
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.addInvite id userId time guild)
+                                        model3.guilds
+                              }
+                            , Command.batch
+                                [ NewInviteLinkChange time guildId (FilledInByBackend id)
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_NewInviteLink time userId guildId id |> ServerChange)
+                                    model3
+                                ]
+                            )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
@@ -555,7 +587,7 @@ userOverviewUpdateFromFrontend clientId time userId user toBackend model =
         Pages.UserOverview.EnableTwoFactorAuthenticationRequest ->
             let
                 ( model2, secret ) =
-                    getUniqueId time model
+                    SecretId.getUniqueId time model
             in
             case TwoFactorAuthentication.getConfig (EmailAddress.toString user.email) secret of
                 Ok key ->
@@ -906,31 +938,14 @@ asAdmin model sessionId func =
         )
 
 
-getUniqueId : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, String )
-getUniqueId time model =
-    ( { model | secretCounter = model.secretCounter + 1 }
-    , Env.secretKey
-        ++ ":"
-        ++ String.fromInt model.secretCounter
-        ++ ":"
-        ++ (if Env.isProduction then
-                String.fromInt (Time.posixToMillis time)
-
-            else
-                ""
-           )
-        |> Sha256.sha256
-    )
-
-
 getLoginCode : Time.Posix -> { a | secretCounter : Int } -> ( { a | secretCounter : Int }, Result () Int )
 getLoginCode time model =
     let
         ( model2, id ) =
-            getUniqueId time model
+            SecretId.getUniqueId time model
     in
     ( model2
-    , case String.left LoginForm.loginCodeLength id |> Hex.fromString of
+    , case String.left LoginForm.loginCodeLength (SecretId.toString id) |> Hex.fromString of
         Ok int ->
             case String.fromInt int |> String.left LoginForm.loginCodeLength |> String.toInt of
                 Just int2 ->

@@ -18,6 +18,7 @@ module Types exposing
     , NewChannelForm
     , ServerChange(..)
     , ToBackend(..)
+    , ToBeFilledInByBackend(..)
     , ToFrontend(..)
     )
 
@@ -29,7 +30,7 @@ import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, FrontendGuild, LocalState)
@@ -40,6 +41,7 @@ import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import Postmark
 import Route exposing (Route)
+import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
@@ -75,6 +77,7 @@ type alias LoadedFrontend =
     , windowSize : ( Int, Int )
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
+    , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     }
 
 
@@ -153,6 +156,9 @@ type FrontendMsg
     | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedDeleteChannel (Id GuildId) (Id ChannelId)
+    | PressedCreateInviteLink (Id GuildId)
+    | FrontendNoOp
+    | PressedCopyText String
 
 
 type alias NewChannelForm =
@@ -220,6 +226,7 @@ type ServerChange
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
 
 
 type LocalChange
@@ -230,3 +237,9 @@ type LocalChange
     | NewChannelChange Time.Posix (Id GuildId) ChannelName
     | EditChannelChange (Id GuildId) (Id ChannelId) ChannelName
     | DeleteChannelChange (Id GuildId) (Id ChannelId)
+    | NewInviteLinkChange Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+
+
+type ToBeFilledInByBackend a
+    = EmptyPlaceholder
+    | FilledInByBackend a
