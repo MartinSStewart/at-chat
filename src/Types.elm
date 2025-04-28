@@ -34,7 +34,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import NonemptyDict exposing (NonemptyDict)
@@ -48,7 +48,7 @@ import String.Nonempty exposing (NonemptyString)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser)
+import User exposing (BackendUser, FrontendUser)
 
 
 type FrontendModel
@@ -187,6 +187,7 @@ type ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | UserOverviewToBackend Pages.UserOverview.ToBackend
+    | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
 
 
 type BackendMsg
@@ -238,6 +239,16 @@ type ServerChange
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
+    | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
+    | Server_YouJoinedGuildByInvite
+        (Result
+            JoinGuildError
+            { guildId : Id GuildId
+            , guild : FrontendGuild
+            , owner : FrontendUser
+            , members : SeqDict (Id UserId) FrontendUser
+            }
+        )
 
 
 type LocalChange

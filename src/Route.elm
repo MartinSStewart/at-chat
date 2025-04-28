@@ -5,6 +5,7 @@ module Route exposing
     , decode
     , encode
     , push
+    , replace
     )
 
 import AppUrl exposing (AppUrl)
@@ -41,6 +42,11 @@ type UserOverviewRouteData
 push : BrowserNavigation.Key -> Route -> Command FrontendOnly toMsg msg
 push navkey route =
     BrowserNavigation.pushUrl navkey (encode route)
+
+
+replace : BrowserNavigation.Key -> Route -> Command FrontendOnly toMsg msg
+replace navkey route =
+    BrowserNavigation.replaceUrl navkey (encode route)
 
 
 decode : Url -> Route

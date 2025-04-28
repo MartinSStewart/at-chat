@@ -193,6 +193,7 @@ loadedInitHelper time loginData loading =
                     IsNotAdminLoginData data ->
                         IsNotAdmin data
             , guilds = loginData.guilds
+            , joinGuildError = Nothing
             }
 
         localStateContainer : Local LocalMsg LocalState
@@ -370,7 +371,7 @@ routeRequest model =
                         )
                         model
 
-        GuildRoute _ channelRoute ->
+        GuildRoute guildId channelRoute ->
             case channelRoute of
                 ChannelRoute _ ->
                     ( model, Command.none )
@@ -388,7 +389,12 @@ routeRequest model =
                     ( model, Command.none )
 
                 JoinRoute inviteLinkId ->
-                    ( model, Command.none )
+                    ( model
+                    , Command.batch
+                        [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
+                        , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
+                        ]
+                    )
 
 
 routeRequiresLogin : Route -> Bool
@@ -959,6 +965,49 @@ changeUpdate localMsg local =
                                 (LocalState.addInvite inviteLinkId userId time)
                                 local.guilds
                     }
+
+                Server_MemberJoined time userId guildId user ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild -> LocalState.addMember time userId guild |> Result.withDefault guild)
+                                local.guilds
+                        , adminData =
+                            case local.adminData of
+                                IsAdmin _ ->
+                                    local.adminData
+
+                                IsNotAdmin data ->
+                                    { data | otherUsers = SeqDict.insert userId user data.otherUsers }
+                                        |> IsNotAdmin
+                    }
+
+                Server_YouJoinedGuildByInvite result ->
+                    case result of
+                        Ok ok ->
+                            { local
+                                | guilds =
+                                    SeqDict.insert ok.guildId ok.guild local.guilds
+                                , adminData =
+                                    case local.adminData of
+                                        IsAdmin _ ->
+                                            local.adminData
+
+                                        IsNotAdmin data ->
+                                            { data
+                                                | otherUsers =
+                                                    SeqDict.insert
+                                                        ok.guild.owner
+                                                        ok.owner
+                                                        data.otherUsers
+                                                        |> SeqDict.union ok.members
+                                            }
+                                                |> IsNotAdmin
+                            }
+
+                        Err error ->
+                            { local | joinGuildError = Just error }
 
 
 handleLocalChange :

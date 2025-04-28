@@ -20,12 +20,12 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import Hex
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendGuild, ChannelStatus(..))
+import LocalState exposing (BackendGuild, ChannelStatus(..), JoinGuildError(..))
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
@@ -35,15 +35,29 @@ import Pagination
 import PersonName
 import Postmark
 import Quantity
-import SecretId
+import SecretId exposing (SecretId)
 import SeqDict
 import SeqSet
 import Sha256
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
-import UInt64
+import Types
+    exposing
+        ( AdminStatusLoginData(..)
+        , BackendModel
+        , BackendMsg(..)
+        , LastRequest(..)
+        , LocalChange(..)
+        , LocalMsg(..)
+        , LoginData
+        , LoginResult(..)
+        , LoginTokenData(..)
+        , ServerChange(..)
+        , ToBackend(..)
+        , ToBeFilledInByBackend(..)
+        , ToFrontend(..)
+        )
 import Unsafe
 import User exposing (BackendUser)
 
@@ -587,6 +601,98 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\userId user ->
                     userOverviewUpdateFromFrontend clientId time userId user toBackend2 model2
                 )
+
+        JoinGuildByInviteRequest guildId inviteLinkId ->
+            asUser
+                model2
+                sessionId
+                (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
+
+
+joinGuildByInvite :
+    SecretId InviteLinkId
+    -> Time.Posix
+    -> SessionId
+    -> ClientId
+    -> Id GuildId
+    -> BackendModel
+    -> Id UserId
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user =
+    case SeqDict.get guildId model.guilds of
+        Just guild ->
+            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time userId guild ) of
+                ( Just _, Ok guild2 ) ->
+                    let
+                        modelWithoutUser =
+                            model
+
+                        model2 =
+                            { model
+                                | guilds = SeqDict.insert guildId guild2 model.guilds
+                            }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ broadcastToGuild
+                            clientId
+                            (Server_MemberJoined
+                                time
+                                userId
+                                guildId
+                                (User.backendToFrontendForUser user)
+                                |> ServerChange
+                            )
+                            modelWithoutUser
+                        , case
+                            ( NonemptyDict.get guild.owner model2.users
+                            , LocalState.guildToFrontend userId guild2
+                            )
+                          of
+                            ( Just owner, Just frontendGuild ) ->
+                                { guildId = guildId
+                                , guild = frontendGuild
+                                , owner = User.backendToFrontendForUser owner
+                                , members =
+                                    SeqDict.filterMap
+                                        (\userId2 _ ->
+                                            NonemptyDict.get userId2 model.users
+                                                |> Maybe.map User.backendToFrontendForUser
+                                        )
+                                        guild.members
+                                }
+                                    |> Ok
+                                    |> Server_YouJoinedGuildByInvite
+                                    |> ServerChange
+                                    |> ChangeBroadcast
+                                    |> Lamdera.sendToFrontends sessionId
+
+                            _ ->
+                                Command.none
+                        ]
+                    )
+
+                ( _, Err () ) ->
+                    ( model
+                    , Err AlreadyJoined
+                        |> Server_YouJoinedGuildByInvite
+                        |> ServerChange
+                        |> ChangeBroadcast
+                        |> Lamdera.sendToFrontends sessionId
+                    )
+
+                ( Nothing, _ ) ->
+                    ( model
+                    , Err InviteIsInvalid
+                        |> Server_YouJoinedGuildByInvite
+                        |> ServerChange
+                        |> ChangeBroadcast
+                        |> Lamdera.sendToFrontends sessionId
+                    )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 userOverviewUpdateFromFrontend :

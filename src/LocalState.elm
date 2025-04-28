@@ -6,11 +6,13 @@ module LocalState exposing
     , ChannelStatus(..)
     , FrontendChannel
     , FrontendGuild
+    , JoinGuildError(..)
     , LocalState
     , LogWithTime
     , Message
     , NotAdminData
     , addInvite
+    , addMember
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -48,7 +50,13 @@ type alias LocalState =
     { userId : Id UserId
     , adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
+    , joinGuildError : Maybe JoinGuildError
     }
+
+
+type JoinGuildError
+    = AlreadyJoined
+    | InviteIsInvalid
 
 
 type alias BackendGuild =
@@ -361,3 +369,17 @@ addInvite inviteId userId time guild =
         | invites =
             SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites
     }
+
+
+addMember :
+    Time.Posix
+    -> Id UserId
+    -> { c | owner : Id UserId, members : SeqDict (Id UserId) { joinedAt : Time.Posix } }
+    -> Result () { c | owner : Id UserId, members : SeqDict (Id UserId) { joinedAt : Time.Posix } }
+addMember time userId guild =
+    if guild.owner == userId || SeqDict.member userId guild.members then
+        Err ()
+
+    else
+        { guild | members = SeqDict.insert userId { joinedAt = time } guild.members }
+            |> Ok
