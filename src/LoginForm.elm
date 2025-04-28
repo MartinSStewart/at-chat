@@ -3,6 +3,7 @@ module LoginForm exposing
     , EnterEmail2
     , EnterLoginCode2
     , EnterTwoFactorCode2
+    , EnterUserData2
     , LoginForm(..)
     , Msg(..)
     , emailInputId
@@ -14,6 +15,7 @@ module LoginForm exposing
     , loginCodeLength
     , maxLoginAttempts
     , needsTwoFactor
+    , needsUserData
     , rateLimited
     , submitEmailButtonId
     , twoFactorCodeLength
@@ -29,6 +31,7 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import Html.Attributes
 import MyUi
+import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
 import Ui.Events
@@ -46,6 +49,8 @@ type Msg
     | TypedLoginFormEmail String
     | TypedLoginCode String
     | TypedTwoFactorCode String
+    | TypedName String
+    | PressedSubmitUserData
 
 
 {-| Opaque
@@ -54,6 +59,7 @@ type LoginForm
     = EnterEmail EnterEmail2
     | EnterLoginCode EnterLoginCode2
     | EnterTwoFactorCode EnterTwoFactorCode2
+    | EnterUserData EnterUserData2
 
 
 {-| Opaque
@@ -75,6 +81,15 @@ type alias EnterTwoFactorCode2 =
     { code : String, attempts : SeqDict Int CodeStatus, attemptCount : Int }
 
 
+type alias EnterUserData2 =
+    { name : String, pressedSubmit : SubmitStatus }
+
+
+type SubmitStatus
+    = NotSubmitted Bool
+    | Submitting
+
+
 type CodeStatus
     = Checking
     | NotValid
@@ -86,10 +101,11 @@ update :
     (EmailAddress -> Command FrontendOnly toBackend Msg)
     -> (Int -> Command FrontendOnly toBackend Msg)
     -> (Int -> Command FrontendOnly toBackend Msg)
+    -> (PersonName -> Command FrontendOnly toBackend Msg)
     -> Msg
     -> LoginForm
     -> Maybe ( LoginForm, Command FrontendOnly toBackend Msg )
-update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode msg model =
+update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode onSubmitUserData msg model =
     case msg of
         PressedSubmitEmail ->
             (case model of
@@ -150,6 +166,41 @@ update onSubmitEmail onSubmitLoginCode onSubmitTwoFactorCode msg model =
                     ( model, Command.none )
             )
                 |> Just
+
+        TypedName text ->
+            ( case model of
+                EnterUserData enterUserData ->
+                    case enterUserData.pressedSubmit of
+                        NotSubmitted _ ->
+                            EnterUserData { enterUserData | name = text }
+
+                        Submitting ->
+                            model
+
+                _ ->
+                    model
+            , Command.none
+            )
+                |> Just
+
+        PressedSubmitUserData ->
+            case model of
+                EnterUserData enterUserData ->
+                    case PersonName.fromString enterUserData.name of
+                        Ok name ->
+                            Just
+                                ( EnterUserData { enterUserData | pressedSubmit = Submitting }
+                                , onSubmitUserData name
+                                )
+
+                        Err _ ->
+                            ( EnterUserData { enterUserData | pressedSubmit = NotSubmitted True }
+                            , Command.none
+                            )
+                                |> Just
+
+                _ ->
+                    Just ( model, Command.none )
 
 
 typedCode :
@@ -259,11 +310,46 @@ view loginForm =
 
             EnterTwoFactorCode enterTwoFactorCode ->
                 enterTwoFactorCodeView enterTwoFactorCode
-        , Ui.Prose.paragraph
-            [ Ui.Font.center ]
-            [ Ui.text "If you're having trouble logging in, we can be reached at "
-            , MyUi.emailAddressLink Env.contactEmail
-            ]
+
+            EnterUserData data ->
+                let
+                    label =
+                        Ui.Input.label
+                            "loginForm_name"
+                            []
+                            (Ui.text "Pick a username (you can change it later)")
+                in
+                Ui.column
+                    [ Ui.spacing 16 ]
+                    [ Ui.el [ Ui.Font.size 20 ] (Ui.text "Just one thing before you get started!")
+                    , Ui.column
+                        []
+                        [ label.element
+                        , Ui.Input.text
+                            []
+                            { onChange = TypedName
+                            , text = data.name
+                            , label = label.id
+                            , placeholder = Nothing
+                            }
+                        , case ( data.pressedSubmit, PersonName.fromString data.name ) of
+                            ( NotSubmitted True, Err error ) ->
+                                errorView error
+
+                            _ ->
+                                Ui.none
+                        ]
+                    , Ui.el
+                        [ Ui.Input.button PressedSubmitUserData
+                        , Ui.paddingXY 16 8
+                        , Ui.background (Ui.rgb 240 240 240)
+                        , Ui.width Ui.shrink
+                        , Ui.border 1
+                        , Ui.borderColor (Ui.rgb 220 220 220)
+                        , Ui.rounded 4
+                        ]
+                        (Ui.text "Submit")
+                    ]
         ]
 
 
@@ -496,6 +582,9 @@ rateLimited loginForm =
             EnterEmail
                 { email = "", pressedSubmitEmail = False, rateLimited = True }
 
+        EnterUserData enterUserData ->
+            loginForm
+
 
 invalidCode : Int -> LoginForm -> LoginForm
 invalidCode loginCode loginForm =
@@ -514,6 +603,9 @@ invalidCode loginCode loginForm =
             }
                 |> EnterTwoFactorCode
 
+        EnterUserData enterUserData ->
+            loginForm
+
 
 needsTwoFactor : LoginForm -> LoginForm
 needsTwoFactor loginForm =
@@ -523,6 +615,11 @@ needsTwoFactor loginForm =
 
         _ ->
             loginForm
+
+
+needsUserData : LoginForm
+needsUserData =
+    EnterUserData { name = "", pressedSubmit = NotSubmitted False }
 
 
 enterEmailView : EnterEmail2 -> Element Msg

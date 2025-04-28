@@ -519,6 +519,7 @@ updateLoaded msg model =
                             (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
                             (\loginToken -> LoginWithTokenRequest loginToken |> Lamdera.sendToBackend)
                             (\loginToken -> LoginWithTwoFactorRequest loginToken |> Lamdera.sendToBackend)
+                            (\name -> FinishUserCreationRequest name |> Lamdera.sendToBackend)
                             loginFormMsg
                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                     of
@@ -1152,6 +1153,15 @@ updateLoadedFromBackend msg model =
                                                     Nothing ->
                                                         Nothing
                                         }
+                              }
+                            , Command.none
+                            )
+
+                        NeedsAccountSetup ->
+                            ( { model
+                                | loginStatus =
+                                    NotLoggedIn
+                                        { notLoggedIn | loginForm = Just LoginForm.needsUserData }
                               }
                             , Command.none
                             )

@@ -40,6 +40,7 @@ import LoginForm exposing (LoginForm)
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
+import PersonName exposing (PersonName)
 import Postmark
 import Route exposing (Route)
 import SecretId exposing (SecretId)
@@ -132,6 +133,10 @@ type LoginTokenData
         , loginAttempts : Int
         , loginCode : Int
         }
+    | WaitingForUserDataForSignup
+        { creationTime : Time.Posix
+        , emailAddress : EmailAddress
+        }
 
 
 type alias WaitingForLoginTokenData =
@@ -188,6 +193,7 @@ type ToBackend
     | LocalModelChangeRequest ChangeId LocalChange
     | UserOverviewToBackend Pages.UserOverview.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
+    | FinishUserCreationRequest PersonName
 
 
 type BackendMsg
@@ -202,6 +208,7 @@ type LoginResult
     = LoginSuccess LoginData
     | LoginTokenInvalid Int
     | NeedsTwoFactorToken
+    | NeedsAccountSetup
 
 
 type ToFrontend

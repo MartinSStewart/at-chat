@@ -318,6 +318,45 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         LoginWithTokenRequest loginCode ->
             loginWithToken time sessionId clientId loginCode model2
 
+        FinishUserCreationRequest personName ->
+            case SeqDict.get sessionId model2.pendingLogins of
+                Just (WaitingForUserDataForSignup pendingLogin) ->
+                    if NonemptyDict.values model.users |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress) then
+                        -- It's maybe possible to end up here if a user initiates two account creations for the same email address and then completes both. We'll just silently fail in that case, not worth the effort to give a good error message.
+                        ( model2, Command.none )
+
+                    else
+                        let
+                            userId : Id UserId
+                            userId =
+                                Id.nextId (NonemptyDict.toSeqDict model2.users)
+
+                            newUser : BackendUser
+                            newUser =
+                                LocalState.createNewUser
+                                    time
+                                    personName
+                                    pendingLogin.emailAddress
+                                    False
+
+                            model3 : BackendModel
+                            model3 =
+                                { model2
+                                    | sessions = SeqDict.insert sessionId userId model2.sessions
+                                    , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
+                                    , users = NonemptyDict.insert userId newUser model2.users
+                                }
+                        in
+                        ( model3
+                        , getLoginData userId newUser model3
+                            |> LoginSuccess
+                            |> LoginWithTokenResponse
+                            |> Lamdera.sendToFrontends sessionId
+                        )
+
+                _ ->
+                    ( model, Command.none )
+
         LoginWithTwoFactorRequest loginCode ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForTwoFactorToken pendingLogin) ->
@@ -1222,32 +1261,18 @@ loginWithToken time sessionId clientId loginCode model =
         Just (WaitingForLoginTokenForSignup pendingLogin) ->
             if isLoginTooOld pendingLogin time then
                 if loginCode == pendingLogin.loginCode then
-                    let
-                        userId : Id UserId
-                        userId =
-                            Id.nextId (NonemptyDict.toSeqDict model.users)
-
-                        newUser : BackendUser
-                        newUser =
-                            LocalState.createNewUser
-                                time
-                                PersonName.unknown
-                                pendingLogin.emailAddress
-                                False
-
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | sessions = SeqDict.insert sessionId userId model.sessions
-                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
-                                , users = NonemptyDict.insert userId newUser model.users
-                            }
-                    in
-                    ( model2
-                    , getLoginData userId newUser model2
-                        |> LoginSuccess
-                        |> LoginWithTokenResponse
-                        |> Lamdera.sendToFrontends sessionId
+                    ( { model
+                        | pendingLogins =
+                            SeqDict.insert
+                                sessionId
+                                (WaitingForUserDataForSignup
+                                    { creationTime = pendingLogin.creationTime
+                                    , emailAddress = pendingLogin.emailAddress
+                                    }
+                                )
+                                model.pendingLogins
+                      }
+                    , LoginWithTokenResponse NeedsAccountSetup |> Lamdera.sendToFrontends sessionId
                     )
 
                 else
