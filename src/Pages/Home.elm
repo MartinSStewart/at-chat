@@ -56,7 +56,7 @@ header windowWidth loginStatus =
                          ]
                             ++ buttonAttributes
                         )
-                        (Ui.text "Log In")
+                        (Ui.text "Login/Signup")
             ]
         )
 

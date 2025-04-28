@@ -20,6 +20,7 @@ module Types exposing
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
+    , WaitingForLoginTokenData
     )
 
 import Array exposing (Array)
@@ -119,17 +120,26 @@ type LastRequest
 
 
 type LoginTokenData
-    = WaitingForLoginToken
-        { creationTime : Time.Posix
-        , userId : Id UserId
-        , loginAttempts : Int
-        , loginCode : Int
-        }
+    = WaitingForLoginToken WaitingForLoginTokenData
     | WaitingForTwoFactorToken
         { creationTime : Time.Posix
         , userId : Id UserId
         , loginAttempts : Int
         }
+    | WaitingForLoginTokenForSignup
+        { creationTime : Time.Posix
+        , emailAddress : EmailAddress
+        , loginAttempts : Int
+        , loginCode : Int
+        }
+
+
+type alias WaitingForLoginTokenData =
+    { creationTime : Time.Posix
+    , userId : Id UserId
+    , loginAttempts : Int
+    , loginCode : Int
+    }
 
 
 type FrontendMsg
@@ -147,7 +157,7 @@ type FrontendMsg
     | PressedLink Route
     | UserOverviewMsg Pages.UserOverview.Msg
     | TypedMessage (Id GuildId) (Id ChannelId) String
-    | PressedSendMessage (Id GuildId) (Id ChannelId) NonemptyString
+    | PressedSendMessage (Id GuildId) (Id ChannelId)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
@@ -159,6 +169,7 @@ type FrontendMsg
     | PressedCreateInviteLink (Id GuildId)
     | FrontendNoOp
     | PressedCopyText String
+    | PressedCreateGuild
 
 
 type alias NewChannelForm =

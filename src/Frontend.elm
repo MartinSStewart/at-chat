@@ -37,11 +37,8 @@ import PersonName
 import Ports
 import Quantity
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
-import SecretId
 import SeqDict
 import String.Nonempty
-import Svg
-import Svg.Attributes
 import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -50,7 +47,6 @@ import Ui.Font
 import Ui.Input
 import Ui.Lazy
 import Ui.Prose
-import Ui.Shadow
 import Url exposing (Url)
 
 
@@ -374,8 +370,25 @@ routeRequest model =
                         )
                         model
 
-        GuildRoute _ _ ->
-            ( model, Command.none )
+        GuildRoute _ channelRoute ->
+            case channelRoute of
+                ChannelRoute _ ->
+                    ( model, Command.none )
+
+                NewChannelRoute ->
+                    ( model, Command.none )
+
+                NoChannelRoute ->
+                    ( model, Command.none )
+
+                EditChannelRoute _ ->
+                    ( model, Command.none )
+
+                InviteLinkCreatorRoute ->
+                    ( model, Command.none )
+
+                JoinRoute inviteLinkId ->
+                    ( model, Command.none )
 
 
 routeRequiresLogin : Route -> Bool
@@ -565,17 +578,22 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedSendMessage guildId channelId text ->
+        PressedSendMessage guildId channelId ->
             updateLoggedIn
                 (\loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (SendMessageChange model.time guildId channelId text |> Just)
-                        { loggedIn
-                            | drafts =
-                                SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                        }
-                        Command.none
+                    case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                        Just nonempty ->
+                            handleLocalChange
+                                model.time
+                                (SendMessageChange model.time guildId channelId nonempty |> Just)
+                                { loggedIn
+                                    | drafts =
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                                }
+                                Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -747,6 +765,11 @@ updateLoaded msg model =
         PressedCopyText text ->
             ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
             , Ports.copyToClipboard text
+            )
+
+        PressedCreateGuild ->
+            ( model
+            , Command.none
             )
 
 
@@ -1439,14 +1462,16 @@ guildColumn selectedGuild _ local =
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         , Ui.scrollable
         ]
-        (List.map
-            (\( guildId, guild ) ->
-                Ui.el
-                    [ Ui.Input.button (PressedLink (GuildRoute guildId NoChannelRoute))
-                    ]
-                    (GuildIcon.view (selectedGuild == Just guildId) 50 guild)
-            )
-            (SeqDict.toList local.guilds)
+        (GuildIcon.showFriendsButton (PressedLink HomePageRoute)
+            :: List.map
+                (\( guildId, guild ) ->
+                    Ui.el
+                        [ Ui.Input.button (PressedLink (GuildRoute guildId NoChannelRoute))
+                        ]
+                        (GuildIcon.view (selectedGuild == Just guildId) 50 guild)
+                )
+                (SeqDict.toList local.guilds)
+            ++ [ GuildIcon.addGuildButton PressedCreateGuild ]
         )
 
 
@@ -1456,7 +1481,35 @@ homePageLoggedInView loggedIn local =
         [ Ui.height Ui.fill
         , Ui.background background3
         ]
-        [ guildColumn Nothing loggedIn local
+        [ Ui.column
+            [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+            [ Ui.row
+                [ Ui.height Ui.fill ]
+                [ guildColumn Nothing loggedIn local
+                , friendsColumn local
+                ]
+            , loggedInAsView local
+            ]
+        ]
+
+
+loggedInAsView : LocalState -> Element FrontendMsg
+loggedInAsView local =
+    Ui.row
+        [ Ui.paddingXY 4 4
+        , Ui.Font.color font2
+        , Ui.borderColor border1
+        , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
+        , Ui.background background1
+        ]
+        [ Ui.text (PersonName.toString (LocalState.currentUser local).name)
+        , Ui.el
+            [ Ui.width (Ui.px 30)
+            , Ui.paddingXY 4 0
+            , Ui.alignRight
+            , Ui.Input.button PressedLogOut
+            ]
+            (Ui.html Icons.signoutSvg)
         ]
 
 
@@ -1472,8 +1525,15 @@ guildView model guildId channelRoute loggedIn local =
         Just guild ->
             Ui.row
                 [ Ui.height Ui.fill, Ui.background background3 ]
-                [ guildColumn (Just guildId) loggedIn local
-                , channelColumn local guildId guild channelRoute loggedIn.channelNameHover
+                [ Ui.column
+                    [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+                    [ Ui.row
+                        [ Ui.height Ui.fill ]
+                        [ guildColumn (Just guildId) loggedIn local
+                        , channelColumn local guildId guild channelRoute loggedIn.channelNameHover
+                        ]
+                    , loggedInAsView local
+                    ]
                 , case channelRoute of
                     ChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
@@ -1495,7 +1555,7 @@ guildView model guildId channelRoute loggedIn local =
                             |> newChannelFormView guildId
 
                     NoChannelRoute ->
-                        Ui.none
+                        Ui.el [] Ui.none
 
                     EditChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
@@ -1614,14 +1674,9 @@ copyableText text model =
                 Ui.text "Copied!"
 
              else
-                Ui.el [ Ui.width (Ui.px 18) ] (Ui.html copyIcon)
+                Ui.el [ Ui.width (Ui.px 18) ] (Ui.html Icons.copyIcon)
             )
         ]
-
-
-copyIcon : Html msg
-copyIcon =
-    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.d "M7.5 3.375c0-1.036.84-1.875 1.875-1.875h.375a3.75 3.75 0 0 1 3.75 3.75v1.875C13.5 8.161 14.34 9 15.375 9h1.875A3.75 3.75 0 0 1 21 12.75v3.375C21 17.16 20.16 18 19.125 18h-9.75A1.875 1.875 0 0 1 7.5 16.125V3.375Z" ] [], Svg.path [ Svg.Attributes.d "M15 5.25a5.23 5.23 0 0 0-1.279-3.434 9.768 9.768 0 0 1 6.963 6.963A5.23 5.23 0 0 0 17.25 7.5h-1.875A.375.375 0 0 1 15 7.125V5.25ZM4.875 6H6v10.125A3.375 3.375 0 0 0 9.375 19.5H16.5v1.125c0 1.035-.84 1.875-1.875 1.875h-9.75A1.875 1.875 0 0 1 3 20.625V7.875C3 6.839 3.84 6 4.875 6Z" ] [] ]
 
 
 conversationView :
@@ -1670,12 +1725,7 @@ conversationView guildId channelId loggedIn local channel =
                         |> Json.Decode.andThen
                             (\( shiftHeld, key ) ->
                                 if key == "Enter" && not shiftHeld then
-                                    case String.Nonempty.fromString text of
-                                        Just nonempty ->
-                                            Json.Decode.succeed ( PressedSendMessage guildId channelId nonempty, True )
-
-                                        Nothing ->
-                                            Json.Decode.fail ""
+                                    Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
 
                                 else
                                     Json.Decode.fail ""
@@ -1717,11 +1767,6 @@ messageView local message =
         ]
 
 
-inviteUserIcon : Html msg
-inviteUserIcon =
-    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.d "M5.25 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM2.25 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63 13.067 13.067 0 0 1-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 0 1-.364-.63l-.001-.122ZM18.75 7.5a.75.75 0 0 0-1.5 0v2.25H15a.75.75 0 0 0 0 1.5h2.25v2.25a.75.75 0 0 0 1.5 0v-2.25H21a.75.75 0 0 0 0-1.5h-2.25V7.5Z" ] [] ]
-
-
 channelColumn :
     LocalState
     -> Id GuildId
@@ -1733,9 +1778,6 @@ channelColumn local guildId guild channelRoute channelNameHover =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background background2
-        , Ui.width Ui.shrink
-        , Ui.widthMin 200
-        , Ui.widthMax 300
         ]
         [ Ui.row
             [ Ui.Font.bold
@@ -1755,7 +1797,7 @@ channelColumn local guildId guild channelRoute channelNameHover =
                 , Ui.alignRight
                 , Ui.paddingXY 8 0
                 ]
-                (Ui.html inviteUserIcon)
+                (Ui.html Icons.inviteUserIcon)
             ]
         , Ui.column
             [ Ui.paddingXY 0 8, Ui.scrollable ]
@@ -1806,7 +1848,7 @@ channelColumn local guildId guild channelRoute channelNameHover =
                                 , Ui.Input.button
                                     (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                                 ]
-                                (Ui.html gearIcon)
+                                (Ui.html Icons.gearIcon)
 
                           else
                             Ui.none
@@ -1829,7 +1871,9 @@ channelColumn local guildId guild channelRoute channelNameHover =
                               else
                                 Ui.Font.color font3
                             ]
-                            [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html plusIcon), Ui.text " Add new channel" ]
+                            [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
+                            , Ui.text " Add new channel"
+                            ]
 
                      else
                         Ui.none
@@ -1838,31 +1882,21 @@ channelColumn local guildId guild channelRoute channelNameHover =
         ]
 
 
-plusIcon : Html msg
-plusIcon =
-    Svg.svg [ Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.fillRule "evenodd", Svg.Attributes.d "M12 5.25a.75.75 0 0 1 .75.75v5.25H18a.75.75 0 0 1 0 1.5h-5.25V18a.75.75 0 0 1-1.5 0v-5.25H6a.75.75 0 0 1 0-1.5h5.25V6a.75.75 0 0 1 .75-.75Z", Svg.Attributes.clipRule "evenodd" ] [] ]
-
-
-gearIcon : Html msg
-gearIcon =
-    Svg.svg
-        [ Svg.Attributes.fill "none"
-        , Svg.Attributes.viewBox "0 0 24 24"
-        , Svg.Attributes.strokeWidth "1.5"
-        , Svg.Attributes.stroke "currentColor"
+friendsColumn : LocalState -> Element FrontendMsg
+friendsColumn local =
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.background background2
         ]
-        [ Svg.path
-            [ Svg.Attributes.strokeLinecap "round"
-            , Svg.Attributes.strokeLinejoin "round"
-            , Svg.Attributes.d "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+        [ Ui.el
+            [ Ui.Font.bold
+            , Ui.paddingXY 4 4
+            , Ui.spacing 8
+            , Ui.Font.color font1
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor border1
             ]
-            []
-        , Svg.path
-            [ Svg.Attributes.strokeLinecap "round"
-            , Svg.Attributes.strokeLinejoin "round"
-            , Svg.Attributes.d "M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-            ]
-            []
+            (Ui.text "Direct messages")
         ]
 
 

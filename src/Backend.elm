@@ -32,6 +32,7 @@ import NonemptyDict
 import Pages.Admin exposing (InitAdminData)
 import Pages.UserOverview
 import Pagination
+import PersonName
 import Postmark
 import Quantity
 import SecretId
@@ -410,8 +411,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         , sendLoginEmail (SentLoginEmail time email) email loginCode
                         )
 
-                ( Nothing, Ok _ ) ->
-                    ( model3, Command.none )
+                ( Nothing, Ok loginCode ) ->
+                    ( { model3
+                        | pendingLogins =
+                            SeqDict.insert
+                                sessionId
+                                (WaitingForLoginTokenForSignup
+                                    { creationTime = time
+                                    , loginAttempts = 0
+                                    , emailAddress = email
+                                    , loginCode = loginCode
+                                    }
+                                )
+                                model3.pendingLogins
+                      }
+                    , sendLoginEmail (SentLoginEmail time email) email loginCode
+                    )
 
                 ( _, Err () ) ->
                     ( model3, Command.none )
@@ -1023,6 +1038,11 @@ loginEmailSubject =
     NonemptyString 'L' "ogin code"
 
 
+isLoginTooOld pendingLogin time =
+    (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
+        && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
+
+
 loginWithToken :
     Time.Posix
     -> SessionId
@@ -1033,10 +1053,7 @@ loginWithToken :
 loginWithToken time sessionId clientId loginCode model =
     case SeqDict.get sessionId model.pendingLogins of
         Just (WaitingForLoginToken pendingLogin) ->
-            if
-                (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
-                    && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)
-            then
+            if isLoginTooOld pendingLogin time then
                 if loginCode == pendingLogin.loginCode then
                     case
                         ( NonemptyDict.get pendingLogin.userId model.users
@@ -1085,6 +1102,53 @@ loginWithToken time sessionId clientId loginCode model =
                             SeqDict.insert
                                 sessionId
                                 (WaitingForLoginToken { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 })
+                                model.pendingLogins
+                      }
+                    , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
+                    )
+
+            else
+                ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
+
+        Just (WaitingForLoginTokenForSignup pendingLogin) ->
+            if isLoginTooOld pendingLogin time then
+                if loginCode == pendingLogin.loginCode then
+                    let
+                        userId : Id UserId
+                        userId =
+                            Id.nextId (NonemptyDict.toSeqDict model.users)
+
+                        newUser : BackendUser
+                        newUser =
+                            LocalState.createNewUser
+                                time
+                                PersonName.unknown
+                                pendingLogin.emailAddress
+                                False
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | sessions = SeqDict.insert sessionId userId model.sessions
+                                , pendingLogins = SeqDict.remove sessionId model.pendingLogins
+                                , users = NonemptyDict.insert userId newUser model.users
+                            }
+                    in
+                    ( model2
+                    , getLoginData userId newUser model2
+                        |> LoginSuccess
+                        |> LoginWithTokenResponse
+                        |> Lamdera.sendToFrontends sessionId
+                    )
+
+                else
+                    ( { model
+                        | pendingLogins =
+                            SeqDict.insert
+                                sessionId
+                                (WaitingForLoginTokenForSignup
+                                    { pendingLogin | loginAttempts = pendingLogin.loginAttempts + 1 }
+                                )
                                 model.pendingLogins
                       }
                     , LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId
