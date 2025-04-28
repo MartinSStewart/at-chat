@@ -84,7 +84,7 @@ type alias LoadedFrontend =
 
 type LoginStatus
     = LoggedIn LoggedIn2
-    | NotLoggedIn { loginForm : Maybe LoginForm }
+    | NotLoggedIn { loginForm : Maybe LoginForm, useInviteAfterLoggedIn : Maybe (SecretId InviteLinkId) }
 
 
 type alias LoggedIn2 =
@@ -220,12 +220,14 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
+    , user : BackendUser
+    , otherUsers : SeqDict (Id UserId) FrontendUser
     }
 
 
 type AdminStatusLoginData
     = IsAdminLoginData InitAdminData
-    | IsNotAdminLoginData LocalState.NotAdminData
+    | IsNotAdminLoginData
 
 
 type LocalMsg

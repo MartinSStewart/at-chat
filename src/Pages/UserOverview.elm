@@ -268,7 +268,7 @@ view config userId localState model =
                                                         |> Ui.Input.option a
                                                 )
                                                 User.allEmailNotifications
-                                        , selected = (LocalState.currentUser localState).emailNotifications |> Just
+                                        , selected = localState.user.emailNotifications |> Just
                                         , label = emailNotificationLabel.id
                                         }
                                     ]

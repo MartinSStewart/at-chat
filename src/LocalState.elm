@@ -10,7 +10,6 @@ module LocalState exposing
     , LocalState
     , LogWithTime
     , Message(..)
-    , NotAdminData
     , addInvite
     , addMember
     , channelToFrontend
@@ -18,14 +17,12 @@ module LocalState exposing
     , createChannelFrontend
     , createMessage
     , createNewUser
-    , currentUser
     , deleteChannel
     , deleteChannelFrontend
     , editChannel
     , getUser
     , guildToFrontend
     , isAdmin
-    , updateUser
     )
 
 import Array exposing (Array)
@@ -51,6 +48,8 @@ type alias LocalState =
     , adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , joinGuildError : Maybe JoinGuildError
+    , user : BackendUser
+    , otherUsers : SeqDict (Id UserId) FrontendUser
     }
 
 
@@ -168,13 +167,7 @@ type Message
 
 type AdminStatus
     = IsAdmin AdminData
-    | IsNotAdmin NotAdminData
-
-
-type alias NotAdminData =
-    { user : BackendUser
-    , otherUsers : SeqDict (Id UserId) FrontendUser
-    }
+    | IsNotAdmin
 
 
 type alias LogWithTime =
@@ -186,31 +179,6 @@ type alias AdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     }
-
-
-missingUserEmail : EmailAddress
-missingUserEmail =
-    Unsafe.emailAddress "missing.user@example.com"
-
-
-currentUser : LocalState -> BackendUser
-currentUser localState =
-    case localState.adminData of
-        IsAdmin data ->
-            case NonemptyDict.get localState.userId data.users of
-                Just user ->
-                    user
-
-                Nothing ->
-                    -- This should never happen
-                    createNewUser
-                        (Time.millisToPosix 0)
-                        PersonName.unknown
-                        missingUserEmail
-                        False
-
-        IsNotAdmin data ->
-            data.user
 
 
 createNewUser : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
@@ -228,34 +196,12 @@ createNewUser createdAt name email userIsAdmin =
 
 
 getUser : Id UserId -> LocalState -> Maybe FrontendUser
-getUser userId localState =
-    case localState.adminData of
-        IsAdmin data ->
-            NonemptyDict.get userId data.users |> Maybe.map User.backendToFrontend
+getUser userId local =
+    if local.userId == userId then
+        User.backendToFrontend local.user |> Just
 
-        IsNotAdmin data ->
-            if localState.userId == userId then
-                User.backendToFrontend data.user |> Just
-
-            else
-                SeqDict.get userId data.otherUsers
-
-
-updateUser : Id UserId -> (BackendUser -> BackendUser) -> LocalState -> LocalState
-updateUser userId updateFunc localState =
-    { localState
-        | adminData =
-            case localState.adminData of
-                IsAdmin data ->
-                    IsAdmin { data | users = NonemptyDict.updateIfExists userId updateFunc data.users }
-
-                IsNotAdmin data ->
-                    if localState.userId == userId then
-                        IsNotAdmin { data | user = updateFunc data.user }
-
-                    else
-                        IsNotAdmin data
-    }
+    else
+        SeqDict.get userId local.otherUsers
 
 
 isAdmin : LocalState -> Bool
@@ -264,7 +210,7 @@ isAdmin { adminData } =
         IsAdmin _ ->
             True
 
-        IsNotAdmin _ ->
+        IsNotAdmin ->
             False
 
 

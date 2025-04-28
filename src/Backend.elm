@@ -264,22 +264,21 @@ getLoginData userId user model =
 
         else
             IsNotAdminLoginData
-                { user = user
-                , otherUsers =
-                    NonemptyDict.toList model.users
-                        |> List.filterMap
-                            (\( otherUserId, otherUser ) ->
-                                if otherUserId == userId then
-                                    Nothing
-
-                                else
-                                    Just ( otherUserId, User.backendToFrontendForUser otherUser )
-                            )
-                        |> SeqDict.fromList
-                }
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
     , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontend userId guild) model.guilds
+    , user = user
+    , otherUsers =
+        NonemptyDict.toList model.users
+            |> List.filterMap
+                (\( otherUserId, otherUser ) ->
+                    if otherUserId == userId then
+                        Nothing
+
+                    else
+                        Just ( otherUserId, User.backendToFrontendForUser otherUser )
+                )
+            |> SeqDict.fromList
     }
 
 

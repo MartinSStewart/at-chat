@@ -143,6 +143,7 @@ initLoadedFrontend loading time loginResult =
                 Err () ->
                     ( NotLoggedIn
                         { loginForm = Nothing
+                        , useInviteAfterLoggedIn = Nothing
                         }
                     , Command.none
                     )
@@ -190,10 +191,12 @@ loadedInitHelper time loginData loading =
                             , twoFactorAuthentication = adminData.twoFactorAuthentication
                             }
 
-                    IsNotAdminLoginData data ->
-                        IsNotAdmin data
+                    IsNotAdminLoginData ->
+                        IsNotAdmin
             , guilds = loginData.guilds
             , joinGuildError = Nothing
+            , user = loginData.user
+            , otherUsers = loginData.otherUsers
             }
 
         localStateContainer : Local LocalMsg LocalState
@@ -206,7 +209,7 @@ loadedInitHelper time loginData loading =
                 IsAdminLoginData _ ->
                     let
                         ( logPagination, paginationCmd ) =
-                            Pagination.init (LocalState.currentUser localState).lastLogPageViewed
+                            Pagination.init localState.user.lastLogPageViewed
                     in
                     Pages.Admin.init
                         logPagination
@@ -228,7 +231,7 @@ loadedInitHelper time loginData loading =
                            )
                         |> Just
 
-                IsNotAdminLoginData _ ->
+                IsNotAdminLoginData ->
                     Nothing
 
         loggedIn : LoggedIn2
@@ -238,7 +241,7 @@ loadedInitHelper time loginData loading =
             , userOverview =
                 Pages.UserOverview.init
                     loginData.twoFactorAuthenticationEnabled
-                    (LocalState.currentUser localState |> Just)
+                    (Just localState.user)
                     |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
@@ -389,12 +392,23 @@ routeRequest model =
                     ( model, Command.none )
 
                 JoinRoute inviteLinkId ->
-                    ( model
-                    , Command.batch
-                        [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
-                        , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
-                        ]
-                    )
+                    case model.loginStatus of
+                        NotLoggedIn notLoggedIn ->
+                            ( { model
+                                | loginStatus =
+                                    { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
+                                        |> NotLoggedIn
+                              }
+                            , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
+                            )
+
+                        LoggedIn _ ->
+                            ( model
+                            , Command.batch
+                                [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
+                                , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
+                                ]
+                            )
 
 
 routeRequiresLogin : Route -> Bool
@@ -793,7 +807,7 @@ getUserOverview userId loggedIn =
             Pages.UserOverview.init
                 Nothing
                 (if userId == localState.userId then
-                    LocalState.currentUser localState |> Just
+                    Just localState.user
 
                  else
                     Nothing
@@ -816,16 +830,19 @@ changeUpdate localMsg local =
                                     Pages.Admin.updateAdmin changedBy adminChange adminData |> IsAdmin
                             }
 
-                        IsNotAdmin _ ->
+                        IsNotAdmin ->
                             local
 
                 UserOverviewChange userOverviewChange ->
                     case userOverviewChange of
                         Pages.UserOverview.EmailNotificationsChange emailNotifications ->
-                            LocalState.updateUser
-                                changedBy
-                                (\user -> { user | emailNotifications = emailNotifications })
-                                local
+                            let
+                                user =
+                                    local.user
+                            in
+                            { local
+                                | user = { user | emailNotifications = emailNotifications }
+                            }
 
                 SendMessageChange createdAt guildId channelId text ->
                     case SeqDict.get guildId local.guilds of
@@ -979,14 +996,7 @@ changeUpdate localMsg local =
                                 guildId
                                 (\guild -> LocalState.addMember time userId guild |> Result.withDefault guild)
                                 local.guilds
-                        , adminData =
-                            case local.adminData of
-                                IsAdmin _ ->
-                                    local.adminData
-
-                                IsNotAdmin data ->
-                                    { data | otherUsers = SeqDict.insert userId user data.otherUsers }
-                                        |> IsNotAdmin
+                        , otherUsers = SeqDict.insert userId user local.otherUsers
                     }
 
                 Server_YouJoinedGuildByInvite result ->
@@ -995,21 +1005,12 @@ changeUpdate localMsg local =
                             { local
                                 | guilds =
                                     SeqDict.insert ok.guildId ok.guild local.guilds
-                                , adminData =
-                                    case local.adminData of
-                                        IsAdmin _ ->
-                                            local.adminData
-
-                                        IsNotAdmin data ->
-                                            { data
-                                                | otherUsers =
-                                                    SeqDict.insert
-                                                        ok.guild.owner
-                                                        ok.owner
-                                                        data.otherUsers
-                                                        |> SeqDict.union ok.members
-                                            }
-                                                |> IsNotAdmin
+                                , otherUsers =
+                                    SeqDict.insert
+                                        ok.guild.owner
+                                        ok.owner
+                                        local.otherUsers
+                                        |> SeqDict.union ok.members
                             }
 
                         Err error ->
@@ -1084,40 +1085,44 @@ updateLoadedFromBackend msg model =
             ( model, Command.none )
 
         LoginWithTokenResponse result ->
-            case result of
-                LoginSuccess loginData ->
-                    let
-                        ( loggedIn, cmdA ) =
-                            loadedInitHelper model.time loginData model
+            case model.loginStatus of
+                NotLoggedIn notLoggedIn ->
+                    case result of
+                        LoginSuccess loginData ->
+                            let
+                                ( loggedIn, cmdA ) =
+                                    loadedInitHelper model.time loginData model
 
-                        ( model2, cmdB ) =
-                            routeRequest { model | loginStatus = LoggedIn loggedIn }
-                    in
-                    ( model2
-                    , Command.batch
-                        [ cmdA
-                        , cmdB
-                        , case model2.route of
-                            HomePageRoute ->
-                                Command.none
+                                ( model2, cmdB ) =
+                                    routeRequest { model | loginStatus = LoggedIn loggedIn }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ cmdA
+                                , cmdB
+                                , case model2.route of
+                                    HomePageRoute ->
+                                        Command.none
 
-                            AdminRoute _ ->
-                                Command.none
+                                    AdminRoute _ ->
+                                        Command.none
 
-                            UserOverviewRoute _ ->
-                                Command.none
+                                    UserOverviewRoute _ ->
+                                        Command.none
 
-                            GuildRoute _ _ ->
-                                Command.none
-                        ]
-                    )
+                                    GuildRoute _ _ ->
+                                        Command.none
+                                , case ( model.route, notLoggedIn.useInviteAfterLoggedIn ) of
+                                    ( GuildRoute guildId _, Just inviteLinkId ) ->
+                                        JoinGuildByInviteRequest guildId inviteLinkId
+                                            |> Lamdera.sendToBackend
 
-                LoginTokenInvalid loginCode ->
-                    case model.loginStatus of
-                        LoggedIn _ ->
-                            ( model, Command.none )
+                                    _ ->
+                                        Command.none
+                                ]
+                            )
 
-                        NotLoggedIn notLoggedIn ->
+                        LoginTokenInvalid loginCode ->
                             ( { model
                                 | loginStatus =
                                     NotLoggedIn
@@ -1134,12 +1139,7 @@ updateLoadedFromBackend msg model =
                             , Command.none
                             )
 
-                NeedsTwoFactorToken ->
-                    case model.loginStatus of
-                        LoggedIn _ ->
-                            ( model, Command.none )
-
-                        NotLoggedIn notLoggedIn ->
+                        NeedsTwoFactorToken ->
                             ( { model
                                 | loginStatus =
                                     NotLoggedIn
@@ -1156,11 +1156,15 @@ updateLoadedFromBackend msg model =
                             , Command.none
                             )
 
+                LoggedIn _ ->
+                    ( model, Command.none )
+
         LoggedOutSession ->
             case model.loginStatus of
                 LoggedIn _ ->
                     ( { model
-                        | loginStatus = NotLoggedIn { loginForm = Nothing }
+                        | loginStatus =
+                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
                       }
                     , if routeRequiresLogin model.route then
                         BrowserNavigation.pushUrl model.navigationKey (Route.encode HomePageRoute)
@@ -1557,7 +1561,7 @@ loggedInAsView local =
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
         , Ui.background background1
         ]
-        [ Ui.text (PersonName.toString (LocalState.currentUser local).name)
+        [ Ui.text (PersonName.toString local.user.name)
         , Ui.el
             [ Ui.width (Ui.px 30)
             , Ui.paddingXY 4 0
