@@ -119,6 +119,7 @@ init =
                             Array.fromList
                                 []
                         , status = ChannelActive
+                        , lastTypedAt = SeqDict.empty
                         }
                       )
                     ]
@@ -160,6 +161,7 @@ init =
                                     Array.fromList
                                         []
                                 , status = ChannelActive
+                                , lastTypedAt = SeqDict.empty
                                 }
                               )
                             ]
@@ -490,16 +492,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
         LocalModelChangeRequest changeId localMsg ->
             case localMsg of
-                InvalidChange ->
+                Local_Invalid ->
                     ( model2, invalidChangeResponse changeId clientId )
 
-                AdminChange adminChange ->
+                Local_Admin adminChange ->
                     asAdmin
                         model2
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model2 time)
 
-                UserOverviewChange userOverviewChange ->
+                Local_UserOverview userOverviewChange ->
                     asUser
                         model2
                         sessionId
@@ -517,14 +519,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                         )
 
-                SendMessageChange _ guildId channelId text ->
+                Local_SendMessage _ guildId channelId text ->
                     asGuildMember
                         model2
                         sessionId
                         guildId
                         (sendMessage model2 time clientId changeId guildId channelId text)
 
-                NewChannelChange _ guildId channelName ->
+                Local_NewChannel _ guildId channelName ->
                     asGuildOwner
                         model2
                         sessionId
@@ -538,7 +540,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model.guilds
                               }
                             , Command.batch
-                                [ NewChannelChange time guildId channelName
+                                [ Local_NewChannel time guildId channelName
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuild
@@ -549,7 +551,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                EditChannelChange guildId channelId channelName ->
+                Local_EditChannel guildId channelId channelName ->
                     asGuildOwner
                         model2
                         sessionId
@@ -573,7 +575,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                DeleteChannelChange guildId channelId ->
+                Local_DeleteChannel guildId channelId ->
                     asGuildOwner
                         model2
                         sessionId
@@ -597,7 +599,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                NewInviteLinkChange _ guildId _ ->
+                Local_NewInviteLink _ guildId _ ->
                     asGuildMember
                         model2
                         sessionId
@@ -615,13 +617,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         model3.guilds
                               }
                             , Command.batch
-                                [ NewInviteLinkChange time guildId (FilledInByBackend id)
+                                [ Local_NewInviteLink time guildId (FilledInByBackend id)
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuild
                                     clientId
                                     (Server_NewInviteLink time userId guildId id |> ServerChange)
                                     model3
+                                ]
+                            )
+                        )
+
+                Local_MemberTyping _ guildId channelId ->
+                    asGuildMember
+                        model
+                        sessionId
+                        guildId
+                        (\userId _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.memberIsTyping userId time channelId guild)
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ Local_MemberTyping time guildId channelId
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_MemberTyping time userId guildId channelId |> ServerChange)
+                                    model
                                 ]
                             )
                         )
@@ -811,7 +838,7 @@ adminChangeUpdate :
 adminChangeUpdate clientId changeId adminChange model time userId user =
     let
         localMsg =
-            AdminChange adminChange
+            Local_Admin adminChange
     in
     case adminChange of
         Pages.Admin.ChangeUsers changes ->
@@ -831,7 +858,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                       }
                     , Command.batch
                         [ Pages.Admin.ChangeUsers { changes | time = time }
-                            |> AdminChange
+                            |> Local_Admin
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , broadcastToOtherAdmins clientId model2 (LocalChange userId localMsg)
@@ -920,7 +947,7 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                         model.guilds
               }
             , Command.batch
-                [ LocalChangeResponse changeId (SendMessageChange time guildId channelId text)
+                [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuild
                     clientId
@@ -987,7 +1014,7 @@ broadcastToOtherAdmins currentClientId model broadcastMsg =
 
 invalidChangeResponse : ChangeId -> ClientId -> Command BackendOnly ToFrontend backendMsg
 invalidChangeResponse changeId clientId =
-    LocalChangeResponse changeId InvalidChange
+    LocalChangeResponse changeId Local_Invalid
         |> Lamdera.sendToFrontend clientId
 
 

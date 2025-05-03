@@ -10,6 +10,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
+import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
@@ -247,6 +248,7 @@ loadedInitHelper time loginData loading =
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
             , channelNameHover = Nothing
+            , typingDebouncer = True
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -277,7 +279,7 @@ loadedInitHelper time loginData loading =
         time
         (case maybeAdmin of
             Just ( _, Just adminChange, _ ) ->
-                AdminChange adminChange |> Just
+                Local_Admin adminChange |> Just
 
             _ ->
                 Nothing
@@ -499,7 +501,7 @@ updateLoaded msg model =
                             in
                             handleLocalChange
                                 model.time
-                                (Maybe.map AdminChange maybeLocalChange)
+                                (Maybe.map Local_Admin maybeLocalChange)
                                 { loggedIn | admin = Just newAdmin }
                                 (Command.map AdminToBackend AdminPageMsg cmd)
 
@@ -573,7 +575,7 @@ updateLoaded msg model =
                             in
                             handleLocalChange
                                 model.time
-                                (Maybe.map UserOverviewChange maybeChange)
+                                (Maybe.map Local_UserOverview maybeChange)
                                 { loggedIn | userOverview = SeqDict.insert userId userOverview2 loggedIn.userOverview }
                                 (Command.map UserOverviewToBackend UserOverviewMsg cmd)
 
@@ -585,18 +587,33 @@ updateLoaded msg model =
         TypedMessage guildId channelId text ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | drafts =
-                            case String.Nonempty.fromString text of
-                                Just nonempty ->
-                                    SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+                    handleLocalChange
+                        model.time
+                        (if loggedIn.typingDebouncer then
+                            Local_MemberTyping model.time guildId channelId |> Just
 
-                                Nothing ->
-                                    SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                      }
-                    , Command.none
-                    )
+                         else
+                            Nothing
+                        )
+                        { loggedIn
+                            | drafts =
+                                case String.Nonempty.fromString text of
+                                    Just nonempty ->
+                                        SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+
+                                    Nothing ->
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                            , typingDebouncer = False
+                        }
+                        (Process.sleep (Duration.seconds 1.5)
+                            |> Task.perform (\() -> DebouncedTyping)
+                        )
                 )
+                model
+
+        DebouncedTyping ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | typingDebouncer = True }, Command.none ))
                 model
 
         PressedSendMessage guildId channelId ->
@@ -606,7 +623,7 @@ updateLoaded msg model =
                         Just nonempty ->
                             handleLocalChange
                                 model.time
-                                (SendMessageChange model.time guildId channelId nonempty |> Just)
+                                (Local_SendMessage model.time guildId channelId nonempty |> Just)
                                 { loggedIn
                                     | drafts =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.drafts
@@ -639,7 +656,7 @@ updateLoaded msg model =
                                 ( loggedIn2, cmd ) =
                                     handleLocalChange
                                         model.time
-                                        (NewChannelChange model.time guildId channelName |> Just)
+                                        (Local_NewChannel model.time guildId channelName |> Just)
                                         { loggedIn
                                             | newChannelForm =
                                                 SeqDict.remove guildId loggedIn.newChannelForm
@@ -734,7 +751,7 @@ updateLoaded msg model =
                         Ok channelName ->
                             handleLocalChange
                                 model.time
-                                (EditChannelChange guildId channelId channelName |> Just)
+                                (Local_EditChannel guildId channelId channelName |> Just)
                                 { loggedIn
                                     | editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
@@ -759,7 +776,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (DeleteChannelChange guildId channelId |> Just)
+                        (Local_DeleteChannel guildId channelId |> Just)
                         { loggedIn
                             | drafts = SeqDict.remove ( guildId, channelId ) loggedIn.drafts
                             , editChannelForm =
@@ -774,7 +791,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (NewInviteLinkChange model.time guildId EmptyPlaceholder |> Just)
+                        (Local_NewInviteLink model.time guildId EmptyPlaceholder |> Just)
                         loggedIn
                         Command.none
                 )
@@ -820,10 +837,10 @@ changeUpdate localMsg local =
     case localMsg of
         LocalChange changedBy localChange ->
             case localChange of
-                InvalidChange ->
+                Local_Invalid ->
                     local
 
-                AdminChange adminChange ->
+                Local_Admin adminChange ->
                     case local.adminData of
                         IsAdmin adminData ->
                             { local
@@ -834,7 +851,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                UserOverviewChange userOverviewChange ->
+                Local_UserOverview userOverviewChange ->
                     case userOverviewChange of
                         Pages.UserOverview.EmailNotificationsChange emailNotifications ->
                             let
@@ -845,7 +862,7 @@ changeUpdate localMsg local =
                                 | user = { user | emailNotifications = emailNotifications }
                             }
 
-                SendMessageChange createdAt guildId channelId text ->
+                Local_SendMessage createdAt guildId channelId text ->
                     case SeqDict.get guildId local.guilds of
                         Just guild ->
                             case SeqDict.get channelId guild.channels of
@@ -878,7 +895,7 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
-                NewChannelChange time guildId channelName ->
+                Local_NewChannel time guildId channelName ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
@@ -887,7 +904,7 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                EditChannelChange guildId channelId channelName ->
+                Local_EditChannel guildId channelId channelName ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
@@ -896,7 +913,7 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                DeleteChannelChange guildId channelId ->
+                Local_DeleteChannel guildId channelId ->
                     { local
                         | guilds =
                             SeqDict.updateIfExists
@@ -905,7 +922,7 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                NewInviteLinkChange time guildId inviteLinkId ->
+                Local_NewInviteLink time guildId inviteLinkId ->
                     case inviteLinkId of
                         EmptyPlaceholder ->
                             local
@@ -918,6 +935,15 @@ changeUpdate localMsg local =
                                         (LocalState.addInvite inviteLinkId2 local.userId time)
                                         local.guilds
                             }
+
+                Local_MemberTyping time guildId channelId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.memberIsTyping local.userId time channelId)
+                                local.guilds
+                    }
 
         ServerChange serverChange ->
             case serverChange of
@@ -1016,6 +1042,15 @@ changeUpdate localMsg local =
 
                         Err error ->
                             { local | joinGuildError = Just error }
+
+                Server_MemberTyping time userId guildId channelId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.memberIsTyping userId time channelId)
+                                local.guilds
+                    }
 
 
 handleLocalChange :
@@ -1304,11 +1339,11 @@ updateLoadedFromBackend msg model =
 pendingChangesText : LocalChange -> String
 pendingChangesText localChange =
     case localChange of
-        InvalidChange ->
+        Local_Invalid ->
             -- We should never have a invalid change in the local msg queue
             "InvalidChange"
 
-        AdminChange adminChange ->
+        Local_Admin adminChange ->
             case adminChange of
                 Pages.Admin.ChangeUsers _ ->
                     "Changed users via admin page"
@@ -1329,23 +1364,26 @@ pendingChangesText localChange =
                     else
                         "Disabled email notifications"
 
-        UserOverviewChange _ ->
+        Local_UserOverview _ ->
             "Changed user profile"
 
-        SendMessageChange _ _ _ _ ->
+        Local_SendMessage _ _ _ _ ->
             "Sent a message"
 
-        NewChannelChange posix id channelName ->
+        Local_NewChannel posix id channelName ->
             "Created new channel"
 
-        EditChannelChange id _ channelName ->
+        Local_EditChannel id _ channelName ->
             "Edited channel"
 
-        DeleteChannelChange _ id ->
+        Local_DeleteChannel _ id ->
             "Deleted channel"
 
-        NewInviteLinkChange posix id toBeFilledInByBackend ->
+        Local_NewInviteLink posix id toBeFilledInByBackend ->
             "Created invite link"
+
+        Local_MemberTyping _ _ _ ->
+            "Is typing notification"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -1616,7 +1654,7 @@ guildView model guildId channelRoute loggedIn local =
                     ChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
                             Just channel ->
-                                conversationView guildId channelId loggedIn local channel
+                                conversationView guildId channelId loggedIn model local channel
 
                             Nothing ->
                                 Ui.el
@@ -1635,7 +1673,13 @@ guildView model guildId channelRoute loggedIn local =
                     NoChannelRoute ->
                         case SeqDict.get guild.announcementChannel guild.channels of
                             Just channel ->
-                                conversationView guildId guild.announcementChannel loggedIn local channel
+                                conversationView
+                                    guildId
+                                    guild.announcementChannel
+                                    loggedIn
+                                    model
+                                    local
+                                    channel
 
                             Nothing ->
                                 Ui.el
@@ -1772,10 +1816,11 @@ conversationView :
     Id GuildId
     -> Id ChannelId
     -> LoggedIn2
+    -> LoadedFrontend
     -> LocalState
     -> FrontendChannel
     -> Element FrontendMsg
-conversationView guildId channelId loggedIn local channel =
+conversationView guildId channelId loggedIn model local channel =
     let
         text : String
         text =
@@ -1835,6 +1880,35 @@ conversationView guildId channelId loggedIn local channel =
                 , spellcheck = True
                 }
             )
+        , case
+            SeqDict.filter
+                (\_ time ->
+                    Duration.from time model.time
+                        |> Quantity.lessThan (Duration.seconds 5)
+                )
+                channel.lastTypedAt
+                |> SeqDict.keys
+          of
+            [] ->
+                Ui.none
+
+            _ :: _ :: _ :: _ ->
+                Ui.text "Several people are typing..." |> Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
+
+            many ->
+                List.map
+                    (\isTyping ->
+                        case SeqDict.get isTyping local.otherUsers of
+                            Just user ->
+                                PersonName.toString user.name
+
+                            Nothing ->
+                                "<missing>"
+                    )
+                    many
+                    |> MyUi.listToText
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
         ]
 
 

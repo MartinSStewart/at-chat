@@ -23,6 +23,7 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , isAdmin
+    , memberIsTyping
     )
 
 import Array exposing (Array)
@@ -109,6 +110,7 @@ type alias BackendChannel =
     , name : ChannelName
     , messages : Array Message
     , status : ChannelStatus
+    , lastTypedAt : SeqDict (Id UserId) Time.Posix
     }
 
 
@@ -118,6 +120,7 @@ type alias FrontendChannel =
     , name : ChannelName
     , messages : Array Message
     , isArchived : Maybe Archived
+    , lastTypedAt : SeqDict (Id UserId) Time.Posix
     }
 
 
@@ -130,6 +133,7 @@ channelToFrontend channel =
             , name = channel.name
             , messages = channel.messages
             , isArchived = Nothing
+            , lastTypedAt = channel.lastTypedAt
             }
                 |> Just
 
@@ -139,6 +143,7 @@ channelToFrontend channel =
             , name = channel.name
             , messages = channel.messages
             , isArchived = Just archive
+            , lastTypedAt = channel.lastTypedAt
             }
                 |> Just
 
@@ -235,6 +240,7 @@ createChannel time userId channelName guild =
                 , name = channelName
                 , messages = Array.empty
                 , status = ChannelActive
+                , lastTypedAt = SeqDict.empty
                 }
                 guild.channels
     }
@@ -256,6 +262,7 @@ createChannelFrontend time userId channelName guild =
                 , name = channelName
                 , messages = Array.empty
                 , isArchived = Nothing
+                , lastTypedAt = SeqDict.empty
                 }
                 guild.channels
     }
@@ -294,6 +301,26 @@ deleteChannel time userId channelId guild =
 deleteChannelFrontend : Id ChannelId -> FrontendGuild -> FrontendGuild
 deleteChannelFrontend channelId guild =
     { guild | channels = SeqDict.remove channelId guild.channels }
+
+
+memberIsTyping :
+    Id UserId
+    -> Time.Posix
+    -> Id ChannelId
+    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
+    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
+memberIsTyping userId time channelId guild =
+    { guild
+        | channels =
+            SeqDict.updateIfExists
+                channelId
+                (\channel ->
+                    { channel
+                        | lastTypedAt = SeqDict.insert userId time channel.lastTypedAt
+                    }
+                )
+                guild.channels
+    }
 
 
 addInvite :

@@ -14,6 +14,7 @@ module MyUi exposing
     , hoverText
     , internalLink
     , label
+    , listToText
     , montserrat
     , noPointerEvents
     , padding
@@ -557,3 +558,19 @@ widthAttr width =
 heightAttr : Int -> Html.Attribute msg
 heightAttr height =
     Html.Attributes.style "height" (String.fromInt height ++ "px")
+
+
+listToText : List String -> String
+listToText list =
+    case List.reverse list of
+        [] ->
+            ""
+
+        [ single ] ->
+            single
+
+        [ one, two ] ->
+            two ++ " and " ++ one
+
+        one :: many ->
+            String.join ", " (List.reverse many) ++ ", and " ++ one

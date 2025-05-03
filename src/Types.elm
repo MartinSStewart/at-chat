@@ -96,6 +96,7 @@ type alias LoggedIn2 =
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
+    , typingDebouncer : Bool
     }
 
 
@@ -175,6 +176,7 @@ type FrontendMsg
     | FrontendNoOp
     | PressedCopyText String
     | PressedCreateGuild
+    | DebouncedTyping
 
 
 type alias NewChannelForm =
@@ -258,17 +260,19 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
+    | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
 
 
 type LocalChange
-    = InvalidChange
-    | AdminChange AdminChange
-    | UserOverviewChange Pages.UserOverview.Change
-    | SendMessageChange Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
-    | NewChannelChange Time.Posix (Id GuildId) ChannelName
-    | EditChannelChange (Id GuildId) (Id ChannelId) ChannelName
-    | DeleteChannelChange (Id GuildId) (Id ChannelId)
-    | NewInviteLinkChange Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    = Local_Invalid
+    | Local_Admin AdminChange
+    | Local_UserOverview Pages.UserOverview.Change
+    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    | Local_NewChannel Time.Posix (Id GuildId) ChannelName
+    | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
+    | Local_DeleteChannel (Id GuildId) (Id ChannelId)
+    | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    | Local_MemberTyping Time.Posix (Id GuildId) (Id ChannelId)
 
 
 type ToBeFilledInByBackend a
