@@ -219,9 +219,21 @@ isAdmin { adminData } =
             False
 
 
-createMessage : Message -> { d | messages : Array Message } -> { d | messages : Array Message }
+createMessage :
+    Message
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) Time.Posix }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) Time.Posix }
 createMessage message channel =
-    { channel | messages = Array.push message channel.messages }
+    { channel
+        | messages = Array.push message channel.messages
+        , lastTypedAt =
+            case message of
+                UserTextMessage { createdBy } ->
+                    SeqDict.remove createdBy channel.lastTypedAt
+
+                UserJoinedMessage _ _ ->
+                    channel.lastTypedAt
+    }
 
 
 createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild -> BackendGuild
@@ -344,7 +356,13 @@ addMember :
             | owner : Id UserId
             , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
             , announcementChannel : Id ChannelId
-            , channels : SeqDict (Id ChannelId) { d | messages : Array Message }
+            , channels :
+                SeqDict
+                    (Id ChannelId)
+                    { d
+                        | messages : Array Message
+                        , lastTypedAt : SeqDict (Id UserId) Time.Posix
+                    }
         }
     ->
         Result
@@ -353,7 +371,13 @@ addMember :
                 | owner : Id UserId
                 , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
                 , announcementChannel : Id ChannelId
-                , channels : SeqDict (Id ChannelId) { d | messages : Array Message }
+                , channels :
+                    SeqDict
+                        (Id ChannelId)
+                        { d
+                            | messages : Array Message
+                            , lastTypedAt : SeqDict (Id UserId) Time.Posix
+                        }
             }
 addMember time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then

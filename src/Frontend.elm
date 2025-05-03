@@ -88,11 +88,7 @@ subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
 subscriptions _ =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
-        , if Env.isProduction then
-            Time.every Duration.second GotTime
-
-          else
-            Time.every (Duration.seconds 10) GotTime
+        , Time.every Duration.second GotTime
         ]
 
 
@@ -605,7 +601,7 @@ updateLoaded msg model =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.drafts
                             , typingDebouncer = False
                         }
-                        (Process.sleep (Duration.seconds 1.5)
+                        (Process.sleep (Duration.seconds 1)
                             |> Task.perform (\() -> DebouncedTyping)
                         )
                 )
@@ -963,7 +959,7 @@ changeUpdate localMsg local =
                                                             (LocalState.createMessage
                                                                 (UserTextMessage
                                                                     { createdAt = createdAt
-                                                                    , createdBy = local.userId
+                                                                    , createdBy = userId
                                                                     , content = text
                                                                     }
                                                                 )
@@ -1830,6 +1826,14 @@ conversationView guildId channelId loggedIn model local channel =
 
                 Nothing ->
                     ""
+
+        userIdToName userId =
+            case SeqDict.get userId local.otherUsers of
+                Just user ->
+                    PersonName.toString user.name
+
+                Nothing ->
+                    "<missing>"
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -1842,9 +1846,9 @@ conversationView guildId channelId loggedIn model local channel =
                     (messageView local)
                     (Array.toList channel.messages)
             )
-        , Ui.el
-            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 8 } ]
-            (Ui.Input.multiline
+        , Ui.column
+            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 2 } ]
+            [ Ui.Input.multiline
                 [ Ui.Font.color
                     (if text == "" then
                         placeholderFont
@@ -1879,36 +1883,44 @@ conversationView guildId channelId loggedIn model local channel =
                 , label = Ui.Input.labelHidden "Message input field"
                 , spellcheck = True
                 }
-            )
-        , case
-            SeqDict.filter
-                (\_ time ->
-                    Duration.from time model.time
-                        |> Quantity.lessThan (Duration.seconds 5)
-                )
-                channel.lastTypedAt
-                |> SeqDict.keys
-          of
-            [] ->
-                Ui.none
-
-            _ :: _ :: _ :: _ ->
-                Ui.text "Several people are typing..." |> Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
-
-            many ->
-                List.map
-                    (\isTyping ->
-                        case SeqDict.get isTyping local.otherUsers of
-                            Just user ->
-                                PersonName.toString user.name
-
-                            Nothing ->
-                                "<missing>"
+            , (case
+                SeqDict.filter
+                    (\_ time ->
+                        Duration.from time model.time |> Quantity.lessThan (Duration.seconds 2)
                     )
-                    many
-                    |> MyUi.listToText
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold, Ui.Font.size 14 ]
+                    (SeqDict.remove local.userId channel.lastTypedAt)
+                    |> SeqDict.keys
+               of
+                [] ->
+                    ""
+
+                [ single ] ->
+                    userIdToName single ++ " is typing..."
+
+                [ one, two ] ->
+                    userIdToName one ++ " and " ++ userIdToName two ++ " are typing..."
+
+                [ one, two, three ] ->
+                    userIdToName one
+                        ++ ", "
+                        ++ userIdToName two
+                        ++ ", and "
+                        ++ userIdToName three
+                        ++ " are typing..."
+
+                _ :: _ :: _ :: _ ->
+                    "Several people are typing..."
+              )
+                |> Ui.text
+                |> Ui.el
+                    [ Ui.Font.bold
+                    , Ui.Font.size 13
+                    , Ui.Font.color font3
+                    , Ui.height (Ui.px 18)
+                    , Ui.contentCenterY
+                    , Ui.paddingXY 4 0
+                    ]
+            ]
         ]
 
 
