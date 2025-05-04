@@ -2184,70 +2184,7 @@ conversationView guildId channelId loggedIn model local channel =
             )
         , Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 2 } ]
-            [ Ui.Input.multiline
-                [ Ui.Font.color
-                    (if text == "" then
-                        placeholderFont
-
-                     else
-                        font1
-                    )
-                , Ui.id (Dom.idToString channelTextInputId)
-                , Ui.background background2
-                , Ui.borderColor border1
-                , Html.Events.preventDefaultOn
-                    "keydown"
-                    (Json.Decode.map2 Tuple.pair
-                        (Json.Decode.field "shiftKey" Json.Decode.bool)
-                        (Json.Decode.field "key" Json.Decode.string)
-                        |> Json.Decode.andThen
-                            (\( shiftHeld, key ) ->
-                                if key == "Enter" && not shiftHeld then
-                                    Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
-
-                                else
-                                    Json.Decode.fail ""
-                            )
-                    )
-                    |> Ui.htmlAttribute
-                , Ui.Events.onFocus (TextInputGotFocus channelTextInputId)
-                , Ui.Events.onLoseFocus (TextInputLostFocus channelTextInputId)
-                , case loggedIn.pingUser of
-                    Just { dropdownIndex } ->
-                        Html.Events.preventDefaultOn
-                            "keydown"
-                            (Json.Decode.andThen
-                                (\key ->
-                                    case key of
-                                        "ArrowDown" ->
-                                            Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
-
-                                        "ArrowUp" ->
-                                            Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
-
-                                        "Enter" ->
-                                            Json.Decode.succeed
-                                                ( PressedPingUser guildId channelId dropdownIndex, True )
-
-                                        _ ->
-                                            Json.Decode.fail ""
-                                )
-                                (Json.Decode.field "key" Json.Decode.string)
-                            )
-                            |> Ui.htmlAttribute
-
-                    Nothing ->
-                        Ui.noAttr
-                ]
-                { onChange = TypedMessage guildId channelId
-                , text = text
-                , placeholder =
-                    "Write a message in #"
-                        ++ ChannelName.toString channel.name
-                        |> Just
-                , label = Ui.Input.labelHidden "Message input field"
-                , spellcheck = True
-                }
+            [ channelTextInput guildId channelId channel loggedIn local
             , (case
                 SeqDict.filter
                     (\_ time ->
@@ -2287,6 +2224,157 @@ conversationView guildId channelId loggedIn model local channel =
                     ]
             ]
         ]
+
+
+channelTextInput : Id GuildId -> Id ChannelId -> FrontendChannel -> LoggedIn2 -> LocalState -> Element FrontendMsg
+channelTextInput guildId channelId channel loggedIn local =
+    let
+        text : String
+        text =
+            case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                Just nonempty ->
+                    String.Nonempty.toString nonempty
+
+                Nothing ->
+                    ""
+
+        userNames : List String
+        userNames =
+            LocalState.allUsers local
+                |> SeqDict.toList
+                |> List.map (\( _, user ) -> PersonName.toString user.name)
+
+        segments : List { highlight : String, rest : String }
+        segments =
+            List.foldl
+                (\part ( isFirst, index, highlights ) ->
+                    case
+                        ( isFirst
+                        , List.filter (\name -> String.startsWith name part) userNames
+                            |> List.Extra.maximumBy String.length
+                        )
+                    of
+                        ( False, Just match ) ->
+                            ( False
+                            , index + 1 + String.length part
+                            , { highlight = "@" ++ match
+                              , rest = String.dropLeft (String.length match) part
+                              }
+                                :: highlights
+                            )
+
+                        ( False, Nothing ) ->
+                            ( False
+                            , index + 1 + String.length part
+                            , (case loggedIn.pingUser of
+                                Just { charIndex } ->
+                                    if charIndex == index then
+                                        { highlight = "@", rest = part }
+
+                                    else
+                                        { highlight = "", rest = "@" ++ part }
+
+                                Nothing ->
+                                    { highlight = "", rest = "@" ++ part }
+                              )
+                                :: highlights
+                            )
+
+                        ( True, _ ) ->
+                            ( False, index + String.length part, { highlight = "", rest = part } :: highlights )
+                )
+                ( True, 0, [] )
+                (String.split "@" text)
+                |> (\( _, _, chars ) -> List.reverse chars)
+
+        paddingX =
+            8
+    in
+    Ui.Input.multiline
+        [ Ui.Font.color
+            (if text == "" then
+                placeholderFont
+
+             else
+                Ui.rgba 0 0 0 0
+            )
+        , Ui.id (Dom.idToString channelTextInputId)
+        , Ui.background background2
+        , Ui.borderColor border1
+        , Ui.htmlAttribute (Html.Attributes.style "caret-color" "white")
+        , Ui.paddingXY paddingX 8
+        , Ui.Events.onFocus (TextInputGotFocus channelTextInputId)
+        , Ui.Events.onLoseFocus (TextInputLostFocus channelTextInputId)
+        , case loggedIn.pingUser of
+            Just { dropdownIndex } ->
+                Html.Events.preventDefaultOn
+                    "keydown"
+                    (Json.Decode.andThen
+                        (\key ->
+                            case key of
+                                "ArrowDown" ->
+                                    Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
+
+                                "ArrowUp" ->
+                                    Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
+
+                                "Enter" ->
+                                    Json.Decode.succeed
+                                        ( PressedPingUser guildId channelId dropdownIndex, True )
+
+                                _ ->
+                                    Json.Decode.fail ""
+                        )
+                        (Json.Decode.field "key" Json.Decode.string)
+                    )
+                    |> Ui.htmlAttribute
+
+            Nothing ->
+                Html.Events.preventDefaultOn
+                    "keydown"
+                    (Json.Decode.map2 Tuple.pair
+                        (Json.Decode.field "shiftKey" Json.Decode.bool)
+                        (Json.Decode.field "key" Json.Decode.string)
+                        |> Json.Decode.andThen
+                            (\( shiftHeld, key ) ->
+                                if key == "Enter" && not shiftHeld then
+                                    Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
+
+                                else
+                                    Json.Decode.fail ""
+                            )
+                    )
+                    |> Ui.htmlAttribute
+        , Ui.Prose.paragraph
+            [ MyUi.noPointerEvents
+            , Ui.paddingXY paddingX 0
+            , Ui.move { x = 0, y = -9, z = 0 }
+            , Ui.Font.color font1
+            ]
+            (List.concatMap
+                (\{ highlight, rest } ->
+                    [ Ui.el
+                        [ Ui.background labelBackgroundColor
+                        , Ui.rounded 2
+                        , Ui.Font.color labelFontColor
+                        ]
+                        (Ui.text highlight)
+                    , Ui.text rest
+                    ]
+                )
+                segments
+            )
+            |> Ui.inFront
+        ]
+        { onChange = TypedMessage guildId channelId
+        , text = text
+        , placeholder =
+            "Write a message in #"
+                ++ ChannelName.toString channel.name
+                |> Just
+        , label = Ui.Input.labelHidden "Message input field"
+        , spellcheck = True
+        }
 
 
 dropdownButtonId : Int -> HtmlId
@@ -2444,12 +2532,12 @@ label2 user =
     Ui.el
         [ Ui.background labelBackgroundColor
         , Ui.width Ui.shrink
-        , Ui.paddingXY 3 0
+        , Ui.paddingWith { left = 1, right = 1, top = 0, bottom = 1 }
         , Ui.Font.color labelFontColor
         , Ui.rounded 2
         , Ui.Font.noWrap
         ]
-        (Ui.text (PersonName.toString user.name))
+        (Ui.text ("@" ++ PersonName.toString user.name))
 
 
 labelBackgroundColor : Ui.Color
