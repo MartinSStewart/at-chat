@@ -15,6 +15,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , MentionUserDropdown
     , NewChannelForm
     , ServerChange(..)
     , ToBackend(..)
@@ -26,6 +27,7 @@ module Types exposing
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
@@ -33,6 +35,7 @@ import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
+import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
@@ -42,6 +45,7 @@ import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Postmark
+import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
@@ -80,6 +84,7 @@ type alias LoadedFrontend =
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
+    , textInputFocus : Maybe HtmlId
     }
 
 
@@ -97,6 +102,14 @@ type alias LoggedIn2 =
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     , typingDebouncer : Bool
+    , pingUser : Maybe MentionUserDropdown
+    }
+
+
+type alias MentionUserDropdown =
+    { charIndex : Int
+    , dropdownIndex : Int
+    , inputElement : { x : Float, y : Float, width : Float, height : Float }
     }
 
 
@@ -177,6 +190,12 @@ type FrontendMsg
     | PressedCopyText String
     | PressedCreateGuild
     | DebouncedTyping
+    | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
+    | PressedPingUser (Id GuildId) (Id ChannelId) Int
+    | SetFocus
+    | PressedArrowInDropdown (Id GuildId) Int
+    | TextInputGotFocus HtmlId
+    | TextInputLostFocus HtmlId
 
 
 type alias NewChannelForm =
@@ -245,7 +264,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -267,7 +286,7 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
     | Local_UserOverview Pages.UserOverview.Change
-    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) NonemptyString
+    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)

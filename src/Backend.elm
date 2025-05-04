@@ -35,6 +35,7 @@ import Pagination
 import PersonName
 import Postmark
 import Quantity
+import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict
 import SeqSet
@@ -917,7 +918,7 @@ sendMessage :
     -> ChangeId
     -> Id GuildId
     -> Id ChannelId
-    -> NonemptyString
+    -> Nonempty RichText
     -> Id UserId
     -> BackendUser
     -> BackendGuild

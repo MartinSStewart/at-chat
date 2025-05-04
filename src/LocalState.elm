@@ -12,6 +12,7 @@ module LocalState exposing
     , Message(..)
     , addInvite
     , addMember
+    , allUsers
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -33,9 +34,11 @@ import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
+import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
+import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -165,7 +168,7 @@ type Message
     = UserTextMessage
         { createdAt : Time.Posix
         , createdBy : Id UserId
-        , content : NonemptyString
+        , content : Nonempty RichText
         }
     | UserJoinedMessage Time.Posix (Id UserId)
 
@@ -393,3 +396,8 @@ addMember time userId guild =
                     guild.channels
         }
             |> Ok
+
+
+allUsers : LocalState -> SeqDict (Id UserId) FrontendUser
+allUsers local =
+    SeqDict.insert local.userId (User.backendToFrontendForUser local.user) local.otherUsers

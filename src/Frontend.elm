@@ -4,8 +4,10 @@ import Array
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
+import CssPixels
+import Diff
 import Duration
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -25,6 +27,8 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
+import List.Extra
+import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..))
 import LoginForm
@@ -34,12 +38,13 @@ import Pages.Admin
 import Pages.Home
 import Pages.UserOverview
 import Pagination
-import PersonName
+import PersonName exposing (PersonName)
 import Ports
 import Quantity
+import RichText exposing (RichText(..))
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
-import SeqDict
-import String.Nonempty
+import SeqDict exposing (SeqDict)
+import String.Nonempty exposing (NonemptyString)
 import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -48,7 +53,9 @@ import Ui.Font
 import Ui.Input
 import Ui.Lazy
 import Ui.Prose
+import Ui.Shadow
 import Url exposing (Url)
+import User exposing (FrontendUser)
 
 
 app :
@@ -154,6 +161,7 @@ initLoadedFrontend loading time loginResult =
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
+            , textInputFocus = Nothing
             }
 
         ( model2, cmdA ) =
@@ -245,6 +253,7 @@ loadedInitHelper time loginData loading =
             , editChannelForm = SeqDict.empty
             , channelNameHover = Nothing
             , typingDebouncer = True
+            , pingUser = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -583,13 +592,15 @@ updateLoaded msg model =
         TypedMessage guildId channelId text ->
             updateLoggedIn
                 (\loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (if loggedIn.typingDebouncer then
-                            Local_MemberTyping model.time guildId channelId |> Just
+                    multilineUpdate
+                        channelTextInputId
+                        text
+                        (case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                            Just nonempty ->
+                                String.Nonempty.toString nonempty
 
-                         else
-                            Nothing
+                            Nothing ->
+                                ""
                         )
                         { loggedIn
                             | drafts =
@@ -601,9 +612,27 @@ updateLoaded msg model =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.drafts
                             , typingDebouncer = False
                         }
-                        (Process.sleep (Duration.seconds 1)
-                            |> Task.perform (\() -> DebouncedTyping)
-                        )
+                 --handleLocalChange
+                 --model.time
+                 --(if loggedIn.typingDebouncer then
+                 --    Local_MemberTyping model.time guildId channelId |> Just
+                 --
+                 -- else
+                 --    Nothing
+                 --)
+                 --{ loggedIn
+                 --    | drafts =
+                 --        case String.Nonempty.fromString text of
+                 --            Just nonempty ->
+                 --                SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+                 --
+                 --            Nothing ->
+                 --                SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                 --    , typingDebouncer = False
+                 --}
+                 --(Process.sleep (Duration.seconds 1)
+                 --    |> Task.perform (\() -> DebouncedTyping)
+                 --)
                 )
                 model
 
@@ -617,9 +646,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
                         Just nonempty ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
                             handleLocalChange
                                 model.time
-                                (Local_SendMessage model.time guildId channelId nonempty |> Just)
+                                (Local_SendMessage
+                                    model.time
+                                    guildId
+                                    channelId
+                                    (RichText.fromNonemptyString
+                                        (LocalState.allUsers local)
+                                        nonempty
+                                    )
+                                    |> Just
+                                )
                                 { loggedIn
                                     | drafts =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.drafts
@@ -805,6 +848,266 @@ updateLoaded msg model =
             ( model
             , Command.none
             )
+
+        GotPingUserPosition result ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( case result of
+                        Ok ok ->
+                            { loggedIn | pingUser = Just ok }
+
+                        Err _ ->
+                            loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedPingUser guildId channelId index ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case
+                        ( loggedIn.pingUser
+                        , userDropdownList guildId local
+                            |> List.Extra.getAt index
+                        )
+                    of
+                        ( Just { charIndex }, Just ( _, user ) ) ->
+                            let
+                                applyText : NonemptyString -> NonemptyString
+                                applyText text =
+                                    let
+                                        name : String
+                                        name =
+                                            PersonName.toString user.name
+
+                                        text2 =
+                                            String.Nonempty.toString text
+
+                                        followingText : String
+                                        followingText =
+                                            String.foldl
+                                                (\char ( name2, chars ) ->
+                                                    case name2 of
+                                                        head :: rest ->
+                                                            if Char.toLower head == Char.toLower char then
+                                                                ( rest, chars )
+
+                                                            else
+                                                                ( [], char :: chars )
+
+                                                        [] ->
+                                                            ( [], char :: chars )
+                                                )
+                                                ( String.toList name, [] )
+                                                (String.dropLeft (charIndex + 1) text2)
+                                                |> Tuple.second
+                                                |> List.reverse
+                                                |> String.fromList
+                                    in
+                                    String.left (charIndex + 1) text2
+                                        ++ name
+                                        ++ followingText
+                                        |> String.Nonempty.fromString
+                                        |> Maybe.withDefault text
+                            in
+                            ( { loggedIn
+                                | pingUser = Nothing
+                                , drafts =
+                                    SeqDict.updateIfExists
+                                        ( guildId, channelId )
+                                        applyText
+                                        loggedIn.drafts
+                              }
+                            , Dom.focus channelTextInputId
+                                |> Task.attempt (\_ -> SetFocus)
+                            )
+
+                        _ ->
+                            ( { loggedIn | pingUser = Nothing }, Command.none )
+                )
+                model
+
+        SetFocus ->
+            ( model, Command.none )
+
+        PressedArrowInDropdown guildId index ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( case loggedIn.pingUser of
+                        Just pingUser ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            { loggedIn
+                                | pingUser =
+                                    { pingUser
+                                        | dropdownIndex =
+                                            if index < 0 then
+                                                List.length (userDropdownList guildId local) - 1
+
+                                            else if index >= List.length (userDropdownList guildId local) then
+                                                0
+
+                                            else
+                                                index
+                                    }
+                                        |> Just
+                            }
+
+                        Nothing ->
+                            loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
+        TextInputGotFocus htmlId ->
+            ( { model | textInputFocus = Just htmlId }, Command.none )
+
+        TextInputLostFocus htmlId ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | pingUser = Nothing }, Command.none ))
+                { model
+                    | textInputFocus =
+                        if Just htmlId == model.textInputFocus then
+                            Nothing
+
+                        else
+                            model.textInputFocus
+                }
+
+
+userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList guildId local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
+            let
+                allUsers : SeqDict (Id UserId) FrontendUser
+                allUsers =
+                    LocalState.allUsers local
+            in
+            guild.owner
+                :: SeqDict.keys guild.members
+                |> List.filterMap
+                    (\userId ->
+                        case SeqDict.get userId allUsers of
+                            Just user ->
+                                Just ( userId, user )
+
+                            Nothing ->
+                                Nothing
+                    )
+                |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+
+        Nothing ->
+            []
+
+
+multilineUpdate :
+    HtmlId
+    -> String
+    -> String
+    -> LoggedIn2
+    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
+multilineUpdate multilineId text oldText model =
+    let
+        oldAtCount : Int
+        oldAtCount =
+            List.length (String.indexes "@" oldText)
+
+        atCount : Int
+        atCount =
+            List.length (String.indexes "@" text)
+
+        typedAtSymbol : Maybe Int
+        typedAtSymbol =
+            if
+                (atCount > oldAtCount)
+                    && -- Detect if the user is pasting in text and if they are, abort the @mention dropdown
+                       (String.length text - String.length oldText < 3)
+            then
+                case newAtSymbol oldText text of
+                    Just { index } ->
+                        let
+                            previous =
+                                String.slice (index - 1) index text
+                        in
+                        if index == 0 || previous == " " || previous == "\n" then
+                            Just index
+
+                        else
+                            Nothing
+
+                    Nothing ->
+                        Nothing
+
+            else
+                Nothing
+    in
+    ( { model
+        | pingUser =
+            if oldAtCount > atCount then
+                Nothing
+
+            else
+                model.pingUser
+      }
+    , case typedAtSymbol of
+        Just index ->
+            Dom.getElement multilineId
+                |> Task.map
+                    (\{ element } ->
+                        { dropdownIndex = 0
+                        , charIndex = index
+                        , inputElement = element
+                        }
+                    )
+                |> Task.attempt GotPingUserPosition
+
+        Nothing ->
+            Command.none
+    )
+
+
+newAtSymbol : String -> String -> Maybe { index : Int }
+newAtSymbol oldText text =
+    List.foldl
+        (\change state ->
+            case change of
+                Diff.Added char ->
+                    if char == '@' then
+                        { index = state.index + 1
+                        , foundAtSymbol = Just { index = state.index }
+                        }
+
+                    else
+                        case state.foundAtSymbol of
+                            Just found ->
+                                { index = state.index + 1
+                                , foundAtSymbol = Just { index = found.index }
+                                }
+
+                            Nothing ->
+                                { index = state.index + 1
+                                , foundAtSymbol = state.foundAtSymbol
+                                }
+
+                _ ->
+                    { index = state.index + 1
+                    , foundAtSymbol = state.foundAtSymbol
+                    }
+        )
+        { index = 0, foundAtSymbol = Nothing }
+        (Diff.diff (String.toList oldText) (String.toList text))
+        |> .foundAtSymbol
 
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
@@ -1466,9 +1769,37 @@ view model =
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
+                                let
+                                    local =
+                                        Local.model loggedIn.localState
+                                in
                                 layout
                                     loaded
-                                    []
+                                    [ case loaded.route of
+                                        GuildRoute guildId NoChannelRoute ->
+                                            case SeqDict.get guildId local.guilds of
+                                                Just guild ->
+                                                    case pingDropdown guildId guild.announcementChannel local loggedIn of
+                                                        Just element ->
+                                                            Ui.inFront element
+
+                                                        Nothing ->
+                                                            Ui.noAttr
+
+                                                Nothing ->
+                                                    Ui.noAttr
+
+                                        GuildRoute guildId (ChannelRoute channelId) ->
+                                            case pingDropdown guildId channelId local loggedIn of
+                                                Just element ->
+                                                    Ui.inFront element
+
+                                                Nothing ->
+                                                    Ui.noAttr
+
+                                        _ ->
+                                            Ui.noAttr
+                                    ]
                                     (page loggedIn (Local.model loggedIn.localState))
 
                             NotLoggedIn { loginForm } ->
@@ -1808,6 +2139,11 @@ copyableText text model =
         ]
 
 
+channelTextInputId : HtmlId
+channelTextInputId =
+    Dom.id "channel_textinput"
+
+
 conversationView :
     Id GuildId
     -> Id ChannelId
@@ -1856,6 +2192,7 @@ conversationView guildId channelId loggedIn model local channel =
                      else
                         font1
                     )
+                , Ui.id (Dom.idToString channelTextInputId)
                 , Ui.background background2
                 , Ui.borderColor border1
                 , Html.Events.preventDefaultOn
@@ -1873,6 +2210,34 @@ conversationView guildId channelId loggedIn model local channel =
                             )
                     )
                     |> Ui.htmlAttribute
+                , Ui.Events.onFocus (TextInputGotFocus channelTextInputId)
+                , Ui.Events.onLoseFocus (TextInputLostFocus channelTextInputId)
+                , case loggedIn.pingUser of
+                    Just { dropdownIndex } ->
+                        Html.Events.preventDefaultOn
+                            "keydown"
+                            (Json.Decode.andThen
+                                (\key ->
+                                    case key of
+                                        "ArrowDown" ->
+                                            Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
+
+                                        "ArrowUp" ->
+                                            Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
+
+                                        "Enter" ->
+                                            Json.Decode.succeed
+                                                ( PressedPingUser guildId channelId dropdownIndex, True )
+
+                                        _ ->
+                                            Json.Decode.fail ""
+                                )
+                                (Json.Decode.field "key" Json.Decode.string)
+                            )
+                            |> Ui.htmlAttribute
+
+                    Nothing ->
+                        Ui.noAttr
                 ]
                 { onChange = TypedMessage guildId channelId
                 , text = text
@@ -1924,6 +2289,77 @@ conversationView guildId channelId loggedIn model local channel =
         ]
 
 
+dropdownButtonId : Int -> HtmlId
+dropdownButtonId index =
+    Dom.id ("dropdown_button" ++ String.fromInt index)
+
+
+pingDropdown : Id GuildId -> Id ChannelId -> LocalState -> LoggedIn2 -> Maybe (Element FrontendMsg)
+pingDropdown guildId channelId localState model =
+    case model.pingUser of
+        Just { dropdownIndex, inputElement } ->
+            Ui.column
+                [ Ui.background background2
+                , Ui.borderColor border1
+                , Ui.border 1
+                , Ui.Font.color font2
+                , Ui.move
+                    { x = round inputElement.x
+                    , y = round (inputElement.y - 400 + 1)
+                    , z = 0
+                    }
+                , Ui.width (Ui.px (round inputElement.width))
+                , Ui.height (Ui.px 400)
+                , Ui.clip
+                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+
+                --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
+                ]
+                [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
+                , Ui.column
+                    []
+                    (List.indexedMap
+                        (\index ( _, user ) ->
+                            Ui.el
+                                [ Ui.Input.button (PressedPingUser guildId channelId index)
+                                , Ui.Events.onMouseDown (PressedPingUser guildId channelId index)
+                                , MyUi.touchPress (PressedPingUser guildId channelId index)
+                                , Ui.id (Dom.idToString (dropdownButtonId index))
+                                , Ui.paddingXY 8 4
+                                , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor background3 ]
+                                , if dropdownIndex == index then
+                                    Ui.background background3
+
+                                  else
+                                    Ui.noAttr
+                                , Html.Events.on
+                                    "keydown"
+                                    (Json.Decode.field "key" Json.Decode.string
+                                        |> Json.Decode.andThen
+                                            (\key ->
+                                                if key == "ArrowDown" then
+                                                    Json.Decode.succeed (PressedArrowInDropdown guildId (index + 1))
+
+                                                else if key == "ArrowUp" then
+                                                    Json.Decode.succeed (PressedArrowInDropdown guildId (index - 1))
+
+                                                else
+                                                    Json.Decode.fail ""
+                                            )
+                                    )
+                                    |> Ui.htmlAttribute
+                                ]
+                                (Ui.text (PersonName.toString user.name))
+                        )
+                        (userDropdownList guildId localState)
+                    )
+                ]
+                |> Just
+
+        Nothing ->
+            Nothing
+
+
 messageView : LocalState -> Message -> Element FrontendMsg
 messageView local message =
     case message of
@@ -1932,19 +2368,17 @@ messageView local message =
                 [ Ui.Font.color font1
                 , Ui.paddingXY 0 10
                 ]
-                [ Ui.el
+                (Ui.el
                     [ Ui.Font.bold ]
                     (case LocalState.getUser message2.createdBy local of
                         Just user ->
-                            Ui.text (PersonName.toString user.name)
+                            Ui.text (PersonName.toString user.name ++ " ")
 
                         Nothing ->
                             Ui.text "<missing> "
                     )
-                , Ui.el
-                    [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
-                    (Ui.text ("  " ++ String.Nonempty.toString message2.content))
-                ]
+                    :: richTextView local message2.content
+                )
 
         UserJoinedMessage _ userId ->
             Ui.Prose.paragraph
@@ -1964,6 +2398,68 @@ messageView local message =
                     []
                     (Ui.text " joined!")
                 ]
+
+
+richTextView : LocalState -> Nonempty RichText -> List (Element msg)
+richTextView users nonempty =
+    List.map
+        (\item ->
+            case item of
+                UserMention userId ->
+                    label userId users
+
+                NormalText text ->
+                    Ui.el
+                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
+                        (Ui.text (String.Nonempty.toString text))
+        )
+        (List.Nonempty.toList nonempty)
+
+
+label : Id UserId -> LocalState -> Element msg
+label userId local =
+    case SeqDict.get userId (LocalState.allUsers local) of
+        Just user ->
+            label2 user
+
+        Nothing ->
+            Ui.el
+                [ errorBackground
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 4 0
+                , Ui.Font.color (Ui.rgb 50 70 240)
+                , Ui.rounded 2
+                , Ui.link (Route.encode (Route.UserOverviewRoute (SpecificUserRoute userId)))
+                ]
+                (Ui.text "<name missing>")
+
+
+errorBackground : Ui.Attribute msg
+errorBackground =
+    Ui.background (Ui.rgb 255 240 240)
+
+
+label2 : { a | name : PersonName } -> Element msg
+label2 user =
+    Ui.el
+        [ Ui.background labelBackgroundColor
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 3 0
+        , Ui.Font.color labelFontColor
+        , Ui.rounded 2
+        , Ui.Font.noWrap
+        ]
+        (Ui.text (PersonName.toString user.name))
+
+
+labelBackgroundColor : Ui.Color
+labelBackgroundColor =
+    Ui.rgb 215 235 255
+
+
+labelFontColor : Ui.Color
+labelFontColor =
+    Ui.rgb 50 70 240
 
 
 channelColumn :

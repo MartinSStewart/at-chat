@@ -30,6 +30,7 @@
             "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.0.0",
             "ianmackenzie/elm-units": "2.10.0",
+            "jinjor/elm-diff": "1.0.6",
             "lamdera/codecs": "1.0.0",
             "lamdera/containers": "1.0.0",
             "lamdera/core": "1.0.0",
