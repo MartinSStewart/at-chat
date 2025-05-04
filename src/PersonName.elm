@@ -1,5 +1,6 @@
 module PersonName exposing (PersonName(..), fromString, toString, unknown)
 
+import Set
 import String.Nonempty exposing (NonemptyString)
 
 

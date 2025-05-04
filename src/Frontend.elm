@@ -96,6 +96,7 @@ subscriptions _ =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
         , Time.every Duration.second GotTime
+        , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         ]
 
 
@@ -983,6 +984,28 @@ updateLoaded msg model =
                         else
                             model.textInputFocus
                 }
+
+        KeyDown key ->
+            case key of
+                "Escape" ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            case loggedIn.pingUser of
+                                Just _ ->
+                                    ( { loggedIn | pingUser = Nothing }
+                                    , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
+
+        RemovedFocus ->
+            ( model, Command.none )
 
 
 userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
@@ -2465,7 +2488,7 @@ messageView local message =
                         Nothing ->
                             Ui.text "<missing> "
                     )
-                    :: richTextView local message2.content
+                    :: richTextView { underline = False, italic = False } local message2.content
                 )
 
         UserJoinedMessage _ userId ->
@@ -2488,18 +2511,32 @@ messageView local message =
                 ]
 
 
-richTextView : LocalState -> Nonempty RichText -> List (Element msg)
-richTextView users nonempty =
-    List.map
+type alias RichTextState =
+    { italic : Bool, underline : Bool }
+
+
+richTextView : RichTextState -> LocalState -> Nonempty RichText -> List (Element msg)
+richTextView state users nonempty =
+    List.concatMap
         (\item ->
             case item of
                 UserMention userId ->
-                    label userId users
+                    [ label userId users ]
 
                 NormalText text ->
-                    Ui.el
-                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute ]
+                    [ Ui.el
+                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
+                        , Ui.attrIf state.italic Ui.Font.italic
+                        , Ui.attrIf state.underline Ui.Font.italic
+                        ]
                         (Ui.text (String.Nonempty.toString text))
+                    ]
+
+                Italic nonempty2 ->
+                    richTextView { state | italic = True } users nonempty2
+
+                Underline nonempty2 ->
+                    richTextView { state | underline = True } users nonempty2
         )
         (List.Nonempty.toList nonempty)
 

@@ -196,6 +196,8 @@ type FrontendMsg
     | PressedArrowInDropdown (Id GuildId) Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
+    | KeyDown String
+    | RemovedFocus
 
 
 type alias NewChannelForm =

@@ -7,6 +7,7 @@ module RichText exposing
 import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
+import Parser
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
@@ -16,6 +17,8 @@ import User exposing (FrontendUser)
 type RichText
     = UserMention (Id UserId)
     | NormalText NonemptyString
+    | Italic (Nonempty RichText)
+    | Underline (Nonempty RichText)
 
 
 isMentioned : Id UserId -> Nonempty RichText -> Bool
@@ -89,5 +92,17 @@ fromNonemptyString users input =
                    )
         )
         segments
+        --|> handleTextFormatting
         |> List.Nonempty.fromList
         |> Maybe.withDefault (Nonempty (NormalText input) [])
+
+
+
+--
+--handleTextFormatting : List RichText -> List RichText
+--handleTextFormatting richTexts =
+--    0
+--
+--
+--parser =
+--    Parser.chompWhile (\char -> char /= '_') |> Parser.getChompedString
