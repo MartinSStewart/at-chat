@@ -36,11 +36,10 @@ test =
             \_ ->
                 RichText.fromString (NonemptyString '*' "a*b")
                     |> Expect.equal (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
-        , Test.only <|
-            Test.test "_a*a_" <|
-                \_ ->
-                    RichText.fromString (NonemptyString '_' "a*a_")
-                        |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
+        , Test.test "_a*a_" <|
+            \_ ->
+                RichText.fromString (NonemptyString '_' "a*a_")
+                    |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromString text

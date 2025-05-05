@@ -154,9 +154,17 @@ fromString string =
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
+                    let
+                        _ =
+                            Debug.log "ok" ()
+                    in
                     normalize nonempty
 
                 Nothing ->
+                    let
+                        _ =
+                            Debug.log "error" ()
+                    in
                     Nonempty (normalTextFromNonempty string) []
 
         Err error ->
@@ -171,16 +179,48 @@ normalize : Nonempty RichText -> Nonempty RichText
 normalize nonempty =
     List.foldl
         (\richText nonempty2 ->
-            case ( List.Nonempty.head nonempty2, richText ) of
-                ( NormalText previousChar previousRest, NormalText char rest ) ->
-                    List.Nonempty.replaceHead
-                        (NormalText previousChar (previousRest ++ String.cons char rest))
-                        nonempty2
+            case richText of
+                NormalText char rest ->
+                    case List.Nonempty.head nonempty2 of
+                        NormalText previousChar previousRest ->
+                            List.Nonempty.replaceHead
+                                (NormalText previousChar (previousRest ++ String.cons char rest))
+                                nonempty2
 
-                _ ->
+                        _ ->
+                            List.Nonempty.cons richText nonempty2
+
+                Italic a ->
+                    List.Nonempty.cons (Italic (normalize a)) nonempty2
+
+                Bold a ->
+                    List.Nonempty.cons (Bold (normalize a)) nonempty2
+
+                Underline a ->
+                    List.Nonempty.cons (Underline (normalize a)) nonempty2
+
+                UserMention _ ->
                     List.Nonempty.cons richText nonempty2
         )
-        (Nonempty (List.Nonempty.head nonempty) [])
+        (Nonempty
+            (case List.Nonempty.head nonempty of
+                Italic a ->
+                    Italic (normalize a)
+
+                UserMention id ->
+                    UserMention id
+
+                NormalText char string ->
+                    NormalText char string
+
+                Bold a ->
+                    Bold (normalize a)
+
+                Underline a ->
+                    Underline (normalize a)
+            )
+            []
+        )
         (List.Nonempty.tail nonempty)
         |> List.Nonempty.reverse
 
@@ -189,6 +229,19 @@ type Modifiers
     = IsBold
     | IsItalic
     | IsUnderlined
+
+
+modifierToSymbol : Modifiers -> String
+modifierToSymbol modifier =
+    case modifier of
+        IsBold ->
+            "*"
+
+        IsItalic ->
+            "_"
+
+        IsUnderlined ->
+            "__"
 
 
 type alias LoopState =
@@ -200,15 +253,23 @@ parser modifiers previousChar =
     Parser.loop
         { current = Array.fromList [ previousChar ], rest = Array.empty }
         (\state ->
-            let
-                _ =
-                    Debug.log "" state
-            in
             Parser.oneOf
-                [ modifierHelper IsBold "*" Bold state modifiers
+                [ --case modifiers of
+                  --    _ :: rest ->
+                  --        Parser.oneOf
+                  --            (List.map
+                  --                (\modifier ->
+                  --                    Parser.symbol (modifierToSymbol modifier)
+                  --                )
+                  --                rest
+                  --            )
+                  --
+                  --    [] ->
+                  --        Parser.oneOf []
+                  modifierHelper IsBold Bold state modifiers
 
                 --, modifierHelper IsUnderlined "__" Underline state modifiers
-                , modifierHelper IsItalic "_" Italic state modifiers
+                , modifierHelper IsItalic Italic state modifiers
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
                     |> Parser.map
@@ -218,39 +279,44 @@ parser modifiers previousChar =
                                 , rest = state.rest
                                 }
                         )
-                , Parser.map
-                    (\() ->
-                        Array.append
-                            (case modifiers of
-                                IsBold :: _ ->
-                                    Array.fromList [ NormalText '*' "" ]
-
-                                IsItalic :: _ ->
-                                    Array.fromList [ NormalText '_' "" ]
-
-                                IsUnderlined :: _ ->
-                                    Array.fromList [ NormalText '_' "_" ]
-
-                                _ ->
-                                    Array.empty
-                            )
-                            (Array.append state.rest (parserHelper state))
-                            |> Done
-                    )
-                    Parser.end
+                , Parser.map (\() -> bailOut state modifiers) Parser.end
                 ]
         )
 
 
+bailOut : LoopState -> List Modifiers -> Step state (Array RichText)
+bailOut state modifiers =
+    Array.append
+        (case modifiers of
+            IsBold :: _ ->
+                Array.fromList [ NormalText '*' "" ]
+
+            IsItalic :: _ ->
+                Array.fromList [ NormalText '_' "" ]
+
+            IsUnderlined :: _ ->
+                Array.fromList [ NormalText '_' "_" ]
+
+            _ ->
+                Array.empty
+        )
+        (Array.append state.rest (parserHelper state))
+        |> Done
+
+
 modifierHelper :
     Modifiers
-    -> String
-    -> (Nonempty RichText -> a)
+    -> (Nonempty RichText -> RichText)
     -> LoopState
     -> List Modifiers
-    -> Parser (Step { current : Array String, rest : Array RichText } (Array a))
-modifierHelper modifier symbol container state modifiers =
-    if List.member modifier modifiers then
+    -> Parser (Step LoopState (Array RichText))
+modifierHelper modifier container state modifiers =
+    let
+        symbol : String
+        symbol =
+            modifierToSymbol modifier
+    in
+    if List.head modifiers == Just modifier then
         Parser.map
             (\() ->
                 case
@@ -265,6 +331,19 @@ modifierHelper modifier symbol container state modifiers =
                         Done Array.empty
             )
             (Parser.symbol symbol)
+
+    else if List.member modifier modifiers then
+        Parser.succeed Tuple.pair
+            |= Parser.getSource
+            |= Parser.getOffset
+            |> Parser.andThen
+                (\( source, offset ) ->
+                    if String.dropLeft offset source |> String.startsWith symbol then
+                        bailOut state modifiers |> Parser.succeed
+
+                    else
+                        Parser.backtrackable (Parser.problem "")
+                )
 
     else
         Parser.succeed identity
