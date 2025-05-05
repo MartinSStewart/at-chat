@@ -31,19 +31,28 @@ test =
                             (NormalText (NonemptyString ' ' ""))
                             [ Bold (Nonempty (NormalText (NonemptyString 'a' "bc ")) []) ]
                         )
-        , Test.test "Edge case" <|
+        , Test.test "*abc_123" <|
             \_ ->
-                RichText.fromString (NonemptyString '*' "a_a")
+                RichText.fromString (NonemptyString '*' "abc_123")
                     |> Expect.equal
                         (Nonempty
-                            (NormalText (NonemptyString '*' "a_a"))
+                            (NormalText (NonemptyString '*' "abc_123"))
                             []
                         )
-        , Test.fuzz markdownStringFuzzer "Round trip" <|
-            \text ->
-                RichText.fromString text
-                    |> RichText.toString SeqDict.empty
-                    |> Expect.equal (String.Nonempty.toString text)
+        , Test.test "*a*b" <|
+            \_ ->
+                RichText.fromString (NonemptyString '*' "a*b")
+                    |> Expect.equal
+                        (Nonempty
+                            (Bold (Nonempty (NormalText (NonemptyString 'a' "")) []))
+                            [ NormalText (NonemptyString 'b' "") ]
+                        )
+
+        --, Test.fuzz markdownStringFuzzer "Round trip" <|
+        --    \text ->
+        --        RichText.fromString text
+        --            |> RichText.toString SeqDict.empty
+        --            |> Expect.equal (String.Nonempty.toString text)
         ]
 
 

@@ -7,6 +7,7 @@ module RichText exposing
     , toString
     )
 
+import Array exposing (Array)
 import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -102,15 +103,6 @@ fromNonemptyString users input =
         |> Maybe.withDefault (Nonempty (NormalText input) [])
 
 
-
---
---handleTextFormatting : List RichText -> List RichText
---handleTextFormatting richTexts =
---    0
---
---
-
-
 toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
 toString users nonempty =
     List.Nonempty.map
@@ -145,7 +137,7 @@ fromString : NonemptyString -> Nonempty RichText
 fromString string =
     case Parser.run (parser [] "") (String.Nonempty.toString string) of
         Ok ok ->
-            case List.Nonempty.fromList ok of
+            case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
                     normalize nonempty
 
@@ -162,14 +154,20 @@ fromString string =
 
 normalize : Nonempty RichText -> Nonempty RichText
 normalize nonempty =
-    List.Nonempty.foldl
+    List.foldl
         (\richText nonempty2 ->
             case ( List.Nonempty.head nonempty2, richText ) of
                 ( NormalText previous, NormalText text ) ->
-                    NormalText (String.Nonempty.append (String.Nonempty.toString previous) text)
+                    List.Nonempty.replaceHead
+                        (NormalText (String.Nonempty.append (String.Nonempty.toString previous) text))
+                        nonempty2
+
+                _ ->
+                    List.Nonempty.cons richText nonempty2
         )
-        (Nonempty (List.Nonempty.head nonempty))
+        (Nonempty (List.Nonempty.head nonempty) [])
         (List.Nonempty.tail nonempty)
+        |> List.Nonempty.reverse
 
 
 type Modifiers
@@ -179,121 +177,103 @@ type Modifiers
 
 
 type alias LoopState =
-    { current : List String, rest : List RichText }
+    { current : Array String, rest : Array RichText }
 
 
-parser : List Modifiers -> String -> Parser (List RichText)
+parser : List Modifiers -> String -> Parser (Array RichText)
 parser modifiers previousChar =
     Parser.loop
-        { current = [ previousChar ], rest = [] }
+        { current = Array.fromList [ previousChar ], rest = Array.empty }
         (\state ->
             Parser.oneOf
-                [ if List.member IsBold modifiers then
-                    Parser.map
-                        (\() ->
-                            case parserHelper state ++ state.rest |> List.reverse |> List.Nonempty.fromList of
-                                Just nonempty ->
-                                    Done [ Bold nonempty ]
-
-                                Nothing ->
-                                    Done []
-                        )
-                        (Parser.symbol "*")
-
-                  else
-                    Parser.succeed identity
-                        |. Parser.symbol "*"
-                        |= Parser.oneOf
-                            [ Parser.chompIf (\char -> char /= ' ' && char /= '*')
-                                |> Parser.getChompedString
-                                |> Parser.andThen (parser (IsBold :: modifiers))
-                                |> Parser.map
-                                    (\a ->
-                                        Loop
-                                            { current = []
-                                            , rest = a ++ parserHelper state ++ state.rest
-                                            }
-                                    )
-                            , Loop { current = "*" :: state.current, rest = state.rest }
-                                |> Parser.succeed
-                            ]
-                , if List.member IsItalic modifiers then
-                    Parser.map
-                        (\() ->
-                            case parserHelper state ++ state.rest |> List.reverse |> List.Nonempty.fromList of
-                                Just nonempty ->
-                                    Done [ Italic nonempty ]
-
-                                Nothing ->
-                                    Done []
-                        )
-                        (Parser.symbol "_")
-
-                  else
-                    Parser.succeed identity
-                        |. Parser.symbol "_"
-                        |= Parser.oneOf
-                            [ Parser.chompIf (\char -> char /= ' ' && char /= '_')
-                                |> Parser.getChompedString
-                                |> Parser.andThen (parser (IsItalic :: modifiers))
-                                |> Parser.map
-                                    (\a ->
-                                        Loop
-                                            { current = []
-                                            , rest = a ++ parserHelper state ++ state.rest
-                                            }
-                                    )
-                            , Loop { current = "_" :: state.current, rest = state.rest }
-                                |> Parser.succeed
-                            ]
+                [ modifierHelper IsBold "*" Bold state modifiers
+                , modifierHelper IsItalic "_" Italic state modifiers
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
                     |> Parser.map
                         (\a ->
                             Loop
-                                { current = a :: state.current
+                                { current = Array.push a state.current
                                 , rest = state.rest
                                 }
                         )
-                , Parser.end
-                    |> Parser.map
-                        (\() ->
-                            Done
-                                (parserHelper
-                                    { state
-                                        | current =
-                                            (case modifiers of
-                                                IsBold :: _ ->
-                                                    [ "*" ]
+                , Parser.map
+                    (\() ->
+                        Array.append
+                            (case modifiers of
+                                IsBold :: _ ->
+                                    Array.fromList [ NormalText (NonemptyString '*' "") ]
 
-                                                IsItalic :: _ ->
-                                                    [ "_" ]
+                                IsItalic :: _ ->
+                                    Array.fromList [ NormalText (NonemptyString '_' "") ]
 
-                                                IsUnderlined :: _ ->
-                                                    [ "__" ]
+                                IsUnderlined :: _ ->
+                                    Array.fromList [ NormalText (NonemptyString '_' "_") ]
 
-                                                _ ->
-                                                    []
-                                            )
-                                                ++ state.current
-                                    }
-                                    ++ state.rest
-                                    |> List.reverse
-                                )
-                        )
+                                _ ->
+                                    Array.empty
+                            )
+                            (Array.append state.rest (parserHelper state))
+                            |> Done
+                    )
+                    Parser.end
                 ]
         )
 
 
-parserHelper : LoopState -> List RichText
+modifierHelper :
+    Modifiers
+    -> String
+    -> (Nonempty RichText -> a)
+    -> LoopState
+    -> List Modifiers
+    -> Parser (Step { current : Array String, rest : Array RichText } (Array a))
+modifierHelper modifier symbol container state modifiers =
+    if List.member modifier modifiers then
+        Parser.map
+            (\() ->
+                case
+                    Array.append state.rest (parserHelper state)
+                        |> Array.toList
+                        |> List.Nonempty.fromList
+                of
+                    Just nonempty ->
+                        Done (Array.fromList [ container nonempty ])
+
+                    Nothing ->
+                        Done Array.empty
+            )
+            (Parser.symbol symbol)
+
+    else
+        Parser.succeed identity
+            |. Parser.symbol symbol
+            |= Parser.oneOf
+                [ Parser.chompIf (\char -> char /= ' ' && String.fromChar char /= symbol)
+                    |> Parser.getChompedString
+                    |> Parser.andThen (parser (modifier :: modifiers))
+                    |> Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.empty
+                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                }
+                        )
+                , Loop { current = Array.push symbol state.current, rest = state.rest }
+                    |> Parser.succeed
+                ]
+
+
+parserHelper : LoopState -> Array RichText
 parserHelper state =
     case
-        List.reverse state.current
+        state.current
+            |> Array.toList
             |> String.concat
             |> String.Nonempty.fromString
     of
         Just nonempty ->
-            [ NormalText nonempty ]
+            Array.fromList [ NormalText nonempty ]
 
         Nothing ->
-            []
+            Array.empty
