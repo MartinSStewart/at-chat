@@ -21,7 +21,7 @@ import User exposing (FrontendUser)
 
 type RichText
     = UserMention (Id UserId)
-    | NormalText NonemptyString
+    | NormalText Char String
     | Bold (Nonempty RichText)
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
@@ -39,6 +39,21 @@ isMentioned userId richText =
                     False
         )
         (List.Nonempty.toList richText)
+
+
+normalTextFromString : String -> Maybe RichText
+normalTextFromString text =
+    case String.uncons text of
+        Just ( head, rest ) ->
+            NormalText head rest |> Just
+
+        Nothing ->
+            Nothing
+
+
+normalTextFromNonempty : NonemptyString -> RichText
+normalTextFromNonempty text =
+    NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
 
 
 fromNonemptyString : SeqDict (Id UserId) FrontendUser -> NonemptyString -> Nonempty RichText
@@ -89,9 +104,9 @@ fromNonemptyString users input =
                 Nothing ->
                     []
             )
-                ++ (case String.Nonempty.fromString segment.rest of
-                        Just nonempty ->
-                            [ NormalText nonempty ]
+                ++ (case normalTextFromString segment.rest of
+                        Just a ->
+                            [ a ]
 
                         Nothing ->
                             []
@@ -100,7 +115,7 @@ fromNonemptyString users input =
         segments
         --|> handleTextFormatting
         |> List.Nonempty.fromList
-        |> Maybe.withDefault (Nonempty (NormalText input) [])
+        |> Maybe.withDefault (Nonempty (normalTextFromNonempty input) [])
 
 
 toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
@@ -108,8 +123,8 @@ toString users nonempty =
     List.Nonempty.map
         (\richText ->
             case richText of
-                NormalText a ->
-                    String.Nonempty.toString a
+                NormalText char rest ->
+                    String.cons char rest
 
                 UserMention userId ->
                     case SeqDict.get userId users of
@@ -142,14 +157,14 @@ fromString string =
                     normalize nonempty
 
                 Nothing ->
-                    Nonempty (NormalText string) []
+                    Nonempty (normalTextFromNonempty string) []
 
         Err error ->
             let
                 _ =
                     Debug.log "error" error
             in
-            Nonempty (NormalText string) []
+            Nonempty (normalTextFromNonempty string) []
 
 
 normalize : Nonempty RichText -> Nonempty RichText
@@ -157,9 +172,9 @@ normalize nonempty =
     List.foldl
         (\richText nonempty2 ->
             case ( List.Nonempty.head nonempty2, richText ) of
-                ( NormalText previous, NormalText text ) ->
+                ( NormalText previousChar previousRest, NormalText char rest ) ->
                     List.Nonempty.replaceHead
-                        (NormalText (String.Nonempty.append (String.Nonempty.toString previous) text))
+                        (NormalText previousChar (previousRest ++ String.cons char rest))
                         nonempty2
 
                 _ ->
@@ -185,8 +200,14 @@ parser modifiers previousChar =
     Parser.loop
         { current = Array.fromList [ previousChar ], rest = Array.empty }
         (\state ->
+            let
+                _ =
+                    Debug.log "" state
+            in
             Parser.oneOf
                 [ modifierHelper IsBold "*" Bold state modifiers
+
+                --, modifierHelper IsUnderlined "__" Underline state modifiers
                 , modifierHelper IsItalic "_" Italic state modifiers
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
@@ -202,13 +223,13 @@ parser modifiers previousChar =
                         Array.append
                             (case modifiers of
                                 IsBold :: _ ->
-                                    Array.fromList [ NormalText (NonemptyString '*' "") ]
+                                    Array.fromList [ NormalText '*' "" ]
 
                                 IsItalic :: _ ->
-                                    Array.fromList [ NormalText (NonemptyString '_' "") ]
+                                    Array.fromList [ NormalText '_' "" ]
 
                                 IsUnderlined :: _ ->
-                                    Array.fromList [ NormalText (NonemptyString '_' "_") ]
+                                    Array.fromList [ NormalText '_' "_" ]
 
                                 _ ->
                                     Array.empty
@@ -266,14 +287,9 @@ modifierHelper modifier symbol container state modifiers =
 
 parserHelper : LoopState -> Array RichText
 parserHelper state =
-    case
-        state.current
-            |> Array.toList
-            |> String.concat
-            |> String.Nonempty.fromString
-    of
-        Just nonempty ->
-            Array.fromList [ NormalText nonempty ]
+    case state.current |> Array.toList |> String.concat |> normalTextFromString of
+        Just a ->
+            Array.fromList [ a ]
 
         Nothing ->
             Array.empty

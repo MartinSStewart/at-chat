@@ -3,7 +3,6 @@ module RichTextTests exposing (..)
 import Expect
 import Fuzz
 import List.Nonempty exposing (Nonempty(..))
-import Parser
 import RichText exposing (RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
@@ -16,43 +15,37 @@ test =
         [ Test.test "text" <|
             \_ ->
                 RichText.fromString (NonemptyString ' ' "abc ")
-                    |> Expect.equal
-                        (Nonempty (NormalText (NonemptyString ' ' "abc ")) [])
+                    |> Expect.equal (Nonempty (NormalText ' ' "abc ") [])
         , Test.test "not bold" <|
             \_ ->
                 RichText.fromString (NonemptyString ' ' "* abc *")
-                    |> Expect.equal
-                        (Nonempty (NormalText (NonemptyString ' ' "* abc *")) [])
+                    |> Expect.equal (Nonempty (NormalText ' ' "* abc *") [])
         , Test.test "bold" <|
             \_ ->
                 RichText.fromString (NonemptyString ' ' "*abc *")
                     |> Expect.equal
                         (Nonempty
-                            (NormalText (NonemptyString ' ' ""))
-                            [ Bold (Nonempty (NormalText (NonemptyString 'a' "bc ")) []) ]
+                            (NormalText ' ' "")
+                            [ Bold (Nonempty (NormalText 'a' "bc ") []) ]
                         )
         , Test.test "*abc_123" <|
             \_ ->
                 RichText.fromString (NonemptyString '*' "abc_123")
-                    |> Expect.equal
-                        (Nonempty
-                            (NormalText (NonemptyString '*' "abc_123"))
-                            []
-                        )
+                    |> Expect.equal (Nonempty (NormalText '*' "abc_123") [])
         , Test.test "*a*b" <|
             \_ ->
                 RichText.fromString (NonemptyString '*' "a*b")
-                    |> Expect.equal
-                        (Nonempty
-                            (Bold (Nonempty (NormalText (NonemptyString 'a' "")) []))
-                            [ NormalText (NonemptyString 'b' "") ]
-                        )
-
-        --, Test.fuzz markdownStringFuzzer "Round trip" <|
-        --    \text ->
-        --        RichText.fromString text
-        --            |> RichText.toString SeqDict.empty
-        --            |> Expect.equal (String.Nonempty.toString text)
+                    |> Expect.equal (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
+        , Test.only <|
+            Test.test "_a*a_" <|
+                \_ ->
+                    RichText.fromString (NonemptyString '_' "a*a_")
+                        |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
+        , Test.fuzz markdownStringFuzzer "Round trip" <|
+            \text ->
+                RichText.fromString text
+                    |> RichText.toString SeqDict.empty
+                    |> Expect.equal (String.Nonempty.toString text)
         ]
 
 
