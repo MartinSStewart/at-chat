@@ -2273,21 +2273,15 @@ channelTextInput guildId channelId channel loggedIn local =
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "font-family" "inherit"
             , Html.Attributes.style "line-height" "inherit"
-            , Html.Attributes.style "flex-grow" "1"
             , Html.Attributes.style "width" "calc(100% - 16px)"
             , Html.Attributes.style "height" "100%"
-            , Html.Attributes.style "min-height" "min-content"
             , Dom.idToAttribute channelTextInputId
             , Html.Attributes.style "background-color" "rgb(32,40,70)"
             , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
             , Html.Attributes.style "resize" "none"
             , Html.Attributes.style "overflow" "hidden"
-
-            --, Ui.borderColor border1
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
-
-            --, Ui.paddingXY paddingX 8
             , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
             , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
             , case loggedIn.pingUser of
@@ -2350,7 +2344,7 @@ channelTextInput guildId channelId channel loggedIn local =
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    []
+                    [ Html.text "\n" ]
             )
         ]
         --{ onChange = TypedMessage guildId channelId
