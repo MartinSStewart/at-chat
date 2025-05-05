@@ -8,7 +8,6 @@ module Id exposing
     , fromString
     , nextId
     , toString
-    , toUInt64
     )
 
 import List.Extra
@@ -33,34 +32,29 @@ type InviteLinkId
 
 
 type Id a
-    = Id UInt64
+    = Id Int
 
 
 nextId : SeqDict (Id a) b -> Id a
 nextId dict =
-    SeqDict.keys dict
-        |> List.Extra.maximumWith (\(Id a) (Id b) -> UInt64.compare a b)
-        |> Maybe.withDefault (Id UInt64.zero)
-        |> toUInt64
-        |> UInt64.increment
-        |> Id
+    case SeqDict.keys dict |> List.Extra.maximumWith (\(Id a) (Id b) -> compare a b) of
+        Just (Id value) ->
+            Id (value + 1)
 
-
-toUInt64 : Id a -> UInt64
-toUInt64 (Id a) =
-    a
+        Nothing ->
+            Id 0
 
 
 fromInt : Int -> Id a
-fromInt int =
-    UInt64.fromInt int |> Id
+fromInt =
+    Id
 
 
 fromString : String -> Maybe (Id a)
 fromString string =
-    UInt64.fromString string |> Maybe.map Id
+    String.toInt string |> Maybe.map Id
 
 
 toString : Id a -> String
 toString (Id a) =
-    UInt64.toString a
+    String.fromInt a

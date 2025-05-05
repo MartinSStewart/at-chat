@@ -22,21 +22,20 @@ roundtrip =
                     Expect.fail ("Could not parse  URL: " ++ encoded)
 
                 Just url ->
-                    case Route.decode url of
-                        Nothing ->
-                            Expect.fail ("Could not decode URL: " ++ encoded)
+                    let
+                        actual =
+                            Route.decode url
+                    in
+                    if actual == route then
+                        Expect.pass
 
-                        Just actual ->
-                            if actual == route then
-                                Expect.pass
-
-                            else
-                                let
-                                    _ =
-                                        Debug.log "Failed to roundtrip, URL was " encoded
-                                in
-                                actual
-                                    |> Expect.equal route
+                    else
+                        let
+                            _ =
+                                Debug.log "Failed to roundtrip, URL was " encoded
+                        in
+                        actual
+                            |> Expect.equal route
 
 
 routeFuzzer : Fuzzer Route
@@ -55,7 +54,7 @@ routeFuzzer =
 
 idFuzzer : Fuzzer (Id a)
 idFuzzer =
-    Fuzz.map Id.Id stringFuzzer
+    Fuzz.map Id.Id (Fuzz.intRange 0 10000)
 
 
 stringFuzzer : Fuzzer String

@@ -2,6 +2,7 @@ module TwoFactorTests exposing (makeSureWeDontChangeTheSettings)
 
 import Expect
 import Id
+import SecretId
 import Test exposing (Test)
 import Time
 import TwoFactorAuthentication
@@ -12,7 +13,7 @@ makeSureWeDontChangeTheSettings =
     Test.test
         "Make sure we don't break existing 2FA codes"
         (\_ ->
-            case TwoFactorAuthentication.getConfig "steve@mail.com" (Id.fromString "123123123") of
+            case TwoFactorAuthentication.getConfig "steve@mail.com" (SecretId.fromString "123123123") of
                 Ok ok ->
                     case TwoFactorAuthentication.getCode (Time.millisToPosix 1740227321000) ok of
                         Just code ->
