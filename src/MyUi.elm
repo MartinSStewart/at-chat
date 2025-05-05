@@ -1,13 +1,13 @@
 module MyUi exposing
     ( column
     , contentContainerAttributes
+    , css
     , datestamp
     , deleteButton
     , emailAddress
     , emailAddressLink
     , errorBox
     , errorColor
-    , fontCss
     , gray
     , green500
     , heightAttr
@@ -526,8 +526,8 @@ hoverText text =
     Ui.htmlAttribute (Html.Attributes.title text)
 
 
-fontCss : Html msg
-fontCss =
+css : Html msg
+css =
     Html.node "style"
         []
         [ Html.text
@@ -537,6 +537,18 @@ fontCss =
                 ++ fontFace 500 "Montserrat-Medium"
                 ++ fontFace 400 "Montserrat-Regular"
                 ++ fontFace 300 "Montserrat-Light"
+                ++ """
+textarea::selection {
+    background-color: rgb(0,120,215); /* Change this to your desired background color */
+    color: rgba(0,0,0,0); /* Change this to your desired text color */
+}
+
+/* For Firefox */
+textarea::-moz-selection {
+    background-color: rgb(0,120,215); /* Change this to your desired background color */
+    color: rgba(0,0,0,0); /* Change this to your desired text color */
+}
+"""
             )
         ]
 

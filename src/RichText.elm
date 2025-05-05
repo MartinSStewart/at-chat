@@ -368,7 +368,7 @@ textInputViewHelper state allUsers nonempty =
                     [ Html.span
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "1px 0px 0px white")
+                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
 
                         --, Html.Attributes.style "display" "inline-block"
                         --, Html.Attributes.style "work-break" "break-all"

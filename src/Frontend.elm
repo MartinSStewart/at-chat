@@ -1753,7 +1753,7 @@ layout model attributes child =
             )
             :: Ui.Font.family [ Ui.Font.sansSerif ]
             :: Ui.height Ui.fill
-            :: Ui.behindContent (Ui.html MyUi.fontCss)
+            :: Ui.behindContent (Ui.html MyUi.css)
             :: Ui.Font.size 16
             :: Ui.background (Ui.rgb 255 255 255)
             :: attributes
