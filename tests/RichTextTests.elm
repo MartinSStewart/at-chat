@@ -53,6 +53,19 @@ test =
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '_' "a*a_")
                     |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
+        , Test.test "_*abc*_" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '_' "*abc*_")
+                    |> Expect.equal
+                        (Nonempty
+                            (Italic
+                                (Nonempty
+                                    (Bold (Nonempty (NormalText 'a' "bc") []))
+                                    []
+                                )
+                            )
+                            []
+                        )
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromNonemptyString users text

@@ -2276,7 +2276,7 @@ channelTextInput guildId channelId channel loggedIn local =
         , Html.Attributes.style "min-height" "min-content"
         ]
         [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
+            [ Html.Attributes.style "color" "rgba(0,0,0,0)"
             , Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "font-family" "inherit"
@@ -2286,7 +2286,7 @@ channelTextInput guildId channelId channel loggedIn local =
             , Dom.idToAttribute channelTextInputId
             , Html.Attributes.style "background-color" "rgb(32,40,70)"
             , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
-            , Html.Attributes.style "border-radius" "8px"
+            , Html.Attributes.style "border-radius" "4px"
             , Html.Attributes.style "resize" "none"
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
