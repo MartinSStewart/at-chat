@@ -31,6 +31,14 @@ test =
                             (NormalText (NonemptyString ' ' ""))
                             [ Bold (Nonempty (NormalText (NonemptyString 'a' "bc ")) []) ]
                         )
+        , Test.test "Edge case" <|
+            \_ ->
+                RichText.fromString (NonemptyString '*' "a_a")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText (NonemptyString '*' "a_a"))
+                            []
+                        )
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromString text
@@ -47,6 +55,7 @@ markdownStringFuzzer =
             , " "
             , "*"
             , "@"
+            , "_"
             ]
         )
         |> Fuzz.map
