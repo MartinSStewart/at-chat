@@ -2400,6 +2400,23 @@ channelTextInput guildId channelId channel loggedIn local =
         }
 
 
+
+--Italic nonempty2 ->
+--                    Ui.text "_"
+--                        :: richTextView { state | italic = True } users nonempty2
+--                        ++ [ Ui.text "_" ]
+--
+--                Underline nonempty2 ->
+--                    Ui.text "__"
+--                        :: richTextView { state | underline = True } users nonempty2
+--                        ++ [ Ui.text "__" ]
+--
+--                Bold nonempty2 ->
+--                    Ui.text "*"
+--                        :: richTextView { state | bold = True } users nonempty2
+--                        ++ [ Ui.text "*" ]
+
+
 dropdownButtonId : Int -> HtmlId
 dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
@@ -2488,7 +2505,7 @@ messageView local message =
                         Nothing ->
                             Ui.text "<missing> "
                     )
-                    :: richTextView { underline = False, italic = False } local message2.content
+                    :: richTextView { underline = False, italic = False, bold = False } local message2.content
                 )
 
         UserJoinedMessage _ userId ->
@@ -2512,7 +2529,7 @@ messageView local message =
 
 
 type alias RichTextState =
-    { italic : Bool, underline : Bool }
+    { italic : Bool, underline : Bool, bold : Bool }
 
 
 richTextView : RichTextState -> LocalState -> Nonempty RichText -> List (Element msg)
@@ -2523,13 +2540,13 @@ richTextView state users nonempty =
                 UserMention userId ->
                     [ label userId users ]
 
-                NormalText text ->
+                NormalText char text ->
                     [ Ui.el
                         [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
                         , Ui.attrIf state.italic Ui.Font.italic
                         , Ui.attrIf state.underline Ui.Font.italic
                         ]
-                        (Ui.text (String.Nonempty.toString text))
+                        (Ui.text (String.cons char text))
                     ]
 
                 Italic nonempty2 ->
@@ -2537,6 +2554,9 @@ richTextView state users nonempty =
 
                 Underline nonempty2 ->
                     richTextView { state | underline = True } users nonempty2
+
+                Bold nonempty2 ->
+                    richTextView { state | bold = True } users nonempty2
         )
         (List.Nonempty.toList nonempty)
 

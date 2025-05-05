@@ -148,30 +148,18 @@ toString users nonempty =
         |> String.concat
 
 
-fromString : NonemptyString -> Nonempty RichText
-fromString string =
-    case Parser.run (parser [] "") (String.Nonempty.toString string) of
+fromString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText
+fromString users string =
+    case Parser.run (parser users [] "") (String.Nonempty.toString string) of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
-                    let
-                        _ =
-                            Debug.log "ok" ()
-                    in
                     normalize nonempty
 
                 Nothing ->
-                    let
-                        _ =
-                            Debug.log "error" ()
-                    in
                     Nonempty (normalTextFromNonempty string) []
 
         Err error ->
-            let
-                _ =
-                    Debug.log "error" error
-            in
             Nonempty (normalTextFromNonempty string) []
 
 
@@ -248,28 +236,40 @@ type alias LoopState =
     { current : Array String, rest : Array RichText }
 
 
-parser : List Modifiers -> String -> Parser (Array RichText)
-parser modifiers previousChar =
+parser : SeqDict (Id UserId) { a | name : PersonName } -> List Modifiers -> String -> Parser (Array RichText)
+parser users modifiers previousChar =
     Parser.loop
         { current = Array.fromList [ previousChar ], rest = Array.empty }
         (\state ->
             Parser.oneOf
-                [ --case modifiers of
-                  --    _ :: rest ->
-                  --        Parser.oneOf
-                  --            (List.map
-                  --                (\modifier ->
-                  --                    Parser.symbol (modifierToSymbol modifier)
-                  --                )
-                  --                rest
-                  --            )
-                  --
-                  --    [] ->
-                  --        Parser.oneOf []
-                  modifierHelper IsBold Bold state modifiers
-
-                --, modifierHelper IsUnderlined "__" Underline state modifiers
-                , modifierHelper IsItalic Italic state modifiers
+                [ Parser.succeed identity
+                    |. Parser.symbol "@"
+                    |= Parser.oneOf
+                        (List.map
+                            (\( userId, user ) ->
+                                Parser.succeed
+                                    (Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (UserMention userId) (parserHelper state))
+                                        }
+                                    )
+                                    |. Parser.symbol (PersonName.toString user.name)
+                            )
+                            (SeqDict.toList users)
+                            ++ [ Parser.succeed
+                                    (Loop
+                                        { current = Array.push "@" state.current
+                                        , rest = state.rest
+                                        }
+                                    )
+                               ]
+                        )
+                , modifierHelper users IsBold Bold state modifiers
+                , modifierHelper users IsUnderlined Underline state modifiers
+                , modifierHelper users IsItalic Italic state modifiers
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
                     |> Parser.map
@@ -305,12 +305,13 @@ bailOut state modifiers =
 
 
 modifierHelper :
-    Modifiers
+    SeqDict (Id UserId) { a | name : PersonName }
+    -> Modifiers
     -> (Nonempty RichText -> RichText)
     -> LoopState
     -> List Modifiers
     -> Parser (Step LoopState (Array RichText))
-modifierHelper modifier container state modifiers =
+modifierHelper users modifier container state modifiers =
     let
         symbol : String
         symbol =
@@ -351,7 +352,7 @@ modifierHelper modifier container state modifiers =
             |= Parser.oneOf
                 [ Parser.chompIf (\char -> char /= ' ' && String.fromChar char /= symbol)
                     |> Parser.getChompedString
-                    |> Parser.andThen (parser (modifier :: modifiers))
+                    |> Parser.andThen (parser users (modifier :: modifiers))
                     |> Parser.map
                         (\a ->
                             Loop
