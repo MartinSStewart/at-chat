@@ -19,6 +19,9 @@ fromString text =
             if String.Nonempty.length nonempty > 50 then
                 Err "Too long"
 
+            else if String.Nonempty.any (\char -> char == '\n') nonempty then
+                Err "Name can't contain line breaks"
+
             else
                 ChannelName nonempty |> Ok
 

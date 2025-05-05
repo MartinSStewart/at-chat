@@ -594,6 +594,8 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     multilineUpdate
+                        guildId
+                        channelId
                         channelTextInputId
                         text
                         (case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
@@ -603,37 +605,8 @@ updateLoaded msg model =
                             Nothing ->
                                 ""
                         )
-                        { loggedIn
-                            | drafts =
-                                case String.Nonempty.fromString text of
-                                    Just nonempty ->
-                                        SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
-
-                                    Nothing ->
-                                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                            , typingDebouncer = False
-                        }
-                 --handleLocalChange
-                 --model.time
-                 --(if loggedIn.typingDebouncer then
-                 --    Local_MemberTyping model.time guildId channelId |> Just
-                 --
-                 -- else
-                 --    Nothing
-                 --)
-                 --{ loggedIn
-                 --    | drafts =
-                 --        case String.Nonempty.fromString text of
-                 --            Just nonempty ->
-                 --                SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
-                 --
-                 --            Nothing ->
-                 --                SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                 --    , typingDebouncer = False
-                 --}
-                 --(Process.sleep (Duration.seconds 1)
-                 --    |> Task.perform (\() -> DebouncedTyping)
-                 --)
+                        loggedIn
+                        model
                 )
                 model
 
@@ -1035,12 +1008,15 @@ userDropdownList guildId local =
 
 
 multilineUpdate :
-    HtmlId
+    Id GuildId
+    -> Id ChannelId
+    -> HtmlId
     -> String
     -> String
     -> LoggedIn2
-    -> ( LoggedIn2, Command FrontendOnly toMsg FrontendMsg )
-multilineUpdate multilineId text oldText model =
+    -> LoadedFrontend
+    -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+multilineUpdate guildId channelId multilineId text oldText loggedIn model =
     let
         oldAtCount : Int
         oldAtCount =
@@ -1075,29 +1051,70 @@ multilineUpdate multilineId text oldText model =
             else
                 Nothing
     in
-    ( { model
-        | pingUser =
-            if oldAtCount > atCount then
-                Nothing
+    handleLocalChange
+        model.time
+        (if loggedIn.typingDebouncer then
+            Local_MemberTyping model.time guildId channelId |> Just
 
-            else
-                model.pingUser
-      }
-    , case typedAtSymbol of
-        Just index ->
-            Dom.getElement multilineId
-                |> Task.map
-                    (\{ element } ->
-                        { dropdownIndex = 0
-                        , charIndex = index
-                        , inputElement = element
-                        }
-                    )
-                |> Task.attempt GotPingUserPosition
+         else
+            Nothing
+        )
+        { loggedIn
+            | pingUser =
+                if oldAtCount > atCount then
+                    Nothing
 
-        Nothing ->
-            Command.none
-    )
+                else
+                    loggedIn.pingUser
+            , drafts =
+                case String.Nonempty.fromString text of
+                    Just nonempty ->
+                        SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+
+                    Nothing ->
+                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+            , typingDebouncer = False
+        }
+        (Command.batch
+            [ case typedAtSymbol of
+                Just index ->
+                    Dom.getElement multilineId
+                        |> Task.map
+                            (\{ element } ->
+                                { dropdownIndex = 0
+                                , charIndex = index
+                                , inputElement = element
+                                }
+                            )
+                        |> Task.attempt GotPingUserPosition
+
+                Nothing ->
+                    Command.none
+            , Process.sleep (Duration.seconds 1)
+                |> Task.perform (\() -> DebouncedTyping)
+            ]
+        )
+
+
+
+--handleLocalChange
+--model.time
+--(if loggedIn.typingDebouncer then
+--    Local_MemberTyping model.time guildId channelId |> Just
+--
+-- else
+--    Nothing
+--)
+--{ loggedIn
+--    | drafts =
+--        case String.Nonempty.fromString text of
+--            Just nonempty ->
+--                SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+--
+--            Nothing ->
+--                SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+--    , typingDebouncer = False
+--}
 
 
 newAtSymbol : String -> String -> Maybe { index : Int }
@@ -2198,46 +2215,46 @@ conversationView guildId channelId loggedIn model local channel =
                     (Array.toList channel.messages)
             )
         , Ui.column
-            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 2 } ]
+            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
             [ channelTextInput guildId channelId channel loggedIn local
-            , (case
-                SeqDict.filter
-                    (\_ time ->
-                        Duration.from time model.time |> Quantity.lessThan (Duration.seconds 2)
-                    )
-                    (SeqDict.remove local.userId channel.lastTypedAt)
-                    |> SeqDict.keys
-               of
-                [] ->
-                    ""
-
-                [ single ] ->
-                    userIdToName single ++ " is typing..."
-
-                [ one, two ] ->
-                    userIdToName one ++ " and " ++ userIdToName two ++ " are typing..."
-
-                [ one, two, three ] ->
-                    userIdToName one
-                        ++ ", "
-                        ++ userIdToName two
-                        ++ ", and "
-                        ++ userIdToName three
-                        ++ " are typing..."
-
-                _ :: _ :: _ :: _ ->
-                    "Several people are typing..."
-              )
-                |> Ui.text
-                |> Ui.el
-                    [ Ui.Font.bold
-                    , Ui.Font.size 13
-                    , Ui.Font.color font3
-                    , Ui.height (Ui.px 18)
-                    , Ui.contentCenterY
-                    , Ui.paddingXY 4 0
-                    ]
             ]
+        , (case
+            SeqDict.filter
+                (\_ time ->
+                    Duration.from time model.time |> Quantity.lessThan (Duration.seconds 3)
+                )
+                (SeqDict.remove local.userId channel.lastTypedAt)
+                |> SeqDict.keys
+           of
+            [] ->
+                ""
+
+            [ single ] ->
+                userIdToName single ++ " is typing..."
+
+            [ one, two ] ->
+                userIdToName one ++ " and " ++ userIdToName two ++ " are typing..."
+
+            [ one, two, three ] ->
+                userIdToName one
+                    ++ ", "
+                    ++ userIdToName two
+                    ++ ", and "
+                    ++ userIdToName three
+                    ++ " are typing..."
+
+            _ :: _ :: _ :: _ ->
+                "Several people are typing..."
+          )
+            |> Ui.text
+            |> Ui.el
+                [ Ui.Font.bold
+                , Ui.Font.size 13
+                , Ui.Font.color font3
+                , Ui.height (Ui.px 18)
+                , Ui.contentCenterY
+                , Ui.paddingXY 12 0
+                ]
         ]
 
 
@@ -2252,9 +2269,6 @@ channelTextInput guildId channelId channel loggedIn local =
 
                 Nothing ->
                     ""
-
-        paddingX =
-            8
     in
     Html.div
         [ Html.Attributes.style "display" "flex"
@@ -2262,13 +2276,7 @@ channelTextInput guildId channelId channel loggedIn local =
         , Html.Attributes.style "min-height" "min-content"
         ]
         [ Html.textarea
-            [ Html.Attributes.style "color"
-                (if text == "" then
-                    "rgb(180,180,180)"
-
-                 else
-                    "rgba(255,0,0,1)"
-                )
+            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
             , Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "font-family" "inherit"
@@ -2278,6 +2286,7 @@ channelTextInput guildId channelId channel loggedIn local =
             , Dom.idToAttribute channelTextInputId
             , Html.Attributes.style "background-color" "rgb(32,40,70)"
             , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
+            , Html.Attributes.style "border-radius" "8px"
             , Html.Attributes.style "resize" "none"
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
@@ -2329,10 +2338,15 @@ channelTextInput guildId channelId channel loggedIn local =
         , Html.div
             [ Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.style "padding" "0 8px 0 8px"
-            , Html.Attributes.style "font-size" "16px"
             , Html.Attributes.style "transform" "translateY(9px)"
             , Html.Attributes.style "white-space" "pre-wrap"
-            , Html.Attributes.style "color" "rgb(255,255,255)"
+            , Html.Attributes.style "color"
+                (if text == "" then
+                    "rgb(180,180,180)"
+
+                 else
+                    "rgb(255,255,255)"
+                )
             ]
             (case String.Nonempty.fromString text of
                 Just nonempty ->
@@ -2344,20 +2358,12 @@ channelTextInput guildId channelId channel loggedIn local =
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    [ Html.text "\n" ]
+                    [ "Write a message in #"
+                        ++ ChannelName.toString channel.name
+                        |> Html.text
+                    ]
             )
         ]
-        --{ onChange = TypedMessage guildId channelId
-        --, text = text
-        --, placeholder =
-        --    Nothing
-        --
-        ----"Write a message in #"
-        ----    ++ ChannelName.toString channel.name
-        ----    |> Just
-        --, label = Ui.Input.labelHidden "Message input field"
-        --, spellcheck = True
-        --}
         |> Ui.html
 
 

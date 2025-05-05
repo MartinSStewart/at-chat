@@ -19,6 +19,9 @@ fromString text =
             if String.Nonempty.length nonempty > 100 then
                 Err "Too long"
 
+            else if String.Nonempty.any (\char -> char == '\n') nonempty then
+                Err "Name can't contain line breaks"
+
             else
                 GuildName nonempty |> Ok
 
