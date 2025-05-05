@@ -28,6 +28,8 @@ module MyUi exposing
     , textLinkColor
     , timeElapsedView
     , touchPress
+    , userLabel
+    , userLabel2
     , white
     , widthAttr
     )
@@ -39,9 +41,12 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
+import Id exposing (Id, UserId)
+import PersonName exposing (PersonName)
 import Quantity
 import Round
-import Route exposing (Route)
+import Route exposing (Route, UserOverviewRouteData(..))
+import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
 import Ui exposing (Element)
 import Ui.Font
@@ -574,3 +579,44 @@ listToText list =
 
         one :: many ->
             String.join ", " (List.reverse many) ++ ", and " ++ one
+
+
+userLabel : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Element msg
+userLabel userId allUsers =
+    case SeqDict.get userId allUsers of
+        Just user ->
+            userLabel2 user
+
+        Nothing ->
+            Ui.el
+                [ errorBackground
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 4 0
+                , Ui.Font.color (Ui.rgb 50 70 240)
+                , Ui.rounded 2
+                , Ui.link (Route.encode (Route.UserOverviewRoute (SpecificUserRoute userId)))
+                ]
+                (Ui.text "<name missing>")
+
+
+userLabel2 : { a | name : PersonName } -> Element msg
+userLabel2 user =
+    Ui.el
+        [ Ui.background labelBackgroundColor
+        , Ui.width Ui.shrink
+        , Ui.paddingWith { left = 1, right = 1, top = 0, bottom = 1 }
+        , Ui.Font.color labelFontColor
+        , Ui.rounded 2
+        , Ui.Font.noWrap
+        ]
+        (Ui.text ("@" ++ PersonName.toString user.name))
+
+
+labelBackgroundColor : Ui.Color
+labelBackgroundColor =
+    Ui.rgb 215 235 255
+
+
+labelFontColor : Ui.Color
+labelFontColor =
+    Ui.rgb 50 70 240

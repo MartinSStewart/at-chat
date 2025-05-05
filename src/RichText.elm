@@ -1,22 +1,26 @@
 module RichText exposing
     ( RichText(..)
+    , RichTextState
     , fromNonemptyString
-    , fromString
-    , isMentioned
     , parser
+    , richTextView
+    , textInputView
     , toString
     )
 
 import Array exposing (Array)
+import Html exposing (Html)
+import Html.Attributes
 import Id exposing (Id, UserId)
-import List.Extra
 import List.Nonempty exposing (Nonempty(..))
+import MyUi
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
-import User exposing (FrontendUser)
+import Ui exposing (Element)
+import Ui.Font
+import Ui.Shadow
 
 
 type RichText
@@ -25,20 +29,6 @@ type RichText
     | Bold (Nonempty RichText)
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
-
-
-isMentioned : Id UserId -> Nonempty RichText -> Bool
-isMentioned userId richText =
-    List.any
-        (\part ->
-            case part of
-                UserMention a ->
-                    a == userId
-
-                _ ->
-                    False
-        )
-        (List.Nonempty.toList richText)
 
 
 normalTextFromString : String -> Maybe RichText
@@ -54,68 +44,6 @@ normalTextFromString text =
 normalTextFromNonempty : NonemptyString -> RichText
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
-
-
-fromNonemptyString : SeqDict (Id UserId) FrontendUser -> NonemptyString -> Nonempty RichText
-fromNonemptyString users input =
-    let
-        userNames : List ( Id UserId, String )
-        userNames =
-            SeqDict.toList users |> List.map (\( userId, user ) -> ( userId, PersonName.toString user.name ))
-
-        segments : List { highlight : Maybe (Id UserId), rest : String }
-        segments =
-            List.foldl
-                (\part ( isFirst, index, highlights ) ->
-                    case
-                        ( isFirst
-                        , List.filter (\( _, name ) -> String.startsWith name part) userNames
-                            |> List.Extra.maximumBy (\( _, name ) -> String.length name)
-                        )
-                    of
-                        ( False, Just ( userId, match ) ) ->
-                            ( False
-                            , index + 1 + String.length part
-                            , { highlight = Just userId
-                              , rest = String.dropLeft (String.length match) part
-                              }
-                                :: highlights
-                            )
-
-                        ( False, Nothing ) ->
-                            ( False
-                            , index + 1 + String.length part
-                            , { highlight = Nothing, rest = "@" ++ part } :: highlights
-                            )
-
-                        ( True, _ ) ->
-                            ( False, index + String.length part, { highlight = Nothing, rest = part } :: highlights )
-                )
-                ( True, 0, [] )
-                (String.split "@" (String.Nonempty.toString input))
-                |> (\( _, _, chars ) -> List.reverse chars)
-    in
-    List.concatMap
-        (\segment ->
-            (case segment.highlight of
-                Just userId ->
-                    [ UserMention userId ]
-
-                Nothing ->
-                    []
-            )
-                ++ (case normalTextFromString segment.rest of
-                        Just a ->
-                            [ a ]
-
-                        Nothing ->
-                            []
-                   )
-        )
-        segments
-        --|> handleTextFormatting
-        |> List.Nonempty.fromList
-        |> Maybe.withDefault (Nonempty (normalTextFromNonempty input) [])
 
 
 toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
@@ -148,8 +76,8 @@ toString users nonempty =
         |> String.concat
 
 
-fromString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText
-fromString users string =
+fromNonemptyString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText
+fromNonemptyString users string =
     case Parser.run (parser users [] "") (String.Nonempty.toString string) of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
@@ -373,3 +301,98 @@ parserHelper state =
 
         Nothing ->
             Array.empty
+
+
+type alias RichTextState =
+    { italic : Bool, underline : Bool, bold : Bool }
+
+
+richTextView users nonempty =
+    richTextViewHelper { underline = False, italic = False, bold = False } users nonempty
+
+
+richTextViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Element msg)
+richTextViewHelper state allUsers nonempty =
+    List.concatMap
+        (\item ->
+            case item of
+                UserMention userId ->
+                    [ MyUi.userLabel userId allUsers ]
+
+                NormalText char text ->
+                    [ Ui.el
+                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
+                        , Ui.attrIf state.italic Ui.Font.italic
+                        , Ui.attrIf state.underline Ui.Font.italic
+                        , Ui.attrIf state.bold Ui.Font.bold
+                        ]
+                        (Ui.text (String.cons char text))
+                    ]
+
+                Italic nonempty2 ->
+                    richTextViewHelper { state | italic = True } allUsers nonempty2
+
+                Underline nonempty2 ->
+                    richTextViewHelper { state | underline = True } allUsers nonempty2
+
+                Bold nonempty2 ->
+                    richTextViewHelper { state | bold = True } allUsers nonempty2
+        )
+        (List.Nonempty.toList nonempty)
+
+
+textInputView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
+textInputView users nonempty =
+    textInputViewHelper { underline = False, italic = False, bold = False } users nonempty
+
+
+htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
+htmlAttrIf condition attribute =
+    if condition then
+        attribute
+
+    else
+        Html.Attributes.style "" ""
+
+
+textInputViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
+textInputViewHelper state allUsers nonempty =
+    List.concatMap
+        (\item ->
+            case item of
+                UserMention userId ->
+                    []
+
+                --[ MyUi.userLabel userId allUsers ]
+                NormalText char text ->
+                    [ Html.span
+                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "1px 0px 0px white")
+
+                        --, Html.Attributes.style "display" "inline-block"
+                        --, Html.Attributes.style "work-break" "break-all"
+                        ]
+                        [ Html.text (String.cons char text) ]
+                    ]
+
+                Italic nonempty2 ->
+                    formatText "_"
+                        :: textInputViewHelper { state | italic = True } allUsers nonempty2
+                        ++ [ formatText "_" ]
+
+                Underline nonempty2 ->
+                    formatText "__"
+                        :: textInputViewHelper { state | underline = True } allUsers nonempty2
+                        ++ [ formatText "__" ]
+
+                Bold nonempty2 ->
+                    formatText "*"
+                        :: textInputViewHelper { state | bold = True } allUsers nonempty2
+                        ++ [ formatText "*" ]
+        )
+        (List.Nonempty.toList nonempty)
+
+
+formatText text =
+    Html.span [ Html.Attributes.style "color" "rgb(180,180,180" ] [ Html.text text ]

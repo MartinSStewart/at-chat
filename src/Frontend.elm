@@ -2177,15 +2177,7 @@ conversationView :
     -> Element FrontendMsg
 conversationView guildId channelId loggedIn model local channel =
     let
-        text : String
-        text =
-            case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
-                Just nonempty ->
-                    String.Nonempty.toString nonempty
-
-                Nothing ->
-                    ""
-
+        userIdToName : Id UserId -> String
         userIdToName userId =
             case SeqDict.get userId local.otherUsers of
                 Just user ->
@@ -2261,160 +2253,118 @@ channelTextInput guildId channelId channel loggedIn local =
                 Nothing ->
                     ""
 
-        userNames : List String
-        userNames =
-            LocalState.allUsers local
-                |> SeqDict.toList
-                |> List.map (\( _, user ) -> PersonName.toString user.name)
-
-        segments : List { highlight : String, rest : String }
-        segments =
-            List.foldl
-                (\part ( isFirst, index, highlights ) ->
-                    case
-                        ( isFirst
-                        , List.filter (\name -> String.startsWith name part) userNames
-                            |> List.Extra.maximumBy String.length
-                        )
-                    of
-                        ( False, Just match ) ->
-                            ( False
-                            , index + 1 + String.length part
-                            , { highlight = "@" ++ match
-                              , rest = String.dropLeft (String.length match) part
-                              }
-                                :: highlights
-                            )
-
-                        ( False, Nothing ) ->
-                            ( False
-                            , index + 1 + String.length part
-                            , (case loggedIn.pingUser of
-                                Just { charIndex } ->
-                                    if charIndex == index then
-                                        { highlight = "@", rest = part }
-
-                                    else
-                                        { highlight = "", rest = "@" ++ part }
-
-                                Nothing ->
-                                    { highlight = "", rest = "@" ++ part }
-                              )
-                                :: highlights
-                            )
-
-                        ( True, _ ) ->
-                            ( False, index + String.length part, { highlight = "", rest = part } :: highlights )
-                )
-                ( True, 0, [] )
-                (String.split "@" text)
-                |> (\( _, _, chars ) -> List.reverse chars)
-
         paddingX =
             8
     in
-    Ui.Input.multiline
-        [ Ui.Font.color
-            (if text == "" then
-                placeholderFont
-
-             else
-                Ui.rgba 0 0 0 0
-            )
-        , Ui.id (Dom.idToString channelTextInputId)
-        , Ui.background background2
-        , Ui.borderColor border1
-        , Ui.htmlAttribute (Html.Attributes.style "caret-color" "white")
-        , Ui.paddingXY paddingX 8
-        , Ui.Events.onFocus (TextInputGotFocus channelTextInputId)
-        , Ui.Events.onLoseFocus (TextInputLostFocus channelTextInputId)
-        , case loggedIn.pingUser of
-            Just { dropdownIndex } ->
-                Html.Events.preventDefaultOn
-                    "keydown"
-                    (Json.Decode.andThen
-                        (\key ->
-                            case key of
-                                "ArrowDown" ->
-                                    Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
-
-                                "ArrowUp" ->
-                                    Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
-
-                                "Enter" ->
-                                    Json.Decode.succeed
-                                        ( PressedPingUser guildId channelId dropdownIndex, True )
-
-                                _ ->
-                                    Json.Decode.fail ""
-                        )
-                        (Json.Decode.field "key" Json.Decode.string)
-                    )
-                    |> Ui.htmlAttribute
-
-            Nothing ->
-                Html.Events.preventDefaultOn
-                    "keydown"
-                    (Json.Decode.map2 Tuple.pair
-                        (Json.Decode.field "shiftKey" Json.Decode.bool)
-                        (Json.Decode.field "key" Json.Decode.string)
-                        |> Json.Decode.andThen
-                            (\( shiftHeld, key ) ->
-                                if key == "Enter" && not shiftHeld then
-                                    Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
-
-                                else
-                                    Json.Decode.fail ""
-                            )
-                    )
-                    |> Ui.htmlAttribute
-        , Ui.Prose.paragraph
-            [ MyUi.noPointerEvents
-            , Ui.paddingXY paddingX 0
-            , Ui.move { x = 0, y = -9, z = 0 }
-            , Ui.Font.color font1
-            ]
-            (List.concatMap
-                (\{ highlight, rest } ->
-                    [ Ui.el
-                        [ Ui.background labelBackgroundColor
-                        , Ui.rounded 2
-                        , Ui.Font.color labelFontColor
-                        ]
-                        (Ui.text highlight)
-                    , Ui.text rest
-                    ]
-                )
-                segments
-            )
-            |> Ui.inFront
+    Html.div
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "min-height" "min-content"
         ]
-        { onChange = TypedMessage guildId channelId
-        , text = text
-        , placeholder =
-            "Write a message in #"
-                ++ ChannelName.toString channel.name
-                |> Just
-        , label = Ui.Input.labelHidden "Message input field"
-        , spellcheck = True
-        }
+        [ Html.textarea
+            [ Html.Attributes.style "color"
+                (if text == "" then
+                    "rgb(180,180,180)"
 
+                 else
+                    "rgba(255,0,0,1)"
+                )
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "font-size" "inherit"
+            , Html.Attributes.style "font-family" "inherit"
+            , Html.Attributes.style "line-height" "inherit"
+            , Html.Attributes.style "flex-grow" "1"
+            , Html.Attributes.style "width" "calc(100% - 16px)"
+            , Html.Attributes.style "height" "100%"
+            , Html.Attributes.style "min-height" "min-content"
+            , Dom.idToAttribute channelTextInputId
+            , Html.Attributes.style "background-color" "rgb(32,40,70)"
+            , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
+            , Html.Attributes.style "resize" "none"
+            , Html.Attributes.style "overflow" "hidden"
 
+            --, Ui.borderColor border1
+            , Html.Attributes.style "caret-color" "white"
+            , Html.Attributes.style "padding" "8px"
 
---Italic nonempty2 ->
---                    Ui.text "_"
---                        :: richTextView { state | italic = True } users nonempty2
---                        ++ [ Ui.text "_" ]
---
---                Underline nonempty2 ->
---                    Ui.text "__"
---                        :: richTextView { state | underline = True } users nonempty2
---                        ++ [ Ui.text "__" ]
---
---                Bold nonempty2 ->
---                    Ui.text "*"
---                        :: richTextView { state | bold = True } users nonempty2
---                        ++ [ Ui.text "*" ]
+            --, Ui.paddingXY paddingX 8
+            , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
+            , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
+            , case loggedIn.pingUser of
+                Just { dropdownIndex } ->
+                    Html.Events.preventDefaultOn
+                        "keydown"
+                        (Json.Decode.andThen
+                            (\key ->
+                                case key of
+                                    "ArrowDown" ->
+                                        Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
+
+                                    "ArrowUp" ->
+                                        Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
+
+                                    "Enter" ->
+                                        Json.Decode.succeed
+                                            ( PressedPingUser guildId channelId dropdownIndex, True )
+
+                                    _ ->
+                                        Json.Decode.fail ""
+                            )
+                            (Json.Decode.field "key" Json.Decode.string)
+                        )
+
+                Nothing ->
+                    Html.Events.preventDefaultOn
+                        "keydown"
+                        (Json.Decode.map2 Tuple.pair
+                            (Json.Decode.field "shiftKey" Json.Decode.bool)
+                            (Json.Decode.field "key" Json.Decode.string)
+                            |> Json.Decode.andThen
+                                (\( shiftHeld, key ) ->
+                                    if key == "Enter" && not shiftHeld then
+                                        Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
+
+                                    else
+                                        Json.Decode.fail ""
+                                )
+                        )
+            , Html.Events.onInput (TypedMessage guildId channelId)
+            , Html.Attributes.value text
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.style "padding" "0 8px 0 8px"
+            , Html.Attributes.style "font-size" "16px"
+            , Html.Attributes.style "transform" "translateY(9px)"
+            , Html.Attributes.style "white-space" "pre-wrap"
+            , Html.Attributes.style "color" "rgb(255,255,255)"
+            ]
+            (case String.Nonempty.fromString text of
+                Just nonempty ->
+                    let
+                        users =
+                            LocalState.allUsers local
+                    in
+                    RichText.textInputView users (RichText.fromNonemptyString users nonempty)
+                        ++ [ Html.text "\n" ]
+
+                Nothing ->
+                    []
+            )
+        ]
+        --{ onChange = TypedMessage guildId channelId
+        --, text = text
+        --, placeholder =
+        --    Nothing
+        --
+        ----"Write a message in #"
+        ----    ++ ChannelName.toString channel.name
+        ----    |> Just
+        --, label = Ui.Input.labelHidden "Message input field"
+        --, spellcheck = True
+        --}
+        |> Ui.html
 
 
 dropdownButtonId : Int -> HtmlId
@@ -2505,7 +2455,7 @@ messageView local message =
                         Nothing ->
                             Ui.text "<missing> "
                     )
-                    :: richTextView { underline = False, italic = False, bold = False } local message2.content
+                    :: RichText.richTextView (LocalState.allUsers local) message2.content
                 )
 
         UserJoinedMessage _ userId ->
@@ -2526,85 +2476,6 @@ messageView local message =
                     []
                     (Ui.text " joined!")
                 ]
-
-
-type alias RichTextState =
-    { italic : Bool, underline : Bool, bold : Bool }
-
-
-richTextView : RichTextState -> LocalState -> Nonempty RichText -> List (Element msg)
-richTextView state users nonempty =
-    List.concatMap
-        (\item ->
-            case item of
-                UserMention userId ->
-                    [ label userId users ]
-
-                NormalText char text ->
-                    [ Ui.el
-                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
-                        , Ui.attrIf state.italic Ui.Font.italic
-                        , Ui.attrIf state.underline Ui.Font.italic
-                        ]
-                        (Ui.text (String.cons char text))
-                    ]
-
-                Italic nonempty2 ->
-                    richTextView { state | italic = True } users nonempty2
-
-                Underline nonempty2 ->
-                    richTextView { state | underline = True } users nonempty2
-
-                Bold nonempty2 ->
-                    richTextView { state | bold = True } users nonempty2
-        )
-        (List.Nonempty.toList nonempty)
-
-
-label : Id UserId -> LocalState -> Element msg
-label userId local =
-    case SeqDict.get userId (LocalState.allUsers local) of
-        Just user ->
-            label2 user
-
-        Nothing ->
-            Ui.el
-                [ errorBackground
-                , Ui.width Ui.shrink
-                , Ui.paddingXY 4 0
-                , Ui.Font.color (Ui.rgb 50 70 240)
-                , Ui.rounded 2
-                , Ui.link (Route.encode (Route.UserOverviewRoute (SpecificUserRoute userId)))
-                ]
-                (Ui.text "<name missing>")
-
-
-errorBackground : Ui.Attribute msg
-errorBackground =
-    Ui.background (Ui.rgb 255 240 240)
-
-
-label2 : { a | name : PersonName } -> Element msg
-label2 user =
-    Ui.el
-        [ Ui.background labelBackgroundColor
-        , Ui.width Ui.shrink
-        , Ui.paddingWith { left = 1, right = 1, top = 0, bottom = 1 }
-        , Ui.Font.color labelFontColor
-        , Ui.rounded 2
-        , Ui.Font.noWrap
-        ]
-        (Ui.text ("@" ++ PersonName.toString user.name))
-
-
-labelBackgroundColor : Ui.Color
-labelBackgroundColor =
-    Ui.rgb 215 235 255
-
-
-labelFontColor : Ui.Color
-labelFontColor =
-    Ui.rgb 50 70 240
 
 
 channelColumn :

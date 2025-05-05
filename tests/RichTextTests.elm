@@ -22,20 +22,20 @@ test =
         "Rich text tests"
         [ Test.test "text" <|
             \_ ->
-                RichText.fromString users (NonemptyString ' ' "abc ")
+                RichText.fromNonemptyString users (NonemptyString ' ' "abc ")
                     |> Expect.equal (Nonempty (NormalText ' ' "abc ") [])
         , Test.test "mention" <|
             \_ ->
-                RichText.fromString users (NonemptyString ' ' "@a ")
+                RichText.fromNonemptyString users (NonemptyString ' ' "@a ")
                     |> Expect.equal
                         (Nonempty (NormalText ' ' "") [ UserMention (Id.fromInt 123), NormalText ' ' "" ])
         , Test.test "not bold" <|
             \_ ->
-                RichText.fromString users (NonemptyString ' ' "* abc *")
+                RichText.fromNonemptyString users (NonemptyString ' ' "* abc *")
                     |> Expect.equal (Nonempty (NormalText ' ' "* abc *") [])
         , Test.test "bold" <|
             \_ ->
-                RichText.fromString users (NonemptyString ' ' "*abc *")
+                RichText.fromNonemptyString users (NonemptyString ' ' "*abc *")
                     |> Expect.equal
                         (Nonempty
                             (NormalText ' ' "")
@@ -43,19 +43,19 @@ test =
                         )
         , Test.test "*abc_123" <|
             \_ ->
-                RichText.fromString users (NonemptyString '*' "abc_123")
+                RichText.fromNonemptyString users (NonemptyString '*' "abc_123")
                     |> Expect.equal (Nonempty (NormalText '*' "abc_123") [])
         , Test.test "*a*b" <|
             \_ ->
-                RichText.fromString users (NonemptyString '*' "a*b")
+                RichText.fromNonemptyString users (NonemptyString '*' "a*b")
                     |> Expect.equal (Nonempty (Bold (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
         , Test.test "_a*a_" <|
             \_ ->
-                RichText.fromString users (NonemptyString '_' "a*a_")
+                RichText.fromNonemptyString users (NonemptyString '_' "a*a_")
                     |> Expect.equal (Nonempty (Italic (Nonempty (NormalText 'a' "*a") [])) [])
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
-                RichText.fromString users text
+                RichText.fromNonemptyString users text
                     |> RichText.toString users
                     |> Expect.equal (String.Nonempty.toString text)
         ]
@@ -71,6 +71,7 @@ markdownStringFuzzer =
             , "@"
             , "_"
             , "__"
+            , "👏"
             ]
         )
         |> Fuzz.map
