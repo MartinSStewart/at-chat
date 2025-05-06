@@ -539,14 +539,12 @@ css =
                 ++ fontFace 300 "Montserrat-Light"
                 ++ """
 textarea::selection {
-    background-color: rgb(0,120,215); /* Change this to your desired background color */
-    color: rgba(0,0,0,0); /* Change this to your desired text color */
+    background-color: rgb(0,120,215);
+    color: rgba(0,0,0,0);
 }
-
-/* For Firefox */
 textarea::-moz-selection {
-    background-color: rgb(0,120,215); /* Change this to your desired background color */
-    color: rgba(0,0,0,0); /* Change this to your desired text color */
+    background-color: rgb(0,120,215);
+    color: rgba(0,0,0,0);
 }
 """
             )
