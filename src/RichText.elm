@@ -78,7 +78,7 @@ toString users nonempty =
 
 fromNonemptyString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText
 fromNonemptyString users string =
-    case Parser.run (parser users [] "") (String.Nonempty.toString string) of
+    case Parser.run (parser users []) (String.Nonempty.toString string) of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
@@ -164,11 +164,15 @@ type alias LoopState =
     { current : Array String, rest : Array RichText }
 
 
-parser : SeqDict (Id UserId) { a | name : PersonName } -> List Modifiers -> String -> Parser (Array RichText)
-parser users modifiers previousChar =
+parser : SeqDict (Id UserId) { a | name : PersonName } -> List Modifiers -> Parser (Array RichText)
+parser users modifiers =
     Parser.loop
-        { current = Array.fromList [ previousChar ], rest = Array.empty }
+        { current = Array.empty, rest = Array.empty }
         (\state ->
+            let
+                _ =
+                    Debug.log "state" ( modifiers, state )
+            in
             Parser.oneOf
                 [ Parser.succeed identity
                     |. Parser.symbol "@"
@@ -232,6 +236,20 @@ bailOut state modifiers =
         |> Done
 
 
+peekSymbol symbol ifSuccessful =
+    Parser.succeed Tuple.pair
+        |= Parser.getSource
+        |= Parser.getOffset
+        |> Parser.andThen
+            (\( source, offset ) ->
+                if String.dropLeft offset source |> String.startsWith symbol then
+                    ifSuccessful
+
+                else
+                    Parser.backtrackable (Parser.problem "")
+            )
+
+
 modifierHelper :
     SeqDict (Id UserId) { a | name : PersonName }
     -> Modifiers
@@ -278,15 +296,27 @@ modifierHelper users modifier container state modifiers =
         Parser.succeed identity
             |. Parser.symbol symbol
             |= Parser.oneOf
-                [ Parser.chompIf (\char -> char /= ' ' && String.fromChar char /= symbol)
-                    |> Parser.getChompedString
-                    |> Parser.andThen (parser users (modifier :: modifiers))
-                    |> Parser.map
-                        (\a ->
-                            Loop
-                                { current = Array.empty
-                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
-                                }
+                [ Parser.succeed Tuple.pair
+                    |= Parser.getSource
+                    |= Parser.getOffset
+                    |> Parser.andThen
+                        (\( source, offset ) ->
+                            let
+                                rest =
+                                    String.dropLeft offset source
+                            in
+                            if String.startsWith symbol rest || String.startsWith " " rest then
+                                Parser.backtrackable (Parser.problem "")
+
+                            else
+                                Parser.map
+                                    (\a ->
+                                        Loop
+                                            { current = Array.empty
+                                            , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                            }
+                                    )
+                                    (parser users (modifier :: modifiers))
                         )
                 , Loop { current = Array.push symbol state.current, rest = state.rest }
                     |> Parser.succeed

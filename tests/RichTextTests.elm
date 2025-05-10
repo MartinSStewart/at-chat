@@ -66,6 +66,19 @@ test =
                             )
                             []
                         )
+        , Test.test "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '👨' "\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText '👨' "\u{200D}👩\u{200D}👧\u{200D}👦")
+                            [ Italic
+                                (Nonempty
+                                    (Bold (Nonempty (NormalText 'a' "bc") []))
+                                    []
+                                )
+                            ]
+                        )
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromNonemptyString users text
@@ -84,7 +97,7 @@ markdownStringFuzzer =
             , "@"
             , "_"
             , "__"
-            , "👏"
+            , "👨\u{200D}👩\u{200D}👧\u{200D}👦"
             ]
         )
         |> Fuzz.map
