@@ -654,6 +654,68 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_AddReactionEmoji messageId emoji ->
+                    asGuildMember
+                        model
+                        sessionId
+                        messageId.guildId
+                        (\userId _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        messageId.guildId
+                                        (LocalState.addReactionEmoji
+                                            emoji
+                                            userId
+                                            messageId.channelId
+                                            messageId.messageIndex
+                                            guild
+                                        )
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ Local_AddReactionEmoji messageId emoji
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_AddReactionEmoji userId messageId emoji |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
+                Local_RemoveReactionEmoji messageId emoji ->
+                    asGuildMember
+                        model
+                        sessionId
+                        messageId.guildId
+                        (\userId _ guild ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        messageId.guildId
+                                        (LocalState.removeReactionEmoji
+                                            emoji
+                                            userId
+                                            messageId.channelId
+                                            messageId.messageIndex
+                                            guild
+                                        )
+                                        model.guilds
+                              }
+                            , Command.batch
+                                [ Local_RemoveReactionEmoji messageId emoji
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_RemoveReactionEmoji userId messageId emoji |> ServerChange)
+                                    model
+                                ]
+                            )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
@@ -939,6 +1001,7 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                                             { createdAt = time
                                             , createdBy = userId
                                             , content = text
+                                            , reactions = SeqDict.empty
                                             }
                                         )
                                         channel

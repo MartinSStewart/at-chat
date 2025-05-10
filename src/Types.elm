@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , EmojiSelector(..)
     , FrontendModel(..)
     , FrontendMsg(..)
     , LastRequest(..)
@@ -33,6 +34,7 @@ import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
@@ -105,12 +107,18 @@ type alias LoggedIn2 =
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
     , messageHover : Maybe MessageId
-    , showEmojiSelector : Bool
+    , showEmojiSelector : EmojiSelector
     }
 
 
+type EmojiSelector
+    = EmojiSelectorHidden
+    | EmojiSelectorForReaction MessageId
+    | EmojiSelectorForMessage
+
+
 type alias MessageId =
-    { guildId : Id GuildId, channelId : Id ChannelId, createdBy : Id UserId, createdAt : Time.Posix }
+    { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Int }
 
 
 type alias MentionUserDropdown =
@@ -207,8 +215,11 @@ type FrontendMsg
     | RemovedFocus
     | MouseEnteredMessage MessageId
     | MouseExitedMessage MessageId
-    | PressedAddReactionEmoji MessageId
+    | PressedShowReactionEmojiSelector MessageId
     | PressedEditMessage MessageId
+    | PressedEmojiSelectorEmoji Emoji
+    | PressedReactionEmoji_Add MessageId Emoji
+    | PressedReactionEmoji_Remove MessageId Emoji
 
 
 type alias NewChannelForm =
@@ -293,6 +304,8 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
+    | Server_AddReactionEmoji (Id UserId) MessageId Emoji
+    | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
 
 
 type LocalChange
@@ -305,6 +318,8 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_MemberTyping Time.Posix (Id GuildId) (Id ChannelId)
+    | Local_AddReactionEmoji MessageId Emoji
+    | Local_RemoveReactionEmoji MessageId Emoji
 
 
 type ToBeFilledInByBackend a

@@ -12,6 +12,7 @@ module LocalState exposing
     , Message(..)
     , addInvite
     , addMember
+    , addReactionEmoji
     , allUsers
     , channelToFrontend
     , createChannel
@@ -25,18 +26,23 @@ module LocalState exposing
     , guildToFrontend
     , isAdmin
     , memberIsTyping
+    , removeReactionEmoji
+    , updateChannel
     )
 
 import Array exposing (Array)
+import Array.Extra
 import ChannelName exposing (ChannelName)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import PersonName exposing (PersonName)
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
@@ -169,8 +175,10 @@ type Message
         { createdAt : Time.Posix
         , createdBy : Id UserId
         , content : Nonempty RichText
+        , reactions : SeqDict Emoji (NonemptySet (Id UserId))
         }
-    | UserJoinedMessage Time.Posix (Id UserId)
+    | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
+    | DeletedMessage
 
 
 type AdminStatus
@@ -234,7 +242,10 @@ createMessage message channel =
                 UserTextMessage { createdBy } ->
                     SeqDict.remove createdBy channel.lastTypedAt
 
-                UserJoinedMessage _ _ ->
+                UserJoinedMessage _ _ _ ->
+                    channel.lastTypedAt
+
+                DeletedMessage ->
                     channel.lastTypedAt
     }
 
@@ -289,28 +300,15 @@ editChannel :
     -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName } }
     -> { c | channels : SeqDict (Id ChannelId) { d | name : ChannelName } }
 editChannel channelName channelId guild =
-    { guild
-        | channels =
-            SeqDict.updateIfExists
-                channelId
-                (\channel ->
-                    { channel | name = channelName }
-                )
-                guild.channels
-    }
+    updateChannel (\channel -> { channel | name = channelName }) channelId guild
 
 
 deleteChannel : Time.Posix -> Id UserId -> Id ChannelId -> BackendGuild -> BackendGuild
 deleteChannel time userId channelId guild =
-    { guild
-        | channels =
-            SeqDict.updateIfExists
-                channelId
-                (\channel ->
-                    { channel | status = ChannelDeleted { deletedAt = time, deletedBy = userId } }
-                )
-                guild.channels
-    }
+    updateChannel
+        (\channel -> { channel | status = ChannelDeleted { deletedAt = time, deletedBy = userId } })
+        channelId
+        guild
 
 
 deleteChannelFrontend : Id ChannelId -> FrontendGuild -> FrontendGuild
@@ -325,17 +323,14 @@ memberIsTyping :
     -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
     -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
 memberIsTyping userId time channelId guild =
-    { guild
-        | channels =
-            SeqDict.updateIfExists
-                channelId
-                (\channel ->
-                    { channel
-                        | lastTypedAt = SeqDict.insert userId time channel.lastTypedAt
-                    }
-                )
-                guild.channels
-    }
+    updateChannel
+        (\channel ->
+            { channel
+                | lastTypedAt = SeqDict.insert userId time channel.lastTypedAt
+            }
+        )
+        channelId
+        guild
 
 
 addInvite :
@@ -392,7 +387,7 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     guild.announcementChannel
-                    (createMessage (UserJoinedMessage time userId))
+                    (createMessage (UserJoinedMessage time userId SeqDict.empty))
                     guild.channels
         }
             |> Ok
@@ -401,3 +396,138 @@ addMember time userId guild =
 allUsers : LocalState -> SeqDict (Id UserId) FrontendUser
 allUsers local =
     SeqDict.insert local.userId (User.backendToFrontendForUser local.user) local.otherUsers
+
+
+addReactionEmoji :
+    Emoji
+    -> Id UserId
+    -> Id ChannelId
+    -> Int
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+addReactionEmoji emoji userId channelId messageIndex guild =
+    updateChannel
+        (\channel ->
+            { channel
+                | messages =
+                    Array.Extra.update messageIndex
+                        (\message ->
+                            case message of
+                                UserTextMessage message2 ->
+                                    { message2
+                                        | reactions =
+                                            SeqDict.update
+                                                emoji
+                                                (\maybeSet ->
+                                                    (case maybeSet of
+                                                        Just nonempty ->
+                                                            NonemptySet.insert userId nonempty
+
+                                                        Nothing ->
+                                                            NonemptySet.singleton userId
+                                                    )
+                                                        |> Just
+                                                )
+                                                message2.reactions
+                                    }
+                                        |> UserTextMessage
+
+                                UserJoinedMessage time userJoined reactions ->
+                                    UserJoinedMessage
+                                        time
+                                        userJoined
+                                        (SeqDict.update
+                                            emoji
+                                            (\maybeSet ->
+                                                (case maybeSet of
+                                                    Just nonempty ->
+                                                        NonemptySet.insert userId nonempty
+
+                                                    Nothing ->
+                                                        NonemptySet.singleton userId
+                                                )
+                                                    |> Just
+                                            )
+                                            reactions
+                                        )
+
+                                DeletedMessage ->
+                                    message
+                        )
+                        channel.messages
+            }
+        )
+        channelId
+        guild
+
+
+updateChannel :
+    (v -> v)
+    -> Id ChannelId
+    -> { a | channels : SeqDict (Id ChannelId) v }
+    -> { a | channels : SeqDict (Id ChannelId) v }
+updateChannel updateFunc channelId guild =
+    { guild | channels = SeqDict.updateIfExists channelId updateFunc guild.channels }
+
+
+removeReactionEmoji :
+    Emoji
+    -> Id UserId
+    -> Id ChannelId
+    -> Int
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+removeReactionEmoji emoji userId channelId messageIndex guild =
+    updateChannel
+        (\channel ->
+            { channel
+                | messages =
+                    Array.Extra.update messageIndex
+                        (\message ->
+                            case message of
+                                UserTextMessage message2 ->
+                                    { message2
+                                        | reactions =
+                                            SeqDict.update
+                                                emoji
+                                                (\maybeSet ->
+                                                    case maybeSet of
+                                                        Just nonempty ->
+                                                            NonemptySet.toSeqSet nonempty
+                                                                |> SeqSet.remove userId
+                                                                |> NonemptySet.fromSeqSet
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                                message2.reactions
+                                    }
+                                        |> UserTextMessage
+
+                                UserJoinedMessage time userJoined reactions ->
+                                    UserJoinedMessage
+                                        time
+                                        userJoined
+                                        (SeqDict.update
+                                            emoji
+                                            (\maybeSet ->
+                                                case maybeSet of
+                                                    Just nonempty ->
+                                                        NonemptySet.toSeqSet nonempty
+                                                            |> SeqSet.remove userId
+                                                            |> NonemptySet.fromSeqSet
+
+                                                    Nothing ->
+                                                        Nothing
+                                            )
+                                            reactions
+                                        )
+
+                                DeletedMessage ->
+                                    message
+                        )
+                        channel.messages
+            }
+        )
+        channelId
+        guild

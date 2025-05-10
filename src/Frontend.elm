@@ -17,6 +17,7 @@ import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
+import Emoji exposing (Emoji)
 import Env
 import GuildIcon
 import GuildName
@@ -34,6 +35,7 @@ import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, Front
 import LoginForm
 import MyUi
 import NonemptyDict
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin
 import Pages.Home
 import Pages.UserOverview
@@ -44,8 +46,9 @@ import Quantity
 import RichText exposing (RichText(..))
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -256,7 +259,7 @@ loadedInitHelper time loginData loading =
             , typingDebouncer = True
             , pingUser = Nothing
             , messageHover = Nothing
-            , showEmojiSelector = False
+            , showEmojiSelector = EmojiSelectorHidden
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -967,12 +970,12 @@ updateLoaded msg model =
                         (\loggedIn ->
                             case loggedIn.pingUser of
                                 Just _ ->
-                                    ( { loggedIn | pingUser = Nothing }
+                                    ( { loggedIn | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
                                     , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
                                     )
 
                                 Nothing ->
-                                    ( loggedIn, Command.none )
+                                    ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }, Command.none )
                         )
                         model
 
@@ -1003,10 +1006,10 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedAddReactionEmoji messageId ->
+        PressedShowReactionEmojiSelector messageId ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( loggedIn
+                    ( { loggedIn | showEmojiSelector = EmojiSelectorForReaction messageId }
                     , Command.none
                     )
                 )
@@ -1018,6 +1021,47 @@ updateLoaded msg model =
                     ( loggedIn
                     , Command.none
                     )
+                )
+                model
+
+        PressedEmojiSelectorEmoji emoji ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.showEmojiSelector of
+                        EmojiSelectorHidden ->
+                            ( loggedIn, Command.none )
+
+                        EmojiSelectorForReaction messageId ->
+                            handleLocalChange
+                                model.time
+                                (Local_AddReactionEmoji messageId emoji |> Just)
+                                loggedIn
+                                Command.none
+
+                        EmojiSelectorForMessage ->
+                            Debug.todo ""
+                )
+                model
+
+        PressedReactionEmoji_Add messageId emoji ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Local_AddReactionEmoji messageId emoji |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        PressedReactionEmoji_Remove messageId emoji ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Local_RemoveReactionEmoji messageId emoji |> Just)
+                        loggedIn
+                        Command.none
                 )
                 model
 
@@ -1260,6 +1304,7 @@ changeUpdate localMsg local =
                                                                     { createdAt = createdAt
                                                                     , createdBy = local.userId
                                                                     , content = text
+                                                                    , reactions = SeqDict.empty
                                                                     }
                                                                 )
                                                                 channel
@@ -1325,6 +1370,34 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                Local_AddReactionEmoji messageId emoji ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (LocalState.addReactionEmoji
+                                    emoji
+                                    local.userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                )
+                                local.guilds
+                    }
+
+                Local_RemoveReactionEmoji messageId emoji ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (LocalState.removeReactionEmoji
+                                    emoji
+                                    local.userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                )
+                                local.guilds
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text ->
@@ -1345,6 +1418,7 @@ changeUpdate localMsg local =
                                                                     { createdAt = createdAt
                                                                     , createdBy = userId
                                                                     , content = text
+                                                                    , reactions = SeqDict.empty
                                                                     }
                                                                 )
                                                                 channel
@@ -1429,6 +1503,29 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.memberIsTyping userId time channelId)
+                                local.guilds
+                    }
+
+                Server_AddReactionEmoji userId messageId emoji ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (LocalState.addReactionEmoji emoji userId messageId.channelId messageId.messageIndex)
+                                local.guilds
+                    }
+
+                Server_RemoveReactionEmoji userId messageId emoji ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (LocalState.removeReactionEmoji
+                                    emoji
+                                    userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                )
                                 local.guilds
                     }
 
@@ -1764,6 +1861,12 @@ pendingChangesText localChange =
 
         Local_MemberTyping _ _ _ ->
             "Is typing notification"
+
+        Local_AddReactionEmoji messageId emoji ->
+            "Added reaction emoji"
+
+        Local_RemoveReactionEmoji messageId emoji ->
+            "Removed reaction emoji"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -2225,6 +2328,38 @@ channelTextInputId =
     Dom.id "channel_textinput"
 
 
+emojiSelector : Element FrontendMsg
+emojiSelector =
+    Ui.column
+        [ Ui.width (Ui.px (8 * 32 + 21))
+        , Ui.height (Ui.px 400)
+        , Ui.scrollable
+        , Ui.background background1
+        , Ui.border 1
+        , Ui.borderColor border1
+        , Ui.Font.size 24
+        ]
+        (List.map
+            (\emojiRow ->
+                Ui.row
+                    [ Ui.height (Ui.px 34) ]
+                    (List.map
+                        (\emoji ->
+                            Ui.el
+                                [ Ui.width (Ui.px 32)
+                                , Ui.contentCenterX
+                                , Ui.Input.button (PressedEmojiSelectorEmoji emoji)
+                                ]
+                                (Ui.text (Emoji.toString emoji))
+                        )
+                        emojiRow
+                    )
+            )
+            (List.Extra.greedyGroupsOf 8 Emoji.emojis)
+        )
+        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0 ]
+
+
 conversationView :
     Id GuildId
     -> Id ChannelId
@@ -2246,14 +2381,65 @@ conversationView guildId channelId loggedIn model local channel =
     in
     Ui.column
         [ Ui.height Ui.fill ]
-        [ Ui.column
-            [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
-            (Ui.el
-                [ Ui.Font.color font2 ]
-                (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
-                :: List.map
-                    (messageView guildId channelId loggedIn.messageHover local)
-                    (Array.toList channel.messages)
+        [ Ui.el
+            [ Ui.height Ui.fill
+            , Ui.scrollable
+            , case loggedIn.showEmojiSelector of
+                EmojiSelectorHidden ->
+                    Ui.noAttr
+
+                EmojiSelectorForReaction _ ->
+                    Ui.inFront emojiSelector
+
+                EmojiSelectorForMessage ->
+                    Ui.inFront emojiSelector
+            ]
+            (Ui.column
+                [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
+                (Ui.el
+                    [ Ui.Font.color font2, Ui.paddingXY 8 4 ]
+                    (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
+                    :: List.indexedMap
+                        (\index message ->
+                            case loggedIn.messageHover of
+                                Just messageHover ->
+                                    let
+                                        messageId : MessageId
+                                        messageId =
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = index
+                                            }
+                                    in
+                                    if messageId == messageHover then
+                                        Ui.Lazy.lazy5
+                                            messageViewHovered
+                                            guildId
+                                            channelId
+                                            local
+                                            index
+                                            message
+
+                                    else
+                                        Ui.Lazy.lazy5
+                                            messageViewNotHovered
+                                            guildId
+                                            channelId
+                                            local
+                                            index
+                                            message
+
+                                Nothing ->
+                                    Ui.Lazy.lazy5
+                                        messageViewNotHovered
+                                        guildId
+                                        channelId
+                                        local
+                                        index
+                                        message
+                        )
+                        (Array.toList channel.messages)
+                )
             )
         , Ui.column
             [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
@@ -2490,81 +2676,198 @@ messageHoverButton onPress svg =
         (Ui.html svg)
 
 
-messageView : Id GuildId -> Id ChannelId -> Maybe MessageId -> LocalState -> Message -> Element FrontendMsg
-messageView guildId channelId maybeMessageHover local message =
+reactionEmojiView : MessageId -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Element FrontendMsg
+reactionEmojiView messageId currentUserId reactions =
+    if SeqDict.isEmpty reactions then
+        Ui.none
+
+    else
+        Ui.row
+            [ Ui.paddingWith { left = 16, right = 16, top = 0, bottom = 4 }, Ui.wrap, Ui.spacing 4 ]
+            (List.map
+                (\( emoji, users ) ->
+                    let
+                        hasReactedTo : Bool
+                        hasReactedTo =
+                            NonemptySet.member currentUserId users
+                    in
+                    Ui.row
+                        [ Ui.rounded 8
+                        , Ui.background background1
+                        , Ui.paddingWith { left = 1, right = 4, top = 0, bottom = 0 }
+                        , Ui.borderColor
+                            (if hasReactedTo then
+                                highlightedBorder
+
+                             else
+                                border1
+                            )
+                        , Ui.Font.color
+                            (if hasReactedTo then
+                                highlightedBorder
+
+                             else
+                                font2
+                            )
+                        , Ui.border 1
+                        , Ui.width Ui.shrink
+                        , Ui.Font.bold
+                        , Ui.Input.button
+                            (if hasReactedTo then
+                                PressedReactionEmoji_Remove messageId emoji
+
+                             else
+                                PressedReactionEmoji_Add messageId emoji
+                            )
+                        ]
+                        [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
+                )
+                (SeqDict.toList reactions)
+            )
+
+
+messageViewHovered :
+    Id GuildId
+    -> Id ChannelId
+    -> LocalState
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewHovered guildId channelId local messageIndex message =
+    messageView guildId channelId True local messageIndex message
+
+
+messageViewNotHovered :
+    Id GuildId
+    -> Id ChannelId
+    -> LocalState
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewNotHovered guildId channelId local messageIndex message =
+    messageView guildId channelId False local messageIndex message
+
+
+messageView :
+    Id GuildId
+    -> Id ChannelId
+    -> Bool
+    -> LocalState
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageView guildId channelId isHovered local messageIndex message =
+    let
+        _ =
+            Debug.log "changed" messageIndex
+    in
     case message of
         UserTextMessage message2 ->
-            let
-                messageId : MessageId
-                messageId =
-                    { guildId = guildId
-                    , channelId = channelId
-                    , createdBy = message2.createdBy
-                    , createdAt = message2.createdAt
-                    }
-            in
-            Ui.Prose.paragraph
-                ([ Ui.Font.color font1
-                 , Ui.paddingXY 8 10
-                 , Ui.Events.onMouseEnter (MouseEnteredMessage messageId)
-                 , Ui.Events.onMouseLeave (MouseExitedMessage messageId)
-                 ]
-                    ++ (case maybeMessageHover of
-                            Just messageHover ->
-                                if messageHover == messageId then
-                                    [ Ui.background (Ui.rgba 255 255 255 0.1)
-                                    , Ui.row
-                                        [ Ui.alignRight
-                                        , Ui.background background1
-                                        , Ui.rounded 4
-                                        , Ui.borderColor border1
-                                        , Ui.border 1
-                                        , Ui.move { x = -8, y = -16, z = 0 }
-                                        , Ui.height (Ui.px 32)
-                                        ]
-                                        [ messageHoverButton (PressedAddReactionEmoji messageId) Icons.smile
-                                        , messageHoverButton (PressedEditMessage messageId) Icons.pencil
-                                        ]
-                                        |> Ui.inFront
-                                    ]
-
-                                else
-                                    []
+            messageContainer
+                guildId
+                channelId
+                messageIndex
+                (local.userId == message2.createdBy)
+                local.userId
+                message2.reactions
+                isHovered
+                (Ui.Prose.paragraph
+                    [ Ui.paddingXY 8 10 ]
+                    (Ui.el
+                        [ Ui.Font.bold ]
+                        (case LocalState.getUser message2.createdBy local of
+                            Just user ->
+                                Ui.text (PersonName.toString user.name ++ " ")
 
                             Nothing ->
-                                []
-                       )
-                )
-                (Ui.el
-                    [ Ui.Font.bold ]
-                    (case LocalState.getUser message2.createdBy local of
-                        Just user ->
-                            Ui.text (PersonName.toString user.name ++ " ")
-
-                        Nothing ->
-                            Ui.text "<missing> "
+                                Ui.text "<missing> "
+                        )
+                        :: RichText.richTextView (LocalState.allUsers local) message2.content
                     )
-                    :: RichText.richTextView (LocalState.allUsers local) message2.content
                 )
 
-        UserJoinedMessage _ userId ->
-            Ui.Prose.paragraph
-                [ Ui.Font.color font1
-                , Ui.paddingXY 0 10
-                ]
-                [ Ui.el
-                    [ Ui.Font.bold ]
-                    (case LocalState.getUser userId local of
-                        Just user ->
-                            Ui.text (PersonName.toString user.name)
+        UserJoinedMessage _ userId reactions ->
+            messageContainer
+                guildId
+                channelId
+                messageIndex
+                False
+                local.userId
+                reactions
+                isHovered
+                (Ui.Prose.paragraph
+                    [ Ui.paddingXY 8 10 ]
+                    [ Ui.el
+                        [ Ui.Font.bold ]
+                        (case LocalState.getUser userId local of
+                            Just user ->
+                                Ui.text (PersonName.toString user.name)
 
-                        Nothing ->
-                            Ui.text "<missing> "
-                    )
-                , Ui.el
+                            Nothing ->
+                                Ui.text "<missing> "
+                        )
+                    , Ui.el
+                        []
+                        (Ui.text " joined!")
+                    ]
+                )
+
+        DeletedMessage ->
+            Ui.el [ Ui.Font.color font3, Ui.Font.italic ] (Ui.text "Message deleted")
+
+
+messageContainer :
+    Id GuildId
+    -> Id ChannelId
+    -> Int
+    -> Bool
+    -> Id UserId
+    -> SeqDict Emoji (NonemptySet (Id UserId))
+    -> Bool
+    -> Element FrontendMsg
+    -> Element FrontendMsg
+messageContainer guildId channelId messageIndex canEdit currentUserId reactions isHovered messageContent =
+    let
+        messageId : MessageId
+        messageId =
+            { guildId = guildId
+            , channelId = channelId
+            , messageIndex = messageIndex
+            }
+    in
+    Ui.column
+        ([ Ui.Font.color font1
+         , Ui.Events.onMouseEnter (MouseEnteredMessage messageId)
+         , Ui.Events.onMouseLeave (MouseExitedMessage messageId)
+         ]
+            ++ (if isHovered then
+                    [ Ui.background (Ui.rgba 255 255 255 0.1)
+                    , Ui.row
+                        [ Ui.alignRight
+                        , Ui.background background1
+                        , Ui.rounded 4
+                        , Ui.borderColor border1
+                        , Ui.border 1
+                        , Ui.move { x = -8, y = -16, z = 0 }
+                        , Ui.height (Ui.px 32)
+                        ]
+                        [ messageHoverButton (PressedShowReactionEmojiSelector messageId) Icons.smile
+                        , if canEdit then
+                            messageHoverButton (PressedEditMessage messageId) Icons.pencil
+
+                          else
+                            Ui.none
+                        ]
+                        |> Ui.inFront
+                    ]
+
+                else
                     []
-                    (Ui.text " joined!")
-                ]
+               )
+        )
+        [ messageContent
+        , reactionEmojiView messageId currentUserId reactions
+        ]
 
 
 channelColumn :
@@ -2938,6 +3241,11 @@ inputBorder =
 border1 : Ui.Color
 border1 =
     Ui.rgb 60 70 100
+
+
+highlightedBorder : Ui.Color
+highlightedBorder =
+    Ui.rgb 12 140 200
 
 
 errorColor =
