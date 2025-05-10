@@ -236,18 +236,11 @@ bailOut state modifiers =
         |> Done
 
 
-peekSymbol symbol ifSuccessful =
-    Parser.succeed Tuple.pair
-        |= Parser.getSource
+getRemainingText : Parser String
+getRemainingText =
+    Parser.succeed String.dropLeft
         |= Parser.getOffset
-        |> Parser.andThen
-            (\( source, offset ) ->
-                if String.dropLeft offset source |> String.startsWith symbol then
-                    ifSuccessful
-
-                else
-                    Parser.backtrackable (Parser.problem "")
-            )
+        |= Parser.getSource
 
 
 modifierHelper :
@@ -280,12 +273,10 @@ modifierHelper users modifier container state modifiers =
             (Parser.symbol symbol)
 
     else if List.member modifier modifiers then
-        Parser.succeed Tuple.pair
-            |= Parser.getSource
-            |= Parser.getOffset
+        getRemainingText
             |> Parser.andThen
-                (\( source, offset ) ->
-                    if String.dropLeft offset source |> String.startsWith symbol then
+                (\remainingText ->
+                    if String.startsWith symbol remainingText then
                         bailOut state modifiers |> Parser.succeed
 
                     else
@@ -296,16 +287,13 @@ modifierHelper users modifier container state modifiers =
         Parser.succeed identity
             |. Parser.symbol symbol
             |= Parser.oneOf
-                [ Parser.succeed Tuple.pair
-                    |= Parser.getSource
-                    |= Parser.getOffset
+                [ getRemainingText
                     |> Parser.andThen
-                        (\( source, offset ) ->
-                            let
-                                rest =
-                                    String.dropLeft offset source
-                            in
-                            if String.startsWith symbol rest || String.startsWith " " rest then
+                        (\remainingText ->
+                            if
+                                String.startsWith symbol remainingText
+                                    || String.startsWith " " remainingText
+                            then
                                 Parser.backtrackable (Parser.problem "")
 
                             else
