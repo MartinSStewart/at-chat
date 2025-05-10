@@ -409,7 +409,7 @@ routeRequest model =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
                               }
-                            , Route.push model.navigationKey HomePageRoute
+                            , Command.none
                             )
 
                         LoggedIn loggedIn ->
@@ -422,7 +422,7 @@ routeRequest model =
                                 [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
                                 , case SeqDict.get guildId local.guilds of
                                     Just guild ->
-                                        Route.push
+                                        Route.replace
                                             model.navigationKey
                                             (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
@@ -1828,11 +1828,7 @@ updateLoadedFromBackend msg model =
                         localState =
                             Local.updateFromBackend changeUpdate (Just changeId) change loggedIn.localState
                     in
-                    ( { loggedIn
-                        | localState = localState
-                      }
-                    , Command.none
-                    )
+                    ( { loggedIn | localState = localState }, Command.none )
                 )
                 model
 
@@ -1844,10 +1840,22 @@ updateLoadedFromBackend msg model =
                         localState =
                             Local.updateFromBackend changeUpdate Nothing change loggedIn.localState
                     in
-                    ( { loggedIn
-                        | localState = localState
-                      }
-                    , Command.none
+                    ( { loggedIn | localState = localState }
+                    , case change of
+                        ServerChange (Server_YouJoinedGuildByInvite (Ok { guildId, guild })) ->
+                            case model.route of
+                                GuildRoute inviteGuildId _ ->
+                                    if inviteGuildId == guildId then
+                                        Route.replace model.navigationKey (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        _ ->
+                            Command.none
                     )
                 )
                 model
