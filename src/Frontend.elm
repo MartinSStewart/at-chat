@@ -2442,7 +2442,7 @@ conversationView guildId channelId loggedIn model local channel =
                 )
             )
         , channelTextInput guildId channelId channel loggedIn local
-            |> Ui.el [ Ui.paddingXY 8 0 ]
+            |> Ui.el [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
         , (case
             SeqDict.filter
                 (\_ time ->
