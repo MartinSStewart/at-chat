@@ -58,7 +58,7 @@ import Ui.Lazy
 import Ui.Prose
 import Ui.Shadow
 import Url exposing (Url)
-import User exposing (FrontendUser)
+import User exposing (BackendUser, FrontendUser)
 
 
 app :
@@ -395,9 +395,6 @@ routeRequest model =
                 NewChannelRoute ->
                     ( model, Command.none )
 
-                NoChannelRoute ->
-                    ( model, Command.none )
-
                 EditChannelRoute _ ->
                     ( model, Command.none )
 
@@ -412,14 +409,25 @@ routeRequest model =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
                               }
-                            , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
+                            , Route.push model.navigationKey HomePageRoute
                             )
 
-                        LoggedIn _ ->
+                        LoggedIn loggedIn ->
+                            let
+                                local =
+                                    Local.model loggedIn.localState
+                            in
                             ( model
                             , Command.batch
                                 [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
-                                , Route.replace model.navigationKey (GuildRoute guildId NoChannelRoute)
+                                , case SeqDict.get guildId local.guilds of
+                                    Just guild ->
+                                        Route.push
+                                            model.navigationKey
+                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+
+                                    Nothing ->
+                                        Command.none
                                 ]
                             )
 
@@ -792,6 +800,11 @@ updateLoaded msg model =
         PressedDeleteChannel guildId channelId ->
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
                     handleLocalChange
                         model.time
                         (Local_DeleteChannel guildId channelId |> Just)
@@ -800,7 +813,15 @@ updateLoaded msg model =
                             , editChannelForm =
                                 SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                         }
-                        (Route.push model.navigationKey (GuildRoute guildId NoChannelRoute))
+                        (case SeqDict.get guildId local.guilds of
+                            Just guild ->
+                                Route.push
+                                    model.navigationKey
+                                    (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+
+                            Nothing ->
+                                Command.none
+                        )
                 )
                 model
 
@@ -985,44 +1006,78 @@ updateLoaded msg model =
         RemovedFocus ->
             ( model, Command.none )
 
-        MouseEnteredMessage messageId ->
-            updateLoggedIn
-                (\loggedIn -> ( { loggedIn | messageHover = Just messageId }, Command.none ))
-                model
+        MouseEnteredMessage messageIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | messageHover =
+                                    Just { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
 
-        MouseExitedMessage messageId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | messageHover =
-                            if Just messageId == loggedIn.messageHover then
-                                Nothing
+                _ ->
+                    ( model, Command.none )
 
-                            else
-                                loggedIn.messageHover
-                      }
-                    , Command.none
-                    )
-                )
-                model
+        MouseExitedMessage messageIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | messageHover =
+                                    if
+                                        Just { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                            == loggedIn.messageHover
+                                    then
+                                        Nothing
 
-        PressedShowReactionEmojiSelector messageId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | showEmojiSelector = EmojiSelectorForReaction messageId }
-                    , Command.none
-                    )
-                )
-                model
+                                    else
+                                        loggedIn.messageHover
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
 
-        PressedEditMessage messageId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( loggedIn
-                    , Command.none
-                    )
-                )
-                model
+                _ ->
+                    ( model, Command.none )
+
+        PressedShowReactionEmojiSelector messageIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | showEmojiSelector =
+                                    EmojiSelectorForReaction
+                                        { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
+
+        PressedEditMessage messageIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( loggedIn
+                            , Command.none
+                            )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
 
         PressedEmojiSelectorEmoji emoji ->
             updateLoggedIn
@@ -1043,27 +1098,45 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedReactionEmoji_Add messageId emoji ->
-            updateLoggedIn
-                (\loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Local_AddReactionEmoji messageId emoji |> Just)
-                        loggedIn
-                        Command.none
-                )
-                model
+        PressedReactionEmoji_Add messageIndex emoji ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (Local_AddReactionEmoji
+                                    { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                    emoji
+                                    |> Just
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
 
-        PressedReactionEmoji_Remove messageId emoji ->
-            updateLoggedIn
-                (\loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Local_RemoveReactionEmoji messageId emoji |> Just)
-                        loggedIn
-                        Command.none
-                )
-                model
+                _ ->
+                    ( model, Command.none )
+
+        PressedReactionEmoji_Remove messageIndex emoji ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (Local_RemoveReactionEmoji
+                                    { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                    emoji
+                                    |> Just
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
 
 
 userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
@@ -1960,19 +2033,6 @@ view model =
                                 layout
                                     loaded
                                     [ case loaded.route of
-                                        GuildRoute guildId NoChannelRoute ->
-                                            case SeqDict.get guildId local.guilds of
-                                                Just guild ->
-                                                    case pingDropdown guildId guild.announcementChannel local loggedIn of
-                                                        Just element ->
-                                                            Ui.inFront element
-
-                                                        Nothing ->
-                                                            Ui.noAttr
-
-                                                Nothing ->
-                                                    Ui.noAttr
-
                                         GuildRoute guildId (ChannelRoute channelId) ->
                                             case pingDropdown guildId channelId local loggedIn of
                                                 Just element ->
@@ -2084,7 +2144,7 @@ guildColumn route loggedIn local =
             :: List.map
                 (\( guildId, guild ) ->
                     Ui.el
-                        [ Ui.Input.button (PressedLink (GuildRoute guildId NoChannelRoute))
+                        [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute guild.announcementChannel)))
                         ]
                         (GuildIcon.view
                             (case route of
@@ -2180,26 +2240,6 @@ guildView model guildId channelRoute loggedIn local =
                         SeqDict.get guildId loggedIn.newChannelForm
                             |> Maybe.withDefault newChannelFormInit
                             |> newChannelFormView guildId
-
-                    NoChannelRoute ->
-                        case SeqDict.get guild.announcementChannel guild.channels of
-                            Just channel ->
-                                conversationView
-                                    guildId
-                                    guild.announcementChannel
-                                    loggedIn
-                                    model
-                                    local
-                                    channel
-
-                            Nothing ->
-                                Ui.el
-                                    [ Ui.centerY
-                                    , Ui.Font.center
-                                    , Ui.Font.color font1
-                                    , Ui.Font.size 20
-                                    ]
-                                    (Ui.text "Channel does not exist")
 
                     EditChannelRoute channelId ->
                         case SeqDict.get channelId guild.channels of
@@ -2380,10 +2420,9 @@ conversationView guildId channelId loggedIn model local channel =
                     "<missing>"
     in
     Ui.column
-        [ Ui.height Ui.fill ]
+        [ Ui.height Ui.fill, Ui.scrollable ]
         [ Ui.el
-            [ Ui.height Ui.fill
-            , Ui.scrollable
+            [ Ui.scrollable
             , case loggedIn.showEmojiSelector of
                 EmojiSelectorHidden ->
                     Ui.noAttr
@@ -2414,27 +2453,27 @@ conversationView guildId channelId loggedIn model local channel =
                                     if messageId == messageHover then
                                         Ui.Lazy.lazy5
                                             messageViewHovered
-                                            guildId
-                                            channelId
-                                            local
+                                            local.userId
+                                            local.user
+                                            local.otherUsers
                                             index
                                             message
 
                                     else
                                         Ui.Lazy.lazy5
                                             messageViewNotHovered
-                                            guildId
-                                            channelId
-                                            local
+                                            local.userId
+                                            local.user
+                                            local.otherUsers
                                             index
                                             message
 
                                 Nothing ->
                                     Ui.Lazy.lazy5
                                         messageViewNotHovered
-                                        guildId
-                                        channelId
-                                        local
+                                        local.userId
+                                        local.user
+                                        local.otherUsers
                                         index
                                         message
                         )
@@ -2675,8 +2714,8 @@ messageHoverButton onPress svg =
         (Ui.html svg)
 
 
-reactionEmojiView : MessageId -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Element FrontendMsg
-reactionEmojiView messageId currentUserId reactions =
+reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Element FrontendMsg
+reactionEmojiView messageIndex currentUserId reactions =
     if SeqDict.isEmpty reactions then
         Ui.none
 
@@ -2713,10 +2752,10 @@ reactionEmojiView messageId currentUserId reactions =
                         , Ui.Font.bold
                         , Ui.Input.button
                             (if hasReactedTo then
-                                PressedReactionEmoji_Remove messageId emoji
+                                PressedReactionEmoji_Remove messageIndex emoji
 
                              else
-                                PressedReactionEmoji_Add messageId emoji
+                                PressedReactionEmoji_Add messageIndex emoji
                             )
                         ]
                         [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
@@ -2725,68 +2764,80 @@ reactionEmojiView messageId currentUserId reactions =
             )
 
 
-messageViewHovered : Id GuildId -> Id ChannelId -> LocalState -> Int -> Message -> Element FrontendMsg
-messageViewHovered guildId channelId local messageIndex message =
-    messageView guildId channelId True local messageIndex message
-
-
-messageViewNotHovered : Id GuildId -> Id ChannelId -> LocalState -> Int -> Message -> Element FrontendMsg
-messageViewNotHovered guildId channelId local messageIndex message =
-    messageView guildId channelId False local messageIndex message
-
-
-messageView :
-    Id GuildId
-    -> Id ChannelId
-    -> Bool
-    -> LocalState
+messageViewHovered :
+    Id UserId
+    -> BackendUser
+    -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageView guildId channelId isHovered local messageIndex message =
+messageViewHovered currentUserId currentUser otherUsers messageIndex message =
+    messageView True currentUserId currentUser otherUsers messageIndex message
+
+
+messageViewNotHovered :
+    Id UserId
+    -> BackendUser
+    -> SeqDict (Id UserId) FrontendUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewNotHovered currentUserId currentUser otherUsers messageIndex message =
+    messageView False currentUserId currentUser otherUsers messageIndex message
+
+
+messageView :
+    Bool
+    -> Id UserId
+    -> BackendUser
+    -> SeqDict (Id UserId) FrontendUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageView isHovered currentUserId currentUser otherUsers messageIndex message =
     let
         _ =
             Debug.log "changed" messageIndex
+
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            SeqDict.insert currentUserId (User.backendToFrontend currentUser) otherUsers
     in
     case message of
         UserTextMessage message2 ->
             messageContainer
-                guildId
-                channelId
                 messageIndex
-                (local.userId == message2.createdBy)
-                local.userId
+                (currentUserId == message2.createdBy)
+                currentUserId
                 message2.reactions
                 isHovered
                 (Ui.Prose.paragraph
                     [ Ui.paddingXY 8 10 ]
                     (Ui.el
                         [ Ui.Font.bold ]
-                        (case LocalState.getUser message2.createdBy local of
+                        (case SeqDict.get message2.createdBy allUsers of
                             Just user ->
                                 Ui.text (PersonName.toString user.name ++ " ")
 
                             Nothing ->
                                 Ui.text "<missing> "
                         )
-                        :: RichText.richTextView (LocalState.allUsers local) message2.content
+                        :: RichText.richTextView allUsers message2.content
                     )
                 )
 
         UserJoinedMessage _ userId reactions ->
             messageContainer
-                guildId
-                channelId
                 messageIndex
                 False
-                local.userId
+                currentUserId
                 reactions
                 isHovered
                 (Ui.Prose.paragraph
                     [ Ui.paddingXY 8 10 ]
                     [ Ui.el
                         [ Ui.Font.bold ]
-                        (case LocalState.getUser userId local of
+                        (case SeqDict.get userId allUsers of
                             Just user ->
                                 Ui.text (PersonName.toString user.name)
 
@@ -2804,28 +2855,18 @@ messageView guildId channelId isHovered local messageIndex message =
 
 
 messageContainer :
-    Id GuildId
-    -> Id ChannelId
-    -> Int
+    Int
     -> Bool
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
     -> Bool
     -> Element FrontendMsg
     -> Element FrontendMsg
-messageContainer guildId channelId messageIndex canEdit currentUserId reactions isHovered messageContent =
-    let
-        messageId : MessageId
-        messageId =
-            { guildId = guildId
-            , channelId = channelId
-            , messageIndex = messageIndex
-            }
-    in
+messageContainer messageIndex canEdit currentUserId reactions isHovered messageContent =
     Ui.column
         ([ Ui.Font.color font1
-         , Ui.Events.onMouseEnter (MouseEnteredMessage messageId)
-         , Ui.Events.onMouseLeave (MouseExitedMessage messageId)
+         , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
+         , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
          ]
             ++ (if isHovered then
                     [ Ui.background (Ui.rgba 255 255 255 0.1)
@@ -2838,9 +2879,9 @@ messageContainer guildId channelId messageIndex canEdit currentUserId reactions 
                         , Ui.move { x = -8, y = -16, z = 0 }
                         , Ui.height (Ui.px 32)
                         ]
-                        [ messageHoverButton (PressedShowReactionEmojiSelector messageId) Icons.smile
+                        [ messageHoverButton (PressedShowReactionEmojiSelector messageIndex) Icons.smile
                         , if canEdit then
-                            messageHoverButton (PressedEditMessage messageId) Icons.pencil
+                            messageHoverButton (PressedEditMessage messageIndex) Icons.pencil
 
                           else
                             Ui.none
@@ -2853,7 +2894,7 @@ messageContainer guildId channelId messageIndex canEdit currentUserId reactions 
                )
         )
         [ messageContent
-        , reactionEmojiView messageId currentUserId reactions
+        , reactionEmojiView messageIndex currentUserId reactions
         ]
 
 
@@ -2898,9 +2939,6 @@ channelColumn local guildId guild channelRoute channelNameHover =
                             case channelRoute of
                                 ChannelRoute a ->
                                     a == channelId
-
-                                NoChannelRoute ->
-                                    guild.announcementChannel == channelId
 
                                 _ ->
                                     False

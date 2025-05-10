@@ -28,7 +28,6 @@ type Route
 type ChannelRoute
     = ChannelRoute (Id ChannelId)
     | NewChannelRoute
-    | NoChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
@@ -81,37 +80,34 @@ decode url =
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
                 Just guildId2 ->
-                    GuildRoute
-                        guildId2
-                        (case rest of
-                            [ "c", channelId ] ->
-                                case Id.fromString channelId of
-                                    Just channelId2 ->
-                                        ChannelRoute channelId2
+                    case rest of
+                        [ "c", channelId ] ->
+                            case Id.fromString channelId of
+                                Just channelId2 ->
+                                    GuildRoute guildId2 (ChannelRoute channelId2)
 
-                                    Nothing ->
-                                        NoChannelRoute
+                                Nothing ->
+                                    HomePageRoute
 
-                            [ "c", channelId, "edit" ] ->
-                                case Id.fromString channelId of
-                                    Just channelId2 ->
-                                        EditChannelRoute channelId2
+                        [ "c", channelId, "edit" ] ->
+                            case Id.fromString channelId of
+                                Just channelId2 ->
+                                    GuildRoute guildId2 (EditChannelRoute channelId2)
 
-                                    Nothing ->
-                                        NoChannelRoute
+                                Nothing ->
+                                    HomePageRoute
 
-                            [ "new" ] ->
-                                NewChannelRoute
+                        [ "new" ] ->
+                            GuildRoute guildId2 NewChannelRoute
 
-                            [ "invite" ] ->
-                                InviteLinkCreatorRoute
+                        [ "invite" ] ->
+                            GuildRoute guildId2 InviteLinkCreatorRoute
 
-                            [ "join", inviteLinkId ] ->
-                                JoinRoute (SecretId.fromString inviteLinkId)
+                        [ "join", inviteLinkId ] ->
+                            GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId))
 
-                            _ ->
-                                NoChannelRoute
-                        )
+                        _ ->
+                            HomePageRoute
 
                 Nothing ->
                     HomePageRoute
@@ -158,9 +154,6 @@ encode route =
 
                                 EditChannelRoute channelId ->
                                     [ "c", Id.toString channelId, "edit" ]
-
-                                NoChannelRoute ->
-                                    []
 
                                 NewChannelRoute ->
                                     [ "new" ]

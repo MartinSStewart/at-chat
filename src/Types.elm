@@ -213,13 +213,13 @@ type FrontendMsg
     | TextInputLostFocus HtmlId
     | KeyDown String
     | RemovedFocus
-    | MouseEnteredMessage MessageId
-    | MouseExitedMessage MessageId
-    | PressedShowReactionEmojiSelector MessageId
-    | PressedEditMessage MessageId
+    | MouseEnteredMessage Int
+    | MouseExitedMessage Int
+    | PressedShowReactionEmojiSelector Int
+    | PressedEditMessage Int
     | PressedEmojiSelectorEmoji Emoji
-    | PressedReactionEmoji_Add MessageId Emoji
-    | PressedReactionEmoji_Remove MessageId Emoji
+    | PressedReactionEmoji_Add Int Emoji
+    | PressedReactionEmoji_Remove Int Emoji
 
 
 type alias NewChannelForm =
