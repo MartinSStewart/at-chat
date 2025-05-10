@@ -321,6 +321,7 @@ type alias RichTextState =
     { italic : Bool, underline : Bool, bold : Bool }
 
 
+richTextView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Element msg)
 richTextView users nonempty =
     richTextViewHelper { underline = False, italic = False, bold = False } users nonempty
 
@@ -375,7 +376,18 @@ textInputViewHelper state allUsers nonempty =
         (\item ->
             case item of
                 UserMention userId ->
-                    []
+                    [ case SeqDict.get userId allUsers of
+                        Just user ->
+                            Html.span
+                                [ Html.Attributes.style "color" "rgb(215,235,255)"
+                                , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
+                                , Html.Attributes.style "border-radius" "2px"
+                                ]
+                                [ Html.text ("@" ++ PersonName.toString user.name) ]
+
+                        Nothing ->
+                            Html.text ""
+                    ]
 
                 --[ MyUi.userLabel userId allUsers ]
                 NormalText char text ->

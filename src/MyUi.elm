@@ -624,9 +624,9 @@ userLabel2 user =
 
 labelBackgroundColor : Ui.Color
 labelBackgroundColor =
-    Ui.rgb 215 235 255
+    Ui.rgb 50 70 240
 
 
 labelFontColor : Ui.Color
 labelFontColor =
-    Ui.rgb 50 70 240
+    Ui.rgb 215 235 255

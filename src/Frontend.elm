@@ -2441,10 +2441,8 @@ conversationView guildId channelId loggedIn model local channel =
                         (Array.toList channel.messages)
                 )
             )
-        , Ui.column
-            [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
-            [ channelTextInput guildId channelId channel loggedIn local
-            ]
+        , channelTextInput guildId channelId channel loggedIn local
+            |> Ui.el [ Ui.paddingXY 8 0 ]
         , (case
             SeqDict.filter
                 (\_ time ->
@@ -2501,15 +2499,16 @@ channelTextInput guildId channelId channel loggedIn local =
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
         , Html.Attributes.style "min-height" "min-content"
+        , Html.Attributes.style "width" "100%"
         ]
         [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(0,0,0,0)"
+            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
             , Html.Attributes.style "position" "absolute"
             , Html.Attributes.style "font-size" "inherit"
             , Html.Attributes.style "font-family" "inherit"
             , Html.Attributes.style "line-height" "inherit"
-            , Html.Attributes.style "width" "calc(100% - 16px)"
-            , Html.Attributes.style "height" "100%"
+            , Html.Attributes.style "width" "calc(100% - 18px)"
+            , Html.Attributes.style "height" "calc(100% - 2px)"
             , Dom.idToAttribute channelTextInputId
             , Html.Attributes.style "background-color" "rgb(32,40,70)"
             , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
@@ -2564,7 +2563,7 @@ channelTextInput guildId channelId channel loggedIn local =
             []
         , Html.div
             [ Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.style "padding" "0 8px 0 8px"
+            , Html.Attributes.style "padding" "0 9px 0 9px"
             , Html.Attributes.style "transform" "translateY(9px)"
             , Html.Attributes.style "white-space" "pre-wrap"
             , Html.Attributes.style "color"
@@ -2726,24 +2725,12 @@ reactionEmojiView messageId currentUserId reactions =
             )
 
 
-messageViewHovered :
-    Id GuildId
-    -> Id ChannelId
-    -> LocalState
-    -> Int
-    -> Message
-    -> Element FrontendMsg
+messageViewHovered : Id GuildId -> Id ChannelId -> LocalState -> Int -> Message -> Element FrontendMsg
 messageViewHovered guildId channelId local messageIndex message =
     messageView guildId channelId True local messageIndex message
 
 
-messageViewNotHovered :
-    Id GuildId
-    -> Id ChannelId
-    -> LocalState
-    -> Int
-    -> Message
-    -> Element FrontendMsg
+messageViewNotHovered : Id GuildId -> Id ChannelId -> LocalState -> Int -> Message -> Element FrontendMsg
 messageViewNotHovered guildId channelId local messageIndex message =
     messageView guildId channelId False local messageIndex message
 
