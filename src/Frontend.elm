@@ -45,7 +45,7 @@ import RichText exposing (RichText(..))
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -255,6 +255,8 @@ loadedInitHelper time loginData loading =
             , channelNameHover = Nothing
             , typingDebouncer = True
             , pingUser = Nothing
+            , messageHover = Nothing
+            , showEmojiSelector = False
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -979,6 +981,45 @@ updateLoaded msg model =
 
         RemovedFocus ->
             ( model, Command.none )
+
+        MouseEnteredMessage messageId ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | messageHover = Just messageId }, Command.none ))
+                model
+
+        MouseExitedMessage messageId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | messageHover =
+                            if Just messageId == loggedIn.messageHover then
+                                Nothing
+
+                            else
+                                loggedIn.messageHover
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedAddReactionEmoji messageId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedEditMessage messageId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( loggedIn
+                    , Command.none
+                    )
+                )
+                model
 
 
 userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
@@ -2206,12 +2247,12 @@ conversationView guildId channelId loggedIn model local channel =
     Ui.column
         [ Ui.height Ui.fill ]
         [ Ui.column
-            [ Ui.height Ui.fill, Ui.paddingXY 8 16, Ui.scrollable ]
+            [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
             (Ui.el
                 [ Ui.Font.color font2 ]
                 (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
                 :: List.map
-                    (messageView local)
+                    (messageView guildId channelId loggedIn.messageHover local)
                     (Array.toList channel.messages)
             )
         , Ui.column
@@ -2438,14 +2479,62 @@ pingDropdown guildId channelId localState model =
             Nothing
 
 
-messageView : LocalState -> Message -> Element FrontendMsg
-messageView local message =
+messageHoverButton : msg -> Html msg -> Element msg
+messageHoverButton onPress svg =
+    Ui.el
+        [ Ui.width (Ui.px 32)
+        , Ui.paddingXY 4 3
+        , Ui.height Ui.fill
+        , Ui.Input.button onPress
+        ]
+        (Ui.html svg)
+
+
+messageView : Id GuildId -> Id ChannelId -> Maybe MessageId -> LocalState -> Message -> Element FrontendMsg
+messageView guildId channelId maybeMessageHover local message =
     case message of
         UserTextMessage message2 ->
+            let
+                messageId : MessageId
+                messageId =
+                    { guildId = guildId
+                    , channelId = channelId
+                    , createdBy = message2.createdBy
+                    , createdAt = message2.createdAt
+                    }
+            in
             Ui.Prose.paragraph
-                [ Ui.Font.color font1
-                , Ui.paddingXY 0 10
-                ]
+                ([ Ui.Font.color font1
+                 , Ui.paddingXY 8 10
+                 , Ui.Events.onMouseEnter (MouseEnteredMessage messageId)
+                 , Ui.Events.onMouseLeave (MouseExitedMessage messageId)
+                 ]
+                    ++ (case maybeMessageHover of
+                            Just messageHover ->
+                                if messageHover == messageId then
+                                    [ Ui.background (Ui.rgba 255 255 255 0.1)
+                                    , Ui.row
+                                        [ Ui.alignRight
+                                        , Ui.background background1
+                                        , Ui.rounded 4
+                                        , Ui.borderColor border1
+                                        , Ui.border 1
+                                        , Ui.move { x = -8, y = -16, z = 0 }
+                                        , Ui.height (Ui.px 32)
+                                        ]
+                                        [ messageHoverButton (PressedAddReactionEmoji messageId) Icons.smile
+                                        , messageHoverButton (PressedEditMessage messageId) Icons.pencil
+                                        ]
+                                        |> Ui.inFront
+                                    ]
+
+                                else
+                                    []
+
+                            Nothing ->
+                                []
+                       )
+                )
                 (Ui.el
                     [ Ui.Font.bold ]
                     (case LocalState.getUser message2.createdBy local of

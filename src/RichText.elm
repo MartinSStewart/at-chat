@@ -169,10 +169,6 @@ parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
-            let
-                _ =
-                    Debug.log "state" ( modifiers, state )
-            in
             Parser.oneOf
                 [ Parser.succeed identity
                     |. Parser.symbol "@"

@@ -16,6 +16,7 @@ module Types exposing
     , LoginStatus(..)
     , LoginTokenData(..)
     , MentionUserDropdown
+    , MessageId
     , NewChannelForm
     , ServerChange(..)
     , ToBackend(..)
@@ -103,7 +104,13 @@ type alias LoggedIn2 =
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
+    , messageHover : Maybe MessageId
+    , showEmojiSelector : Bool
     }
+
+
+type alias MessageId =
+    { guildId : Id GuildId, channelId : Id ChannelId, createdBy : Id UserId, createdAt : Time.Posix }
 
 
 type alias MentionUserDropdown =
@@ -198,6 +205,10 @@ type FrontendMsg
     | TextInputLostFocus HtmlId
     | KeyDown String
     | RemovedFocus
+    | MouseEnteredMessage MessageId
+    | MouseExitedMessage MessageId
+    | PressedAddReactionEmoji MessageId
+    | PressedEditMessage MessageId
 
 
 type alias NewChannelForm =
