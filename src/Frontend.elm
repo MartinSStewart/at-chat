@@ -2004,6 +2004,7 @@ guildColumn route loggedIn local =
         , Ui.borderColor border1
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         , Ui.scrollable
+        , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
         ]
         (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
             :: List.map
@@ -2036,7 +2037,7 @@ homePageLoggedInView model loggedIn local =
         [ Ui.column
             [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
             [ Ui.row
-                [ Ui.height Ui.fill ]
+                [ Ui.height Ui.fill, Ui.heightMin 0 ]
                 [ guildColumn model.route loggedIn local
                 , friendsColumn local
                 ]
@@ -2080,7 +2081,7 @@ guildView model guildId channelRoute loggedIn local =
                 [ Ui.column
                     [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                     [ Ui.row
-                        [ Ui.height Ui.fill ]
+                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
                         [ guildColumn model.route loggedIn local
                         , channelColumn local guildId guild channelRoute loggedIn.channelNameHover
                         ]
@@ -2270,7 +2271,7 @@ emojiSelector =
             )
             (List.Extra.greedyGroupsOf 8 Emoji.emojis)
         )
-        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0 ]
+        |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
 conversationView :
@@ -2293,10 +2294,9 @@ conversationView guildId channelId loggedIn model local channel =
                     "<missing>"
     in
     Ui.column
-        [ Ui.height Ui.fill, Ui.scrollable ]
+        [ Ui.height Ui.fill ]
         [ Ui.el
-            [ Ui.scrollable
-            , case loggedIn.showEmojiSelector of
+            [ case loggedIn.showEmojiSelector of
                 EmojiSelectorHidden ->
                     Ui.noAttr
 
@@ -2305,6 +2305,8 @@ conversationView guildId channelId loggedIn model local channel =
 
                 EmojiSelectorForMessage ->
                     Ui.inFront emojiSelector
+            , Ui.heightMin 0
+            , Ui.height Ui.fill
             ]
             (Ui.column
                 [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
