@@ -546,6 +546,16 @@ textarea::-moz-selection {
     background-color: rgb(0,120,215);
     color: rgba(0,0,0,0);
 }
+
+//https://stackoverflow.com/a/54410301
+.disable-scrollbars::-webkit-scrollbar {
+  background: transparent; /* Chrome/Safari/Webkit */
+  width: 0px;
+}
+.disable-scrollbars {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE 10+ */
+}
 """
             )
         ]
