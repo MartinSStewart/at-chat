@@ -1,23 +1,41 @@
 module MyUi exposing
-    ( column
+    ( background1
+    , background2
+    , background3
+    , border1
+    , buttonBackground
+    , buttonBorder
+    , buttonFontColor
+    , cancelButtonBackground
+    , column
     , contentContainerAttributes
     , css
     , datestamp
     , deleteButton
+    , deleteButtonBackground
+    , deleteButtonFont
     , emailAddress
     , emailAddressLink
     , errorBox
     , errorColor
+    , font1
+    , font2
+    , font3
     , gray
     , green500
     , heightAttr
+    , highlightedBorder
     , hoverText
+    , inputBackground
+    , inputBorder
     , internalLink
     , label
+    , labelFontColor
     , listToText
     , montserrat
     , noPointerEvents
     , padding
+    , placeholderFont
     , primaryButton
     , radioRowWithSeparators
     , rounded
@@ -25,6 +43,7 @@ module MyUi exposing
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
+    , splitterColor
     , textLinkColor
     , timeElapsedView
     , touchPress
@@ -338,11 +357,6 @@ textLinkColor =
     Ui.rgb 66 93 203
 
 
-errorColor : Ui.Color
-errorColor =
-    Ui.rgb 200 0 0
-
-
 emailAddress : EmailAddress -> Element msg
 emailAddress emailAddress2 =
     Ui.el [ Ui.Font.bold ] (Ui.text (EmailAddress.toString emailAddress2))
@@ -640,3 +654,98 @@ labelBackgroundColor =
 labelFontColor : Ui.Color
 labelFontColor =
     Ui.rgb 215 235 255
+
+
+background1 : Ui.Color
+background1 =
+    Ui.rgb 14 20 40
+
+
+background2 : Ui.Color
+background2 =
+    Ui.rgb 32 40 70
+
+
+background3 : Ui.Color
+background3 =
+    Ui.rgb 50 60 90
+
+
+inputBackground : Ui.Color
+inputBackground =
+    Ui.rgb 32 40 70
+
+
+inputBorder : Ui.Color
+inputBorder =
+    Ui.rgb 97 104 124
+
+
+splitterColor : Ui.Color
+splitterColor =
+    background1
+
+
+buttonBackground : Ui.Color
+buttonBackground =
+    Ui.rgb 220 230 240
+
+
+cancelButtonBackground : Ui.Color
+cancelButtonBackground =
+    Ui.rgb 196 200 204
+
+
+deleteButtonBackground : Ui.Color
+deleteButtonBackground =
+    Ui.rgb 255 240 250
+
+
+deleteButtonFont : Ui.Color
+deleteButtonFont =
+    Ui.rgb 255 0 0
+
+
+buttonBorder : Ui.Color
+buttonBorder =
+    Ui.rgb 10 20 30
+
+
+buttonFontColor : Ui.Color
+buttonFontColor =
+    Ui.rgb 0 0 0
+
+
+font1 : Ui.Color
+font1 =
+    Ui.rgb 255 255 255
+
+
+font2 : Ui.Color
+font2 =
+    Ui.rgb 220 220 220
+
+
+font3 : Ui.Color
+font3 =
+    Ui.rgb 200 200 200
+
+
+placeholderFont : Ui.Color
+placeholderFont =
+    Ui.rgb 180 180 180
+
+
+border1 : Ui.Color
+border1 =
+    Ui.rgb 60 70 100
+
+
+highlightedBorder : Ui.Color
+highlightedBorder =
+    Ui.rgb 12 140 200
+
+
+errorColor : Ui.Color
+errorColor =
+    Ui.rgb 240 170 180

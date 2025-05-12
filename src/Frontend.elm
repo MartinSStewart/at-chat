@@ -33,6 +33,7 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..))
 import LoginForm
+import MessageInput exposing (MsgConfig)
 import MyUi
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
@@ -606,20 +607,38 @@ updateLoaded msg model =
         TypedMessage guildId channelId text ->
             updateLoggedIn
                 (\loggedIn ->
-                    multilineUpdate
-                        guildId
-                        channelId
-                        (channelTextInputId Nothing)
-                        text
-                        (case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
-                            Just nonempty ->
-                                String.Nonempty.toString nonempty
+                    let
+                        ( pingUser, cmd ) =
+                            MessageInput.multilineUpdate
+                                (messageInputConfig guildId channelId)
+                                channelTextInputId
+                                text
+                                (case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                                    Just nonempty ->
+                                        String.Nonempty.toString nonempty
 
-                            Nothing ->
-                                ""
-                        )
-                        loggedIn
-                        model
+                                    Nothing ->
+                                        ""
+                                )
+                                loggedIn.pingUser
+                    in
+                    ( { loggedIn
+                        | pingUser = pingUser
+                        , drafts =
+                            case String.Nonempty.fromString text of
+                                Just nonempty ->
+                                    SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+
+                                Nothing ->
+                                    SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                        , typingDebouncer = False
+                      }
+                    , Command.batch
+                        [ cmd
+                        , Process.sleep (Duration.seconds 1)
+                            |> Task.perform (\() -> DebouncedTyping)
+                        ]
+                    )
                 )
                 model
 
@@ -866,70 +885,28 @@ updateLoaded msg model =
         PressedPingUser guildId channelId index ->
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    case
-                        ( loggedIn.pingUser
-                        , userDropdownList guildId local
-                            |> List.Extra.getAt index
-                        )
-                    of
-                        ( Just { charIndex }, Just ( _, user ) ) ->
+                    case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                        Just text ->
                             let
-                                applyText : NonemptyString -> NonemptyString
-                                applyText text =
-                                    let
-                                        name : String
-                                        name =
-                                            PersonName.toString user.name
-
-                                        text2 =
-                                            String.Nonempty.toString text
-
-                                        followingText : String
-                                        followingText =
-                                            String.foldl
-                                                (\char ( name2, chars ) ->
-                                                    case name2 of
-                                                        head :: rest ->
-                                                            if Char.toLower head == Char.toLower char then
-                                                                ( rest, chars )
-
-                                                            else
-                                                                ( [], char :: chars )
-
-                                                        [] ->
-                                                            ( [], char :: chars )
-                                                )
-                                                ( String.toList name, [] )
-                                                (String.dropLeft (charIndex + 1) text2)
-                                                |> Tuple.second
-                                                |> List.reverse
-                                                |> String.fromList
-                                    in
-                                    String.left (charIndex + 1) text2
-                                        ++ name
-                                        ++ followingText
-                                        |> String.Nonempty.fromString
-                                        |> Maybe.withDefault text
+                                ( pingUser, text2, cmd ) =
+                                    MessageInput.pressedPingUser
+                                        SetFocus
+                                        guildId
+                                        channelTextInputId
+                                        index
+                                        loggedIn.pingUser
+                                        (Local.model loggedIn.localState)
+                                        text
                             in
                             ( { loggedIn
-                                | pingUser = Nothing
-                                , drafts =
-                                    SeqDict.updateIfExists
-                                        ( guildId, channelId )
-                                        applyText
-                                        loggedIn.drafts
+                                | pingUser = pingUser
+                                , drafts = SeqDict.insert ( guildId, channelId ) text2 loggedIn.drafts
                               }
-                            , Dom.focus (channelTextInputId Nothing)
-                                |> Task.attempt (\_ -> SetFocus)
+                            , cmd
                             )
 
-                        _ ->
-                            ( { loggedIn | pingUser = Nothing }, Command.none )
+                        Nothing ->
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -939,31 +916,14 @@ updateLoaded msg model =
         PressedArrowInDropdown guildId index ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( case loggedIn.pingUser of
-                        Just pingUser ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
-                            { loggedIn
-                                | pingUser =
-                                    { pingUser
-                                        | dropdownIndex =
-                                            if index < 0 then
-                                                List.length (userDropdownList guildId local) - 1
-
-                                            else if index >= List.length (userDropdownList guildId local) then
-                                                0
-
-                                            else
-                                                index
-                                    }
-                                        |> Just
-                            }
-
-                        Nothing ->
-                            loggedIn
+                    ( { loggedIn
+                        | pingUser =
+                            MessageInput.pressedArrowInDropdown
+                                guildId
+                                index
+                                loggedIn.pingUser
+                                (Local.model loggedIn.localState)
+                      }
                     , Command.none
                     )
                 )
@@ -1139,30 +1099,16 @@ updateLoaded msg model =
                     ( model, Command.none )
 
 
-userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
-userDropdownList guildId local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
-            let
-                allUsers : SeqDict (Id UserId) FrontendUser
-                allUsers =
-                    LocalState.allUsers local
-            in
-            guild.owner
-                :: SeqDict.keys guild.members
-                |> List.filterMap
-                    (\userId ->
-                        case SeqDict.get userId allUsers of
-                            Just user ->
-                                Just ( userId, user )
-
-                            Nothing ->
-                                Nothing
-                    )
-                |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
-
-        Nothing ->
-            []
+messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
+messageInputConfig guildId channelId =
+    { gotPingUserPosition = GotPingUserPosition
+    , textInputGotFocus = TextInputGotFocus channelTextInputId
+    , textInputLostFocus = TextInputLostFocus channelTextInputId
+    , typedMessage = TypedMessage guildId channelId
+    , pressedSendMessage = PressedSendMessage guildId channelId
+    , pressedArrowInDropdown = PressedArrowInDropdown guildId
+    , pressedPingUser = PressedPingUser guildId channelId
+    }
 
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
@@ -1899,7 +1845,14 @@ view model =
                                     loaded
                                     [ case loaded.route of
                                         GuildRoute guildId (ChannelRoute channelId) ->
-                                            case pingDropdown guildId channelId local loggedIn of
+                                            case
+                                                MessageInput.pingDropdown
+                                                    (messageInputConfig guildId channelId)
+                                                    guildId
+                                                    local
+                                                    dropdownButtonId
+                                                    loggedIn.pingUser
+                                            of
                                                 Just element ->
                                                     Ui.inFront element
 
@@ -2000,8 +1953,8 @@ guildColumn route loggedIn local =
         , Ui.paddingXY 0 6
         , Ui.width Ui.shrink
         , Ui.height Ui.fill
-        , Ui.background background1
-        , Ui.borderColor border1
+        , Ui.background MyUi.background1
+        , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         , Ui.scrollable
         , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
@@ -2032,7 +1985,7 @@ homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element Fron
 homePageLoggedInView model loggedIn local =
     Ui.row
         [ Ui.height Ui.fill
-        , Ui.background background3
+        , Ui.background MyUi.background3
         ]
         [ Ui.column
             [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
@@ -2050,10 +2003,10 @@ loggedInAsView : LocalState -> Element FrontendMsg
 loggedInAsView local =
     Ui.row
         [ Ui.paddingXY 4 4
-        , Ui.Font.color font2
-        , Ui.borderColor border1
+        , Ui.Font.color MyUi.font2
+        , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
-        , Ui.background background1
+        , Ui.background MyUi.background1
         ]
         [ Ui.text (PersonName.toString local.user.name)
         , Ui.el
@@ -2077,7 +2030,7 @@ guildView model guildId channelRoute loggedIn local =
     case SeqDict.get guildId local.guilds of
         Just guild ->
             Ui.row
-                [ Ui.height Ui.fill, Ui.background background3 ]
+                [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
                 [ Ui.column
                     [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                     [ Ui.row
@@ -2097,7 +2050,7 @@ guildView model guildId channelRoute loggedIn local =
                                 Ui.el
                                     [ Ui.centerY
                                     , Ui.Font.center
-                                    , Ui.Font.color font1
+                                    , Ui.Font.color MyUi.font1
                                     , Ui.Font.size 20
                                     ]
                                     (Ui.text "Channel does not exist")
@@ -2122,7 +2075,7 @@ guildView model guildId channelRoute loggedIn local =
                                 Ui.el
                                     [ Ui.centerY
                                     , Ui.Font.center
-                                    , Ui.Font.color font1
+                                    , Ui.Font.color MyUi.font1
                                     , Ui.Font.size 20
                                     ]
                                     (Ui.text "Channel does not exist")
@@ -2144,7 +2097,7 @@ inviteLinkCreatorForm model guildId guild =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
-            [ Ui.Font.color font1
+            [ Ui.Font.color MyUi.font1
             , Ui.padding 16
             , Ui.alignTop
             , Ui.spacing 16
@@ -2199,9 +2152,9 @@ copyableText text model =
         [ Ui.Input.text
             [ Ui.roundedWith { topLeft = 4, bottomLeft = 4, topRight = 0, bottomRight = 0 }
             , Ui.border 1
-            , Ui.borderColor inputBorder
+            , Ui.borderColor MyUi.inputBorder
             , Ui.paddingXY 4 4
-            , Ui.background inputBackground
+            , Ui.background MyUi.inputBackground
             ]
             { text = text
             , onChange = \_ -> FrontendNoOp
@@ -2210,10 +2163,10 @@ copyableText text model =
             }
         , Ui.el
             [ Ui.Input.button (PressedCopyText text)
-            , Ui.Font.color font2
+            , Ui.Font.color MyUi.font2
             , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
             , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
-            , Ui.borderColor inputBorder
+            , Ui.borderColor MyUi.inputBorder
             , Ui.paddingXY 6 0
             , Ui.width Ui.shrink
             , Ui.height Ui.fill
@@ -2229,17 +2182,9 @@ copyableText text model =
         ]
 
 
-channelTextInputId : Maybe Int -> HtmlId
-channelTextInputId maybeMessageIndex =
-    "channel_textinput"
-        ++ (case maybeMessageIndex of
-                Just messageIndex ->
-                    "_" ++ String.fromInt messageIndex
-
-                Nothing ->
-                    ""
-           )
-        |> Dom.id
+channelTextInputId : HtmlId
+channelTextInputId =
+    "channel_textinput" |> Dom.id
 
 
 emojiSelector : Element FrontendMsg
@@ -2248,9 +2193,9 @@ emojiSelector =
         [ Ui.width (Ui.px (8 * 32 + 21))
         , Ui.height (Ui.px 400)
         , Ui.scrollable
-        , Ui.background background1
+        , Ui.background MyUi.background1
         , Ui.border 1
-        , Ui.borderColor border1
+        , Ui.borderColor MyUi.border1
         , Ui.Font.size 24
         ]
         (List.map
@@ -2311,7 +2256,7 @@ conversationView guildId channelId loggedIn model local channel =
             (Ui.column
                 [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
                 (Ui.el
-                    [ Ui.Font.color font2, Ui.paddingXY 8 4 ]
+                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
                     (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
                     :: List.indexedMap
                         (\index message ->
@@ -2355,7 +2300,19 @@ conversationView guildId channelId loggedIn model local channel =
                         (Array.toList channel.messages)
                 )
             )
-        , channelTextInput guildId channelId channel loggedIn local
+        , MessageInput.channelTextInput
+            (messageInputConfig guildId channelId)
+            channelTextInputId
+            channel
+            (case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
+                Just text ->
+                    String.Nonempty.toString text
+
+                Nothing ->
+                    ""
+            )
+            loggedIn.pingUser
+            local
             |> Ui.el [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
         , (case
             SeqDict.filter
@@ -2389,7 +2346,7 @@ conversationView guildId channelId loggedIn model local channel =
             |> Ui.el
                 [ Ui.Font.bold
                 , Ui.Font.size 13
-                , Ui.Font.color font3
+                , Ui.Font.color MyUi.font3
                 , Ui.height (Ui.px 18)
                 , Ui.contentCenterY
                 , Ui.paddingXY 12 0
@@ -2400,72 +2357,6 @@ conversationView guildId channelId loggedIn model local channel =
 dropdownButtonId : Int -> HtmlId
 dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
-
-
-pingDropdown : Id GuildId -> Id ChannelId -> LocalState -> LoggedIn2 -> Maybe (Element FrontendMsg)
-pingDropdown guildId channelId localState model =
-    case model.pingUser of
-        Just { dropdownIndex, inputElement } ->
-            Ui.column
-                [ Ui.background background2
-                , Ui.borderColor border1
-                , Ui.border 1
-                , Ui.Font.color font2
-                , Ui.move
-                    { x = round inputElement.x
-                    , y = round (inputElement.y - 400 + 1)
-                    , z = 0
-                    }
-                , Ui.width (Ui.px (round inputElement.width))
-                , Ui.height (Ui.px 400)
-                , Ui.clip
-                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-
-                --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
-                ]
-                [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
-                , Ui.column
-                    []
-                    (List.indexedMap
-                        (\index ( _, user ) ->
-                            Ui.el
-                                [ Ui.Input.button (PressedPingUser guildId channelId index)
-                                , Ui.Events.onMouseDown (PressedPingUser guildId channelId index)
-                                , MyUi.touchPress (PressedPingUser guildId channelId index)
-                                , Ui.id (Dom.idToString (dropdownButtonId index))
-                                , Ui.paddingXY 8 4
-                                , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor background3 ]
-                                , if dropdownIndex == index then
-                                    Ui.background background3
-
-                                  else
-                                    Ui.noAttr
-                                , Html.Events.on
-                                    "keydown"
-                                    (Json.Decode.field "key" Json.Decode.string
-                                        |> Json.Decode.andThen
-                                            (\key ->
-                                                if key == "ArrowDown" then
-                                                    Json.Decode.succeed (PressedArrowInDropdown guildId (index + 1))
-
-                                                else if key == "ArrowUp" then
-                                                    Json.Decode.succeed (PressedArrowInDropdown guildId (index - 1))
-
-                                                else
-                                                    Json.Decode.fail ""
-                                            )
-                                    )
-                                    |> Ui.htmlAttribute
-                                ]
-                                (Ui.text (PersonName.toString user.name))
-                        )
-                        (userDropdownList guildId localState)
-                    )
-                ]
-                |> Just
-
-        Nothing ->
-            Nothing
 
 
 messageHoverButton : msg -> Html msg -> Element msg
@@ -2496,21 +2387,21 @@ reactionEmojiView messageIndex currentUserId reactions =
                     in
                     Ui.row
                         [ Ui.rounded 8
-                        , Ui.background background1
+                        , Ui.background MyUi.background1
                         , Ui.paddingWith { left = 1, right = 4, top = 0, bottom = 0 }
                         , Ui.borderColor
                             (if hasReactedTo then
-                                highlightedBorder
+                                MyUi.highlightedBorder
 
                              else
-                                border1
+                                MyUi.border1
                             )
                         , Ui.Font.color
                             (if hasReactedTo then
-                                highlightedBorder
+                                MyUi.highlightedBorder
 
                              else
-                                font2
+                                MyUi.font2
                             )
                         , Ui.border 1
                         , Ui.width Ui.shrink
@@ -2616,7 +2507,7 @@ messageView isHovered currentUserId currentUser otherUsers messageIndex message 
                 )
 
         DeletedMessage ->
-            Ui.el [ Ui.Font.color font3, Ui.Font.italic ] (Ui.text "Message deleted")
+            Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
 
 
 messageContainer :
@@ -2629,7 +2520,7 @@ messageContainer :
     -> Element FrontendMsg
 messageContainer messageIndex canEdit currentUserId reactions isHovered messageContent =
     Ui.column
-        ([ Ui.Font.color font1
+        ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
          , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
          ]
@@ -2637,9 +2528,9 @@ messageContainer messageIndex canEdit currentUserId reactions isHovered messageC
                     [ Ui.background (Ui.rgba 255 255 255 0.1)
                     , Ui.row
                         [ Ui.alignRight
-                        , Ui.background background1
+                        , Ui.background MyUi.background1
                         , Ui.rounded 4
-                        , Ui.borderColor border1
+                        , Ui.borderColor MyUi.border1
                         , Ui.border 1
                         , Ui.move { x = -8, y = -16, z = 0 }
                         , Ui.height (Ui.px 32)
@@ -2673,21 +2564,21 @@ channelColumn :
 channelColumn local guildId guild channelRoute channelNameHover =
     Ui.column
         [ Ui.height Ui.fill
-        , Ui.background background2
+        , Ui.background MyUi.background2
         ]
         [ Ui.row
             [ Ui.Font.bold
             , Ui.paddingWith { left = 8, right = 4, top = 0, bottom = 0 }
             , Ui.spacing 8
-            , Ui.Font.color font1
+            , Ui.Font.color MyUi.font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor border1
+            , Ui.borderColor MyUi.border1
             ]
             [ Ui.text (GuildName.toString guild.name)
             , Ui.el
                 [ Ui.width Ui.shrink
                 , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
-                , Ui.Font.color font2
+                , Ui.Font.color MyUi.font2
                 , Ui.width (Ui.px 40)
                 , Ui.alignRight
                 , Ui.paddingXY 8 8
@@ -2713,10 +2604,10 @@ channelColumn local guildId guild channelRoute channelNameHover =
                     in
                     Ui.row
                         [ if isSelected then
-                            Ui.Font.color font1
+                            Ui.Font.color MyUi.font1
 
                           else
-                            Ui.Font.color font2
+                            Ui.Font.color MyUi.font2
                         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                         , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId)
                         , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
@@ -2745,7 +2636,7 @@ channelColumn local guildId guild channelRoute channelNameHover =
                                 , Ui.contentCenterY
                                 , Ui.height Ui.fill
                                 , Ui.paddingXY 4 0
-                                , Ui.Font.color font3
+                                , Ui.Font.color MyUi.font3
                                 , Ui.Input.button
                                     (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                                 ]
@@ -2763,14 +2654,14 @@ channelColumn local guildId guild channelRoute channelNameHover =
                         in
                         Ui.row
                             [ Ui.paddingXY 4 8
-                            , Ui.Font.color font3
+                            , Ui.Font.color MyUi.font3
                             , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
                             , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                             , if isSelected then
-                                Ui.Font.color font1
+                                Ui.Font.color MyUi.font1
 
                               else
-                                Ui.Font.color font3
+                                Ui.Font.color MyUi.font3
                             ]
                             [ Ui.el [ Ui.width (Ui.px 22) ] (Ui.html Icons.plusIcon)
                             , Ui.text " Add new channel"
@@ -2787,15 +2678,15 @@ friendsColumn : LocalState -> Element FrontendMsg
 friendsColumn local =
     Ui.column
         [ Ui.height Ui.fill
-        , Ui.background background2
+        , Ui.background MyUi.background2
         ]
         [ Ui.el
             [ Ui.Font.bold
             , Ui.paddingXY 8 8
             , Ui.spacing 8
-            , Ui.Font.color font1
+            , Ui.Font.color MyUi.font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor border1
+            , Ui.borderColor MyUi.border1
             ]
             (Ui.text "Direct messages")
         ]
@@ -2806,8 +2697,8 @@ memberColumn local guild =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.alignRight
-        , Ui.background background2
-        , Ui.Font.color font1
+        , Ui.background MyUi.background2
+        , Ui.Font.color MyUi.font1
         ]
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
@@ -2855,7 +2746,7 @@ editChannelFormInit channel =
 editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
 editChannelFormView guildId channelId channel form =
     Ui.column
-        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
         , channelNameInput guildId form |> Ui.map (EditChannelFormChanged guildId channelId)
         , Ui.row
@@ -2863,12 +2754,12 @@ editChannelFormView guildId channelId channel form =
             [ Ui.el
                 [ Ui.Input.button (PressedCancelEditChannelChanges guildId channelId)
                 , Ui.paddingXY 16 8
-                , Ui.background cancelButtonBackground
+                , Ui.background MyUi.cancelButtonBackground
                 , Ui.width Ui.shrink
                 , Ui.rounded 8
-                , Ui.Font.color buttonFontColor
+                , Ui.Font.color MyUi.buttonFontColor
                 , Ui.Font.bold
-                , Ui.borderColor buttonBorder
+                , Ui.borderColor MyUi.buttonBorder
                 , Ui.border 1
                 ]
                 (Ui.text "Cancel")
@@ -2881,12 +2772,12 @@ editChannelFormView guildId channelId channel form =
         , Ui.el
             [ Ui.Input.button (PressedDeleteChannel guildId channelId)
             , Ui.paddingXY 16 8
-            , Ui.background deleteButtonBackground
+            , Ui.background MyUi.deleteButtonBackground
             , Ui.width Ui.shrink
             , Ui.rounded 8
-            , Ui.Font.color deleteButtonFont
+            , Ui.Font.color MyUi.deleteButtonFont
             , Ui.Font.bold
-            , Ui.borderColor buttonBorder
+            , Ui.borderColor MyUi.buttonBorder
             , Ui.border 1
             ]
             (Ui.text "Delete channel")
@@ -2896,7 +2787,7 @@ editChannelFormView guildId channelId channel form =
 newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView guildId form =
     Ui.column
-        [ Ui.Font.color font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
         , channelNameInput guildId form |> Ui.map (NewChannelFormChanged guildId)
         , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
@@ -2908,12 +2799,12 @@ submitButton onPress text =
     Ui.el
         [ Ui.Input.button onPress
         , Ui.paddingXY 16 8
-        , Ui.background buttonBackground
+        , Ui.background MyUi.buttonBackground
         , Ui.width Ui.shrink
         , Ui.rounded 8
-        , Ui.Font.color buttonFontColor
+        , Ui.Font.color MyUi.buttonFontColor
         , Ui.Font.bold
-        , Ui.borderColor buttonBorder
+        , Ui.borderColor MyUi.buttonBorder
         , Ui.border 1
         ]
         (Ui.text text)
@@ -2925,7 +2816,7 @@ channelNameInput guildId form =
         nameLabel =
             Ui.Input.label
                 "newChannelName"
-                [ Ui.Font.color font2, Ui.paddingXY 2 0 ]
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
                 (Ui.text "Channel name")
     in
     Ui.column
@@ -2933,8 +2824,8 @@ channelNameInput guildId form =
         [ nameLabel.element
         , Ui.Input.text
             [ Ui.padding 6
-            , Ui.background inputBackground
-            , Ui.borderColor inputBorder
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
             , Ui.widthMax 500
             ]
             { onChange = \text -> { form | name = text }
@@ -2944,99 +2835,8 @@ channelNameInput guildId form =
             }
         , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
             ( True, Err error ) ->
-                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color errorColor ] (Ui.text error)
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
             _ ->
                 Ui.none
         ]
-
-
-splitterColor : Ui.Color
-splitterColor =
-    background1
-
-
-buttonBackground : Ui.Color
-buttonBackground =
-    Ui.rgb 220 230 240
-
-
-cancelButtonBackground : Ui.Color
-cancelButtonBackground =
-    Ui.rgb 196 200 204
-
-
-deleteButtonBackground =
-    Ui.rgb 255 240 250
-
-
-deleteButtonFont =
-    Ui.rgb 255 0 0
-
-
-buttonBorder : Ui.Color
-buttonBorder =
-    Ui.rgb 10 20 30
-
-
-buttonFontColor : Ui.Color
-buttonFontColor =
-    Ui.rgb 0 0 0
-
-
-font1 : Ui.Color
-font1 =
-    Ui.rgb 255 255 255
-
-
-font2 : Ui.Color
-font2 =
-    Ui.rgb 220 220 220
-
-
-font3 : Ui.Color
-font3 =
-    Ui.rgb 200 200 200
-
-
-placeholderFont : Ui.Color
-placeholderFont =
-    Ui.rgb 180 180 180
-
-
-background1 : Ui.Color
-background1 =
-    Ui.rgb 14 20 40
-
-
-background2 : Ui.Color
-background2 =
-    Ui.rgb 32 40 70
-
-
-background3 : Ui.Color
-background3 =
-    Ui.rgb 50 60 90
-
-
-inputBackground : Ui.Color
-inputBackground =
-    Ui.rgb 32 40 70
-
-
-inputBorder =
-    Ui.rgb 97 104 124
-
-
-border1 : Ui.Color
-border1 =
-    Ui.rgb 60 70 100
-
-
-highlightedBorder : Ui.Color
-highlightedBorder =
-    Ui.rgb 12 140 200
-
-
-errorColor =
-    Ui.rgb 240 170 180

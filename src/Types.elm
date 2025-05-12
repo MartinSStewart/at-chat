@@ -16,7 +16,6 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
-    , MentionUserDropdown
     , MessageId
     , NewChannelForm
     , ServerChange(..)
@@ -43,6 +42,7 @@ import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
+import MessageInput exposing (MentionUserDropdown)
 import NonemptyDict exposing (NonemptyDict)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
@@ -119,13 +119,6 @@ type EmojiSelector
 
 type alias MessageId =
     { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Int }
-
-
-type alias MentionUserDropdown =
-    { charIndex : Int
-    , dropdownIndex : Int
-    , inputElement : { x : Float, y : Float, width : Float, height : Float }
-    }
 
 
 type alias BackendModel =

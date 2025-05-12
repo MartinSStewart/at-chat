@@ -1,41 +1,59 @@
-module MessageInput exposing (..)
+module MessageInput exposing (MentionUserDropdown, MsgConfig, channelTextInput, multilineUpdate, pingDropdown, pressedArrowInDropdown, pressedPingUser)
 
-import Browser.Dom as Dom
 import ChannelName
 import Diff
 import Duration
-import Effect.Browser.Dom exposing (HtmlId)
-import Effect.Command as Command
+import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Process as Process
 import Effect.Task as Task
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildId, Id)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (FrontendChannel)
+import List.Extra
+import LocalState exposing (FrontendChannel, LocalState)
+import MyUi
+import PersonName
 import RichText
-import SeqDict
-import String.Nonempty
+import SeqDict exposing (SeqDict)
+import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
+import Ui.Anim
+import Ui.Events
+import Ui.Font
+import Ui.Input
+import User exposing (FrontendUser)
 
 
-type Msg
-    = NoOp
+type alias MentionUserDropdown =
+    { charIndex : Int
+    , dropdownIndex : Int
+    , inputElement : { x : Float, y : Float, width : Float, height : Float }
+    }
 
 
-channelTextInput : Id GuildId -> Id ChannelId -> FrontendChannel -> LoggedIn2 -> LocalState -> Element Msg
-channelTextInput guildId channelId channel loggedIn local =
-    let
-        text : String
-        text =
-            case SeqDict.get ( guildId, channelId ) loggedIn.drafts of
-                Just nonempty ->
-                    String.Nonempty.toString nonempty
+type alias MsgConfig msg =
+    { gotPingUserPosition : Result Dom.Error MentionUserDropdown -> msg
+    , textInputGotFocus : msg
+    , textInputLostFocus : msg
+    , typedMessage : String -> msg
+    , pressedSendMessage : msg
+    , pressedArrowInDropdown : Int -> msg
+    , pressedPingUser : Int -> msg
+    }
 
-                Nothing ->
-                    ""
-    in
+
+channelTextInput :
+    MsgConfig msg
+    -> HtmlId
+    -> FrontendChannel
+    -> String
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> Element msg
+channelTextInput msgConfig channelTextInputId channel text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -58,9 +76,9 @@ channelTextInput guildId channelId channel loggedIn local =
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
-            , Html.Events.onFocus (TextInputGotFocus channelTextInputId)
-            , Html.Events.onBlur (TextInputLostFocus channelTextInputId)
-            , case loggedIn.pingUser of
+            , Html.Events.onFocus msgConfig.textInputGotFocus
+            , Html.Events.onBlur msgConfig.textInputLostFocus
+            , case pingUser of
                 Just { dropdownIndex } ->
                     Html.Events.preventDefaultOn
                         "keydown"
@@ -68,14 +86,14 @@ channelTextInput guildId channelId channel loggedIn local =
                             (\key ->
                                 case key of
                                     "ArrowDown" ->
-                                        Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex + 1), True )
+                                        Json.Decode.succeed ( msgConfig.pressedArrowInDropdown (dropdownIndex + 1), True )
 
                                     "ArrowUp" ->
-                                        Json.Decode.succeed ( PressedArrowInDropdown guildId (dropdownIndex - 1), True )
+                                        Json.Decode.succeed ( msgConfig.pressedArrowInDropdown (dropdownIndex - 1), True )
 
                                     "Enter" ->
                                         Json.Decode.succeed
-                                            ( PressedPingUser guildId channelId dropdownIndex, True )
+                                            ( msgConfig.pressedPingUser dropdownIndex, True )
 
                                     _ ->
                                         Json.Decode.fail ""
@@ -92,13 +110,13 @@ channelTextInput guildId channelId channel loggedIn local =
                             |> Json.Decode.andThen
                                 (\( shiftHeld, key ) ->
                                     if key == "Enter" && not shiftHeld then
-                                        Json.Decode.succeed ( PressedSendMessage guildId channelId, True )
+                                        Json.Decode.succeed ( msgConfig.pressedSendMessage, True )
 
                                     else
                                         Json.Decode.fail ""
                                 )
                         )
-            , Html.Events.onInput (TypedMessage guildId channelId)
+            , Html.Events.onInput msgConfig.typedMessage
             , Html.Attributes.value text
             ]
             []
@@ -135,15 +153,13 @@ channelTextInput guildId channelId channel loggedIn local =
 
 
 multilineUpdate :
-    Id GuildId
-    -> Id ChannelId
+    MsgConfig msg
     -> HtmlId
     -> String
     -> String
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> ( LoggedIn2, Command FrontendOnly ToBackend Msg )
-multilineUpdate guildId channelId multilineId text oldText loggedIn model =
+    -> Maybe MentionUserDropdown
+    -> ( Maybe MentionUserDropdown, Command FrontendOnly toMsg msg )
+multilineUpdate msgConfig multilineId text oldText pingUser =
     let
         oldAtCount : Int
         oldAtCount =
@@ -178,49 +194,26 @@ multilineUpdate guildId channelId multilineId text oldText loggedIn model =
             else
                 Nothing
     in
-    handleLocalChange
-        model.time
-        (if loggedIn.typingDebouncer then
-            Local_MemberTyping model.time guildId channelId |> Just
+    ( if oldAtCount > atCount then
+        Nothing
 
-         else
-            Nothing
-        )
-        { loggedIn
-            | pingUser =
-                if oldAtCount > atCount then
-                    Nothing
+      else
+        pingUser
+    , case typedAtSymbol of
+        Just index ->
+            Dom.getElement multilineId
+                |> Task.map
+                    (\{ element } ->
+                        { dropdownIndex = 0
+                        , charIndex = index
+                        , inputElement = element
+                        }
+                    )
+                |> Task.attempt msgConfig.gotPingUserPosition
 
-                else
-                    loggedIn.pingUser
-            , drafts =
-                case String.Nonempty.fromString text of
-                    Just nonempty ->
-                        SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
-
-                    Nothing ->
-                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-            , typingDebouncer = False
-        }
-        (Command.batch
-            [ case typedAtSymbol of
-                Just index ->
-                    Dom.getElement multilineId
-                        |> Task.map
-                            (\{ element } ->
-                                { dropdownIndex = 0
-                                , charIndex = index
-                                , inputElement = element
-                                }
-                            )
-                        |> Task.attempt GotPingUserPosition
-
-                Nothing ->
-                    Command.none
-            , Process.sleep (Duration.seconds 1)
-                |> Task.perform (\() -> DebouncedTyping)
-            ]
-        )
+        Nothing ->
+            Command.none
+    )
 
 
 newAtSymbol : String -> String -> Maybe { index : Int }
@@ -254,3 +247,182 @@ newAtSymbol oldText text =
         { index = 0, foundAtSymbol = Nothing }
         (Diff.diff (String.toList oldText) (String.toList text))
         |> .foundAtSymbol
+
+
+userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList guildId local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
+            let
+                allUsers : SeqDict (Id UserId) FrontendUser
+                allUsers =
+                    LocalState.allUsers local
+            in
+            guild.owner
+                :: SeqDict.keys guild.members
+                |> List.filterMap
+                    (\userId ->
+                        case SeqDict.get userId allUsers of
+                            Just user ->
+                                Just ( userId, user )
+
+                            Nothing ->
+                                Nothing
+                    )
+                |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+
+        Nothing ->
+            []
+
+
+pressedArrowInDropdown : Id GuildId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+pressedArrowInDropdown guildId index maybePingUser local =
+    case maybePingUser of
+        Just pingUser ->
+            { pingUser
+                | dropdownIndex =
+                    if index < 0 then
+                        List.length (userDropdownList guildId local) - 1
+
+                    else if index >= List.length (userDropdownList guildId local) then
+                        0
+
+                    else
+                        index
+            }
+                |> Just
+
+        Nothing ->
+            Nothing
+
+
+pressedPingUser :
+    msg
+    -> Id GuildId
+    -> HtmlId
+    -> Int
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> NonemptyString
+    -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
+pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inputText =
+    case ( pingUser, userDropdownList guildId local |> List.Extra.getAt index ) of
+        ( Just { charIndex }, Just ( _, user ) ) ->
+            let
+                applyText : NonemptyString -> NonemptyString
+                applyText text =
+                    let
+                        name : String
+                        name =
+                            PersonName.toString user.name
+
+                        text2 =
+                            String.Nonempty.toString text
+
+                        followingText : String
+                        followingText =
+                            String.foldl
+                                (\char ( name2, chars ) ->
+                                    case name2 of
+                                        head :: rest ->
+                                            if Char.toLower head == Char.toLower char then
+                                                ( rest, chars )
+
+                                            else
+                                                ( [], char :: chars )
+
+                                        [] ->
+                                            ( [], char :: chars )
+                                )
+                                ( String.toList name, [] )
+                                (String.dropLeft (charIndex + 1) text2)
+                                |> Tuple.second
+                                |> List.reverse
+                                |> String.fromList
+                    in
+                    String.left (charIndex + 1) text2
+                        ++ name
+                        ++ followingText
+                        |> String.Nonempty.fromString
+                        |> Maybe.withDefault text
+            in
+            ( Nothing
+            , applyText inputText
+            , Dom.focus channelTextInputId
+                |> Task.attempt (\_ -> setFocusMsg)
+            )
+
+        _ ->
+            ( Nothing, inputText, Command.none )
+
+
+pingDropdown :
+    MsgConfig msg
+    -> Id GuildId
+    -> LocalState
+    -> (Int -> HtmlId)
+    -> Maybe MentionUserDropdown
+    -> Maybe (Element msg)
+pingDropdown msgConfig guildId localState dropdownButtonId pingUser =
+    case pingUser of
+        Just { dropdownIndex, inputElement } ->
+            Ui.column
+                [ Ui.background MyUi.background2
+                , Ui.borderColor MyUi.border1
+                , Ui.border 1
+                , Ui.Font.color MyUi.font2
+                , Ui.move
+                    { x = round inputElement.x
+                    , y = round (inputElement.y - 400 + 1)
+                    , z = 0
+                    }
+                , Ui.width (Ui.px (round inputElement.width))
+                , Ui.height (Ui.px 400)
+                , Ui.clip
+                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+
+                --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
+                ]
+                [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
+                , Ui.column
+                    []
+                    (List.indexedMap
+                        (\index ( _, user ) ->
+                            Ui.el
+                                [ Ui.Input.button (msgConfig.pressedPingUser index)
+                                , Ui.Events.onMouseDown (msgConfig.pressedPingUser index)
+                                , MyUi.touchPress (msgConfig.pressedPingUser index)
+                                , Ui.id (Dom.idToString (dropdownButtonId index))
+                                , Ui.paddingXY 8 4
+                                , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
+                                , if dropdownIndex == index then
+                                    Ui.background MyUi.background3
+
+                                  else
+                                    Ui.noAttr
+                                , Html.Events.on
+                                    "keydown"
+                                    (Json.Decode.field "key" Json.Decode.string
+                                        |> Json.Decode.andThen
+                                            (\key ->
+                                                if key == "ArrowDown" then
+                                                    Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
+
+                                                else if key == "ArrowUp" then
+                                                    Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
+
+                                                else
+                                                    Json.Decode.fail ""
+                                            )
+                                    )
+                                    |> Ui.htmlAttribute
+                                ]
+                                (Ui.text (PersonName.toString user.name))
+                        )
+                        (userDropdownList guildId localState)
+                    )
+                ]
+                |> Just
+
+        Nothing ->
+            Nothing
