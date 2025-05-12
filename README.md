@@ -1,6 +1,6 @@
 # At Chat
 
-A text chat app based on Discord
+A text chat app similar to Discord
 
 ## How do I login in development?
 
