@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , EditMessage
     , EmojiSelector(..)
     , FrontendModel(..)
     , FrontendMsg(..)
@@ -108,7 +109,12 @@ type alias LoggedIn2 =
     , pingUser : Maybe MentionUserDropdown
     , messageHover : Maybe MessageId
     , showEmojiSelector : EmojiSelector
+    , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     }
+
+
+type alias EditMessage =
+    { messageIndex : Int, text : String }
 
 
 type EmojiSelector
@@ -213,6 +219,11 @@ type FrontendMsg
     | PressedEmojiSelectorEmoji Emoji
     | PressedReactionEmoji_Add Int Emoji
     | PressedReactionEmoji_Remove Int Emoji
+    | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
+    | TypedEditMessage (Id GuildId) (Id ChannelId) String
+    | PressedSendEditMessage (Id GuildId) (Id ChannelId)
+    | PressedArrowInDropdownForEditMessage Int
+    | PressedPingUserForEditMessage Int
 
 
 type alias NewChannelForm =

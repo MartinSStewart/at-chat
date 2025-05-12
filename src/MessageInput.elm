@@ -36,8 +36,8 @@ type alias MentionUserDropdown =
 
 type alias MsgConfig msg =
     { gotPingUserPosition : Result Dom.Error MentionUserDropdown -> msg
-    , textInputGotFocus : msg
-    , textInputLostFocus : msg
+    , textInputGotFocus : HtmlId -> msg
+    , textInputLostFocus : HtmlId -> msg
     , typedMessage : String -> msg
     , pressedSendMessage : msg
     , pressedArrowInDropdown : Int -> msg
@@ -48,12 +48,12 @@ type alias MsgConfig msg =
 channelTextInput :
     MsgConfig msg
     -> HtmlId
-    -> FrontendChannel
+    -> String
     -> String
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element msg
-channelTextInput msgConfig channelTextInputId channel text pingUser local =
+channelTextInput msgConfig channelTextInputId placeholderText text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -76,8 +76,8 @@ channelTextInput msgConfig channelTextInputId channel text pingUser local =
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
-            , Html.Events.onFocus msgConfig.textInputGotFocus
-            , Html.Events.onBlur msgConfig.textInputLostFocus
+            , Html.Events.onFocus (msgConfig.textInputGotFocus channelTextInputId)
+            , Html.Events.onBlur (msgConfig.textInputLostFocus channelTextInputId)
             , case pingUser of
                 Just { dropdownIndex } ->
                     Html.Events.preventDefaultOn
@@ -143,10 +143,7 @@ channelTextInput msgConfig channelTextInputId channel text pingUser local =
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    [ "Write a message in #"
-                        ++ ChannelName.toString channel.name
-                        |> Html.text
-                    ]
+                    [ Html.text placeholderText ]
             )
         ]
         |> Ui.html
