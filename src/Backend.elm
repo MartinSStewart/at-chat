@@ -716,6 +716,42 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SendEditMessage _ messageId newContent ->
+                    asGuildMember
+                        model
+                        sessionId
+                        messageId.guildId
+                        (\userId _ guild ->
+                            case
+                                LocalState.editMessage
+                                    userId
+                                    time
+                                    newContent
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                    guild
+                            of
+                                Ok guild2 ->
+                                    ( { model | guilds = SeqDict.insert messageId.guildId guild2 model.guilds }
+                                    , Command.batch
+                                        [ Local_SendEditMessage time messageId newContent
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastToGuild
+                                            clientId
+                                            (Server_SendEditMessage time userId messageId newContent
+                                                |> ServerChange
+                                            )
+                                            model
+                                        ]
+                                    )
+
+                                Err () ->
+                                    ( model
+                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
@@ -1002,6 +1038,7 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                                             , createdBy = userId
                                             , content = text
                                             , reactions = SeqDict.empty
+                                            , editedAt = Nothing
                                             }
                                         )
                                         channel

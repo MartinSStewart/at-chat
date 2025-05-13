@@ -25,6 +25,7 @@ module MyUi exposing
     , green500
     , heightAttr
     , highlightedBorder
+    , hoverHighlight
     , hoverText
     , inputBackground
     , inputBorder
@@ -749,3 +750,8 @@ highlightedBorder =
 errorColor : Ui.Color
 errorColor =
     Ui.rgb 240 170 180
+
+
+hoverHighlight : Ui.Color
+hoverHighlight =
+    Ui.rgba 255 255 255 0.1

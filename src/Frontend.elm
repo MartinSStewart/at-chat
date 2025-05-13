@@ -33,6 +33,7 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..))
 import LoginForm
+import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MyUi
 import NonemptyDict
@@ -623,23 +624,31 @@ updateLoaded msg model =
                                 )
                                 loggedIn.pingUser
                     in
-                    ( { loggedIn
-                        | pingUser = pingUser
-                        , drafts =
-                            case String.Nonempty.fromString text of
-                                Just nonempty ->
-                                    SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+                    handleLocalChange
+                        model.time
+                        (if loggedIn.typingDebouncer then
+                            Local_MemberTyping model.time guildId channelId |> Just
 
-                                Nothing ->
-                                    SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                        , typingDebouncer = False
-                      }
-                    , Command.batch
-                        [ cmd
-                        , Process.sleep (Duration.seconds 1)
-                            |> Task.perform (\() -> DebouncedTyping)
-                        ]
-                    )
+                         else
+                            Nothing
+                        )
+                        { loggedIn
+                            | pingUser = pingUser
+                            , drafts =
+                                case String.Nonempty.fromString text of
+                                    Just nonempty ->
+                                        SeqDict.insert ( guildId, channelId ) nonempty loggedIn.drafts
+
+                                    Nothing ->
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                            , typingDebouncer = False
+                        }
+                        (Command.batch
+                            [ cmd
+                            , Process.sleep (Duration.seconds 1)
+                                |> Task.perform (\() -> DebouncedTyping)
+                            ]
+                        )
                 )
                 model
 
@@ -1173,17 +1182,29 @@ updateLoaded msg model =
                                         edit.text
                                         loggedIn.pingUser
                             in
-                            ( { loggedIn
-                                | pingUser = pingUser
-                                , editMessage =
-                                    SeqDict.insert
-                                        ( guildId, channelId )
-                                        { edit | text = text }
-                                        loggedIn.editMessage
-                                , typingDebouncer = False
-                              }
-                            , cmd
-                            )
+                            handleLocalChange
+                                model.time
+                                (if loggedIn.typingDebouncer then
+                                    Local_MemberTyping model.time guildId channelId |> Just
+
+                                 else
+                                    Nothing
+                                )
+                                { loggedIn
+                                    | pingUser = pingUser
+                                    , editMessage =
+                                        SeqDict.insert
+                                            ( guildId, channelId )
+                                            { edit | text = text }
+                                            loggedIn.editMessage
+                                    , typingDebouncer = False
+                                }
+                                (Command.batch
+                                    [ cmd
+                                    , Process.sleep (Duration.seconds 1)
+                                        |> Task.perform (\() -> DebouncedTyping)
+                                    ]
+                                )
 
                         Nothing ->
                             ( loggedIn, Command.none )
@@ -1191,7 +1212,44 @@ updateLoaded msg model =
                 model
 
         PressedSendEditMessage guildId channelId ->
-            Debug.todo ""
+            updateLoggedIn
+                (\loggedIn ->
+                    case SeqDict.get ( guildId, channelId ) loggedIn.editMessage of
+                        Just edit ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            handleLocalChange
+                                model.time
+                                (case String.Nonempty.fromString edit.text of
+                                    Just nonempty ->
+                                        Local_SendEditMessage
+                                            model.time
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = edit.messageIndex
+                                            }
+                                            (RichText.fromNonemptyString
+                                                (LocalState.allUsers local)
+                                                nonempty
+                                            )
+                                            |> Just
+
+                                    Nothing ->
+                                        Nothing
+                                )
+                                { loggedIn
+                                    | editMessage =
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
+                                }
+                                Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         PressedArrowInDropdownForEditMessage index ->
             Debug.todo ""
@@ -1282,6 +1340,7 @@ changeUpdate localMsg local =
                                                                     , createdBy = local.userId
                                                                     , content = text
                                                                     , reactions = SeqDict.empty
+                                                                    , editedAt = Nothing
                                                                     }
                                                                 )
                                                                 channel
@@ -1375,6 +1434,24 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
+                Local_SendEditMessage time messageId newContent ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (\guild ->
+                                    LocalState.editMessage
+                                        local.userId
+                                        time
+                                        newContent
+                                        messageId.channelId
+                                        messageId.messageIndex
+                                        guild
+                                        |> Result.withDefault guild
+                                )
+                                local.guilds
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text ->
@@ -1396,6 +1473,7 @@ changeUpdate localMsg local =
                                                                     , createdBy = userId
                                                                     , content = text
                                                                     , reactions = SeqDict.empty
+                                                                    , editedAt = Nothing
                                                                     }
                                                                 )
                                                                 channel
@@ -1502,6 +1580,24 @@ changeUpdate localMsg local =
                                     userId
                                     messageId.channelId
                                     messageId.messageIndex
+                                )
+                                local.guilds
+                    }
+
+                Server_SendEditMessage time userId messageId newContent ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (\guild ->
+                                    LocalState.editMessage
+                                        userId
+                                        time
+                                        newContent
+                                        messageId.channelId
+                                        messageId.messageIndex
+                                        guild
+                                        |> Result.withDefault guild
                                 )
                                 local.guilds
                     }
@@ -1852,6 +1948,9 @@ pendingChangesText localChange =
 
         Local_RemoveReactionEmoji messageId emoji ->
             "Removed reaction emoji"
+
+        Local_SendEditMessage posix messageId nonempty ->
+            "Edit message"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -2365,15 +2464,23 @@ conversationView guildId channelId loggedIn model local channel =
                     (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
                     :: List.indexedMap
                         (\index message ->
+                            let
+                                notHovered : Element FrontendMsg
+                                notHovered =
+                                    Ui.Lazy.lazy5
+                                        messageViewNotHovered
+                                        local.userId
+                                        local.user
+                                        local.otherUsers
+                                        index
+                                        message
+                            in
                             case maybeEditing of
                                 Just editing ->
                                     let
                                         messageId : MessageId
                                         messageId =
-                                            { guildId = guildId
-                                            , channelId = channelId
-                                            , messageIndex = index
-                                            }
+                                            { guildId = guildId, channelId = channelId, messageIndex = index }
                                     in
                                     if editing.messageIndex == index then
                                         messageEditingView
@@ -2384,13 +2491,22 @@ conversationView guildId channelId loggedIn model local channel =
                                             local
 
                                     else
-                                        Ui.Lazy.lazy5
-                                            messageViewNotHovered
-                                            local.userId
-                                            local.user
-                                            local.otherUsers
-                                            index
-                                            message
+                                        case loggedIn.messageHover of
+                                            Just messageHover ->
+                                                if messageId == messageHover then
+                                                    Ui.Lazy.lazy5
+                                                        messageViewHovered
+                                                        local.userId
+                                                        local.user
+                                                        local.otherUsers
+                                                        index
+                                                        message
+
+                                                else
+                                                    notHovered
+
+                                            Nothing ->
+                                                notHovered
 
                                 Nothing ->
                                     case loggedIn.messageHover of
@@ -2413,27 +2529,15 @@ conversationView guildId channelId loggedIn model local channel =
                                                     message
 
                                             else
-                                                Ui.Lazy.lazy5
-                                                    messageViewNotHovered
-                                                    local.userId
-                                                    local.user
-                                                    local.otherUsers
-                                                    index
-                                                    message
+                                                notHovered
 
                                         Nothing ->
-                                            Ui.Lazy.lazy5
-                                                messageViewNotHovered
-                                                local.userId
-                                                local.user
-                                                local.otherUsers
-                                                index
-                                                message
+                                            notHovered
                         )
                         (Array.toList channel.messages)
                 )
             )
-        , MessageInput.channelTextInput
+        , MessageInput.view
             (messageInputConfig guildId channelId)
             channelTextInputId
             ("Write a message in #" ++ ChannelName.toString channel.name)
@@ -2446,7 +2550,7 @@ conversationView guildId channelId loggedIn model local channel =
             )
             loggedIn.pingUser
             local
-            |> Ui.el [ Ui.paddingWith { left = 8, right = 8, top = 0, bottom = 16 } ]
+            |> Ui.el [ Ui.paddingXY 8 0 ]
         , (case
             SeqDict.filter
                 (\_ time ->
@@ -2503,14 +2607,14 @@ messageHoverButton onPress svg =
         (Ui.html svg)
 
 
-reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Element FrontendMsg
+reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element FrontendMsg)
 reactionEmojiView messageIndex currentUserId reactions =
     if SeqDict.isEmpty reactions then
-        Ui.none
+        Nothing
 
     else
         Ui.row
-            [ Ui.paddingWith { left = 16, right = 16, top = 0, bottom = 4 }, Ui.wrap, Ui.spacing 4 ]
+            [ Ui.wrap, Ui.spacing 4 ]
             (List.map
                 (\( emoji, users ) ->
                     let
@@ -2551,6 +2655,7 @@ reactionEmojiView messageIndex currentUserId reactions =
                 )
                 (SeqDict.toList reactions)
             )
+            |> Just
 
 
 messageEditingView :
@@ -2563,17 +2668,43 @@ messageEditingView :
 messageEditingView messageId message editing pingUser local =
     case message of
         UserTextMessage data ->
+            let
+                maybeReactions =
+                    reactionEmojiView messageId.messageIndex local.userId data.reactions
+            in
             Ui.column
                 [ Ui.Font.color MyUi.font1
+                , Ui.background MyUi.hoverHighlight
+                , Ui.paddingWith
+                    { left = 8
+                    , right = 8
+                    , top = 4
+                    , bottom =
+                        if maybeReactions == Nothing then
+                            8
+
+                        else
+                            4
+                    }
+                , Ui.spacing 4
                 ]
-                [ MessageInput.channelTextInput
+                [ Ui.el
+                    [ Ui.Font.bold ]
+                    (case LocalState.getUser data.createdBy local of
+                        Just user ->
+                            Ui.text (PersonName.toString user.name ++ " ")
+
+                        Nothing ->
+                            Ui.text "<missing> "
+                    )
+                , MessageInput.view
                     (editMessageTextInputConfig messageId.guildId messageId.channelId)
                     editMessageTextInputId
                     ""
                     editing.text
                     pingUser
                     local
-                , reactionEmojiView messageId.messageIndex local.userId data.reactions
+                , Maybe.withDefault Ui.none maybeReactions
                 ]
 
         UserJoinedMessage _ _ _ ->
@@ -2647,20 +2778,17 @@ messageView isHovered currentUserId currentUser otherUsers messageIndex message 
                 currentUserId
                 message2.reactions
                 isHovered
-                (Ui.Prose.paragraph
-                    [ Ui.paddingXY 8 10 ]
-                    (Ui.el
-                        [ Ui.Font.bold ]
-                        (case SeqDict.get message2.createdBy allUsers of
-                            Just user ->
-                                Ui.text (PersonName.toString user.name ++ " ")
+                [ Ui.el
+                    [ Ui.Font.bold ]
+                    (case SeqDict.get message2.createdBy allUsers of
+                        Just user ->
+                            Ui.text (PersonName.toString user.name ++ " ")
 
-                            Nothing ->
-                                Ui.text "<missing> "
-                        )
-                        :: RichText.richTextView allUsers message2.content
+                        Nothing ->
+                            Ui.text "<missing> "
                     )
-                )
+                , Ui.Prose.paragraph [] (RichText.richTextView allUsers message2.content)
+                ]
 
         UserJoinedMessage _ userId reactions ->
             messageContainer
@@ -2669,7 +2797,7 @@ messageView isHovered currentUserId currentUser otherUsers messageIndex message 
                 currentUserId
                 reactions
                 isHovered
-                (Ui.Prose.paragraph
+                [ Ui.Prose.paragraph
                     [ Ui.paddingXY 8 10 ]
                     [ Ui.el
                         [ Ui.Font.bold ]
@@ -2684,7 +2812,7 @@ messageView isHovered currentUserId currentUser otherUsers messageIndex message 
                         []
                         (Ui.text " joined!")
                     ]
-                )
+                ]
 
         DeletedMessage ->
             Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
@@ -2696,16 +2824,32 @@ messageContainer :
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
     -> Bool
-    -> Element FrontendMsg
+    -> List (Element FrontendMsg)
     -> Element FrontendMsg
 messageContainer messageIndex canEdit currentUserId reactions isHovered messageContent =
+    let
+        maybeReactions =
+            reactionEmojiView messageIndex currentUserId reactions
+    in
     Ui.column
         ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
          , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
+         , Ui.paddingWith
+            { left = 8
+            , right = 8
+            , top = 4
+            , bottom =
+                if maybeReactions == Nothing then
+                    8
+
+                else
+                    4
+            }
+         , Ui.spacing 4
          ]
             ++ (if isHovered then
-                    [ Ui.background (Ui.rgba 255 255 255 0.1)
+                    [ Ui.background MyUi.hoverHighlight
                     , Ui.row
                         [ Ui.alignRight
                         , Ui.background MyUi.background1
@@ -2729,9 +2873,7 @@ messageContainer messageIndex canEdit currentUserId reactions isHovered messageC
                     []
                )
         )
-        [ messageContent
-        , reactionEmojiView messageIndex currentUserId reactions
-        ]
+        (messageContent ++ Maybe.Extra.toList maybeReactions)
 
 
 channelColumn :

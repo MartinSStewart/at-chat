@@ -1,4 +1,4 @@
-module MessageInput exposing (MentionUserDropdown, MsgConfig, channelTextInput, multilineUpdate, pingDropdown, pressedArrowInDropdown, pressedPingUser)
+module MessageInput exposing (MentionUserDropdown, MsgConfig, multilineUpdate, pingDropdown, pressedArrowInDropdown, pressedPingUser, view)
 
 import ChannelName
 import Diff
@@ -45,15 +45,8 @@ type alias MsgConfig msg =
     }
 
 
-channelTextInput :
-    MsgConfig msg
-    -> HtmlId
-    -> String
-    -> String
-    -> Maybe MentionUserDropdown
-    -> LocalState
-    -> Element msg
-channelTextInput msgConfig channelTextInputId placeholderText text pingUser local =
+view : MsgConfig msg -> HtmlId -> String -> String -> Maybe MentionUserDropdown -> LocalState -> Element msg
+view msgConfig channelTextInputId placeholderText text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -143,10 +136,16 @@ channelTextInput msgConfig channelTextInputId placeholderText text pingUser loca
                         ++ [ Html.text "\n" ]
 
                 Nothing ->
-                    [ Html.text placeholderText ]
+                    [ if placeholderText == "" then
+                        Html.text " "
+
+                      else
+                        Html.text placeholderText
+                    ]
             )
         ]
         |> Ui.html
+        |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 16 } ]
 
 
 multilineUpdate :
