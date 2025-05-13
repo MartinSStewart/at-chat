@@ -2889,7 +2889,7 @@ messageView isHovered isBeingEdited currentUserId currentUser otherUsers message
                 reactions
                 isHovered
                 [ Ui.Prose.paragraph
-                    [ Ui.paddingXY 8 10 ]
+                    [ Ui.paddingXY 0 4 ]
                     [ Ui.el
                         [ Ui.Font.bold ]
                         (case SeqDict.get userId allUsers of
