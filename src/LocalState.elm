@@ -7,6 +7,7 @@ module LocalState exposing
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
+    , LastTypedAt
     , LocalState
     , LogWithTime
     , Message(..)
@@ -26,6 +27,7 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , isAdmin
+    , memberIsEditTyping
     , memberIsTyping
     , removeReactionEmoji
     , updateChannel
@@ -120,7 +122,7 @@ type alias BackendChannel =
     , name : ChannelName
     , messages : Array Message
     , status : ChannelStatus
-    , lastTypedAt : SeqDict (Id UserId) Time.Posix
+    , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     }
 
 
@@ -130,8 +132,12 @@ type alias FrontendChannel =
     , name : ChannelName
     , messages : Array Message
     , isArchived : Maybe Archived
-    , lastTypedAt : SeqDict (Id UserId) Time.Posix
+    , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     }
+
+
+type alias LastTypedAt =
+    { time : Time.Posix, messageIndex : Maybe Int }
 
 
 channelToFrontend : BackendChannel -> Maybe FrontendChannel
@@ -234,8 +240,8 @@ isAdmin { adminData } =
 
 createMessage :
     Message
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) Time.Posix }
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) Time.Posix }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
 createMessage message channel =
     { channel
         | messages = Array.push message channel.messages
@@ -322,17 +328,56 @@ memberIsTyping :
     Id UserId
     -> Time.Posix
     -> Id ChannelId
-    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
-    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) Time.Posix } }
+    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
+    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
 memberIsTyping userId time channelId guild =
     updateChannel
         (\channel ->
             { channel
-                | lastTypedAt = SeqDict.insert userId time channel.lastTypedAt
+                | lastTypedAt =
+                    SeqDict.insert userId { time = time, messageIndex = Nothing } channel.lastTypedAt
             }
         )
         channelId
         guild
+
+
+memberIsEditTyping :
+    Id UserId
+    -> Time.Posix
+    -> Id ChannelId
+    -> Int
+    -> { d | channels : SeqDict (Id ChannelId) { e | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
+    -> Result () { d | channels : SeqDict (Id ChannelId) { e | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
+memberIsEditTyping userId time channelId messageIndex guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            case Array.get messageIndex channel.messages of
+                Just (UserTextMessage data) ->
+                    if data.createdBy == userId then
+                        { guild
+                            | channels =
+                                SeqDict.insert
+                                    channelId
+                                    { channel
+                                        | lastTypedAt =
+                                            SeqDict.insert
+                                                userId
+                                                { time = time, messageIndex = Just messageIndex }
+                                                channel.lastTypedAt
+                                    }
+                                    guild.channels
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                _ ->
+                    Err ()
+
+        Nothing ->
+            Err ()
 
 
 addInvite :
@@ -361,7 +406,7 @@ addMember :
                     (Id ChannelId)
                     { d
                         | messages : Array Message
-                        , lastTypedAt : SeqDict (Id UserId) Time.Posix
+                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
                     }
         }
     ->
@@ -376,7 +421,7 @@ addMember :
                         (Id ChannelId)
                         { d
                             | messages : Array Message
-                            , lastTypedAt : SeqDict (Id UserId) Time.Posix
+                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
                         }
             }
 addMember time userId guild =
@@ -478,8 +523,28 @@ editMessage :
     -> Nonempty RichText
     -> Id ChannelId
     -> Int
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
-    -> Result () { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+    ->
+        { a
+            | channels :
+                SeqDict
+                    (Id ChannelId)
+                    { b
+                        | messages : Array Message
+                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                    }
+        }
+    ->
+        Result
+            ()
+            { a
+                | channels :
+                    SeqDict
+                        (Id ChannelId)
+                        { b
+                            | messages : Array Message
+                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                        }
+            }
 editMessage editedBy time newContent channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
@@ -498,6 +563,22 @@ editMessage editedBy time newContent channelId messageIndex guild =
                                                     |> UserTextMessage
                                                 )
                                                 channel.messages
+                                        , lastTypedAt =
+                                            SeqDict.update
+                                                editedBy
+                                                (\maybe ->
+                                                    case maybe of
+                                                        Just a ->
+                                                            if a.messageIndex == Just messageIndex then
+                                                                Nothing
+
+                                                            else
+                                                                maybe
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                                channel.lastTypedAt
                                     }
                                     guild.channels
                         }

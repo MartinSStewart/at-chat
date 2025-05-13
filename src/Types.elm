@@ -311,6 +311,7 @@ type ServerChange
     | Server_AddReactionEmoji (Id UserId) MessageId Emoji
     | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
+    | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
 
 
 type LocalChange
@@ -326,6 +327,7 @@ type LocalChange
     | Local_AddReactionEmoji MessageId Emoji
     | Local_RemoveReactionEmoji MessageId Emoji
     | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
+    | Local_MemberEditTyping Time.Posix MessageId
 
 
 type ToBeFilledInByBackend a

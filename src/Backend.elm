@@ -752,6 +752,41 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                         )
 
+                Local_MemberEditTyping _ messageId ->
+                    asGuildMember
+                        model
+                        sessionId
+                        messageId.guildId
+                        (\userId _ guild ->
+                            case
+                                LocalState.memberIsEditTyping
+                                    userId
+                                    time
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                    guild
+                            of
+                                Ok guild2 ->
+                                    ( { model | guilds = SeqDict.insert messageId.guildId guild2 model.guilds }
+                                    , Command.batch
+                                        [ Local_MemberEditTyping time messageId
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastToGuild
+                                            clientId
+                                            (Server_MemberEditTyping time userId messageId
+                                                |> ServerChange
+                                            )
+                                            model
+                                        ]
+                                    )
+
+                                Err () ->
+                                    ( model
+                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
