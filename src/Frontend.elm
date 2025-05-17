@@ -1339,9 +1339,7 @@ updateLoaded msg model =
                                                     |> Array.toList
                                                     |> List.indexedMap
                                                         (\index message ->
-                                                            ( messageCount + index - 5
-                                                            , message
-                                                            )
+                                                            ( messageCount + index - 5, message )
                                                         )
                                             )
                                                 |> List.reverse
@@ -1405,6 +1403,17 @@ updateLoaded msg model =
 
                 _ ->
                     ( model, Command.none )
+
+        PressedCloseReplyTo guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | replyTo = SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
+                      }
+                    , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                    )
+                )
+                model
 
 
 messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -2781,10 +2790,10 @@ conversationView guildId channelId loggedIn model local channel =
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
-                            replyToHeader data.createdBy local
+                            replyToHeader guildId channelId data.createdBy local
 
                         Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader userId local
+                            replyToHeader guildId channelId userId local
 
                         Just DeletedMessage ->
                             Ui.none
@@ -2849,8 +2858,8 @@ conversationView guildId channelId loggedIn model local channel =
         ]
 
 
-replyToHeader : Id UserId -> LocalState -> Element msg
-replyToHeader userId local =
+replyToHeader : Id GuildId -> Id ChannelId -> Id UserId -> LocalState -> Element FrontendMsg
+replyToHeader guildId channelId userId local =
     Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
@@ -2858,6 +2867,15 @@ replyToHeader userId local =
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
         , Ui.border 1
         , Ui.borderColor MyUi.border1
+        , Ui.inFront
+            (Ui.el
+                [ Ui.Input.button (PressedCloseReplyTo guildId channelId)
+                , Ui.width (Ui.px 32)
+                , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
+                , Ui.alignRight
+                ]
+                (Ui.html Icons.x)
+            )
         ]
         [ Ui.text "Reply to "
         , case SeqDict.get userId (LocalState.allUsers local) of

@@ -20,6 +20,7 @@ module Icons exposing
     , sortDescending
     , user
     , users
+    , x
     )
 
 import Html exposing (Html)
@@ -155,3 +156,8 @@ pencil =
 reply : Html msg
 reply =
     Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" ] [] ]
+
+
+x : Html msg
+x =
+    Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.width "24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M6 18 18 6M6 6l12 12" ] [] ]

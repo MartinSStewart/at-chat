@@ -227,6 +227,7 @@ type FrontendMsg
     | PressedPingUserForEditMessage (Id GuildId) (Id ChannelId) Int
     | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
     | PressedReply Int
+    | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
 
 
 type alias NewChannelForm =
