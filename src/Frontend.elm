@@ -1193,7 +1193,7 @@ updateLoaded msg model =
                                 Command.none
 
                         EmojiSelectorForMessage ->
-                            Debug.todo ""
+                            ( loggedIn, Command.none )
                 )
                 model
 
