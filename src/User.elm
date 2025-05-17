@@ -11,7 +11,9 @@ module User exposing
 
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import Id exposing (ChannelId, GuildId, Id)
 import PersonName exposing (PersonName)
+import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 
 
@@ -27,6 +29,7 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
+    , lastViewed : SeqDict ( Id GuildId, Id ChannelId ) Int
     }
 
 

@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , EditMessage
     , EmojiSelector(..)
     , FrontendModel(..)
     , FrontendMsg(..)
@@ -16,9 +17,9 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
-    , MentionUserDropdown
     , MessageId
     , NewChannelForm
+    , RevealedSpoilers
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
@@ -30,6 +31,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
@@ -43,7 +45,9 @@ import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
+import MessageInput exposing (MentionUserDropdown)
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
@@ -108,7 +112,21 @@ type alias LoggedIn2 =
     , pingUser : Maybe MentionUserDropdown
     , messageHover : Maybe MessageId
     , showEmojiSelector : EmojiSelector
+    , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
+    , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , revealedSpoilers : Maybe RevealedSpoilers
     }
+
+
+type alias RevealedSpoilers =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    , messages : SeqDict Int (NonemptySet Int)
+    }
+
+
+type alias EditMessage =
+    { messageIndex : Int, text : String }
 
 
 type EmojiSelector
@@ -119,13 +137,6 @@ type EmojiSelector
 
 type alias MessageId =
     { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Int }
-
-
-type alias MentionUserDropdown =
-    { charIndex : Int
-    , dropdownIndex : Int
-    , inputElement : { x : Float, y : Float, width : Float, height : Float }
-    }
 
 
 type alias BackendModel =
@@ -220,6 +231,16 @@ type FrontendMsg
     | PressedEmojiSelectorEmoji Emoji
     | PressedReactionEmoji_Add Int Emoji
     | PressedReactionEmoji_Remove Int Emoji
+    | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
+    | TypedEditMessage (Id GuildId) (Id ChannelId) String
+    | PressedSendEditMessage (Id GuildId) (Id ChannelId)
+    | PressedArrowInDropdownForEditMessage (Id GuildId) Int
+    | PressedPingUserForEditMessage (Id GuildId) (Id ChannelId) Int
+    | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
+    | PressedReply Int
+    | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
+    | PressedSpoiler Int Int
+    | VisibilityChanged Visibility
 
 
 type alias NewChannelForm =
@@ -288,7 +309,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
+    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -306,13 +327,15 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
     | Server_AddReactionEmoji (Id UserId) MessageId Emoji
     | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
+    | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
+    | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
 
 
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
     | Local_UserOverview Pages.UserOverview.Change
-    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
+    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -320,6 +343,8 @@ type LocalChange
     | Local_MemberTyping Time.Posix (Id GuildId) (Id ChannelId)
     | Local_AddReactionEmoji MessageId Emoji
     | Local_RemoveReactionEmoji MessageId Emoji
+    | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
+    | Local_MemberEditTyping Time.Posix MessageId
 
 
 type ToBeFilledInByBackend a

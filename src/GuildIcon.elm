@@ -1,4 +1,4 @@
-module GuildIcon exposing (addGuildButton, showFriendsButton, view)
+module GuildIcon exposing (Mode(..), NotificationType(..), addGuildButton, notificationView, showFriendsButton, view)
 
 import GuildName exposing (GuildName)
 import Icons
@@ -10,33 +10,91 @@ import Ui.Font
 import Ui.Input
 
 
-view : Bool -> FrontendGuild -> Element msg
-view isSelected guild =
+type Mode
+    = Normal NotificationType
+    | IsSelected
+
+
+type NotificationType
+    = NoNotification
+    | NewMessage
+    | NewMessageForUser
+
+
+notificationView : Ui.Color -> NotificationType -> Ui.Attribute msg
+notificationView borderColor notification =
+    case notification of
+        NoNotification ->
+            Ui.noAttr
+
+        NewMessage ->
+            Ui.inFront
+                (Ui.el
+                    [ Ui.rounded 99
+                    , Ui.background (Ui.rgb 255 255 255)
+                    , Ui.width (Ui.px 14)
+                    , Ui.height (Ui.px 14)
+                    , Ui.border 2
+                    , Ui.borderColor borderColor
+                    , Ui.move { x = 0, y = -3, z = 0 }
+                    , Ui.alignRight
+                    ]
+                    Ui.none
+                )
+
+        NewMessageForUser ->
+            Ui.inFront
+                (Ui.el
+                    [ Ui.rounded 99
+                    , Ui.background MyUi.alertColor
+                    , Ui.width (Ui.px 14)
+                    , Ui.height (Ui.px 14)
+                    , Ui.border 2
+                    , Ui.borderColor borderColor
+                    , Ui.move { x = 0, y = -3, z = 0 }
+                    , Ui.alignRight
+                    ]
+                    Ui.none
+                )
+
+
+view : Mode -> FrontendGuild -> Element msg
+view mode guild =
     let
+        name : String
         name =
             GuildName.toString guild.name
     in
     Ui.el
-        [ if isSelected then
-            Ui.noAttr
+        [ case mode of
+            IsSelected ->
+                Ui.noAttr
 
-          else
-            sidePadding
+            _ ->
+                sidePadding
+        , case mode of
+            IsSelected ->
+                Ui.noAttr
+
+            Normal notification ->
+                notificationView MyUi.background1 notification
         ]
         (case guild.icon of
             Just icon ->
                 Ui.image
-                    [ if isSelected then
-                        Ui.noAttr
+                    [ case mode of
+                        IsSelected ->
+                            Ui.noAttr
 
-                      else
-                        Ui.width (Ui.px size)
+                        _ ->
+                            Ui.width (Ui.px size)
                     , Ui.height (Ui.px size)
-                    , if isSelected then
-                        Ui.noAttr
+                    , case mode of
+                        IsSelected ->
+                            Ui.noAttr
 
-                      else
-                        Ui.rounded (round (toFloat size * 8 / 50))
+                        _ ->
+                            Ui.rounded (round (toFloat size * 8 / 50))
                     , Ui.clip
                     , Ui.border 1
                     , Ui.borderColor MyUi.secondaryGrayBorder
@@ -58,22 +116,24 @@ view isSelected guild =
                     |> Ui.el
                         [ Ui.contentCenterX
                         , Ui.contentCenterY
-                        , if isSelected then
-                            Ui.noAttr
+                        , case mode of
+                            IsSelected ->
+                                Ui.noAttr
 
-                          else
-                            Ui.rounded (round (toFloat size * 8 / 50))
+                            _ ->
+                                Ui.rounded (round (toFloat size * 8 / 50))
                         , MyUi.montserrat
                         , Ui.Font.weight 600
                         , Ui.height Ui.fill
                         , Ui.background (Ui.rgb 240 240 240)
                         , Ui.border 1
                         , Ui.borderColor MyUi.secondaryGrayBorder
-                        , if isSelected then
-                            Ui.noAttr
+                        , case mode of
+                            IsSelected ->
+                                Ui.noAttr
 
-                          else
-                            Ui.width (Ui.px size)
+                            _ ->
+                                Ui.width (Ui.px size)
                         , Ui.height (Ui.px size)
                         , Ui.Font.size (round (toFloat size * 18 / 50))
                         , Ui.Font.color (Ui.rgb 20 20 20)
