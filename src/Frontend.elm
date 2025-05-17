@@ -47,7 +47,7 @@ import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -260,6 +260,7 @@ loadedInitHelper time loginData loading =
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
+            , revealedSpoilers = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -388,23 +389,36 @@ routeRequest model =
                         model
 
         GuildRoute guildId channelRoute ->
+            let
+                model2 : LoadedFrontend
+                model2 =
+                    { model
+                        | loginStatus =
+                            case model.loginStatus of
+                                LoggedIn loggedIn ->
+                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+
+                                NotLoggedIn _ ->
+                                    model.loginStatus
+                    }
+            in
             case channelRoute of
                 ChannelRoute _ ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
                 NewChannelRoute ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
                 EditChannelRoute _ ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
                 InviteLinkCreatorRoute ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
                 JoinRoute inviteLinkId ->
-                    case model.loginStatus of
+                    case model2.loginStatus of
                         NotLoggedIn notLoggedIn ->
-                            ( { model
+                            ( { model2
                                 | loginStatus =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
@@ -417,13 +431,13 @@ routeRequest model =
                                 local =
                                     Local.model loggedIn.localState
                             in
-                            ( model
+                            ( model2
                             , Command.batch
                                 [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
                                 , case SeqDict.get guildId local.guilds of
                                     Just guild ->
                                         Route.replace
-                                            model.navigationKey
+                                            model2.navigationKey
                                             (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
                                     Nothing ->
@@ -1414,6 +1428,59 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        PressedSpoiler messageIndex spoilerIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                revealedSpoilers : RevealedSpoilers
+                                revealedSpoilers =
+                                    case loggedIn.revealedSpoilers of
+                                        Just a ->
+                                            if a.guildId == guildId && a.channelId == channelId then
+                                                a
+
+                                            else
+                                                { guildId = guildId
+                                                , channelId = channelId
+                                                , messages = SeqDict.empty
+                                                }
+
+                                        Nothing ->
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messages = SeqDict.empty
+                                            }
+                            in
+                            ( { loggedIn
+                                | revealedSpoilers =
+                                    Just
+                                        { revealedSpoilers
+                                            | messages =
+                                                SeqDict.update
+                                                    messageIndex
+                                                    (\maybe ->
+                                                        (case maybe of
+                                                            Just revealed ->
+                                                                NonemptySet.insert spoilerIndex revealed
+
+                                                            Nothing ->
+                                                                NonemptySet.singleton spoilerIndex
+                                                        )
+                                                            |> Just
+                                                    )
+                                                    revealedSpoilers.messages
+                                        }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
 
 
 messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -2676,6 +2743,19 @@ conversationView guildId channelId loggedIn model local channel =
 
                 Nothing ->
                     Nothing
+
+        revealedSpoilers : SeqDict Int (NonemptySet Int)
+        revealedSpoilers =
+            case loggedIn.revealedSpoilers of
+                Just revealed ->
+                    if revealed.guildId == guildId && revealed.channelId == channelId then
+                        revealed.messages
+
+                    else
+                        SeqDict.empty
+
+                Nothing ->
+                    SeqDict.empty
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -2738,17 +2818,29 @@ conversationView guildId channelId loggedIn model local channel =
                                     if messageHoverIndex == Just index then
                                         case highlight of
                                             NoHighlight ->
-                                                Ui.Lazy.lazy6
-                                                    messageViewHovered
-                                                    otherUserIsEditing
-                                                    local.userId
-                                                    local.user
-                                                    local.otherUsers
-                                                    index
-                                                    message
+                                                if otherUserIsEditing then
+                                                    Ui.Lazy.lazy6
+                                                        messageViewHoveredAndEdited
+                                                        revealedSpoilers
+                                                        local.userId
+                                                        local.user
+                                                        local.otherUsers
+                                                        index
+                                                        message
+
+                                                else
+                                                    Ui.Lazy.lazy6
+                                                        messageViewHovered
+                                                        revealedSpoilers
+                                                        local.userId
+                                                        local.user
+                                                        local.otherUsers
+                                                        index
+                                                        message
 
                                             _ ->
                                                 messageView
+                                                    revealedSpoilers
                                                     highlight
                                                     True
                                                     otherUserIsEditing
@@ -2761,17 +2853,29 @@ conversationView guildId channelId loggedIn model local channel =
                                     else
                                         case highlight of
                                             NoHighlight ->
-                                                Ui.Lazy.lazy6
-                                                    messageViewNotHovered
-                                                    otherUserIsEditing
-                                                    local.userId
-                                                    local.user
-                                                    local.otherUsers
-                                                    index
-                                                    message
+                                                if otherUserIsEditing then
+                                                    Ui.Lazy.lazy6
+                                                        messageViewNotHoveredAndEdited
+                                                        revealedSpoilers
+                                                        local.userId
+                                                        local.user
+                                                        local.otherUsers
+                                                        index
+                                                        message
+
+                                                else
+                                                    Ui.Lazy.lazy6
+                                                        messageViewNotHovered
+                                                        revealedSpoilers
+                                                        local.userId
+                                                        local.user
+                                                        local.otherUsers
+                                                        index
+                                                        message
 
                                             _ ->
                                                 messageView
+                                                    revealedSpoilers
                                                     highlight
                                                     False
                                                     otherUserIsEditing
@@ -3036,27 +3140,87 @@ editMessageTextInputId =
 
 
 messageViewHovered :
-    Bool
+    SeqDict Int (NonemptySet Int)
     -> Id UserId
     -> BackendUser
     -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewHovered isBeingEdited currentUserId currentUser otherUsers messageIndex message =
-    messageView NoHighlight True isBeingEdited currentUserId currentUser otherUsers messageIndex message
+messageViewHovered revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+    messageView
+        revealedSpoilers
+        NoHighlight
+        True
+        False
+        currentUserId
+        currentUser
+        otherUsers
+        messageIndex
+        message
 
 
 messageViewNotHovered :
-    Bool
+    SeqDict Int (NonemptySet Int)
     -> Id UserId
     -> BackendUser
     -> SeqDict (Id UserId) FrontendUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered isBeingEdited currentUserId currentUser otherUsers messageIndex message =
-    messageView NoHighlight False isBeingEdited currentUserId currentUser otherUsers messageIndex message
+messageViewNotHovered revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+    messageView
+        revealedSpoilers
+        NoHighlight
+        False
+        False
+        currentUserId
+        currentUser
+        otherUsers
+        messageIndex
+        message
+
+
+messageViewHoveredAndEdited :
+    SeqDict Int (NonemptySet Int)
+    -> Id UserId
+    -> BackendUser
+    -> SeqDict (Id UserId) FrontendUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewHoveredAndEdited revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+    messageView
+        revealedSpoilers
+        NoHighlight
+        True
+        True
+        currentUserId
+        currentUser
+        otherUsers
+        messageIndex
+        message
+
+
+messageViewNotHoveredAndEdited :
+    SeqDict Int (NonemptySet Int)
+    -> Id UserId
+    -> BackendUser
+    -> SeqDict (Id UserId) FrontendUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewNotHoveredAndEdited revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+    messageView
+        revealedSpoilers
+        NoHighlight
+        False
+        True
+        currentUserId
+        currentUser
+        otherUsers
+        messageIndex
+        message
 
 
 type HighlightMessage
@@ -3066,7 +3230,8 @@ type HighlightMessage
 
 
 messageView :
-    HighlightMessage
+    SeqDict Int (NonemptySet Int)
+    -> HighlightMessage
     -> Bool
     -> Bool
     -> Id UserId
@@ -3075,7 +3240,7 @@ messageView :
     -> Int
     -> Message
     -> Element FrontendMsg
-messageView highlight isHovered isBeingEdited currentUserId currentUser otherUsers messageIndex message =
+messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId currentUser otherUsers messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -3102,7 +3267,17 @@ messageView highlight isHovered isBeingEdited currentUserId currentUser otherUse
                             Ui.text "<missing> "
                     )
                 , Ui.Prose.paragraph []
-                    (RichText.richTextView allUsers message2.content
+                    (RichText.richTextView
+                        (PressedSpoiler messageIndex)
+                        (case SeqDict.get messageIndex revealedSpoilers of
+                            Just nonempty ->
+                                NonemptySet.toSeqSet nonempty
+
+                            Nothing ->
+                                SeqSet.empty
+                        )
+                        allUsers
+                        message2.content
                         ++ (if isBeingEdited then
                                 [ Ui.el
                                     [ Ui.Font.color MyUi.font3

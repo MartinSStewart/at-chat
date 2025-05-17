@@ -18,9 +18,12 @@ import MyUi
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
+import Ui.Prose
 import Ui.Shadow
 
 
@@ -30,6 +33,7 @@ type RichText
     | Bold (Nonempty RichText)
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
+    | Spoiler (Nonempty RichText)
 
 
 normalTextFromString : String -> Maybe RichText
@@ -71,6 +75,9 @@ toString users nonempty =
 
                 Underline a ->
                     "__" ++ toString users a ++ "__"
+
+                Spoiler a ->
+                    "||" ++ toString users a ++ "||"
         )
         nonempty
         |> List.Nonempty.toList
@@ -123,6 +130,9 @@ normalize nonempty =
 
                 UserMention _ ->
                     List.Nonempty.cons richText nonempty2
+
+                Spoiler a ->
+                    List.Nonempty.cons (Spoiler (normalize a)) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -140,6 +150,9 @@ normalize nonempty =
 
                 Underline a ->
                     Underline (normalize a)
+
+                Spoiler a ->
+                    Spoiler (normalize a)
             )
             []
         )
@@ -151,6 +164,7 @@ type Modifiers
     = IsBold
     | IsItalic
     | IsUnderlined
+    | IsSpoilered
 
 
 modifierToSymbol : Modifiers -> String
@@ -164,6 +178,9 @@ modifierToSymbol modifier =
 
         IsUnderlined ->
             "__"
+
+        IsSpoilered ->
+            "||"
 
 
 type alias LoopState =
@@ -204,6 +221,7 @@ parser users modifiers =
                 , modifierHelper users IsBold Bold state modifiers
                 , modifierHelper users IsUnderlined Underline state modifiers
                 , modifierHelper users IsItalic Italic state modifiers
+                , modifierHelper users IsSpoilered Spoiler state modifiers
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
                     |> Parser.map
@@ -231,7 +249,10 @@ bailOut state modifiers =
             IsUnderlined :: _ ->
                 Array.fromList [ NormalText '_' "_" ]
 
-            _ ->
+            IsSpoilered :: _ ->
+                Array.fromList [ NormalText '|' "|" ]
+
+            [] ->
                 Array.empty
         )
         (Array.append state.rest (parserHelper state))
@@ -323,48 +344,137 @@ parserHelper state =
             Array.empty
 
 
-type alias RichTextState =
-    { italic : Bool, underline : Bool, bold : Bool }
+richTextView :
+    (Int -> msg)
+    -> SeqSet Int
+    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> Nonempty RichText
+    -> List (Element msg)
+richTextView pressedSpoiler revealedSpoilers users nonempty =
+    richTextViewHelper
+        pressedSpoiler
+        0
+        { spoiler = False, underline = False, italic = False, bold = False }
+        revealedSpoilers
+        users
+        nonempty
+        |> Tuple.second
 
 
-richTextView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Element msg)
-richTextView users nonempty =
-    richTextViewHelper { underline = False, italic = False, bold = False } users nonempty
-
-
-richTextViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Element msg)
-richTextViewHelper state allUsers nonempty =
-    List.concatMap
-        (\item ->
+richTextViewHelper :
+    (Int -> msg)
+    -> Int
+    -> RichTextState
+    -> SeqSet Int
+    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> Nonempty RichText
+    -> ( Int, List (Element msg) )
+richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
+    List.foldl
+        (\item ( spoilerIndex2, list ) ->
             case item of
                 UserMention userId ->
-                    [ MyUi.userLabel userId allUsers ]
+                    ( spoilerIndex2, list ++ [ MyUi.userLabel userId allUsers ] )
 
                 NormalText char text ->
-                    [ Ui.el
-                        [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
-                        , Ui.attrIf state.italic Ui.Font.italic
-                        , Ui.attrIf state.underline Ui.Font.italic
-                        , Ui.attrIf state.bold Ui.Font.bold
-                        ]
-                        (Ui.text (String.cons char text))
-                    ]
+                    ( spoilerIndex2
+                    , list
+                        ++ [ Ui.el
+                                [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
+                                , Ui.attrIf state.italic Ui.Font.italic
+                                , Ui.attrIf state.underline Ui.Font.italic
+                                , Ui.attrIf state.bold Ui.Font.bold
+                                , Ui.attrIf state.spoiler (Ui.opacity 0)
+                                ]
+                                (Ui.text (String.cons char text))
+                           ]
+                    )
 
                 Italic nonempty2 ->
-                    richTextViewHelper { state | italic = True } allUsers nonempty2
+                    let
+                        ( spoilerIndex3, list2 ) =
+                            richTextViewHelper
+                                pressedSpoiler
+                                spoilerIndex2
+                                { state | italic = True }
+                                revealedSpoilers
+                                allUsers
+                                nonempty2
+                    in
+                    ( spoilerIndex3, list ++ list2 )
 
                 Underline nonempty2 ->
-                    richTextViewHelper { state | underline = True } allUsers nonempty2
+                    let
+                        ( spoilerIndex3, list2 ) =
+                            richTextViewHelper
+                                pressedSpoiler
+                                spoilerIndex2
+                                { state | underline = True }
+                                revealedSpoilers
+                                allUsers
+                                nonempty2
+                    in
+                    ( spoilerIndex3, list ++ list2 )
 
                 Bold nonempty2 ->
-                    richTextViewHelper { state | bold = True } allUsers nonempty2
+                    let
+                        ( spoilerIndex3, list2 ) =
+                            richTextViewHelper
+                                pressedSpoiler
+                                spoilerIndex2
+                                { state | bold = True }
+                                revealedSpoilers
+                                allUsers
+                                nonempty2
+                    in
+                    ( spoilerIndex3, list ++ list2 )
+
+                Spoiler nonempty2 ->
+                    let
+                        revealed =
+                            SeqSet.member spoilerIndex2 revealedSpoilers
+
+                        -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
+                        ( _, list2 ) =
+                            richTextViewHelper
+                                pressedSpoiler
+                                spoilerIndex2
+                                (if revealed then
+                                    state
+
+                                 else
+                                    { state | spoiler = True }
+                                )
+                                revealedSpoilers
+                                allUsers
+                                nonempty2
+                    in
+                    ( spoilerIndex2 + 1
+                    , list
+                        ++ [ Ui.Prose.paragraph
+                                ([ Ui.paddingXY 4 0
+                                 , Ui.rounded 2
+                                 ]
+                                    ++ (if revealed then
+                                            [ Ui.background MyUi.spoilerRevealedColor ]
+
+                                        else
+                                            [ Ui.Input.button (pressedSpoiler spoilerIndex2)
+                                            , Ui.background MyUi.spoilerColor
+                                            ]
+                                       )
+                                )
+                                list2
+                           ]
+                    )
         )
+        ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
 
 
 textInputView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
 textInputView users nonempty =
-    textInputViewHelper { underline = False, italic = False, bold = False } users nonempty
+    textInputViewHelper { underline = False, italic = False, bold = False, spoiler = False } users nonempty
 
 
 htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
@@ -374,6 +484,10 @@ htmlAttrIf condition attribute =
 
     else
         Html.Attributes.style "" ""
+
+
+type alias RichTextState =
+    { italic : Bool, underline : Bool, bold : Bool, spoiler : Bool }
 
 
 textInputViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
@@ -401,6 +515,7 @@ textInputViewHelper state allUsers nonempty =
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
 
                         --, Html.Attributes.style "display" "inline-block"
                         --, Html.Attributes.style "work-break" "break-all"
@@ -422,9 +537,15 @@ textInputViewHelper state allUsers nonempty =
                     formatText "*"
                         :: textInputViewHelper { state | bold = True } allUsers nonempty2
                         ++ [ formatText "*" ]
+
+                Spoiler nonempty2 ->
+                    formatText "||"
+                        :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
+                        ++ [ formatText "||" ]
         )
         (List.Nonempty.toList nonempty)
 
 
+formatText : String -> Html msg
 formatText text =
-    Html.span [ Html.Attributes.style "color" "rgb(180,180,180" ] [ Html.text text ]
+    Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]

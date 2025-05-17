@@ -49,6 +49,8 @@ module MyUi exposing
     , secondaryGray
     , secondaryGrayBorder
     , splitterColor
+    , spoilerColor
+    , spoilerRevealedColor
     , textLinkColor
     , timeElapsedView
     , touchPress
@@ -779,3 +781,13 @@ hoverAndReplyToColor =
 hoverAndMentionColor : Ui.Color
 hoverAndMentionColor =
     Ui.rgb 203 157 130
+
+
+spoilerColor : Ui.Color
+spoilerColor =
+    Ui.rgb 0 0 0
+
+
+spoilerRevealedColor : Ui.Color
+spoilerRevealedColor =
+    Ui.rgb 30 30 30

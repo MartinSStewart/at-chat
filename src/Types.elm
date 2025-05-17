@@ -19,6 +19,7 @@ module Types exposing
     , LoginTokenData(..)
     , MessageId
     , NewChannelForm
+    , RevealedSpoilers
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
@@ -45,6 +46,7 @@ import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
@@ -111,6 +113,14 @@ type alias LoggedIn2 =
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , revealedSpoilers : Maybe RevealedSpoilers
+    }
+
+
+type alias RevealedSpoilers =
+    { guildId : Id GuildId
+    , channelId : Id ChannelId
+    , messages : SeqDict Int (NonemptySet Int)
     }
 
 
@@ -228,6 +238,7 @@ type FrontendMsg
     | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
     | PressedReply Int
     | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
+    | PressedSpoiler Int Int
 
 
 type alias NewChannelForm =
