@@ -110,6 +110,7 @@ type alias LoggedIn2 =
     , messageHover : Maybe MessageId
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
+    , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     }
 
 
@@ -222,8 +223,10 @@ type FrontendMsg
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage (Id GuildId) (Id ChannelId) String
     | PressedSendEditMessage (Id GuildId) (Id ChannelId)
-    | PressedArrowInDropdownForEditMessage Int
-    | PressedPingUserForEditMessage Int
+    | PressedArrowInDropdownForEditMessage (Id GuildId) Int
+    | PressedPingUserForEditMessage (Id GuildId) (Id ChannelId) Int
+    | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
+    | PressedReply Int
 
 
 type alias NewChannelForm =
@@ -292,7 +295,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
+    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -318,7 +321,7 @@ type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
     | Local_UserOverview Pages.UserOverview.Change
-    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText)
+    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)

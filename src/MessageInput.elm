@@ -1,11 +1,8 @@
-module MessageInput exposing (MentionUserDropdown, MsgConfig, multilineUpdate, pingDropdown, pressedArrowInDropdown, pressedPingUser, view)
+module MessageInput exposing (MentionUserDropdown, MsgConfig, multilineUpdate, pingDropdownView, pressedArrowInDropdown, pressedPingUser, view)
 
-import ChannelName
 import Diff
-import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.Process as Process
 import Effect.Task as Task
 import Html
 import Html.Attributes
@@ -41,6 +38,7 @@ type alias MsgConfig msg =
     , typedMessage : String -> msg
     , pressedSendMessage : msg
     , pressedArrowInDropdown : Int -> msg
+    , pressedArrowUpInEmptyInput : msg
     , pressedPingUser : Int -> msg
     }
 
@@ -102,7 +100,10 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
                             (Json.Decode.field "key" Json.Decode.string)
                             |> Json.Decode.andThen
                                 (\( shiftHeld, key ) ->
-                                    if key == "Enter" && not shiftHeld then
+                                    if key == "ArrowUp" && text == "" then
+                                        Json.Decode.succeed ( msgConfig.pressedArrowUpInEmptyInput, True )
+
+                                    else if key == "Enter" && not shiftHeld then
                                         Json.Decode.succeed ( msgConfig.pressedSendMessage, True )
 
                                     else
@@ -145,7 +146,13 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
             )
         ]
         |> Ui.html
-        |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 16 } ]
+        |> Ui.el
+            [ Ui.paddingWith { left = 3, right = 2, top = 3, bottom = 19 }
+            , Ui.scrollable
+            , Ui.heightMin 0
+            , Ui.heightMax 400
+            , Ui.htmlAttribute (Html.Attributes.style "scrollbar-color" "black")
+            ]
 
 
 multilineUpdate :
@@ -352,14 +359,14 @@ pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inpu
             ( Nothing, inputText, Command.none )
 
 
-pingDropdown :
+pingDropdownView :
     MsgConfig msg
     -> Id GuildId
     -> LocalState
     -> (Int -> HtmlId)
     -> Maybe MentionUserDropdown
     -> Maybe (Element msg)
-pingDropdown msgConfig guildId localState dropdownButtonId pingUser =
+pingDropdownView msgConfig guildId localState dropdownButtonId pingUser =
     case pingUser of
         Just { dropdownIndex, inputElement } ->
             Ui.column

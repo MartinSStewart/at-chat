@@ -520,12 +520,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                         )
 
-                Local_SendMessage _ guildId channelId text ->
+                Local_SendMessage _ guildId channelId text repliedTo ->
                     asGuildMember
                         model2
                         sessionId
                         guildId
-                        (sendMessage model2 time clientId changeId guildId channelId text)
+                        (sendMessage model2 time clientId changeId guildId channelId text repliedTo)
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
@@ -1052,11 +1052,12 @@ sendMessage :
     -> Id GuildId
     -> Id ChannelId
     -> Nonempty RichText
+    -> Maybe Int
     -> Id UserId
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
-sendMessage model time clientId changeId guildId channelId text userId user guild =
+sendMessage model time clientId changeId guildId channelId text repliedTo userId user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             ( { model
@@ -1074,6 +1075,7 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                                             , content = text
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
+                                            , repliedTo = repliedTo
                                             }
                                         )
                                         channel
@@ -1083,11 +1085,11 @@ sendMessage model time clientId changeId guildId channelId text userId user guil
                         model.guilds
               }
             , Command.batch
-                [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text)
+                [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text repliedTo)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuild
                     clientId
-                    (Server_SendMessage userId time guildId channelId text |> ServerChange)
+                    (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
                     model
                 ]
             )

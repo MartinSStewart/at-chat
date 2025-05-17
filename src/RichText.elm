@@ -1,6 +1,7 @@
 module RichText exposing
     ( RichText(..)
     , RichTextState
+    , append
     , fromNonemptyString
     , parser
     , richTextView
@@ -74,6 +75,11 @@ toString users nonempty =
         nonempty
         |> List.Nonempty.toList
         |> String.concat
+
+
+append : Nonempty RichText -> Nonempty RichText -> Nonempty RichText
+append first second =
+    List.Nonempty.append first second |> normalize
 
 
 fromNonemptyString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText

@@ -25,6 +25,8 @@ module MyUi exposing
     , green500
     , heightAttr
     , highlightedBorder
+    , hoverAndMentionColor
+    , hoverAndReplyToColor
     , hoverHighlight
     , hoverText
     , inputBackground
@@ -33,12 +35,14 @@ module MyUi exposing
     , label
     , labelFontColor
     , listToText
+    , mentionColor
     , montserrat
     , noPointerEvents
     , padding
     , placeholderFont
     , primaryButton
     , radioRowWithSeparators
+    , replyToColor
     , rounded
     , row
     , secondaryButton
@@ -755,3 +759,23 @@ errorColor =
 hoverHighlight : Ui.Color
 hoverHighlight =
     Ui.rgba 255 255 255 0.1
+
+
+replyToColor : Ui.Color
+replyToColor =
+    Ui.rgb 69 69 140
+
+
+mentionColor : Ui.Color
+mentionColor =
+    Ui.rgb 180 130 100
+
+
+hoverAndReplyToColor : Ui.Color
+hoverAndReplyToColor =
+    Ui.rgb 84 84 161
+
+
+hoverAndMentionColor : Ui.Color
+hoverAndMentionColor =
+    Ui.rgb 203 157 130

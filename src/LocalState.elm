@@ -36,6 +36,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import Duration
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
@@ -47,7 +48,8 @@ import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import PersonName exposing (PersonName)
-import RichText exposing (RichText)
+import Quantity
+import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -184,6 +186,7 @@ type Message
         , content : Nonempty RichText
         , reactions : SeqDict Emoji (NonemptySet (Id UserId))
         , editedAt : Maybe Time.Posix
+        , repliedTo : Maybe Int
         }
     | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
     | DeletedMessage
@@ -244,7 +247,44 @@ createMessage :
     -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
 createMessage message channel =
     { channel
-        | messages = Array.push message channel.messages
+        | messages =
+            case message of
+                UserTextMessage data ->
+                    let
+                        messageCount : Int
+                        messageCount =
+                            Array.length channel.messages - 1
+                    in
+                    case Array.get messageCount channel.messages of
+                        Just (UserTextMessage previous) ->
+                            if
+                                (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
+                                    && (previous.editedAt == Nothing)
+                                    && (previous.createdBy == data.createdBy)
+                            then
+                                Array.set
+                                    messageCount
+                                    (UserTextMessage
+                                        { previous
+                                            | content =
+                                                RichText.append
+                                                    previous.content
+                                                    (List.Nonempty.cons (NormalText '\n' "") data.content)
+                                        }
+                                    )
+                                    channel.messages
+
+                            else
+                                Array.push message channel.messages
+
+                        _ ->
+                            Array.push message channel.messages
+
+                UserJoinedMessage _ _ _ ->
+                    Array.push message channel.messages
+
+                DeletedMessage ->
+                    Array.push message channel.messages
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
