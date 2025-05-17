@@ -29,6 +29,7 @@ import LocalState exposing (BackendGuild, ChannelStatus(..), JoinGuildError(..),
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
+import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.UserOverview
 import Pagination
@@ -787,6 +788,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                         )
 
+                Local_SetLastViewed guildId channelId messageIndex ->
+                    asUser
+                        model
+                        sessionId
+                        (\userId user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        userId
+                                        { user | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed }
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToUser clientId userId localMsg model
+                                ]
+                            )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
@@ -1083,6 +1104,17 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                                     guild.channels
                         }
                         model.guilds
+                , users =
+                    NonemptyDict.insert
+                        userId
+                        { user
+                            | lastViewed =
+                                SeqDict.insert
+                                    ( guildId, channelId )
+                                    (Array.length channel.messages)
+                                    user.lastViewed
+                        }
+                        model.users
               }
             , Command.batch
                 [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text repliedTo)
@@ -1119,6 +1151,60 @@ broadcastToGuild clientToSkip msg model =
         )
         (SeqDict.toList model.connections)
         |> Command.batch
+
+
+broadcastToUser : ClientId -> Id UserId -> LocalChange -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToUser clientToSkip userId msg model =
+    SeqDict.filterMap
+        (\sessionId otherUserId ->
+            if userId == otherUserId then
+                case SeqDict.get sessionId model.connections of
+                    Just clientIds ->
+                        List.filterMap
+                            (\( otherClientId, _ ) ->
+                                if clientToSkip == otherClientId then
+                                    Nothing
+
+                                else
+                                    ChangeBroadcast (LocalChange userId msg)
+                                        |> Lamdera.sendToFrontend otherClientId
+                                        |> Just
+                            )
+                            (NonemptyDict.toList clientIds)
+                            |> Command.batch
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+
+            else
+                Nothing
+        )
+        model.sessions
+        |> SeqDict.values
+        |> Command.batch
+
+
+
+--    |> SeqDict.keys
+--    |>
+--List.concatMap
+--    (\( _, otherClientIds ) ->
+--        NonemptyDict.keys otherClientIds
+--            |> List.Nonempty.toList
+--            |> List.filterMap
+--                (\otherClientId ->
+--                    if clientToSkip == otherClientId then
+--                        Nothing
+--
+--                    else
+--                        ChangeBroadcast msg
+--                            |> Lamdera.sendToFrontend otherClientId
+--                            |> Just
+--                )
+--    )
+--    (SeqDict.toList model.connections)
+--    |> Command.batch
 
 
 broadcastToOtherAdmins : ClientId -> BackendModel -> LocalMsg -> Command BackendOnly ToFrontend msg

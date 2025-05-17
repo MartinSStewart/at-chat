@@ -345,6 +345,7 @@ type LocalChange
     | Local_RemoveReactionEmoji MessageId Emoji
     | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
     | Local_MemberEditTyping Time.Posix MessageId
+    | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
 
 
 type ToBeFilledInByBackend a

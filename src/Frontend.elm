@@ -990,19 +990,41 @@ updateLoaded msg model =
                                         EmojiSelectorHidden ->
                                             case model.route of
                                                 GuildRoute guildId (ChannelRoute channelId) ->
-                                                    ( if SeqDict.member ( guildId, channelId ) loggedIn.editMessage then
-                                                        { loggedIn
-                                                            | editMessage =
-                                                                SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
-                                                        }
+                                                    let
+                                                        local =
+                                                            Local.model loggedIn.localState
+                                                    in
+                                                    handleLocalChange
+                                                        model.time
+                                                        (case SeqDict.get guildId local.guilds of
+                                                            Just guild ->
+                                                                case SeqDict.get channelId guild.channels of
+                                                                    Just channel ->
+                                                                        Local_SetLastViewed
+                                                                            guildId
+                                                                            channelId
+                                                                            (Array.length channel.messages - 1)
+                                                                            |> Just
 
-                                                      else
-                                                        { loggedIn
-                                                            | replyTo =
-                                                                SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
-                                                        }
-                                                    , setFocus channelTextInputId
-                                                    )
+                                                                    Nothing ->
+                                                                        Nothing
+
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        (if SeqDict.member ( guildId, channelId ) loggedIn.editMessage then
+                                                            { loggedIn
+                                                                | editMessage =
+                                                                    SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
+                                                            }
+
+                                                         else
+                                                            { loggedIn
+                                                                | replyTo =
+                                                                    SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
+                                                            }
+                                                        )
+                                                        (setFocus channelTextInputId)
 
                                                 _ ->
                                                     ( loggedIn, Command.none )
@@ -1576,6 +1598,10 @@ changeUpdate localMsg local =
                         Just guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
+                                    let
+                                        user =
+                                            local.user
+                                    in
                                     { local
                                         | guilds =
                                             SeqDict.insert
@@ -1599,6 +1625,14 @@ changeUpdate localMsg local =
                                                             guild.channels
                                                 }
                                                 local.guilds
+                                        , user =
+                                            { user
+                                                | lastViewed =
+                                                    SeqDict.insert
+                                                        ( guildId, channelId )
+                                                        (Array.length channel.messages)
+                                                        user.lastViewed
+                                            }
                                     }
 
                                 Nothing ->
@@ -1718,6 +1752,19 @@ changeUpdate localMsg local =
                                         |> Result.withDefault guild
                                 )
                                 local.guilds
+                    }
+
+                Local_SetLastViewed guildId channelId messageIndex ->
+                    let
+                        user =
+                            local.user
+                    in
+                    { local
+                        | user =
+                            { user
+                                | lastViewed =
+                                    SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                            }
                     }
 
         ServerChange serverChange ->
@@ -2241,6 +2288,9 @@ pendingChangesText localChange =
         Local_MemberEditTyping posix messageId ->
             "Editing message"
 
+        Local_SetLastViewed id _ int ->
+            "Viewed channel"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -2464,68 +2514,42 @@ channelHasNotifications :
     -> FrontendChannel
     -> NotificationType
 channelHasNotifications currentUserId currentUser guildId channelId channel =
-    case SeqDict.get ( guildId, channelId ) currentUser.lastViewed of
-        Just lastViewed ->
-            let
-                messageCount : Int
-                messageCount =
-                    Array.length channel.messages
-            in
-            Array.slice lastViewed messageCount channel.messages
-                |> Array.toList
-                |> List.foldl
-                    (\message state2 ->
-                        case state2 of
-                            NewMessageForUser ->
-                                state2
+    let
+        lastViewed : Int
+        lastViewed =
+            SeqDict.get ( guildId, channelId ) currentUser.lastViewed |> Maybe.withDefault 0
+    in
+    Array.slice lastViewed (Array.length channel.messages) channel.messages
+        |> Array.toList
+        |> Debug.log "a"
+        |> List.foldl
+            (\message state ->
+                case state of
+                    NewMessageForUser ->
+                        state
 
-                            _ ->
-                                case message of
-                                    UserTextMessage data ->
-                                        if
-                                            (repliedToUserId data channel == Just currentUserId)
-                                                || RichText.mentionsUser currentUserId data.content
-                                        then
-                                            NewMessageForUser
+                    _ ->
+                        case message of
+                            UserTextMessage data ->
+                                if data.createdBy == currentUserId then
+                                    state
 
-                                        else
-                                            NewMessage
+                                else if
+                                    (repliedToUserId data channel == Just currentUserId)
+                                        || RichText.mentionsUser currentUserId data.content
+                                then
+                                    NewMessageForUser
 
-                                    UserJoinedMessage _ _ _ ->
-                                        NewMessage
-
-                                    DeletedMessage ->
-                                        state2
-                    )
-                    NoNotification
-
-        Nothing ->
-            List.foldl
-                (\message state2 ->
-                    case state2 of
-                        NewMessageForUser ->
-                            state2
-
-                        _ ->
-                            case message of
-                                UserTextMessage data ->
-                                    if
-                                        (repliedToUserId data channel == Just currentUserId)
-                                            || RichText.mentionsUser currentUserId data.content
-                                    then
-                                        NewMessageForUser
-
-                                    else
-                                        NewMessage
-
-                                UserJoinedMessage _ _ _ ->
+                                else
                                     NewMessage
 
-                                DeletedMessage ->
-                                    state2
-                )
-                NoNotification
-                (Array.toList channel.messages)
+                            UserJoinedMessage _ _ _ ->
+                                NewMessage
+
+                            DeletedMessage ->
+                                state
+            )
+            NoNotification
 
 
 guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> NotificationType
@@ -3686,9 +3710,10 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                             [ Ui.el
                                 [ channelHasNotifications currentUserId currentUser guildId channelId channel
                                     |> GuildIcon.notificationView MyUi.background2
-                                , Ui.width (Ui.px 16)
+                                , Ui.width (Ui.px 20)
+                                , Ui.paddingWith { left = 0, right = 4, top = 0, bottom = 0 }
                                 ]
-                                (Ui.text "#")
+                                (Ui.html Icons.hashtag)
                             , Ui.text (ChannelName.toString channel.name)
                             ]
                         , if isHover then
