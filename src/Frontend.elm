@@ -98,6 +98,7 @@ subscriptions model =
         [ Effect.Browser.Events.onResize GotWindowSize
         , Time.every Duration.second GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
+        , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , case model of
             Loading _ ->
                 Subscription.none
@@ -135,12 +136,15 @@ init url key =
         , windowSize = ( 1920, 1080 )
         , time = Nothing
         , loginStatus = LoadingData
+        , notificationPermission = Ports.Denied
         }
     , Command.batch
         [ Task.perform GotTime Time.now
         , BrowserNavigation.replaceUrl key (Route.encode route)
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
         , Lamdera.sendToBackend CheckLoginRequest
+        , Ports.loadSounds
+        , Ports.checkNotificationPermission
         ]
     )
 
@@ -175,6 +179,7 @@ initLoadedFrontend loading time loginResult =
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
             , textInputFocus = Nothing
+            , notificationPermission = loading.notificationPermission
             }
 
         ( model2, cmdA ) =
@@ -340,6 +345,9 @@ update msg model =
                 GotWindowSize width height ->
                     ( Loading { loading | windowSize = ( width, height ) }, Command.none )
 
+                CheckedNotificationPermission permission ->
+                    ( Loading { loading | notificationPermission = permission }, Command.none )
+
                 _ ->
                     ( model, Command.none )
 
@@ -480,15 +488,28 @@ updateLoaded msg model =
             case urlRequest of
                 Internal url ->
                     let
+                        route : Route
                         route =
                             Route.decode url
+
+                        notificationRequest : Command FrontendOnly toMsg msg
+                        notificationRequest =
+                            case model.notificationPermission of
+                                Ports.NotAsked ->
+                                    Ports.requestNotificationPermission
+
+                                _ ->
+                                    Command.none
                     in
                     ( model
-                    , if model.route == route then
-                        BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
+                    , Command.batch
+                        [ if model.route == route then
+                            BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
 
-                      else
-                        BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+                          else
+                            BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+                        , notificationRequest
+                        ]
                     )
 
                 External url ->
@@ -595,8 +616,21 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
+            let
+                notificationRequest : Command FrontendOnly toMsg msg
+                notificationRequest =
+                    case model.notificationPermission of
+                        Ports.NotAsked ->
+                            Ports.requestNotificationPermission
+
+                        _ ->
+                            Command.none
+            in
             ( model
-            , BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+            , Command.batch
+                [ BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
+                , notificationRequest
+                ]
             )
 
         UserOverviewMsg userOverviewMsg ->
@@ -1523,6 +1557,9 @@ updateLoaded msg model =
                 Effect.Browser.Events.Hidden ->
                     ( model, Command.none )
 
+        CheckedNotificationPermission notificationPermission ->
+            ( { model | notificationPermission = notificationPermission }, Command.none )
+
 
 setFocus : HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus htmlId =
@@ -1774,6 +1811,10 @@ changeUpdate localMsg local =
                         Just guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
+                                    let
+                                        user =
+                                            local.user
+                                    in
                                     { local
                                         | guilds =
                                             SeqDict.insert
@@ -1797,6 +1838,18 @@ changeUpdate localMsg local =
                                                             guild.channels
                                                 }
                                                 local.guilds
+                                        , user =
+                                            if userId == local.userId then
+                                                { user
+                                                    | lastViewed =
+                                                        SeqDict.insert
+                                                            ( guildId, channelId )
+                                                            (Array.length channel.messages)
+                                                            user.lastViewed
+                                                }
+
+                                            else
+                                                user
                                     }
 
                                 Nothing ->
@@ -2172,6 +2225,9 @@ updateLoadedFromBackend msg model =
                         localState : Local LocalMsg LocalState
                         localState =
                             Local.updateFromBackend changeUpdate Nothing change loggedIn.localState
+
+                        local =
+                            Local.model localState
                     in
                     ( { loggedIn | localState = localState }
                     , case change of
@@ -2186,6 +2242,21 @@ updateLoadedFromBackend msg model =
 
                                 _ ->
                                     Command.none
+
+                        ServerChange (Server_SendMessage userId _ _ _ _ _) ->
+                            if userId == local.userId then
+                                Command.none
+
+                            else
+                                Command.batch
+                                    [ Ports.playSound "pop"
+                                    , case model.notificationPermission of
+                                        Ports.Granted ->
+                                            Ports.showNotification "hello"
+
+                                        _ ->
+                                            Command.none
+                                    ]
 
                         _ ->
                             Command.none
@@ -2521,7 +2592,6 @@ channelHasNotifications currentUserId currentUser guildId channelId channel =
     in
     Array.slice lastViewed (Array.length channel.messages) channel.messages
         |> Array.toList
-        |> Debug.log "a"
         |> List.foldl
             (\message state ->
                 case state of
@@ -2945,8 +3015,8 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                 helper =
                     if lastViewedIndex == index - 1 then
                         [ Ui.el
-                            [ Ui.height (Ui.px 1)
-                            , Ui.background MyUi.alertColor
+                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                            , Ui.borderColor MyUi.alertColor
                             , Ui.inFront
                                 (Ui.el
                                     [ Ui.Font.color MyUi.font1

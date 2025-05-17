@@ -1,8 +1,16 @@
 port module Ports exposing
     ( CropImageDataResponse
+    , NotificationPermission(..)
+    , checkNotificationPermission
+    , checkNotificationPermissionResponse
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , loadSounds
+    , playSound
+    , requestNotificationPermission
+    , showNotification
+    , soundsLoaded
     , textInputSelectAll
     )
 
@@ -17,10 +25,97 @@ import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 
 
+port load_sounds_to_js : Json.Encode.Value -> Cmd msg
+
+
+port load_sounds_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port play_sound : Json.Encode.Value -> Cmd msg
+
+
 port copy_to_clipboard_to_js : Json.Encode.Value -> Cmd msg
 
 
 port text_input_select_all_to_js : Json.Encode.Value -> Cmd msg
+
+
+port show_notification : Json.Encode.Value -> Cmd msg
+
+
+port check_notification_permission_to_js : Json.Encode.Value -> Cmd msg
+
+
+port check_notification_permission_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port request_notification_permission : Json.Encode.Value -> Cmd msg
+
+
+requestNotificationPermission : Command FrontendOnly toMsg msg
+requestNotificationPermission =
+    Command.sendToJs "request_notification_permission" request_notification_permission Json.Encode.null
+
+
+checkNotificationPermission : Command FrontendOnly toMsg msg
+checkNotificationPermission =
+    Command.sendToJs "check_notification_permission_to_js" check_notification_permission_to_js Json.Encode.null
+
+
+type NotificationPermission
+    = NotAsked
+    | Denied
+    | Granted
+
+
+checkNotificationPermissionResponse : (NotificationPermission -> msg) -> Subscription FrontendOnly msg
+checkNotificationPermissionResponse msg =
+    Subscription.fromJs
+        "check_notification_permission_from_js"
+        check_notification_permission_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map
+                    (\text ->
+                        case text of
+                            "granted" ->
+                                Granted
+
+                            "denied" ->
+                                Denied
+
+                            _ ->
+                                NotAsked
+                    )
+                    Json.Decode.string
+                )
+                json
+                |> Result.withDefault NotAsked
+                |> msg
+        )
+
+
+showNotification : String -> Command FrontendOnly toMsg msg
+showNotification text =
+    Command.sendToJs "show_notification" show_notification (Json.Encode.string text)
+
+
+loadSounds : Command FrontendOnly toMsg msg
+loadSounds =
+    Command.sendToJs "load_sounds_to_js" load_sounds_to_js Json.Encode.null
+
+
+soundsLoaded : msg -> Subscription FrontendOnly msg
+soundsLoaded msg =
+    Subscription.fromJs
+        "load_sounds_from_js"
+        load_sounds_from_js
+        (\_ -> msg)
+
+
+playSound : String -> Command FrontendOnly toMsg msg
+playSound name =
+    Command.sendToJs "play_sound" play_sound (Json.Encode.string name)
 
 
 textInputSelectAll : HtmlId -> Command FrontendOnly toMsg msg

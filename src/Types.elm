@@ -51,6 +51,7 @@ import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
+import Ports exposing (NotificationPermission)
 import Postmark
 import RichText exposing (RichText)
 import Route exposing (Route)
@@ -74,6 +75,7 @@ type alias LoadingFrontend =
     , windowSize : ( Int, Int )
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
+    , notificationPermission : NotificationPermission
     }
 
 
@@ -92,6 +94,7 @@ type alias LoadedFrontend =
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     , textInputFocus : Maybe HtmlId
+    , notificationPermission : NotificationPermission
     }
 
 
@@ -241,6 +244,7 @@ type FrontendMsg
     | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
+    | CheckedNotificationPermission NotificationPermission
 
 
 type alias NewChannelForm =

@@ -1,5 +1,80 @@
+async function loadAudio(url, context, sounds) {
+    try {
+        const response = await fetch("/" + url + ".mp3");
+        const responseBuffer = await response.arrayBuffer();
+        sounds[url] = await context.decodeAudioData(responseBuffer);
+    } catch (error) {
+        console.log(error);
+        sounds[url] = null;
+    }
+}
+
+// Copied from here https://developer.mozilla.org/en-US/docs/Web/API/Notification
+function notifyMe() {
+  if (!("Notification" in window)) {
+    // Check if the browser supports notifications
+    alert("This browser does not support desktop notification");
+  } else if (Notification.permission === "granted") {
+    // Check whether notification permissions have already been granted;
+    // if so, create a notification
+    const notification = new Notification("Hi there!");
+    // …
+  } else if (Notification.permission !== "denied") {
+    // We need to ask the user for permission
+    Notification.requestPermission().then((permission) => {
+      // If the user accepts, let's create a notification
+      if (permission === "granted") {
+        const notification = new Notification("Hi there!");
+        // …
+      }
+    });
+  }
+
+  // At last, if the user has denied notifications, and you
+  // want to be respectful there is no need to bother them anymore.
+}
+
+
 exports.init = async function init(app)
 {
+    let context = null;
+    let sounds = {};
+    app.ports.load_sounds_to_js.subscribe((a) => {
+        context = new AudioContext();
+        loadAudio("pop", context, sounds);
+        //app.ports.load_sounds_from_js.send(null);
+    });
+    app.ports.play_sound.subscribe((a) => {
+        const source = context.createBufferSource();
+        if (sounds[a]) {
+            source.buffer = sounds[a];
+            source.connect(context.destination);
+            source.start(0);
+        }
+    });
+
+    app.ports.request_notification_permission.subscribe((a) => {
+        console.log("request");
+        Notification.requestPermission().then((permission) => {
+            console.log(permission);
+          if (permission === "granted") {
+            console.log("granted");
+            const notification = new Notification("Hi there!");
+          }
+          app.ports.check_notification_permission_from_js.send(permission);
+        });
+    })
+
+    app.ports.check_notification_permission_to_js.subscribe((a) => {
+        console.log(Notification.permission);
+        app.ports.check_notification_permission_from_js.send(Notification.permission);
+    });
+
+    app.ports.show_notification.subscribe((a) => {
+        const notification = new Notification('To do list', { body: "Test" });
+        console.log(notification);
+    });
+
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
 
     app.ports.text_input_select_all_to_js.subscribe(htmlId =>
