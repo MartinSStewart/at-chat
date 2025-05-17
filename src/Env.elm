@@ -43,8 +43,3 @@ contactEmail =
 noReplyEmailAddress : EmailAddress
 noReplyEmailAddress =
     Unsafe.emailAddress "no-reply@email.com"
-
-
-companyName : String
-companyName =
-    "MyCompany"

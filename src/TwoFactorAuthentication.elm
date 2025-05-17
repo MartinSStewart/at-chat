@@ -35,7 +35,7 @@ type TwoFactorSecret
 getConfig : String -> SecretId TwoFactorSecret -> Result String TOTP.Key.Key
 getConfig user secret =
     TOTP.Key.init
-        { issuer = Env.companyName
+        { issuer = "atchat"
         , user = user
         , rawSecret = SecretId.toString secret
         , outputLength =
