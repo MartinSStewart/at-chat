@@ -155,7 +155,7 @@ pencil =
 
 reply : Html msg
 reply =
-    Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" ] [] ]
+    Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M7.49 12 3.74 8.248m0 0 3.75-3.75m-3.75 3.75h16.5V19.5" ] [] ]
 
 
 x : Html msg

@@ -17,7 +17,7 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
-import GuildIcon
+import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -28,7 +28,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..))
+import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..), UserTextMessageData)
 import LoginForm
 import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
@@ -93,11 +93,22 @@ app_ =
 
 
 subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
-subscriptions _ =
+subscriptions model =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
         , Time.every Duration.second GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
+        , case model of
+            Loading _ ->
+                Subscription.none
+
+            Loaded loaded ->
+                case loaded.route of
+                    GuildRoute _ (ChannelRoute _) ->
+                        Effect.Browser.Events.onVisibilityChange VisibilityChanged
+
+                    _ ->
+                        Subscription.none
         ]
 
 
@@ -404,7 +415,7 @@ routeRequest model =
             in
             case channelRoute of
                 ChannelRoute _ ->
-                    ( model2, Command.none )
+                    ( model2, setFocus channelTextInputId )
 
                 NewChannelRoute ->
                     ( model2, Command.none )
@@ -971,7 +982,7 @@ updateLoaded msg model =
                             case loggedIn.pingUser of
                                 Just _ ->
                                     ( { loggedIn | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
-                                    , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                                    , setFocus channelTextInputId
                                     )
 
                                 Nothing ->
@@ -990,7 +1001,7 @@ updateLoaded msg model =
                                                             | replyTo =
                                                                 SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
                                                         }
-                                                    , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                                                    , setFocus channelTextInputId
                                                     )
 
                                                 _ ->
@@ -1122,7 +1133,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (Local_AddReactionEmoji messageId emoji |> Just)
-                                loggedIn
+                                { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                 Command.none
 
                         EmojiSelectorForMessage ->
@@ -1388,7 +1399,7 @@ updateLoaded msg model =
                                                         }
                                                         loggedIn.editMessage
                                               }
-                                            , Dom.focus editMessageTextInputId |> Task.attempt (\_ -> SetFocus)
+                                            , setFocus editMessageTextInputId
                                             )
 
                                         Nothing ->
@@ -1410,7 +1421,7 @@ updateLoaded msg model =
                             ( { loggedIn
                                 | replyTo = SeqDict.insert ( guildId, channelId ) messageIndex loggedIn.replyTo
                               }
-                            , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                            , setFocus channelTextInputId
                             )
                         )
                         model
@@ -1424,7 +1435,7 @@ updateLoaded msg model =
                     ( { loggedIn
                         | replyTo = SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
                       }
-                    , Dom.focus channelTextInputId |> Task.attempt (\_ -> SetFocus)
+                    , setFocus channelTextInputId
                     )
                 )
                 model
@@ -1481,6 +1492,19 @@ updateLoaded msg model =
 
                 _ ->
                     ( model, Command.none )
+
+        VisibilityChanged visibility ->
+            case visibility of
+                Effect.Browser.Events.Visible ->
+                    ( model, setFocus channelTextInputId )
+
+                Effect.Browser.Events.Hidden ->
+                    ( model, Command.none )
+
+
+setFocus : HtmlId -> Command FrontendOnly toMsg FrontendMsg
+setFocus htmlId =
+    Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
 
 
 messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -2411,8 +2435,121 @@ view model =
     }
 
 
-guildColumn : Route -> SeqDict (Id GuildId) FrontendGuild -> Element FrontendMsg
-guildColumn route guilds =
+repliedToUserId : UserTextMessageData -> FrontendChannel -> Maybe (Id UserId)
+repliedToUserId data channel =
+    case data.repliedTo of
+        Just repliedTo ->
+            case Array.get repliedTo channel.messages of
+                Just (UserTextMessage repliedToData) ->
+                    Just repliedToData.createdBy
+
+                Just (UserJoinedMessage _ joinedUser _) ->
+                    Just joinedUser
+
+                Just DeletedMessage ->
+                    Nothing
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+channelHasNotifications :
+    Id UserId
+    -> BackendUser
+    -> Id GuildId
+    -> Id ChannelId
+    -> FrontendChannel
+    -> NotificationType
+channelHasNotifications currentUserId currentUser guildId channelId channel =
+    case SeqDict.get ( guildId, channelId ) currentUser.lastViewed of
+        Just lastViewed ->
+            let
+                messageCount : Int
+                messageCount =
+                    Array.length channel.messages
+            in
+            Array.slice lastViewed messageCount channel.messages
+                |> Array.toList
+                |> List.foldl
+                    (\message state2 ->
+                        case state2 of
+                            NewMessageForUser ->
+                                state2
+
+                            _ ->
+                                case message of
+                                    UserTextMessage data ->
+                                        if
+                                            (repliedToUserId data channel == Just currentUserId)
+                                                || RichText.mentionsUser currentUserId data.content
+                                        then
+                                            NewMessageForUser
+
+                                        else
+                                            NewMessage
+
+                                    UserJoinedMessage _ _ _ ->
+                                        NewMessage
+
+                                    DeletedMessage ->
+                                        state2
+                    )
+                    NoNotification
+
+        Nothing ->
+            List.foldl
+                (\message state2 ->
+                    case state2 of
+                        NewMessageForUser ->
+                            state2
+
+                        _ ->
+                            case message of
+                                UserTextMessage data ->
+                                    if
+                                        (repliedToUserId data channel == Just currentUserId)
+                                            || RichText.mentionsUser currentUserId data.content
+                                    then
+                                        NewMessageForUser
+
+                                    else
+                                        NewMessage
+
+                                UserJoinedMessage _ _ _ ->
+                                    NewMessage
+
+                                DeletedMessage ->
+                                    state2
+                )
+                NoNotification
+                (Array.toList channel.messages)
+
+
+guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> NotificationType
+guildHasNotifications currentUserId currentUser guildId guild =
+    List.foldl
+        (\( channelId, channel ) state ->
+            case state of
+                NewMessageForUser ->
+                    state
+
+                _ ->
+                    case channelHasNotifications currentUserId currentUser guildId channelId channel of
+                        NoNotification ->
+                            state
+
+                        notification ->
+                            notification
+        )
+        NoNotification
+        (SeqDict.toList guild.channels)
+
+
+guildColumn : Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Element FrontendMsg
+guildColumn route currentUserId currentUser guilds =
     Ui.column
         [ Ui.spacing 4
         , Ui.paddingXY 0 6
@@ -2433,10 +2570,15 @@ guildColumn route guilds =
                         (GuildIcon.view
                             (case route of
                                 GuildRoute a _ ->
-                                    a == guildId
+                                    if a == guildId then
+                                        GuildIcon.IsSelected
+
+                                    else
+                                        guildHasNotifications currentUserId currentUser guildId guild
+                                            |> GuildIcon.Normal
 
                                 _ ->
-                                    False
+                                    guildHasNotifications currentUserId currentUser guildId guild |> GuildIcon.Normal
                             )
                             guild
                         )
@@ -2456,7 +2598,7 @@ homePageLoggedInView model local =
             [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
             [ Ui.row
                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                [ Ui.Lazy.lazy2 guildColumn model.route local.guilds
+                [ Ui.Lazy.lazy4 guildColumn model.route local.userId local.user local.guilds
                 , friendsColumn local
                 ]
             , loggedInAsView local
@@ -2484,13 +2626,7 @@ loggedInAsView local =
         ]
 
 
-guildView :
-    LoadedFrontend
-    -> Id GuildId
-    -> ChannelRoute
-    -> LoggedIn2
-    -> LocalState
-    -> Element FrontendMsg
+guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
     case SeqDict.get guildId local.guilds of
         Just guild ->
@@ -2500,10 +2636,11 @@ guildView model guildId channelRoute loggedIn local =
                     [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                     [ Ui.row
                         [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                        [ Ui.Lazy.lazy2 guildColumn model.route local.guilds
-                        , Ui.Lazy.lazy5
+                        [ Ui.Lazy.lazy4 guildColumn model.route local.userId local.user local.guilds
+                        , Ui.Lazy.lazy6
                             channelColumn
                             local.userId
+                            local.user
                             guildId
                             guild
                             channelRoute
@@ -2690,25 +2827,16 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-conversationView :
+conversationViewHelper :
     Id GuildId
     -> Id ChannelId
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> LocalState
     -> FrontendChannel
-    -> Element FrontendMsg
-conversationView guildId channelId loggedIn model local channel =
+    -> LoggedIn2
+    -> LocalState
+    -> LoadedFrontend
+    -> List (Element FrontendMsg)
+conversationViewHelper guildId channelId channel loggedIn local model =
     let
-        userIdToName : Id UserId -> String
-        userIdToName userId =
-            case SeqDict.get userId local.otherUsers of
-                Just user ->
-                    PersonName.toString user.name
-
-                Nothing ->
-                    "<missing>"
-
         maybeEditing : Maybe EditMessage
         maybeEditing =
             SeqDict.get ( guildId, channelId ) loggedIn.editMessage
@@ -2756,6 +2884,175 @@ conversationView guildId channelId loggedIn model local channel =
 
                 Nothing ->
                     SeqDict.empty
+
+        lastViewedIndex : Int
+        lastViewedIndex =
+            SeqDict.get ( guildId, channelId ) local.user.lastViewed |> Maybe.withDefault -1
+    in
+    Array.foldr
+        (\message ( index, list ) ->
+            let
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member index othersEditing
+
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == index then
+                                Just editing
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if replyToIndex == Just index then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                helper : List (Element msg)
+                helper =
+                    if lastViewedIndex == index - 1 then
+                        [ Ui.el
+                            [ Ui.height (Ui.px 1)
+                            , Ui.background MyUi.alertColor
+                            , Ui.inFront
+                                (Ui.el
+                                    [ Ui.Font.color MyUi.font1
+                                    , Ui.background MyUi.alertColor
+                                    , Ui.width Ui.shrink
+                                    , Ui.paddingXY 4 0
+                                    , Ui.alignRight
+                                    , Ui.Font.size 12
+                                    , Ui.Font.bold
+                                    , Ui.height (Ui.px 15)
+                                    , Ui.roundedWith
+                                        { bottomLeft = 4, bottomRight = 0, topLeft = 0, topRight = 0 }
+                                    ]
+                                    (Ui.text "New")
+                                )
+                            ]
+                            Ui.none
+                        ]
+
+                    else
+                        []
+            in
+            ( index - 1
+            , helper
+                ++ (case isEditing of
+                        Just editing ->
+                            messageEditingView
+                                { guildId = guildId, channelId = channelId, messageIndex = index }
+                                message
+                                editing
+                                loggedIn.pingUser
+                                local
+
+                        Nothing ->
+                            if messageHoverIndex == Just index then
+                                case highlight of
+                                    NoHighlight ->
+                                        if otherUserIsEditing then
+                                            Ui.Lazy.lazy6
+                                                messageViewHoveredAndEdited
+                                                revealedSpoilers
+                                                local.userId
+                                                local.user
+                                                local.otherUsers
+                                                index
+                                                message
+
+                                        else
+                                            Ui.Lazy.lazy6
+                                                messageViewHovered
+                                                revealedSpoilers
+                                                local.userId
+                                                local.user
+                                                local.otherUsers
+                                                index
+                                                message
+
+                                    _ ->
+                                        messageView
+                                            revealedSpoilers
+                                            highlight
+                                            True
+                                            otherUserIsEditing
+                                            local.userId
+                                            local.user
+                                            local.otherUsers
+                                            index
+                                            message
+
+                            else
+                                case highlight of
+                                    NoHighlight ->
+                                        if otherUserIsEditing then
+                                            Ui.Lazy.lazy6
+                                                messageViewNotHoveredAndEdited
+                                                revealedSpoilers
+                                                local.userId
+                                                local.user
+                                                local.otherUsers
+                                                index
+                                                message
+
+                                        else
+                                            Ui.Lazy.lazy6
+                                                messageViewNotHovered
+                                                revealedSpoilers
+                                                local.userId
+                                                local.user
+                                                local.otherUsers
+                                                index
+                                                message
+
+                                    _ ->
+                                        messageView
+                                            revealedSpoilers
+                                            highlight
+                                            False
+                                            otherUserIsEditing
+                                            local.userId
+                                            local.user
+                                            local.otherUsers
+                                            index
+                                            message
+                   )
+                :: list
+            )
+        )
+        ( Array.length channel.messages - 1, [] )
+        channel.messages
+        |> Tuple.second
+
+
+conversationView :
+    Id GuildId
+    -> Id ChannelId
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> LocalState
+    -> FrontendChannel
+    -> Element FrontendMsg
+conversationView guildId channelId loggedIn model local channel =
+    let
+        userIdToName : Id UserId -> String
+        userIdToName userId =
+            case SeqDict.get userId local.otherUsers of
+                Just user ->
+                    PersonName.toString user.name
+
+                Nothing ->
+                    "<missing>"
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -2777,115 +3074,7 @@ conversationView guildId channelId loggedIn model local channel =
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
                     (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
-                    :: List.indexedMap
-                        (\index message ->
-                            let
-                                otherUserIsEditing : Bool
-                                otherUserIsEditing =
-                                    SeqSet.member index othersEditing
-
-                                isEditing : Maybe EditMessage
-                                isEditing =
-                                    case maybeEditing of
-                                        Just editing ->
-                                            if editing.messageIndex == index then
-                                                Just editing
-
-                                            else
-                                                Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                highlight : HighlightMessage
-                                highlight =
-                                    if replyToIndex == Just index then
-                                        ReplyToHighlight
-
-                                    else
-                                        NoHighlight
-                            in
-                            case isEditing of
-                                Just editing ->
-                                    messageEditingView
-                                        { guildId = guildId, channelId = channelId, messageIndex = index }
-                                        message
-                                        editing
-                                        loggedIn.pingUser
-                                        local
-
-                                Nothing ->
-                                    if messageHoverIndex == Just index then
-                                        case highlight of
-                                            NoHighlight ->
-                                                if otherUserIsEditing then
-                                                    Ui.Lazy.lazy6
-                                                        messageViewHoveredAndEdited
-                                                        revealedSpoilers
-                                                        local.userId
-                                                        local.user
-                                                        local.otherUsers
-                                                        index
-                                                        message
-
-                                                else
-                                                    Ui.Lazy.lazy6
-                                                        messageViewHovered
-                                                        revealedSpoilers
-                                                        local.userId
-                                                        local.user
-                                                        local.otherUsers
-                                                        index
-                                                        message
-
-                                            _ ->
-                                                messageView
-                                                    revealedSpoilers
-                                                    highlight
-                                                    True
-                                                    otherUserIsEditing
-                                                    local.userId
-                                                    local.user
-                                                    local.otherUsers
-                                                    index
-                                                    message
-
-                                    else
-                                        case highlight of
-                                            NoHighlight ->
-                                                if otherUserIsEditing then
-                                                    Ui.Lazy.lazy6
-                                                        messageViewNotHoveredAndEdited
-                                                        revealedSpoilers
-                                                        local.userId
-                                                        local.user
-                                                        local.otherUsers
-                                                        index
-                                                        message
-
-                                                else
-                                                    Ui.Lazy.lazy6
-                                                        messageViewNotHovered
-                                                        revealedSpoilers
-                                                        local.userId
-                                                        local.user
-                                                        local.otherUsers
-                                                        index
-                                                        message
-
-                                            _ ->
-                                                messageView
-                                                    revealedSpoilers
-                                                    highlight
-                                                    False
-                                                    otherUserIsEditing
-                                                    local.userId
-                                                    local.user
-                                                    local.otherUsers
-                                                    index
-                                                    message
-                        )
-                        (Array.toList channel.messages)
+                    :: conversationViewHelper guildId channelId channel loggedIn local model
                 )
             )
         , Ui.column
@@ -3251,7 +3440,17 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
     case message of
         UserTextMessage message2 ->
             messageContainer
-                highlight
+                (case highlight of
+                    NoHighlight ->
+                        if RichText.mentionsUser currentUserId message2.content then
+                            MentionHighlight
+
+                        else
+                            highlight
+
+                    _ ->
+                        highlight
+                )
                 messageIndex
                 (currentUserId == message2.createdBy)
                 currentUserId
@@ -3410,12 +3609,13 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
 channelColumn :
     Id UserId
+    -> BackendUser
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId )
     -> Element FrontendMsg
-channelColumn currentUserId guildId guild channelRoute channelNameHover =
+channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background MyUi.background2
@@ -3453,6 +3653,7 @@ channelColumn currentUserId guildId guild channelRoute channelNameHover =
                                 _ ->
                                     False
 
+                        isHover : Bool
                         isHover =
                             channelNameHover == Just ( guildId, channelId )
                     in
@@ -3466,7 +3667,7 @@ channelColumn currentUserId guildId guild channelRoute channelNameHover =
                         , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId)
                         , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
                         ]
-                        [ Ui.el
+                        [ Ui.row
                             [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId)))
                             , Ui.paddingWith
                                 { left = 8
@@ -3482,7 +3683,14 @@ channelColumn currentUserId guildId guild channelRoute channelNameHover =
                             , Ui.clipWithEllipsis
                             , MyUi.hoverText (ChannelName.toString channel.name)
                             ]
-                            (Ui.text ("# " ++ ChannelName.toString channel.name))
+                            [ Ui.el
+                                [ channelHasNotifications currentUserId currentUser guildId channelId channel
+                                    |> GuildIcon.notificationView MyUi.background2
+                                , Ui.width (Ui.px 16)
+                                ]
+                                (Ui.text "#")
+                            , Ui.text (ChannelName.toString channel.name)
+                            ]
                         , if isHover then
                             Ui.el
                                 [ Ui.alignRight

@@ -31,6 +31,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
@@ -239,6 +240,7 @@ type FrontendMsg
     | PressedReply Int
     | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
     | PressedSpoiler Int Int
+    | VisibilityChanged Visibility
 
 
 type alias NewChannelForm =

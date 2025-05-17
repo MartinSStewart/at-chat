@@ -1,5 +1,6 @@
 module MyUi exposing
-    ( background1
+    ( alertColor
+    , background1
     , background2
     , background3
     , border1
@@ -770,7 +771,7 @@ replyToColor =
 
 mentionColor : Ui.Color
 mentionColor =
-    Ui.rgb 180 130 100
+    Ui.rgb 130 109 100
 
 
 hoverAndReplyToColor : Ui.Color
@@ -780,7 +781,7 @@ hoverAndReplyToColor =
 
 hoverAndMentionColor : Ui.Color
 hoverAndMentionColor =
-    Ui.rgb 203 157 130
+    Ui.rgb 156 132 130
 
 
 spoilerColor : Ui.Color
@@ -791,3 +792,8 @@ spoilerColor =
 spoilerRevealedColor : Ui.Color
 spoilerRevealedColor =
     Ui.rgb 30 30 30
+
+
+alertColor : Ui.Color
+alertColor =
+    Ui.rgb 255 10 40

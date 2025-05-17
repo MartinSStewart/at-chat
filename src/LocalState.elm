@@ -11,6 +11,7 @@ module LocalState exposing
     , LocalState
     , LogWithTime
     , Message(..)
+    , UserTextMessageData
     , addInvite
     , addMember
     , addReactionEmoji
@@ -180,16 +181,19 @@ type ChannelStatus
 
 
 type Message
-    = UserTextMessage
-        { createdAt : Time.Posix
-        , createdBy : Id UserId
-        , content : Nonempty RichText
-        , reactions : SeqDict Emoji (NonemptySet (Id UserId))
-        , editedAt : Maybe Time.Posix
-        , repliedTo : Maybe Int
-        }
+    = UserTextMessage UserTextMessageData
     | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
     | DeletedMessage
+
+
+type alias UserTextMessageData =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , content : Nonempty RichText
+    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , editedAt : Maybe Time.Posix
+    , repliedTo : Maybe Int
+    }
 
 
 type AdminStatus
@@ -219,6 +223,7 @@ createNewUser createdAt name email userIsAdmin =
     , createdAt = createdAt
     , emailNotifications = CheckEvery5Minutes
     , lastEmailNotification = createdAt
+    , lastViewed = SeqDict.empty
     }
 
 
@@ -261,6 +266,7 @@ createMessage message channel =
                                 (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
                                     && (previous.editedAt == Nothing)
                                     && (previous.createdBy == data.createdBy)
+                                    && not (SeqDict.isEmpty previous.reactions)
                             then
                                 Array.set
                                     messageCount

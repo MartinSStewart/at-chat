@@ -3,6 +3,7 @@ module RichText exposing
     , RichTextState
     , append
     , fromNonemptyString
+    , mentionsUser
     , parser
     , richTextView
     , textInputView
@@ -344,6 +345,32 @@ parserHelper state =
             Array.empty
 
 
+mentionsUser : Id UserId -> Nonempty RichText -> Bool
+mentionsUser userId nonempty =
+    List.Nonempty.any
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    False
+
+                UserMention mentionedUser ->
+                    userId == mentionedUser
+
+                Bold nonempty2 ->
+                    mentionsUser userId nonempty2
+
+                Italic nonempty2 ->
+                    mentionsUser userId nonempty2
+
+                Underline nonempty2 ->
+                    mentionsUser userId nonempty2
+
+                Spoiler nonempty2 ->
+                    mentionsUser userId nonempty2
+        )
+        nonempty
+
+
 richTextView :
     (Int -> msg)
     -> SeqSet Int
@@ -452,7 +479,7 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
                     ( spoilerIndex2 + 1
                     , list
                         ++ [ Ui.Prose.paragraph
-                                ([ Ui.paddingXY 4 0
+                                ([ Ui.paddingXY 2 0
                                  , Ui.rounded 2
                                  ]
                                     ++ (if revealed then
