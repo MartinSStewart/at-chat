@@ -771,7 +771,7 @@ replyToColor =
 
 mentionColor : Ui.Color
 mentionColor =
-    Ui.rgb 130 109 100
+    Ui.rgb 130 110 100
 
 
 hoverAndReplyToColor : Ui.Color
