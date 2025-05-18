@@ -2238,13 +2238,7 @@ updateLoadedFromBackend msg model =
                                             , case model.notificationPermission of
                                                 Ports.Granted ->
                                                     Ports.showNotification
-                                                        (case LocalState.getUser userId local of
-                                                            Just user ->
-                                                                PersonName.toString user.name
-
-                                                            Nothing ->
-                                                                "<missing>"
-                                                        )
+                                                        (userToName userId (LocalState.allUsers local))
                                                         (RichText.toString (LocalState.allUsers local) content)
 
                                                 _ ->
@@ -2935,6 +2929,28 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
+repliedToHeader : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg -> Element msg
+repliedToHeader userId allUsers content =
+    Ui.row
+        [ Ui.Font.color MyUi.font1
+        , Ui.Font.size 14
+        , Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 0 }
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px 18)
+            , Ui.move { x = 0, y = 3, z = 0 }
+            ]
+            (Ui.html Icons.reply)
+        , Ui.el
+            [ Ui.Font.color MyUi.font3
+            , Ui.paddingWith { left = 2, right = 6, top = 0, bottom = 0 }
+            , Ui.width Ui.shrink
+            ]
+            (Ui.text (userToName userId allUsers))
+        , content
+        ]
+
+
 conversationViewHelper :
     Id GuildId
     -> Id ChannelId
@@ -2996,6 +3012,10 @@ conversationViewHelper guildId channelId channel loggedIn local model =
         lastViewedIndex : Int
         lastViewedIndex =
             SeqDict.get ( guildId, channelId ) local.user.lastViewed |> Maybe.withDefault -1
+
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -3025,8 +3045,8 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                     else
                         NoHighlight
 
-                helper : List (Element msg)
-                helper =
+                newLine : List (Element msg)
+                newLine =
                     if lastViewedIndex == index - 1 then
                         [ Ui.el
                             [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
@@ -3052,9 +3072,61 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
                     else
                         []
+
+                repliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case Array.get repliedToIndex channel.messages of
+                                        Just repliedToMessage ->
+                                            case repliedToMessage of
+                                                UserTextMessage repliedToData ->
+                                                    [ repliedToHeader
+                                                        repliedToData.createdBy
+                                                        allUsers
+                                                        (Ui.Prose.paragraph
+                                                            []
+                                                            (RichText.view
+                                                                (\_ -> FrontendNoOp)
+                                                                (case SeqDict.get repliedToIndex revealedSpoilers of
+                                                                    Just set ->
+                                                                        NonemptySet.toSeqSet set
+
+                                                                    Nothing ->
+                                                                        SeqSet.empty
+                                                                )
+                                                                allUsers
+                                                                repliedToData.content
+                                                            )
+                                                        )
+                                                    ]
+
+                                                UserJoinedMessage _ userId _ ->
+                                                    [ repliedToHeader
+                                                        userId
+                                                        allUsers
+                                                        (userJoinedContent userId allUsers)
+                                                    ]
+
+                                                DeletedMessage ->
+                                                    []
+
+                                        Nothing ->
+                                            []
+
+                                Nothing ->
+                                    []
+
+                        UserJoinedMessage posix id seqDict ->
+                            []
+
+                        DeletedMessage ->
+                            []
             in
             ( index - 1
-            , helper
+            , newLine
+                ++ repliedTo
                 ++ (case isEditing of
                         Just editing ->
                             messageEditingView
@@ -3264,7 +3336,7 @@ replyToHeader guildId channelId userId local =
     Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
-        , Ui.paddingXY 8 10
+        , Ui.paddingXY 32 10
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
         , Ui.border 1
         , Ui.borderColor MyUi.border1
@@ -3277,14 +3349,11 @@ replyToHeader guildId channelId userId local =
                 ]
                 (Ui.html Icons.x)
             )
+        , Ui.inFront
+            (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
         ]
         [ Ui.text "Reply to "
-        , case SeqDict.get userId (LocalState.allUsers local) of
-            Just user ->
-                Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString user.name))
-
-            Nothing ->
-                Ui.el [ Ui.Font.italic ] (Ui.text "<missing>")
+        , Ui.el [ Ui.Font.bold ] (Ui.text (userToName userId (LocalState.allUsers local)))
         ]
         |> Ui.el [ Ui.paddingXY 3 0, Ui.move { x = 0, y = 4, z = 0 } ]
 
@@ -3386,15 +3455,10 @@ messageEditingView messageId message editing pingUser local =
                     }
                 , Ui.spacing 4
                 ]
-                [ Ui.el
-                    [ Ui.Font.bold, Ui.paddingXY 8 0 ]
-                    (case LocalState.getUser data.createdBy local of
-                        Just user ->
-                            Ui.text (PersonName.toString user.name ++ " ")
-
-                        Nothing ->
-                            Ui.text "<missing> "
-                    )
+                [ userToName data.createdBy (LocalState.allUsers local)
+                    ++ " "
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , MessageInput.view
                     (editMessageTextInputConfig messageId.guildId messageId.channelId)
                     editMessageTextInputId
@@ -3564,15 +3628,10 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
                 currentUserId
                 message2.reactions
                 isHovered
-                [ Ui.el
-                    [ Ui.Font.bold ]
-                    (case SeqDict.get message2.createdBy allUsers of
-                        Just user ->
-                            Ui.text (PersonName.toString user.name ++ " ")
-
-                        Nothing ->
-                            Ui.text "<missing> "
-                    )
+                [ userToName message2.createdBy allUsers
+                    ++ " "
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold ]
                 , Ui.Prose.paragraph []
                     (RichText.view
                         (PressedSpoiler messageIndex)
@@ -3618,25 +3677,33 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
                 currentUserId
                 reactions
                 isHovered
-                [ Ui.Prose.paragraph
-                    [ Ui.paddingXY 0 4 ]
-                    [ Ui.el
-                        [ Ui.Font.bold ]
-                        (case SeqDict.get userId allUsers of
-                            Just user ->
-                                Ui.text (PersonName.toString user.name)
-
-                            Nothing ->
-                                Ui.text "<missing> "
-                        )
-                    , Ui.el
-                        []
-                        (Ui.text " joined!")
-                    ]
-                ]
+                [ userJoinedContent userId allUsers ]
 
         DeletedMessage ->
             Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
+
+
+userJoinedContent : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg
+userJoinedContent userId allUsers =
+    Ui.Prose.paragraph
+        [ Ui.paddingXY 0 4 ]
+        [ userToName userId allUsers
+            |> Ui.text
+            |> Ui.el [ Ui.Font.bold ]
+        , Ui.el
+            []
+            (Ui.text " joined!")
+        ]
+
+
+userToName : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
+userToName userId allUsers =
+    case SeqDict.get userId allUsers of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<missing>"
 
 
 messageContainer :
