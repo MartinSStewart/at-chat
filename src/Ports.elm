@@ -95,9 +95,16 @@ checkNotificationPermissionResponse msg =
         )
 
 
-showNotification : String -> Command FrontendOnly toMsg msg
-showNotification text =
-    Command.sendToJs "show_notification" show_notification (Json.Encode.string text)
+showNotification : String -> String -> Command FrontendOnly toMsg msg
+showNotification title body =
+    Command.sendToJs
+        "show_notification"
+        show_notification
+        (Json.Encode.object
+            [ ( "title", Json.Encode.string title )
+            , ( "body", Json.Encode.string body )
+            ]
+        )
 
 
 loadSounds : Command FrontendOnly toMsg msg

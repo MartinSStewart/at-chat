@@ -97,8 +97,8 @@ adminUser : BackendUser
 adminUser =
     LocalState.createNewUser
         (Time.millisToPosix 0)
-        (Unsafe.personName "Sven Svensson")
-        (Unsafe.emailAddress "sven@email.com")
+        (Unsafe.personName "Martin")
+        (Unsafe.emailAddress "martinsstewart@gmail.com")
         True
 
 
