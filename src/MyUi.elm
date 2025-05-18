@@ -571,12 +571,24 @@ textarea::-moz-selection {
 
 //https://stackoverflow.com/a/54410301
 .disable-scrollbars::-webkit-scrollbar {
-  background: transparent; /* Chrome/Safari/Webkit */
+  background: transparent;
   width: 0px;
 }
 .disable-scrollbars {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none;  /* IE 10+ */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+a:link {
+  color: rgb(176,193,255);
+  text-decoration: none;
+}
+a:hover {
+  color: rgb(176,193,255);
+  text-decoration: underline;
+}
+a:visited {
+  color: rgb(206,193,225);
 }
 """
             )

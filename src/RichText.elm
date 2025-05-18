@@ -5,9 +5,9 @@ module RichText exposing
     , fromNonemptyString
     , mentionsUser
     , parser
-    , richTextView
     , textInputView
     , toString
+    , view
     )
 
 import Array exposing (Array)
@@ -25,7 +25,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
-import Ui.Shadow
+import Url exposing (Protocol(..), Url)
 
 
 type RichText
@@ -35,6 +35,7 @@ type RichText
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
     | Spoiler (Nonempty RichText)
+    | Hyperlink Url.Protocol String
 
 
 normalTextFromString : String -> Maybe RichText
@@ -79,6 +80,9 @@ toString users nonempty =
 
                 Spoiler a ->
                     "||" ++ toString users a ++ "||"
+
+                Hyperlink protocol rest ->
+                    hyperlinkToString protocol rest
         )
         nonempty
         |> List.Nonempty.toList
@@ -134,6 +138,9 @@ normalize nonempty =
 
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
+
+                Hyperlink protocol rest ->
+                    List.Nonempty.cons (Hyperlink protocol rest) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -154,6 +161,9 @@ normalize nonempty =
 
                 Spoiler a ->
                     Spoiler (normalize a)
+
+                Hyperlink protocol rest ->
+                    Hyperlink protocol rest
             )
             []
         )
@@ -223,6 +233,32 @@ parser users modifiers =
                 , modifierHelper users IsUnderlined Underline state modifiers
                 , modifierHelper users IsItalic Italic state modifiers
                 , modifierHelper users IsSpoilered Spoiler state modifiers
+                , Parser.succeed Tuple.pair
+                    |= Parser.oneOf
+                        [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
+                        , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
+                        ]
+                    |= (Parser.chompWhile (\char -> char /= ' ' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
+                            |> Parser.getChompedString
+                       )
+                    |> Parser.map
+                        (\( protocol, rest ) ->
+                            (case Url.fromString ("https://" ++ rest) of
+                                Just url ->
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                    }
+
+                                Nothing ->
+                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    , rest = state.rest
+                                    }
+                            )
+                                |> Loop
+                        )
                 , Parser.chompIf (\_ -> True)
                     |> Parser.getChompedString
                     |> Parser.map
@@ -367,18 +403,21 @@ mentionsUser userId nonempty =
 
                 Spoiler nonempty2 ->
                     mentionsUser userId nonempty2
+
+                Hyperlink _ _ ->
+                    False
         )
         nonempty
 
 
-richTextView :
+view :
     (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> Nonempty RichText
     -> List (Element msg)
-richTextView pressedSpoiler revealedSpoilers users nonempty =
-    richTextViewHelper
+view pressedSpoiler revealedSpoilers users nonempty =
+    viewHelper
         pressedSpoiler
         0
         { spoiler = False, underline = False, italic = False, bold = False }
@@ -388,7 +427,7 @@ richTextView pressedSpoiler revealedSpoilers users nonempty =
         |> Tuple.second
 
 
-richTextViewHelper :
+viewHelper :
     (Int -> msg)
     -> Int
     -> RichTextState
@@ -396,7 +435,7 @@ richTextViewHelper :
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> Nonempty RichText
     -> ( Int, List (Element msg) )
-richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
+viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
     List.foldl
         (\item ( spoilerIndex2, list ) ->
             case item of
@@ -420,7 +459,7 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
                 Italic nonempty2 ->
                     let
                         ( spoilerIndex3, list2 ) =
-                            richTextViewHelper
+                            viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | italic = True }
@@ -433,7 +472,7 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
                 Underline nonempty2 ->
                     let
                         ( spoilerIndex3, list2 ) =
-                            richTextViewHelper
+                            viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | underline = True }
@@ -446,7 +485,7 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
                 Bold nonempty2 ->
                     let
                         ( spoilerIndex3, list2 ) =
-                            richTextViewHelper
+                            viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | bold = True }
@@ -463,7 +502,7 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
                         ( _, list2 ) =
-                            richTextViewHelper
+                            viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
                                 (if revealed then
@@ -492,6 +531,38 @@ richTextViewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers n
                                        )
                                 )
                                 list2
+                           ]
+                    )
+
+                Hyperlink protocol rest ->
+                    let
+                        text : String
+                        text =
+                            hyperlinkToString protocol rest
+                    in
+                    ( spoilerIndex2
+                    , list
+                        ++ [ if state.spoiler then
+                                Html.span
+                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , Html.Attributes.style "opacity" "0"
+                                    ]
+                                    [ Html.text text ]
+                                    |> Ui.html
+
+                             else
+                                Html.a
+                                    [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                    , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , Html.Attributes.href text
+                                    , Html.Attributes.target "_blank"
+                                    , Html.Attributes.rel "noreferrer"
+                                    ]
+                                    [ Html.text text ]
+                                    |> Ui.html
                            ]
                     )
         )
@@ -536,16 +607,12 @@ textInputViewHelper state allUsers nonempty =
                             Html.text ""
                     ]
 
-                --[ MyUi.userLabel userId allUsers ]
                 NormalText char text ->
                     [ Html.span
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                         , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-
-                        --, Html.Attributes.style "display" "inline-block"
-                        --, Html.Attributes.style "work-break" "break-all"
                         ]
                         [ Html.text (String.cons char text) ]
                     ]
@@ -569,8 +636,30 @@ textInputViewHelper state allUsers nonempty =
                     formatText "||"
                         :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
                         ++ [ formatText "||" ]
+
+                Hyperlink protocol rest ->
+                    [ Html.span
+                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+                        , Html.Attributes.style "color" "rgb(66,93,203)"
+                        ]
+                        [ Html.text (hyperlinkToString protocol rest) ]
+                    ]
         )
         (List.Nonempty.toList nonempty)
+
+
+hyperlinkToString protocol rest =
+    (case protocol of
+        Http ->
+            "http://"
+
+        Https ->
+            "https://"
+    )
+        ++ rest
 
 
 formatText : String -> Html msg

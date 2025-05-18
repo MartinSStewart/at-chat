@@ -3574,7 +3574,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
                             Ui.text "<missing> "
                     )
                 , Ui.Prose.paragraph []
-                    (RichText.richTextView
+                    (RichText.view
                         (PressedSpoiler messageIndex)
                         (case SeqDict.get messageIndex revealedSpoilers of
                             Just nonempty ->
