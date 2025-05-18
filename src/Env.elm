@@ -42,4 +42,4 @@ contactEmail =
 
 noReplyEmailAddress : EmailAddress
 noReplyEmailAddress =
-    Unsafe.emailAddress "no-reply@email.com"
+    Unsafe.emailAddress "no-reply@at-chat.app"
