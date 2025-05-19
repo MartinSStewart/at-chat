@@ -98,7 +98,7 @@ adminUser =
     LocalState.createNewUser
         (Time.millisToPosix 0)
         (Unsafe.personName "Martin")
-        (Unsafe.emailAddress "martinsstewart@gmail.com")
+        (Unsafe.emailAddress Env.adminEmail)
         True
 
 

@@ -43,3 +43,8 @@ contactEmail =
 noReplyEmailAddress : EmailAddress
 noReplyEmailAddress =
     Unsafe.emailAddress "no-reply@at-chat.app"
+
+
+adminEmail : String
+adminEmail =
+    "a@a.se"
