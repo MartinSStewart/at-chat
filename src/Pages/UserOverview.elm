@@ -1,6 +1,5 @@
 module Pages.UserOverview exposing
-    ( Change(..)
-    , Config
+    ( Config
     , Model(..)
     , Msg(..)
     , PersonalViewData
@@ -63,10 +62,6 @@ type Msg
     | TypedTwoFactorCode String
 
 
-type Change
-    = EmailNotificationsChange EmailNotifications
-
-
 type ToBackend
     = EnableTwoFactorAuthenticationRequest
     | ConfirmTwoFactorAuthenticationRequest Int
@@ -95,11 +90,11 @@ init twoFactorStatusEnabled maybeUser =
             PublicView
 
 
-update : Msg -> Model -> ( Model, Maybe Change, Command FrontendOnly ToBackend Msg )
+update : Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 update msg model =
     case msg of
         SelectedNotificationFrequency emailNotifications ->
-            ( model, EmailNotificationsChange emailNotifications |> Just, Command.none )
+            ( model, Command.none )
 
         PressedStart2FaSetup ->
             updatePersonal
@@ -107,17 +102,16 @@ update msg model =
                     case personal.twoFactorStatus of
                         TwoFactorNotStarted ->
                             ( { personal | twoFactorStatus = TwoFactorLoading }
-                            , Nothing
                             , Lamdera.sendToBackend EnableTwoFactorAuthenticationRequest
                             )
 
                         _ ->
-                            ( personal, Nothing, Command.none )
+                            ( personal, Command.none )
                 )
                 model
 
         PressedCopyError text ->
-            ( model, Nothing, Ports.copyToClipboard text )
+            ( model, Ports.copyToClipboard text )
 
         TypedTwoFactorCode code ->
             updatePersonal
@@ -133,31 +127,30 @@ update msg model =
                                         { state | attempts = SeqDict.empty }
                             in
                             ( { personal | twoFactorStatus = TwoFactorSetup state2 }
-                            , Nothing
                             , cmd
                             )
 
                         _ ->
-                            ( personal, Nothing, Command.none )
+                            ( personal, Command.none )
                 )
                 model
 
 
 updatePersonal :
-    (PersonalViewData -> ( PersonalViewData, Maybe Change, Command FrontendOnly ToBackend Msg ))
+    (PersonalViewData -> ( PersonalViewData, Command FrontendOnly ToBackend Msg ))
     -> Model
-    -> ( Model, Maybe Change, Command FrontendOnly ToBackend Msg )
+    -> ( Model, Command FrontendOnly ToBackend Msg )
 updatePersonal updateFunc model =
     case model of
         PersonalView personal ->
             let
-                ( data, change, cmd ) =
+                ( data, cmd ) =
                     updateFunc personal
             in
-            ( PersonalView data, change, cmd )
+            ( PersonalView data, cmd )
 
         PublicView ->
-            ( PublicView, Nothing, Command.none )
+            ( PublicView, Command.none )
 
 
 updateFromBackend : ToFrontend -> Model -> Model
@@ -268,7 +261,7 @@ view config userId localState model =
                                                         |> Ui.Input.option a
                                                 )
                                                 User.allEmailNotifications
-                                        , selected = localState.user.emailNotifications |> Just
+                                        , selected = localState.localUser.user.emailNotifications |> Just
                                         , label = emailNotificationLabel.id
                                         }
                                     ]

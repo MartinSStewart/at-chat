@@ -503,24 +503,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model2 time)
 
-                Local_UserOverview userOverviewChange ->
-                    asUser
-                        model2
-                        sessionId
-                        (\userId user ->
-                            case userOverviewChange of
-                                Pages.UserOverview.EmailNotificationsChange emailNotifications ->
-                                    ( { model2
-                                        | users =
-                                            NonemptyDict.insert
-                                                userId
-                                                { user | emailNotifications = emailNotifications }
-                                                model2.users
-                                      }
-                                    , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                    )
-                        )
-
                 Local_SendMessage _ guildId channelId text repliedTo ->
                     asGuildMember
                         model2

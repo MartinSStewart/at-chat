@@ -9,6 +9,7 @@ module LocalState exposing
     , JoinGuildError(..)
     , LastTypedAt
     , LocalState
+    , LocalUser
     , LogWithTime
     , Message(..)
     , UserTextMessageData
@@ -16,6 +17,7 @@ module LocalState exposing
     , addMember
     , addReactionEmoji
     , allUsers
+    , allUsers2
     , channelToFrontend
     , createChannel
     , createChannelFrontend
@@ -54,16 +56,19 @@ import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import String.Nonempty exposing (NonemptyString)
-import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 
 
 type alias LocalState =
-    { userId : Id UserId
-    , adminData : AdminStatus
+    { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , joinGuildError : Maybe JoinGuildError
+    , localUser : LocalUser
+    }
+
+
+type alias LocalUser =
+    { userId : Id UserId
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     }
@@ -229,11 +234,11 @@ createNewUser createdAt name email userIsAdmin =
 
 getUser : Id UserId -> LocalState -> Maybe FrontendUser
 getUser userId local =
-    if local.userId == userId then
-        User.backendToFrontend local.user |> Just
+    if local.localUser.userId == userId then
+        User.backendToFrontend local.localUser.user |> Just
 
     else
-        SeqDict.get userId local.otherUsers
+        SeqDict.get userId local.localUser.otherUsers
 
 
 isAdmin : LocalState -> Bool
@@ -488,7 +493,15 @@ addMember time userId guild =
 
 allUsers : LocalState -> SeqDict (Id UserId) FrontendUser
 allUsers local =
-    SeqDict.insert local.userId (User.backendToFrontendForUser local.user) local.otherUsers
+    allUsers2 local.localUser
+
+
+allUsers2 : LocalUser -> SeqDict (Id UserId) FrontendUser
+allUsers2 localUser =
+    SeqDict.insert
+        localUser.userId
+        (User.backendToFrontendForUser localUser.user)
+        localUser.otherUsers
 
 
 addReactionEmoji :

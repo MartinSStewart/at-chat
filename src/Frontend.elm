@@ -28,7 +28,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, Message(..), UserTextMessageData)
+import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..), UserTextMessageData)
 import LoginForm
 import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
@@ -204,8 +204,7 @@ loadedInitHelper time loginData loading =
     let
         localState : LocalState
         localState =
-            { userId = loginData.userId
-            , adminData =
+            { adminData =
                 case loginData.adminData of
                     IsAdminLoginData adminData ->
                         IsAdmin
@@ -218,8 +217,11 @@ loadedInitHelper time loginData loading =
                         IsNotAdmin
             , guilds = loginData.guilds
             , joinGuildError = Nothing
-            , user = loginData.user
-            , otherUsers = loginData.otherUsers
+            , localUser =
+                { userId = loginData.userId
+                , user = loginData.user
+                , otherUsers = loginData.otherUsers
+                }
             }
 
         localStateContainer : Local LocalMsg LocalState
@@ -232,7 +234,7 @@ loadedInitHelper time loginData loading =
                 IsAdminLoginData _ ->
                     let
                         ( logPagination, paginationCmd ) =
-                            Pagination.init localState.user.lastLogPageViewed
+                            Pagination.init localState.localUser.user.lastLogPageViewed
                     in
                     Pages.Admin.init
                         logPagination
@@ -264,7 +266,7 @@ loadedInitHelper time loginData loading =
             , userOverview =
                 Pages.UserOverview.init
                     loginData.twoFactorAuthenticationEnabled
-                    (Just localState.user)
+                    (Just localState.localUser.user)
                     |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
@@ -398,6 +400,7 @@ routeRequest model =
                         (\loggedIn ->
                             ( loggedIn
                             , Local.model loggedIn.localState
+                                |> .localUser
                                 |> .userId
                                 |> SpecificUserRoute
                                 |> UserOverviewRoute
@@ -643,19 +646,17 @@ updateLoaded msg model =
                                 userId =
                                     case userOverviewData of
                                         PersonalRoute ->
-                                            (Local.model loggedIn.localState).userId
+                                            (Local.model loggedIn.localState).localUser.userId
 
                                         SpecificUserRoute userId2 ->
                                             userId2
 
-                                ( userOverview2, maybeChange, cmd ) =
+                                ( userOverview2, cmd ) =
                                     Pages.UserOverview.update userOverviewMsg (getUserOverview userId loggedIn)
                             in
-                            handleLocalChange
-                                model.time
-                                (Maybe.map Local_UserOverview maybeChange)
-                                { loggedIn | userOverview = SeqDict.insert userId userOverview2 loggedIn.userOverview }
-                                (Command.map UserOverviewToBackend UserOverviewMsg cmd)
+                            ( { loggedIn | userOverview = SeqDict.insert userId userOverview2 loggedIn.userOverview }
+                            , Command.map UserOverviewToBackend UserOverviewMsg cmd
+                            )
 
                         _ ->
                             ( loggedIn, Command.none )
@@ -1421,7 +1422,7 @@ updateLoaded msg model =
                                             (\( index, message ) ->
                                                 case message of
                                                     UserTextMessage data ->
-                                                        if local.userId == data.createdBy then
+                                                        if local.localUser.userId == data.createdBy then
                                                             Just ( index, data.content )
 
                                                         else
@@ -1582,8 +1583,8 @@ getUserOverview userId loggedIn =
             in
             Pages.UserOverview.init
                 Nothing
-                (if userId == localState.userId then
-                    Just localState.user
+                (if userId == localState.localUser.userId then
+                    Just localState.localUser.user
 
                  else
                     Nothing
@@ -1609,23 +1610,15 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_UserOverview userOverviewChange ->
-                    case userOverviewChange of
-                        Pages.UserOverview.EmailNotificationsChange emailNotifications ->
-                            let
-                                user =
-                                    local.user
-                            in
-                            { local
-                                | user = { user | emailNotifications = emailNotifications }
-                            }
-
                 Local_SendMessage createdAt guildId channelId text repliedTo ->
                     case getGuildAndChannel guildId channelId local of
                         Just ( guild, channel ) ->
                             let
                                 user =
-                                    local.user
+                                    local.localUser.user
+
+                                localUser =
+                                    local.localUser
                             in
                             { local
                                 | guilds =
@@ -1638,7 +1631,7 @@ changeUpdate localMsg local =
                                                     (LocalState.createMessage
                                                         (UserTextMessage
                                                             { createdAt = createdAt
-                                                            , createdBy = local.userId
+                                                            , createdBy = local.localUser.userId
                                                             , content = text
                                                             , reactions = SeqDict.empty
                                                             , editedAt = Nothing
@@ -1650,13 +1643,16 @@ changeUpdate localMsg local =
                                                     guild.channels
                                         }
                                         local.guilds
-                                , user =
-                                    { user
-                                        | lastViewed =
-                                            SeqDict.insert
-                                                ( guildId, channelId )
-                                                (Array.length channel.messages)
-                                                user.lastViewed
+                                , localUser =
+                                    { localUser
+                                        | user =
+                                            { user
+                                                | lastViewed =
+                                                    SeqDict.insert
+                                                        ( guildId, channelId )
+                                                        (Array.length channel.messages)
+                                                        user.lastViewed
+                                            }
                                     }
                             }
 
@@ -1668,7 +1664,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.userId channelName)
                                 local.guilds
                     }
 
@@ -1700,7 +1696,7 @@ changeUpdate localMsg local =
                                 | guilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.addInvite inviteLinkId2 local.userId time)
+                                        (LocalState.addInvite inviteLinkId2 local.localUser.userId time)
                                         local.guilds
                             }
 
@@ -1709,7 +1705,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.memberIsTyping local.userId time channelId)
+                                (LocalState.memberIsTyping local.localUser.userId time channelId)
                                 local.guilds
                     }
 
@@ -1720,7 +1716,7 @@ changeUpdate localMsg local =
                                 messageId.guildId
                                 (LocalState.addReactionEmoji
                                     emoji
-                                    local.userId
+                                    local.localUser.userId
                                     messageId.channelId
                                     messageId.messageIndex
                                 )
@@ -1734,7 +1730,7 @@ changeUpdate localMsg local =
                                 messageId.guildId
                                 (LocalState.removeReactionEmoji
                                     emoji
-                                    local.userId
+                                    local.localUser.userId
                                     messageId.channelId
                                     messageId.messageIndex
                                 )
@@ -1748,7 +1744,7 @@ changeUpdate localMsg local =
                                 messageId.guildId
                                 (\guild ->
                                     LocalState.editMessage
-                                        local.userId
+                                        local.localUser.userId
                                         time
                                         newContent
                                         messageId.channelId
@@ -1766,7 +1762,7 @@ changeUpdate localMsg local =
                                 messageId.guildId
                                 (\guild ->
                                     LocalState.memberIsEditTyping
-                                        local.userId
+                                        local.localUser.userId
                                         time
                                         messageId.channelId
                                         messageId.messageIndex
@@ -1779,13 +1775,19 @@ changeUpdate localMsg local =
                 Local_SetLastViewed guildId channelId messageIndex ->
                     let
                         user =
-                            local.user
+                            local.localUser.user
+
+                        localUser =
+                            local.localUser
                     in
                     { local
-                        | user =
-                            { user
-                                | lastViewed =
-                                    SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                        | localUser =
+                            { localUser
+                                | user =
+                                    { user
+                                        | lastViewed =
+                                            SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                                    }
                             }
                     }
 
@@ -1796,7 +1798,10 @@ changeUpdate localMsg local =
                         Just ( guild, channel ) ->
                             let
                                 user =
-                                    local.user
+                                    local.localUser.user
+
+                                localUser =
+                                    local.localUser
                             in
                             { local
                                 | guilds =
@@ -1821,18 +1826,21 @@ changeUpdate localMsg local =
                                                     guild.channels
                                         }
                                         local.guilds
-                                , user =
-                                    if userId == local.userId then
-                                        { user
-                                            | lastViewed =
-                                                SeqDict.insert
-                                                    ( guildId, channelId )
-                                                    (Array.length channel.messages)
-                                                    user.lastViewed
-                                        }
+                                , localUser =
+                                    { localUser
+                                        | user =
+                                            if userId == localUser.userId then
+                                                { user
+                                                    | lastViewed =
+                                                        SeqDict.insert
+                                                            ( guildId, channelId )
+                                                            (Array.length channel.messages)
+                                                            user.lastViewed
+                                                }
 
-                                    else
-                                        user
+                                            else
+                                                user
+                                    }
                             }
 
                         Nothing ->
@@ -1843,7 +1851,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.userId channelName)
                                 local.guilds
                     }
 
@@ -1875,27 +1883,38 @@ changeUpdate localMsg local =
                     }
 
                 Server_MemberJoined time userId guildId user ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
                     { local
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
                                 (\guild -> LocalState.addMember time userId guild |> Result.withDefault guild)
                                 local.guilds
-                        , otherUsers = SeqDict.insert userId user local.otherUsers
+                        , localUser = { localUser | otherUsers = SeqDict.insert userId user localUser.otherUsers }
                     }
 
                 Server_YouJoinedGuildByInvite result ->
                     case result of
                         Ok ok ->
+                            let
+                                localUser =
+                                    local.localUser
+                            in
                             { local
                                 | guilds =
                                     SeqDict.insert ok.guildId ok.guild local.guilds
-                                , otherUsers =
-                                    SeqDict.insert
-                                        ok.guild.owner
-                                        ok.owner
-                                        local.otherUsers
-                                        |> SeqDict.union ok.members
+                                , localUser =
+                                    { localUser
+                                        | otherUsers =
+                                            SeqDict.insert
+                                                ok.guild.owner
+                                                ok.owner
+                                                localUser.otherUsers
+                                                |> SeqDict.union ok.members
+                                    }
                             }
 
                         Err error ->
@@ -1983,7 +2002,7 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
                     Local.update
                         changeUpdate
                         time
-                        (LocalChange (Local.model loggedIn.localState).userId localChange)
+                        (LocalChange (Local.model loggedIn.localState).localUser.userId localChange)
                         loggedIn.localState
             in
             ( { loggedIn | localState = localState2 }
@@ -2184,7 +2203,7 @@ updateLoadedFromBackend msg model =
                     let
                         userId : Id UserId
                         userId =
-                            (Local.model loggedIn.localState).userId
+                            (Local.model loggedIn.localState).localUser.userId
 
                         change : LocalMsg
                         change =
@@ -2231,7 +2250,7 @@ updateLoadedFromBackend msg model =
                                         ((repliedToUserId maybeRepliedTo channel /= Just userId)
                                             || RichText.mentionsUser userId content
                                         )
-                                            && (userId /= local.userId)
+                                            && (userId /= local.localUser.userId)
                                     then
                                         Command.batch
                                             [ Ports.playSound "pop"
@@ -2267,7 +2286,7 @@ updateLoadedFromBackend msg model =
                                 userId =
                                     case userOverviewData of
                                         PersonalRoute ->
-                                            (Local.model loggedIn.localState).userId
+                                            (Local.model loggedIn.localState).localUser.userId
 
                                         SpecificUserRoute userId2 ->
                                             userId2
@@ -2333,9 +2352,6 @@ pendingChangesText localChange =
 
                     else
                         "Disabled email notifications"
-
-        Local_UserOverview _ ->
-            "Changed user profile"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
@@ -2520,7 +2536,7 @@ view model =
                             (\loggedIn local ->
                                 case ( loggedIn.admin, local.adminData ) of
                                     ( Just admin, IsAdmin adminData ) ->
-                                        case NonemptyDict.get local.userId adminData.users of
+                                        case NonemptyDict.get local.localUser.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
                                                     adminData
@@ -2545,7 +2561,7 @@ view model =
                                     userId =
                                         case userOverviewData of
                                             PersonalRoute ->
-                                                local.userId
+                                                local.localUser.userId
 
                                             SpecificUserRoute userId2 ->
                                                 userId2
@@ -2700,7 +2716,7 @@ homePageLoggedInView model local =
             [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
             [ Ui.row
                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                [ Ui.Lazy.lazy4 guildColumn model.route local.userId local.user local.guilds
+                [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
                 , friendsColumn local
                 ]
             , loggedInAsView local
@@ -2717,7 +2733,7 @@ loggedInAsView local =
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
         , Ui.background MyUi.background1
         ]
-        [ Ui.text (PersonName.toString local.user.name)
+        [ Ui.text (PersonName.toString local.localUser.user.name)
         , Ui.el
             [ Ui.width (Ui.px 30)
             , Ui.paddingXY 4 0
@@ -2738,11 +2754,11 @@ guildView model guildId channelRoute loggedIn local =
                     [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                     [ Ui.row
                         [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                        [ Ui.Lazy.lazy4 guildColumn model.route local.userId local.user local.guilds
+                        [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
                         , Ui.Lazy.lazy6
                             channelColumn
-                            local.userId
-                            local.user
+                            local.localUser.userId
+                            local.localUser.user
                             guildId
                             guild
                             channelRoute
@@ -2967,7 +2983,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
         othersEditing : SeqSet Int
         othersEditing =
-            SeqDict.remove local.userId channel.lastTypedAt
+            SeqDict.remove local.localUser.userId channel.lastTypedAt
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
@@ -3011,7 +3027,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
         lastViewedIndex : Int
         lastViewedIndex =
-            SeqDict.get ( guildId, channelId ) local.user.lastViewed |> Maybe.withDefault -1
+            SeqDict.get ( guildId, channelId ) local.localUser.user.lastViewed |> Maybe.withDefault -1
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -3141,22 +3157,18 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                 case highlight of
                                     NoHighlight ->
                                         if otherUserIsEditing then
-                                            Ui.Lazy.lazy6
+                                            Ui.Lazy.lazy4
                                                 messageViewHoveredAndEdited
                                                 revealedSpoilers
-                                                local.userId
-                                                local.user
-                                                local.otherUsers
+                                                local.localUser
                                                 index
                                                 message
 
                                         else
-                                            Ui.Lazy.lazy6
+                                            Ui.Lazy.lazy4
                                                 messageViewHovered
                                                 revealedSpoilers
-                                                local.userId
-                                                local.user
-                                                local.otherUsers
+                                                local.localUser
                                                 index
                                                 message
 
@@ -3166,9 +3178,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                             highlight
                                             True
                                             otherUserIsEditing
-                                            local.userId
-                                            local.user
-                                            local.otherUsers
+                                            local.localUser
                                             index
                                             message
 
@@ -3176,22 +3186,18 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                 case highlight of
                                     NoHighlight ->
                                         if otherUserIsEditing then
-                                            Ui.Lazy.lazy6
+                                            Ui.Lazy.lazy4
                                                 messageViewNotHoveredAndEdited
                                                 revealedSpoilers
-                                                local.userId
-                                                local.user
-                                                local.otherUsers
+                                                local.localUser
                                                 index
                                                 message
 
                                         else
-                                            Ui.Lazy.lazy6
+                                            Ui.Lazy.lazy4
                                                 messageViewNotHovered
                                                 revealedSpoilers
-                                                local.userId
-                                                local.user
-                                                local.otherUsers
+                                                local.localUser
                                                 index
                                                 message
 
@@ -3201,9 +3207,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                             highlight
                                             False
                                             otherUserIsEditing
-                                            local.userId
-                                            local.user
-                                            local.otherUsers
+                                            local.localUser
                                             index
                                             message
                    )
@@ -3225,14 +3229,9 @@ conversationView :
     -> Element FrontendMsg
 conversationView guildId channelId loggedIn model local channel =
     let
-        userIdToName : Id UserId -> String
-        userIdToName userId =
-            case SeqDict.get userId local.otherUsers of
-                Just user ->
-                    PersonName.toString user.name
-
-                Nothing ->
-                    "<missing>"
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local
     in
     Ui.column
         [ Ui.height Ui.fill ]
@@ -3296,24 +3295,24 @@ conversationView guildId channelId loggedIn model local channel =
                     (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
                         && (a.messageIndex == Nothing)
                 )
-                (SeqDict.remove local.userId channel.lastTypedAt)
+                (SeqDict.remove local.localUser.userId channel.lastTypedAt)
                 |> SeqDict.keys
            of
             [] ->
                 ""
 
             [ single ] ->
-                userIdToName single ++ " is typing..."
+                userToName single allUsers ++ " is typing..."
 
             [ one, two ] ->
-                userIdToName one ++ " and " ++ userIdToName two ++ " are typing..."
+                userToName one allUsers ++ " and " ++ userToName two allUsers ++ " are typing..."
 
             [ one, two, three ] ->
-                userIdToName one
+                userToName one allUsers
                     ++ ", "
-                    ++ userIdToName two
+                    ++ userToName two allUsers
                     ++ ", and "
-                    ++ userIdToName three
+                    ++ userToName three allUsers
                     ++ " are typing..."
 
             _ :: _ :: _ :: _ ->
@@ -3437,7 +3436,7 @@ messageEditingView messageId message editing pingUser local =
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView messageId.messageIndex local.userId data.reactions
+                    reactionEmojiView messageId.messageIndex local.localUser.userId data.reactions
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -3502,84 +3501,68 @@ editMessageTextInputId =
 
 messageViewHovered :
     SeqDict Int (NonemptySet Int)
-    -> Id UserId
-    -> BackendUser
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewHovered revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+messageViewHovered revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         True
         False
-        currentUserId
-        currentUser
-        otherUsers
+        localUser
         messageIndex
         message
 
 
 messageViewNotHovered :
     SeqDict Int (NonemptySet Int)
-    -> Id UserId
-    -> BackendUser
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+messageViewNotHovered revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         False
         False
-        currentUserId
-        currentUser
-        otherUsers
+        localUser
         messageIndex
         message
 
 
 messageViewHoveredAndEdited :
     SeqDict Int (NonemptySet Int)
-    -> Id UserId
-    -> BackendUser
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewHoveredAndEdited revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+messageViewHoveredAndEdited revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         True
         True
-        currentUserId
-        currentUser
-        otherUsers
+        localUser
         messageIndex
         message
 
 
 messageViewNotHoveredAndEdited :
     SeqDict Int (NonemptySet Int)
-    -> Id UserId
-    -> BackendUser
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHoveredAndEdited revealedSpoilers currentUserId currentUser otherUsers messageIndex message =
+messageViewNotHoveredAndEdited revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         False
         True
-        currentUserId
-        currentUser
-        otherUsers
+        localUser
         messageIndex
         message
 
@@ -3595,26 +3578,24 @@ messageView :
     -> HighlightMessage
     -> Bool
     -> Bool
-    -> Id UserId
-    -> BackendUser
-    -> SeqDict (Id UserId) FrontendUser
+    -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId currentUser otherUsers messageIndex message =
+messageView revealedSpoilers highlight isHovered isBeingEdited localUser messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
-            SeqDict.insert currentUserId (User.backendToFrontend currentUser) otherUsers
+            LocalState.allUsers2 localUser
     in
     case message of
         UserTextMessage message2 ->
             messageContainer
                 (case highlight of
                     NoHighlight ->
-                        if RichText.mentionsUser currentUserId message2.content then
+                        if RichText.mentionsUser localUser.userId message2.content then
                             MentionHighlight
 
                         else
@@ -3624,8 +3605,8 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
                         highlight
                 )
                 messageIndex
-                (currentUserId == message2.createdBy)
-                currentUserId
+                (localUser.userId == message2.createdBy)
+                localUser.userId
                 message2.reactions
                 isHovered
                 [ userToName message2.createdBy allUsers
@@ -3674,7 +3655,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited currentUserId cur
                 highlight
                 messageIndex
                 False
-                currentUserId
+                localUser.userId
                 reactions
                 isHovered
                 [ userJoinedContent userId allUsers ]
