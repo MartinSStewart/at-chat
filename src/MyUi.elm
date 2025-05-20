@@ -57,6 +57,7 @@ module MyUi exposing
     , touchPress
     , userLabel
     , userLabel2
+    , userLabelHtml
     , white
     , widthAttr
     )
@@ -648,7 +649,6 @@ userLabel userId allUsers =
                 , Ui.paddingXY 4 0
                 , Ui.Font.color (Ui.rgb 50 70 240)
                 , Ui.rounded 2
-                , Ui.link (Route.encode (Route.UserOverviewRoute (SpecificUserRoute userId)))
                 ]
                 (Ui.text "<name missing>")
 
@@ -664,6 +664,35 @@ userLabel2 user =
         , Ui.Font.noWrap
         ]
         (Ui.text ("@" ++ PersonName.toString user.name))
+
+
+userLabelHtml : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Html msg
+userLabelHtml userId allUsers =
+    case SeqDict.get userId allUsers of
+        Just user ->
+            userLabel2Html user
+
+        Nothing ->
+            Html.span
+                [ Html.Attributes.style "background-color" "rgb(50,70,240)"
+                , Html.Attributes.style "padding" "1px 1px 0 1px"
+                , Html.Attributes.style "color" "rgb(215,235,255)"
+                , Html.Attributes.style "border-radius" "2px"
+                , Html.Attributes.style "white-space" "nowrap"
+                ]
+                [ Html.text "@<name missing>" ]
+
+
+userLabel2Html : { a | name : PersonName } -> Html msg
+userLabel2Html user =
+    Html.span
+        [ Html.Attributes.style "background-color" "rgb(50,70,240)"
+        , Html.Attributes.style "padding" "1px 1px 0 1px"
+        , Html.Attributes.style "color" "rgb(215,235,255)"
+        , Html.Attributes.style "border-radius" "2px"
+        , Html.Attributes.style "white-space" "nowrap"
+        ]
+        [ Html.text ("@" ++ PersonName.toString user.name) ]
 
 
 labelBackgroundColor : Ui.Color

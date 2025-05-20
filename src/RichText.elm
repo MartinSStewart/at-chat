@@ -13,6 +13,7 @@ module RichText exposing
 import Array exposing (Array)
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -36,6 +37,7 @@ type RichText
     | Underline (Nonempty RichText)
     | Spoiler (Nonempty RichText)
     | Hyperlink Url.Protocol String
+    | InlineCode Char String
 
 
 normalTextFromString : String -> Maybe RichText
@@ -83,6 +85,9 @@ toString users nonempty =
 
                 Hyperlink protocol rest ->
                     hyperlinkToString protocol rest
+
+                InlineCode char rest ->
+                    "`" ++ String.cons char rest ++ "`"
         )
         nonempty
         |> List.Nonempty.toList
@@ -141,6 +146,9 @@ normalize nonempty =
 
                 Hyperlink protocol rest ->
                     List.Nonempty.cons (Hyperlink protocol rest) nonempty2
+
+                InlineCode char string ->
+                    List.Nonempty.cons (InlineCode char string) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -164,6 +172,9 @@ normalize nonempty =
 
                 Hyperlink protocol rest ->
                     Hyperlink protocol rest
+
+                InlineCode char string ->
+                    InlineCode char string
             )
             []
         )
@@ -233,6 +244,40 @@ parser users modifiers =
                 , modifierHelper users IsUnderlined Underline state modifiers
                 , modifierHelper users IsItalic Italic state modifiers
                 , modifierHelper users IsSpoilered Spoiler state modifiers
+                , Parser.succeed
+                    (\text reachedEnd ->
+                        if reachedEnd then
+                            Loop
+                                { current = Array.push ("`" ++ text) state.current
+                                , rest = state.rest
+                                }
+
+                        else
+                            case String.Nonempty.fromString text of
+                                Just a ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push
+                                                    (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
+                                                    (parserHelper state)
+                                                )
+                                        }
+
+                                Nothing ->
+                                    Loop
+                                        { current = Array.push "``" state.current
+                                        , rest = state.rest
+                                        }
+                    )
+                    |. Parser.symbol "`"
+                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                    |= Parser.oneOf
+                        [ Parser.map (\() -> True) Parser.end
+                        , Parser.map (\() -> False) (Parser.symbol "`")
+                        ]
                 , Parser.succeed Tuple.pair
                     |= Parser.oneOf
                         [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
@@ -406,6 +451,9 @@ mentionsUser userId nonempty =
 
                 Hyperlink _ _ ->
                     False
+
+                InlineCode char string ->
+                    False
         )
         nonempty
 
@@ -415,7 +463,7 @@ view :
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> Nonempty RichText
-    -> List (Element msg)
+    -> List (Html msg)
 view pressedSpoiler revealedSpoilers users nonempty =
     viewHelper
         pressedSpoiler
@@ -434,25 +482,24 @@ viewHelper :
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> Nonempty RichText
-    -> ( Int, List (Element msg) )
+    -> ( Int, List (Html msg) )
 viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
     List.foldl
         (\item ( spoilerIndex2, list ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, list ++ [ MyUi.userLabel userId allUsers ] )
+                    ( spoilerIndex2, list ++ [ MyUi.userLabelHtml userId allUsers ] )
 
                 NormalText char text ->
                     ( spoilerIndex2
                     , list
-                        ++ [ Ui.el
-                                [ Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
-                                , Ui.attrIf state.italic Ui.Font.italic
-                                , Ui.attrIf state.underline Ui.Font.italic
-                                , Ui.attrIf state.bold Ui.Font.bold
-                                , Ui.attrIf state.spoiler (Ui.opacity 0)
+                        ++ [ Html.span
+                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
+                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
                                 ]
-                                (Ui.text (String.cons char text))
+                                [ Html.text (String.cons char text) ]
                            ]
                     )
 
@@ -517,16 +564,17 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                     in
                     ( spoilerIndex2 + 1
                     , list
-                        ++ [ Ui.Prose.paragraph
-                                ([ Ui.paddingXY 2 0
-                                 , Ui.rounded 2
+                        ++ [ Html.span
+                                ([ Html.Attributes.style "padding" "0 2px 0 2px"
+                                 , Html.Attributes.style "border-radius" "2px"
                                  ]
                                     ++ (if revealed then
-                                            [ Ui.background MyUi.spoilerRevealedColor ]
+                                            [ Html.Attributes.style "background" "rgb(30,30,30)" ]
 
                                         else
-                                            [ Ui.Input.button (pressedSpoiler spoilerIndex2)
-                                            , Ui.background MyUi.spoilerColor
+                                            [ Html.Events.onClick (pressedSpoiler spoilerIndex2)
+                                            , Html.Attributes.style "cursor" "pointer"
+                                            , Html.Attributes.style "background" "rgb(0,0,0)"
                                             ]
                                        )
                                 )
@@ -550,7 +598,6 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                     , Html.Attributes.style "opacity" "0"
                                     ]
                                     [ Html.text text ]
-                                    |> Ui.html
 
                              else
                                 Html.a
@@ -562,9 +609,109 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                     , Html.Attributes.rel "noreferrer"
                                     ]
                                     [ Html.text text ]
-                                    |> Ui.html
                            ]
                     )
+
+                InlineCode char rest ->
+                    ( spoilerIndex2
+                    , list
+                        ++ [ --Ui.el
+                             --        [ Ui.paddingXY 2 0
+                             --        , Ui.rounded 2
+                             --        , Ui.background (Ui.rgb 90 100 120)
+                             --        , Ui.borderColor (Ui.rgb 55 61 73)
+                             --        , Ui.border 1
+                             --        , Ui.Font.family [ Ui.Font.monospace ]
+                             --        ]
+                             --        (Ui.text (String.cons char string))
+                             Html.span
+                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                                , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                , if state.spoiler then
+                                    Html.Attributes.style "background-color" "rgb(0,0,0)"
+
+                                  else
+                                    Html.Attributes.style "background-color" "rgb(90,100,120)"
+
+                                --, htmlAttrIf (not state.spoiler) (Html.Attributes.style "border" "rgb(55,61,73) solid 1px")
+                                ]
+                                [ Html.text (String.cons char rest) ]
+                           ]
+                    )
+         --case item of
+         --                UserMention userId ->
+         --                    [ case SeqDict.get userId allUsers of
+         --                        Just user ->
+         --                            Html.span
+         --                                [ Html.Attributes.style "color" "rgb(215,235,255)"
+         --                                , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
+         --                                , Html.Attributes.style "border-radius" "2px"
+         --                                ]
+         --                                [ Html.text ("@" ++ PersonName.toString user.name) ]
+         --
+         --                        Nothing ->
+         --                            Html.text ""
+         --                    ]
+         --
+         --                NormalText char text ->
+         --                    [ Html.span
+         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+         --                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+         --                        ]
+         --                        [ Html.text (String.cons char text) ]
+         --                    ]
+         --
+         --                Italic nonempty2 ->
+         --                    formatText "_"
+         --                        :: textInputViewHelper { state | italic = True } allUsers nonempty2
+         --                        ++ [ formatText "_" ]
+         --
+         --                Underline nonempty2 ->
+         --                    formatText "__"
+         --                        :: textInputViewHelper { state | underline = True } allUsers nonempty2
+         --                        ++ [ formatText "__" ]
+         --
+         --                Bold nonempty2 ->
+         --                    formatText "*"
+         --                        :: textInputViewHelper { state | bold = True } allUsers nonempty2
+         --                        ++ [ formatText "*" ]
+         --
+         --                Spoiler nonempty2 ->
+         --                    formatText "||"
+         --                        :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
+         --                        ++ [ formatText "||" ]
+         --
+         --                Hyperlink protocol rest ->
+         --                    [ Html.span
+         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+         --                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
+         --                        , Html.Attributes.style "color" "rgb(66,93,203)"
+         --                        ]
+         --                        [ Html.text (hyperlinkToString protocol rest) ]
+         --                    ]
+         --
+         --                InlineCode char rest ->
+         --                    [ formatText "`"
+         --                    , Html.span
+         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+         --                        , if state.spoiler then
+         --                            Html.Attributes.style "background-color" "rgb(0,0,0)"
+         --
+         --                          else
+         --                            Html.Attributes.style "background-color" "rgb(90,100,120)"
+         --
+         --                        --, htmlAttrIf (not state.spoiler) (Html.Attributes.style "border" "rgb(55,61,73) solid 1px")
+         --                        ]
+         --                        [ Html.text (String.cons char rest) ]
+         --                    , formatText "`"
+         --                    ]
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -647,10 +794,27 @@ textInputViewHelper state allUsers nonempty =
                         ]
                         [ Html.text (hyperlinkToString protocol rest) ]
                     ]
+
+                InlineCode char rest ->
+                    [ formatText "`"
+                    , Html.span
+                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , if state.spoiler then
+                            Html.Attributes.style "background-color" "rgb(0,0,0)"
+
+                          else
+                            Html.Attributes.style "background-color" "rgb(90,100,120)"
+                        ]
+                        [ Html.text (String.cons char rest) ]
+                    , formatText "`"
+                    ]
         )
         (List.Nonempty.toList nonempty)
 
 
+hyperlinkToString : Protocol -> String -> String
 hyperlinkToString protocol rest =
     (case protocol of
         Http ->

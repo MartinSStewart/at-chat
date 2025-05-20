@@ -2945,8 +2945,8 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-repliedToHeader : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg -> Element msg
-repliedToHeader userId allUsers content =
+repliedToHeader : Element msg -> Element msg
+repliedToHeader content =
     Ui.row
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
@@ -2957,12 +2957,6 @@ repliedToHeader userId allUsers content =
             , Ui.move { x = 0, y = 3, z = 0 }
             ]
             (Ui.html Icons.reply)
-        , Ui.el
-            [ Ui.Font.color MyUi.font3
-            , Ui.paddingWith { left = 2, right = 6, top = 0, bottom = 0 }
-            , Ui.width Ui.shrink
-            ]
-            (Ui.text (userToName userId allUsers))
         , content
         ]
 
@@ -3099,29 +3093,34 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                             case repliedToMessage of
                                                 UserTextMessage repliedToData ->
                                                     [ repliedToHeader
-                                                        repliedToData.createdBy
-                                                        allUsers
-                                                        (Ui.Prose.paragraph
-                                                            []
-                                                            (RichText.view
-                                                                (\_ -> FrontendNoOp)
-                                                                (case SeqDict.get repliedToIndex revealedSpoilers of
-                                                                    Just set ->
-                                                                        NonemptySet.toSeqSet set
+                                                        (Html.div
+                                                            [ Html.Attributes.style "white-space" "nowrap"
+                                                            , Html.Attributes.style "overflow" "hidden"
+                                                            , Html.Attributes.style "text-overflow" "ellipsis"
+                                                            ]
+                                                            (Html.span
+                                                                [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                                                , Html.Attributes.style "padding" "0 6px 0 2px"
+                                                                ]
+                                                                [ Html.text (userToName repliedToData.createdBy allUsers) ]
+                                                                :: RichText.view
+                                                                    (\_ -> FrontendNoOp)
+                                                                    (case SeqDict.get repliedToIndex revealedSpoilers of
+                                                                        Just set ->
+                                                                            NonemptySet.toSeqSet set
 
-                                                                    Nothing ->
-                                                                        SeqSet.empty
-                                                                )
-                                                                allUsers
-                                                                repliedToData.content
+                                                                        Nothing ->
+                                                                            SeqSet.empty
+                                                                    )
+                                                                    allUsers
+                                                                    repliedToData.content
                                                             )
+                                                            |> Ui.html
                                                         )
                                                     ]
 
                                                 UserJoinedMessage _ userId _ ->
                                                     [ repliedToHeader
-                                                        userId
-                                                        allUsers
                                                         (userJoinedContent userId allUsers)
                                                     ]
 
@@ -3613,7 +3612,8 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser message
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
-                , Ui.Prose.paragraph []
+                , Html.div
+                    [ Html.Attributes.style "white-space" "pre-wrap" ]
                     (RichText.view
                         (PressedSpoiler messageIndex)
                         (case SeqDict.get messageIndex revealedSpoilers of
@@ -3626,28 +3626,29 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser message
                         allUsers
                         message2.content
                         ++ (if isBeingEdited then
-                                [ Ui.el
-                                    [ Ui.Font.color MyUi.font3
-                                    , Ui.Font.size 12
+                                [ Html.span
+                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                    , Html.Attributes.style "font-size" "12px"
                                     ]
-                                    (Ui.text " (editing...)")
+                                    [ Html.text " (editing...)" ]
                                 ]
 
                             else
                                 case message2.editedAt of
                                     Just editedAt ->
-                                        [ Ui.el
-                                            [ Ui.Font.color MyUi.font3
-                                            , Ui.Font.size 12
-                                            , MyUi.datestamp editedAt |> MyUi.hoverText
+                                        [ Html.span
+                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                            , Html.Attributes.style "font-size" "12px"
+                                            , MyUi.datestamp editedAt |> Html.Attributes.title
                                             ]
-                                            (Ui.text " (edited)")
+                                            [ Html.text " (edited)" ]
                                         ]
 
                                     Nothing ->
                                         []
                            )
                     )
+                    |> Ui.html
                 ]
 
         UserJoinedMessage _ userId reactions ->
