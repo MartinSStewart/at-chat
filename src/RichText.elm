@@ -22,10 +22,6 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
-import Ui exposing (Element)
-import Ui.Font
-import Ui.Input
-import Ui.Prose
 import Url exposing (Protocol(..), Url)
 
 
@@ -594,7 +590,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 Html.span
                                     [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                                    , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
                                     , Html.Attributes.style "opacity" "0"
                                     ]
                                     [ Html.text text ]
@@ -603,7 +599,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 Html.a
                                     [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                                    , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                    , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
                                     , Html.Attributes.href text
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
@@ -615,103 +611,20 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                 InlineCode char rest ->
                     ( spoilerIndex2
                     , list
-                        ++ [ --Ui.el
-                             --        [ Ui.paddingXY 2 0
-                             --        , Ui.rounded 2
-                             --        , Ui.background (Ui.rgb 90 100 120)
-                             --        , Ui.borderColor (Ui.rgb 55 61 73)
-                             --        , Ui.border 1
-                             --        , Ui.Font.family [ Ui.Font.monospace ]
-                             --        ]
-                             --        (Ui.text (String.cons char string))
-                             Html.span
+                        ++ [ Html.span
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-                                , if state.spoiler then
-                                    Html.Attributes.style "background-color" "rgb(0,0,0)"
-
-                                  else
-                                    Html.Attributes.style "background-color" "rgb(90,100,120)"
-
-                                --, htmlAttrIf (not state.spoiler) (Html.Attributes.style "border" "rgb(55,61,73) solid 1px")
+                                , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
+                                , Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
+                                , Html.Attributes.style "padding" "0 4px 0 4px"
+                                , Html.Attributes.style "border-radius" "4px"
+                                , Html.Attributes.style "font-family" "monospace"
                                 ]
                                 [ Html.text (String.cons char rest) ]
                            ]
                     )
-         --case item of
-         --                UserMention userId ->
-         --                    [ case SeqDict.get userId allUsers of
-         --                        Just user ->
-         --                            Html.span
-         --                                [ Html.Attributes.style "color" "rgb(215,235,255)"
-         --                                , Html.Attributes.style "background-color" "rgba(57,77,255,0.5)"
-         --                                , Html.Attributes.style "border-radius" "2px"
-         --                                ]
-         --                                [ Html.text ("@" ++ PersonName.toString user.name) ]
-         --
-         --                        Nothing ->
-         --                            Html.text ""
-         --                    ]
-         --
-         --                NormalText char text ->
-         --                    [ Html.span
-         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-         --                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-         --                        ]
-         --                        [ Html.text (String.cons char text) ]
-         --                    ]
-         --
-         --                Italic nonempty2 ->
-         --                    formatText "_"
-         --                        :: textInputViewHelper { state | italic = True } allUsers nonempty2
-         --                        ++ [ formatText "_" ]
-         --
-         --                Underline nonempty2 ->
-         --                    formatText "__"
-         --                        :: textInputViewHelper { state | underline = True } allUsers nonempty2
-         --                        ++ [ formatText "__" ]
-         --
-         --                Bold nonempty2 ->
-         --                    formatText "*"
-         --                        :: textInputViewHelper { state | bold = True } allUsers nonempty2
-         --                        ++ [ formatText "*" ]
-         --
-         --                Spoiler nonempty2 ->
-         --                    formatText "||"
-         --                        :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
-         --                        ++ [ formatText "||" ]
-         --
-         --                Hyperlink protocol rest ->
-         --                    [ Html.span
-         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-         --                        , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
-         --                        , Html.Attributes.style "color" "rgb(66,93,203)"
-         --                        ]
-         --                        [ Html.text (hyperlinkToString protocol rest) ]
-         --                    ]
-         --
-         --                InlineCode char rest ->
-         --                    [ formatText "`"
-         --                    , Html.span
-         --                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-         --                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-         --                        , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
-         --                        , if state.spoiler then
-         --                            Html.Attributes.style "background-color" "rgb(0,0,0)"
-         --
-         --                          else
-         --                            Html.Attributes.style "background-color" "rgb(90,100,120)"
-         --
-         --                        --, htmlAttrIf (not state.spoiler) (Html.Attributes.style "border" "rgb(55,61,73) solid 1px")
-         --                        ]
-         --                        [ Html.text (String.cons char rest) ]
-         --                    , formatText "`"
-         --                    ]
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)

@@ -2945,22 +2945,6 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-repliedToHeader : Element msg -> Element msg
-repliedToHeader content =
-    Ui.row
-        [ Ui.Font.color MyUi.font1
-        , Ui.Font.size 14
-        , Ui.paddingWith { left = 8, right = 8, top = 2, bottom = 0 }
-        ]
-        [ Ui.el
-            [ Ui.width (Ui.px 18)
-            , Ui.move { x = 0, y = 3, z = 0 }
-            ]
-            (Ui.html Icons.reply)
-        , content
-        ]
-
-
 conversationViewHelper :
     Id GuildId
     -> Id ChannelId
@@ -3083,70 +3067,37 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                     else
                         []
 
-                repliedTo =
+                maybeRepliedTo : Maybe ( Int, Message )
+                maybeRepliedTo =
                     case message of
                         UserTextMessage data ->
                             case data.repliedTo of
                                 Just repliedToIndex ->
                                     case Array.get repliedToIndex channel.messages of
-                                        Just repliedToMessage ->
-                                            case repliedToMessage of
-                                                UserTextMessage repliedToData ->
-                                                    [ repliedToHeader
-                                                        (Html.div
-                                                            [ Html.Attributes.style "white-space" "nowrap"
-                                                            , Html.Attributes.style "overflow" "hidden"
-                                                            , Html.Attributes.style "text-overflow" "ellipsis"
-                                                            ]
-                                                            (Html.span
-                                                                [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                                                , Html.Attributes.style "padding" "0 6px 0 2px"
-                                                                ]
-                                                                [ Html.text (userToName repliedToData.createdBy allUsers) ]
-                                                                :: RichText.view
-                                                                    (\_ -> FrontendNoOp)
-                                                                    (case SeqDict.get repliedToIndex revealedSpoilers of
-                                                                        Just set ->
-                                                                            NonemptySet.toSeqSet set
-
-                                                                        Nothing ->
-                                                                            SeqSet.empty
-                                                                    )
-                                                                    allUsers
-                                                                    repliedToData.content
-                                                            )
-                                                            |> Ui.html
-                                                        )
-                                                    ]
-
-                                                UserJoinedMessage _ userId _ ->
-                                                    [ repliedToHeader
-                                                        (userJoinedContent userId allUsers)
-                                                    ]
-
-                                                DeletedMessage ->
-                                                    []
+                                        Just message2 ->
+                                            Just ( repliedToIndex, message2 )
 
                                         Nothing ->
-                                            []
+                                            Nothing
 
                                 Nothing ->
-                                    []
+                                    Nothing
 
                         UserJoinedMessage posix id seqDict ->
-                            []
+                            Nothing
 
                         DeletedMessage ->
-                            []
+                            Nothing
             in
             ( index - 1
             , newLine
-                ++ repliedTo
                 ++ (case isEditing of
                         Just editing ->
                             messageEditingView
                                 { guildId = guildId, channelId = channelId, messageIndex = index }
                                 message
+                                maybeRepliedTo
+                                revealedSpoilers
                                 editing
                                 loggedIn.pingUser
                                 local
@@ -3155,21 +3106,26 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                             if messageHoverIndex == Just index then
                                 case highlight of
                                     NoHighlight ->
-                                        if otherUserIsEditing then
-                                            Ui.Lazy.lazy4
-                                                messageViewHoveredAndEdited
-                                                revealedSpoilers
-                                                local.localUser
-                                                index
-                                                message
+                                        case maybeRepliedTo of
+                                            Just _ ->
+                                                messageView
+                                                    revealedSpoilers
+                                                    highlight
+                                                    True
+                                                    otherUserIsEditing
+                                                    local.localUser
+                                                    maybeRepliedTo
+                                                    index
+                                                    message
 
-                                        else
-                                            Ui.Lazy.lazy4
-                                                messageViewHovered
-                                                revealedSpoilers
-                                                local.localUser
-                                                index
-                                                message
+                                            Nothing ->
+                                                Ui.Lazy.lazy5
+                                                    messageViewHovered
+                                                    otherUserIsEditing
+                                                    revealedSpoilers
+                                                    local.localUser
+                                                    index
+                                                    message
 
                                     _ ->
                                         messageView
@@ -3178,27 +3134,33 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                             True
                                             otherUserIsEditing
                                             local.localUser
+                                            maybeRepliedTo
                                             index
                                             message
 
                             else
                                 case highlight of
                                     NoHighlight ->
-                                        if otherUserIsEditing then
-                                            Ui.Lazy.lazy4
-                                                messageViewNotHoveredAndEdited
-                                                revealedSpoilers
-                                                local.localUser
-                                                index
-                                                message
+                                        case maybeRepliedTo of
+                                            Just _ ->
+                                                messageView
+                                                    revealedSpoilers
+                                                    highlight
+                                                    False
+                                                    otherUserIsEditing
+                                                    local.localUser
+                                                    maybeRepliedTo
+                                                    index
+                                                    message
 
-                                        else
-                                            Ui.Lazy.lazy4
-                                                messageViewNotHovered
-                                                revealedSpoilers
-                                                local.localUser
-                                                index
-                                                message
+                                            Nothing ->
+                                                Ui.Lazy.lazy5
+                                                    messageViewNotHovered
+                                                    otherUserIsEditing
+                                                    revealedSpoilers
+                                                    local.localUser
+                                                    index
+                                                    message
 
                                     _ ->
                                         messageView
@@ -3207,6 +3169,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                             False
                                             otherUserIsEditing
                                             local.localUser
+                                            maybeRepliedTo
                                             index
                                             message
                    )
@@ -3426,11 +3389,13 @@ reactionEmojiView messageIndex currentUserId reactions =
 messageEditingView :
     MessageId
     -> Message
+    -> Maybe ( Int, Message )
+    -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView messageId message editing pingUser local =
+messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -3453,7 +3418,9 @@ messageEditingView messageId message editing pingUser local =
                     }
                 , Ui.spacing 4
                 ]
-                [ userToName data.createdBy (LocalState.allUsers local)
+                [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
+                    |> Ui.el [ Ui.paddingXY 8 0 ]
+                , userToName data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -3499,69 +3466,39 @@ editMessageTextInputId =
 
 
 messageViewHovered :
-    SeqDict Int (NonemptySet Int)
+    Bool
+    -> SeqDict Int (NonemptySet Int)
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewHovered revealedSpoilers localUser messageIndex message =
+messageViewHovered isEditing revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         True
-        False
+        isEditing
         localUser
+        Nothing
         messageIndex
         message
 
 
 messageViewNotHovered :
-    SeqDict Int (NonemptySet Int)
+    Bool
+    -> SeqDict Int (NonemptySet Int)
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered revealedSpoilers localUser messageIndex message =
+messageViewNotHovered isEditing revealedSpoilers localUser messageIndex message =
     messageView
         revealedSpoilers
         NoHighlight
         False
-        False
+        isEditing
         localUser
-        messageIndex
-        message
-
-
-messageViewHoveredAndEdited :
-    SeqDict Int (NonemptySet Int)
-    -> LocalUser
-    -> Int
-    -> Message
-    -> Element FrontendMsg
-messageViewHoveredAndEdited revealedSpoilers localUser messageIndex message =
-    messageView
-        revealedSpoilers
-        NoHighlight
-        True
-        True
-        localUser
-        messageIndex
-        message
-
-
-messageViewNotHoveredAndEdited :
-    SeqDict Int (NonemptySet Int)
-    -> LocalUser
-    -> Int
-    -> Message
-    -> Element FrontendMsg
-messageViewNotHoveredAndEdited revealedSpoilers localUser messageIndex message =
-    messageView
-        revealedSpoilers
-        NoHighlight
-        False
-        True
-        localUser
+        Nothing
         messageIndex
         message
 
@@ -3578,10 +3515,11 @@ messageView :
     -> Bool
     -> Bool
     -> LocalUser
+    -> Maybe ( Int, Message )
     -> Int
     -> Message
     -> Element FrontendMsg
-messageView revealedSpoilers highlight isHovered isBeingEdited localUser messageIndex message =
+messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -3608,7 +3546,8 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser message
                 localUser.userId
                 message2.reactions
                 isHovered
-                [ userToName message2.createdBy allUsers
+                [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
+                , userToName message2.createdBy allUsers
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
@@ -3663,6 +3602,66 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser message
 
         DeletedMessage ->
             Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
+
+
+repliedToMessage :
+    Maybe ( Int, Message )
+    -> SeqDict Int (NonemptySet Int)
+    -> SeqDict (Id UserId) FrontendUser
+    -> Element FrontendMsg
+repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
+    case maybeRepliedTo of
+        Just ( repliedToIndex, UserTextMessage repliedToData ) ->
+            repliedToHeaderHelper
+                (Html.div
+                    [ Html.Attributes.style "white-space" "nowrap"
+                    , Html.Attributes.style "overflow" "hidden"
+                    , Html.Attributes.style "text-overflow" "ellipsis"
+                    ]
+                    (Html.span
+                        [ Html.Attributes.style "color" "rgb(200,200,200)"
+                        , Html.Attributes.style "padding" "0 6px 0 2px"
+                        ]
+                        [ Html.text (userToName repliedToData.createdBy allUsers) ]
+                        :: RichText.view
+                            (\_ -> FrontendNoOp)
+                            (case SeqDict.get repliedToIndex revealedSpoilers of
+                                Just set ->
+                                    NonemptySet.toSeqSet set
+
+                                Nothing ->
+                                    SeqSet.empty
+                            )
+                            allUsers
+                            repliedToData.content
+                    )
+                    |> Ui.html
+                )
+
+        Just ( _, UserJoinedMessage _ userId _ ) ->
+            repliedToHeaderHelper (userJoinedContent userId allUsers)
+
+        Just ( _, DeletedMessage ) ->
+            Ui.none
+
+        Nothing ->
+            Ui.none
+
+
+repliedToHeaderHelper : Element msg -> Element msg
+repliedToHeaderHelper content =
+    Ui.row
+        [ Ui.Font.color MyUi.font1
+        , Ui.Font.size 14
+        , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px 18)
+            , Ui.move { x = 0, y = 3, z = 0 }
+            ]
+            (Ui.html Icons.reply)
+        , content
+        ]
 
 
 userJoinedContent : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg
