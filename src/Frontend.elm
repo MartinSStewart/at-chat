@@ -4,7 +4,9 @@ import Array
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
-import Duration
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
+import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
@@ -21,9 +23,10 @@ import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
-import Json.Decode
+import Json.Decode exposing (Decoder)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -40,14 +43,15 @@ import Pages.Home
 import Pages.UserOverview
 import Pagination
 import PersonName exposing (PersonName)
+import Point2d
 import Ports
-import Quantity
+import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText(..))
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -57,6 +61,7 @@ import Ui.Lazy
 import Ui.Prose
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
+import Vector2d exposing (Vector2d)
 
 
 app :
@@ -104,12 +109,24 @@ subscriptions model =
                 Subscription.none
 
             Loaded loaded ->
-                case loaded.route of
-                    GuildRoute _ (ChannelRoute _) ->
-                        Effect.Browser.Events.onVisibilityChange VisibilityChanged
+                Subscription.batch
+                    [ case loaded.route of
+                        GuildRoute _ (ChannelRoute _) ->
+                            Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
-                    _ ->
-                        Subscription.none
+                        _ ->
+                            Subscription.none
+                    , case loaded.loginStatus of
+                        LoggedIn loggedIn ->
+                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= -1 && loaded.previousTouches == SeqDict.empty then
+                                Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+
+                            else
+                                Subscription.none
+
+                        NotLoggedIn _ ->
+                            Subscription.none
+                    ]
         ]
 
 
@@ -133,7 +150,7 @@ init url key =
     ( Loading
         { navigationKey = key
         , route = route
-        , windowSize = ( 1920, 1080 )
+        , windowSize = Coord.xy 1920 1080
         , time = Nothing
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
@@ -180,6 +197,7 @@ initLoadedFrontend loading time loginResult =
             , lastCopied = Nothing
             , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
+            , previousTouches = SeqDict.empty
             }
 
         ( model2, cmdA ) =
@@ -195,7 +213,7 @@ loadedInitHelper :
     -> LoginData
     ->
         { a
-            | windowSize : ( Int, Int )
+            | windowSize : Coord CssPixels
             , navigationKey : Key
             , route : Route
         }
@@ -279,6 +297,8 @@ loadedInitHelper time loginData loading =
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
+            , sidebarOffset = 0
+            , sidebarPreviousOffset = 0
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -345,7 +365,7 @@ update msg model =
                     tryInitLoadedFrontend { loading | time = Just time }
 
                 GotWindowSize width height ->
-                    ( Loading { loading | windowSize = ( width, height ) }, Command.none )
+                    ( Loading { loading | windowSize = Coord.xy width height }, Command.none )
 
                 CheckedNotificationPermission permission ->
                     ( Loading { loading | notificationPermission = permission }, Command.none )
@@ -535,7 +555,7 @@ updateLoaded msg model =
             ( { model | time = time }, Command.none )
 
         GotWindowSize width height ->
-            ( { model | windowSize = ( width, height ) }
+            ( { model | windowSize = Coord.xy width height }
             , Command.none
             )
 
@@ -1551,6 +1571,87 @@ updateLoaded msg model =
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
 
+        TouchStart ->
+            ( model, Command.none )
+
+        TouchMoved touches ->
+            let
+                dict : SeqDict Int Touch
+                dict =
+                    NonemptyDict.toSeqDict touches
+
+                averageMove : Vector2d CssPixels ScreenCoordinate
+                averageMove =
+                    SeqDict.merge
+                        (\_ _ state -> state)
+                        (\_ new old state ->
+                            { total = Vector2d.plus state.total (Vector2d.from old.client new.client)
+                            , count = state.count + 1
+                            }
+                        )
+                        (\_ _ state -> state)
+                        dict
+                        model.previousTouches
+                        { total = Vector2d.zero, count = 0 }
+                        |> (\a ->
+                                if a.count > 0 then
+                                    a.total |> Vector2d.divideBy a.count
+
+                                else
+                                    Vector2d.zero
+                           )
+
+                tHorizontal : Float
+                tHorizontal =
+                    Quantity.unwrap (Vector2d.xComponent averageMove) / toFloat (Coord.xRaw model.windowSize)
+            in
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp -1 0
+                        , sidebarPreviousOffset = loggedIn.sidebarOffset
+                      }
+                    , Command.none
+                    )
+                )
+                { model | previousTouches = dict }
+
+        TouchEnd ->
+            ( { model | previousTouches = SeqDict.empty }, Command.none )
+
+        TouchCancel ->
+            ( { model | previousTouches = SeqDict.empty }, Command.none )
+
+        OnAnimationFrameDelta delta ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        sidebarDelta =
+                            loggedIn.sidebarOffset
+                                - loggedIn.sidebarPreviousOffset
+                                |> Debug.log "a"
+                    in
+                    ( { loggedIn
+                        | sidebarOffset =
+                            (if sidebarDelta < -0.01 || (loggedIn.sidebarOffset < -0.5 && sidebarDelta < 0.01) then
+                                loggedIn.sidebarOffset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
+
+                             else
+                                loggedIn.sidebarOffset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                            )
+                                |> clamp -1 0
+                        , sidebarPreviousOffset = loggedIn.sidebarOffset
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+
+sidebarSpeed : Quantity Float (Rate Unitless Seconds)
+sidebarSpeed =
+    Quantity.float 4 |> Quantity.per Duration.second
+
 
 setFocus : HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus htmlId =
@@ -1568,6 +1669,11 @@ messageInputConfig guildId channelId =
     , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput guildId channelId
     , pressedPingUser = PressedPingUser guildId channelId
     }
+
+
+isMobile : LoadedFrontend -> Bool
+isMobile model =
+    Coord.xRaw model.windowSize < 700
 
 
 getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
@@ -2419,8 +2525,66 @@ layout model attributes child =
             :: Ui.Font.size 16
             :: Ui.background (Ui.rgb 255 255 255)
             :: attributes
+            ++ (if isMobile model then
+                    [ Html.Events.on "touchstart" (Json.Decode.succeed TouchStart) |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "touchmove"
+                        (Json.Decode.field "touches" (dynamicListOf touchDecoder)
+                            |> Json.Decode.andThen
+                                (\list ->
+                                    case NonemptyDict.fromList list of
+                                        Just nonempty ->
+                                            TouchMoved nonempty |> Json.Decode.succeed
+
+                                        Nothing ->
+                                            Json.Decode.fail ""
+                                )
+                        )
+                        |> Ui.htmlAttribute
+                    , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
+                    , Html.Events.on "touchcancel" (Json.Decode.succeed TouchCancel) |> Ui.htmlAttribute
+                    , Ui.clip
+                    ]
+
+                else
+                    []
+               )
         )
         child
+
+
+touchDecoder : Decoder ( Int, Touch )
+touchDecoder =
+    Json.Decode.map3
+        (\identifier clientX clientY -> ( identifier, { client = Point2d.xy clientX clientY } ))
+        (Json.Decode.field "identifier" Json.Decode.int)
+        (Json.Decode.field "clientX" quantityDecoder)
+        (Json.Decode.field "clientY" quantityDecoder)
+
+
+quantityDecoder : Decoder (Quantity Float unit)
+quantityDecoder =
+    Json.Decode.map Quantity.unsafe Json.Decode.float
+
+
+dynamicListOf : Decoder a -> Decoder (List a)
+dynamicListOf itemDecoder =
+    let
+        decodeN n =
+            List.range 0 (n - 1)
+                |> List.map decodeOne
+                |> all
+
+        decodeOne n =
+            Json.Decode.field (String.fromInt n) itemDecoder
+    in
+    Json.Decode.field "length" Json.Decode.int
+        |> Json.Decode.andThen decodeN
+
+
+all : List (Decoder a) -> Decoder (List a)
+all =
+    List.foldr (Json.Decode.map2 (::)) (Json.Decode.succeed [])
 
 
 view : FrontendModel -> Browser.Document FrontendMsg
@@ -2465,7 +2629,7 @@ view model =
                 let
                     windowWidth : Int
                     windowWidth =
-                        Tuple.first loaded.windowSize
+                        Coord.xRaw loaded.windowSize
 
                     requiresLogin : (LoggedIn2 -> LocalState -> Element FrontendMsg) -> Html FrontendMsg
                     requiresLogin page =
@@ -2511,11 +2675,7 @@ view model =
                             []
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
-                                    let
-                                        local =
-                                            Local.model loggedIn.localState
-                                    in
-                                    homePageLoggedInView loaded local
+                                    homePageLoggedInView loaded loggedIn (Local.model loggedIn.localState)
 
                                 NotLoggedIn { loginForm } ->
                                     Ui.el
@@ -2706,22 +2866,45 @@ guildColumn route currentUserId currentUser guilds =
         )
 
 
-homePageLoggedInView : LoadedFrontend -> LocalState -> Element FrontendMsg
-homePageLoggedInView model local =
-    Ui.row
-        [ Ui.height Ui.fill
-        , Ui.background MyUi.background3
-        ]
-        [ Ui.column
-            [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
-            [ Ui.row
-                [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
-                , friendsColumn local
-                ]
-            , loggedInAsView local
+homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
+homePageLoggedInView model loggedIn local =
+    if isMobile model then
+        Ui.row
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background3
             ]
-        ]
+            [ Ui.column
+                [ Ui.height Ui.fill
+                , Ui.move
+                    { x = round (loggedIn.sidebarOffset * toFloat (Coord.xRaw model.windowSize))
+                    , y = 0
+                    , z = 0
+                    }
+                ]
+                [ Ui.row
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                    , friendsColumn local
+                    ]
+                , loggedInAsView local
+                ]
+            ]
+
+    else
+        Ui.row
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background3
+            ]
+            [ Ui.column
+                [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+                [ Ui.row
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                    , friendsColumn local
+                    ]
+                , loggedInAsView local
+                ]
+            ]
 
 
 loggedInAsView : LocalState -> Element FrontendMsg
@@ -2815,7 +2998,7 @@ guildView model guildId channelRoute loggedIn local =
                 ]
 
         Nothing ->
-            homePageLoggedInView model local
+            homePageLoggedInView model loggedIn local
 
 
 inviteLinkCreatorForm : LoadedFrontend -> Id GuildId -> FrontendGuild -> Element FrontendMsg

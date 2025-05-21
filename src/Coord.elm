@@ -23,9 +23,7 @@ module Coord exposing
     , scalar
     , toPoint2d
     , toTuple
-    , toVec2
     , toVector2d
-    , translateMat4
     , tuple
     , x
     , xFloat
@@ -38,8 +36,6 @@ module Coord exposing
     , yRaw
     )
 
-import Math.Matrix4 exposing (Mat4)
-import Math.Vector2 exposing (Vec2)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity(..))
 import Vector2d exposing (Vector2d)
@@ -56,11 +52,6 @@ area coord =
             toTuple coord
     in
     x_ * y_
-
-
-translateMat4 : Coord unit -> Mat4 -> Mat4
-translateMat4 ( Quantity x_, Quantity y_ ) =
-    Math.Matrix4.translate3 (toFloat x_) (toFloat y_) 0
 
 
 origin : Coord units
@@ -138,11 +129,6 @@ maxTuple ( x0, y0 ) ( x1, y1 ) =
 absTuple : Coord unit -> Coord unit
 absTuple ( x0, y0 ) =
     ( Quantity.abs x0, Quantity.abs y0 )
-
-
-toVec2 : Coord units -> Vec2
-toVec2 ( Quantity x_, Quantity y_ ) =
-    Math.Vector2.vec2 (toFloat x_) (toFloat y_)
 
 
 toPoint2d : Coord units -> Point2d units coordinate

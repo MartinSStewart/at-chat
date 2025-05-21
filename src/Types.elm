@@ -20,16 +20,21 @@ module Types exposing
     , MessageId
     , NewChannelForm
     , RevealedSpoilers
+    , ScreenCoordinate(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
+    , Touch
     , WaitingForLoginTokenData
     )
 
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
@@ -51,6 +56,7 @@ import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
+import Point2d exposing (Point2d)
 import Ports exposing (NotificationPermission)
 import Postmark
 import RichText exposing (RichText)
@@ -72,7 +78,7 @@ type FrontendModel
 type alias LoadingFrontend =
     { navigationKey : Key
     , route : Route
-    , windowSize : ( Int, Int )
+    , windowSize : Coord CssPixels
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
     , notificationPermission : NotificationPermission
@@ -89,12 +95,13 @@ type alias LoadedFrontend =
     { navigationKey : Key
     , route : Route
     , time : Time.Posix
-    , windowSize : ( Int, Int )
+    , windowSize : Coord CssPixels
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     , textInputFocus : Maybe HtmlId
     , notificationPermission : NotificationPermission
+    , previousTouches : SeqDict Int Touch
     }
 
 
@@ -118,6 +125,8 @@ type alias LoggedIn2 =
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
+    , sidebarOffset : Float
+    , sidebarPreviousOffset : Float
     }
 
 
@@ -245,6 +254,20 @@ type FrontendMsg
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
+    | TouchStart
+    | TouchMoved (NonemptyDict Int Touch)
+    | TouchEnd
+    | TouchCancel
+    | OnAnimationFrameDelta Duration
+
+
+type ScreenCoordinate
+    = ScreenCoordinate Never
+
+
+type alias Touch =
+    { client : Point2d CssPixels ScreenCoordinate
+    }
 
 
 type alias NewChannelForm =

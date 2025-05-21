@@ -5,7 +5,9 @@
         "end-to-end-tests",
         "vendored/mdgriffith/elm-ui/2.0.0/src",
         "vendored/mdgriffith/elm-animator/2.0.0/src",
-        "vendored/MartinSStewart/elm-email/1.0.0/src"
+        "vendored/MartinSStewart/elm-email/1.0.0/src",
+        "vendored/ianmackenzie/elm-float-extra/1.1.0/src",
+        "vendored/ianmackenzie/elm-geometry/3.11.0/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -23,6 +25,7 @@
             "elm/http": "2.0.0",
             "elm/json": "1.1.3",
             "elm/parser": "1.1.0",
+            "elm/random": "1.0.0",
             "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
@@ -30,6 +33,7 @@
             "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.0.0",
             "ianmackenzie/elm-units": "2.10.0",
+            "ianmackenzie/elm-units-interval": "3.2.0",
             "jinjor/elm-diff": "1.0.6",
             "lamdera/codecs": "1.0.0",
             "lamdera/containers": "1.0.0",
@@ -50,7 +54,6 @@
             "TSFoster/elm-sha1": "2.1.1",
             "danfishgold/base64-bytes": "1.1.0",
             "elm/file": "1.0.5",
-            "elm/random": "1.0.0",
             "elm/regex": "1.0.0",
             "elm-community/list-extra": "8.7.0",
             "elm-community/result-extra": "2.4.0",
@@ -59,6 +62,7 @@
             "elm-explorations/webgl": "1.1.3",
             "folkertdev/elm-flate": "2.0.5",
             "folkertdev/elm-sha2": "1.0.0",
+            "ianmackenzie/elm-float-extra": "1.1.0",
             "justgook/elm-image": "5.0.0",
             "ktonon/elm-crypto": "1.1.2",
             "ktonon/elm-word": "2.1.2",

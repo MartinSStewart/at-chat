@@ -13,6 +13,8 @@ module Pages.UserOverview exposing
     , view
     )
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
@@ -205,7 +207,7 @@ updateFromBackend toFrontend model =
 
 
 type alias Config a =
-    { a | windowSize : ( Int, Int ), time : Time.Posix }
+    { a | windowSize : Coord CssPixels, time : Time.Posix }
 
 
 view : Config a -> Id UserId -> LocalState -> Model -> Element Msg
