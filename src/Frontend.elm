@@ -201,7 +201,7 @@ initLoadedFrontend loading time loginResult =
             }
 
         ( model2, cmdA ) =
-            routeRequest model
+            routeRequest loading.route model
     in
     ( model2
     , Command.batch [ cmdB, cmdA ]
@@ -377,8 +377,8 @@ update msg model =
             updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
 
-routeRequest : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-routeRequest model =
+routeRequest : Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routeRequest previousRoute model =
     case model.route of
         HomePageRoute ->
             ( { model
@@ -443,10 +443,33 @@ routeRequest model =
                                 NotLoggedIn _ ->
                                     model.loginStatus
                     }
+
+                sameGuild : Bool
+                sameGuild =
+                    case previousRoute of
+                        GuildRoute previousGuildId _ ->
+                            guildId == previousGuildId
+
+                        _ ->
+                            False
             in
             case channelRoute of
                 ChannelRoute _ ->
-                    ( model2, setFocus channelTextInputId )
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | sidebarOffset =
+                                    if sameGuild then
+                                        loggedIn.sidebarOffset
+                                            - Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+
+                                    else
+                                        loggedIn.sidebarOffset
+                              }
+                            , setFocus model2 channelTextInputId
+                            )
+                        )
+                        model2
 
                 NewChannelRoute ->
                     ( model2, Command.none )
@@ -545,7 +568,7 @@ updateLoaded msg model =
                     Route.decode url
 
                 ( model2, cmd ) =
-                    routeRequest { model | route = route }
+                    routeRequest model.route { model | route = route }
             in
             ( model2
             , cmd
@@ -1037,7 +1060,7 @@ updateLoaded msg model =
                             case loggedIn.pingUser of
                                 Just _ ->
                                     ( { loggedIn | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
-                                    , setFocus channelTextInputId
+                                    , setFocus model channelTextInputId
                                     )
 
                                 Nothing ->
@@ -1079,7 +1102,7 @@ updateLoaded msg model =
                                                                     SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
                                                             }
                                                         )
-                                                        (setFocus channelTextInputId)
+                                                        (setFocus model channelTextInputId)
 
                                                 _ ->
                                                     ( loggedIn, Command.none )
@@ -1469,7 +1492,7 @@ updateLoaded msg model =
                                                 }
                                                 loggedIn.editMessage
                                       }
-                                    , setFocus editMessageTextInputId
+                                    , setFocus model editMessageTextInputId
                                     )
 
                                 Nothing ->
@@ -1488,7 +1511,7 @@ updateLoaded msg model =
                             ( { loggedIn
                                 | replyTo = SeqDict.insert ( guildId, channelId ) messageIndex loggedIn.replyTo
                               }
-                            , setFocus channelTextInputId
+                            , setFocus model channelTextInputId
                             )
                         )
                         model
@@ -1502,7 +1525,7 @@ updateLoaded msg model =
                     ( { loggedIn
                         | replyTo = SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
                       }
-                    , setFocus channelTextInputId
+                    , setFocus model channelTextInputId
                     )
                 )
                 model
@@ -1563,7 +1586,7 @@ updateLoaded msg model =
         VisibilityChanged visibility ->
             case visibility of
                 Effect.Browser.Events.Visible ->
-                    ( model, setFocus channelTextInputId )
+                    ( model, setFocus model channelTextInputId )
 
                 Effect.Browser.Events.Hidden ->
                     ( model, Command.none )
@@ -1608,7 +1631,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
-                        | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp -1 0
+                        | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
                         , sidebarPreviousOffset = loggedIn.sidebarOffset
                       }
                     , Command.none
@@ -1617,21 +1640,7 @@ updateLoaded msg model =
                 { model | previousTouches = dict }
 
         TouchEnd ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
-                        sidebarDelta =
-                            loggedIn.sidebarOffset
-                                - loggedIn.sidebarPreviousOffset
-                                |> (*) (toFloat (Coord.xRaw model.windowSize))
-                                |> CssPixels.cssPixels
-                                |> Quantity.per (Duration.seconds (1 / 60))
-                                |> Debug.log "a"
-                    in
-                    ( loggedIn, Command.none )
-                )
-                { model | previousTouches = SeqDict.empty }
+            ( { model | previousTouches = SeqDict.empty }, Command.none )
 
         TouchCancel ->
             ( { model | previousTouches = SeqDict.empty }, Command.none )
@@ -1651,9 +1660,9 @@ updateLoaded msg model =
                     ( { loggedIn
                         | sidebarOffset =
                             (if
-                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -300))
-                                    || ((loggedIn.sidebarOffset < -0.5)
-                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 300))
+                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -200))
+                                    || ((loggedIn.sidebarOffset < 0.5)
+                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 200))
                                        )
                              then
                                 loggedIn.sidebarOffset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
@@ -1672,12 +1681,16 @@ updateLoaded msg model =
 
 sidebarSpeed : Quantity Float (Rate Unitless Seconds)
 sidebarSpeed =
-    Quantity.float 4 |> Quantity.per Duration.second
+    Quantity.float 8 |> Quantity.per Duration.second
 
 
-setFocus : HtmlId -> Command FrontendOnly toMsg FrontendMsg
-setFocus htmlId =
-    Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
+setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
+setFocus model htmlId =
+    if isMobile model then
+        Command.none
+
+    else
+        Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
 
 
 messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -2193,7 +2206,7 @@ updateLoadedFromBackend msg model =
                                     loadedInitHelper model.time loginData model
 
                                 ( model2, cmdB ) =
-                                    routeRequest { model | loginStatus = LoggedIn loggedIn }
+                                    routeRequest model.route { model | loginStatus = LoggedIn loggedIn }
                             in
                             ( model2
                             , Command.batch
@@ -2897,11 +2910,6 @@ homePageLoggedInView model loggedIn local =
             ]
             [ Ui.column
                 [ Ui.height Ui.fill
-                , Ui.move
-                    { x = round (loggedIn.sidebarOffset * toFloat (Coord.xRaw model.windowSize))
-                    , y = 0
-                    , z = 0
-                    }
                 ]
                 [ Ui.row
                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -2949,14 +2957,48 @@ loggedInAsView local =
         ]
 
 
+sidebarOffsetAttr loggedIn model =
+    let
+        width : Int
+        width =
+            Coord.xRaw model.windowSize
+
+        offset : Float
+        offset =
+            loggedIn.sidebarOffset * toFloat width
+    in
+    Ui.move
+        { x =
+            --if offset < 20 then
+            --    0
+            --
+            --else if offset > toFloat width - 20 then
+            --    width
+            --
+            --else
+            round offset
+        , y = 0
+        , z = 0
+        }
+
+
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
     case SeqDict.get guildId local.guilds of
         Just guild ->
-            Ui.row
-                [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
-                [ Ui.column
-                    [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+            if isMobile model then
+                Ui.column
+                    [ Ui.height Ui.fill
+                    , Ui.clip
+                    , Ui.background MyUi.background3
+                    , channelView channelRoute guildId guild loggedIn local model
+                        |> Ui.el
+                            [ Ui.background MyUi.background3
+                            , Ui.height Ui.fill
+                            , sidebarOffsetAttr loggedIn model
+                            ]
+                        |> Ui.inFront
+                    ]
                     [ Ui.row
                         [ Ui.height Ui.fill, Ui.heightMin 0 ]
                         [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
@@ -2971,56 +3013,82 @@ guildView model guildId channelRoute loggedIn local =
                         ]
                     , loggedInAsView local
                     ]
-                , case channelRoute of
-                    ChannelRoute channelId ->
-                        case SeqDict.get channelId guild.channels of
-                            Just channel ->
-                                conversationView guildId channelId loggedIn model local channel
 
-                            Nothing ->
-                                Ui.el
-                                    [ Ui.centerY
-                                    , Ui.Font.center
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.Font.size 20
-                                    ]
-                                    (Ui.text "Channel does not exist")
-
-                    NewChannelRoute ->
-                        SeqDict.get guildId loggedIn.newChannelForm
-                            |> Maybe.withDefault newChannelFormInit
-                            |> newChannelFormView guildId
-
-                    EditChannelRoute channelId ->
-                        case SeqDict.get channelId guild.channels of
-                            Just channel ->
-                                editChannelFormView
-                                    guildId
-                                    channelId
-                                    channel
-                                    (SeqDict.get ( guildId, channelId ) loggedIn.editChannelForm
-                                        |> Maybe.withDefault (editChannelFormInit channel)
-                                    )
-
-                            Nothing ->
-                                Ui.el
-                                    [ Ui.centerY
-                                    , Ui.Font.center
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.Font.size 20
-                                    ]
-                                    (Ui.text "Channel does not exist")
-
-                    InviteLinkCreatorRoute ->
-                        inviteLinkCreatorForm model guildId guild
-
-                    JoinRoute _ ->
-                        Ui.none
-                , memberColumn local guild
-                ]
+            else
+                Ui.row
+                    [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
+                    [ Ui.column
+                        [ Ui.height Ui.fill
+                        , Ui.width (Ui.px 300)
+                        ]
+                        [ Ui.row
+                            [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                            , Ui.Lazy.lazy6
+                                channelColumn
+                                local.localUser.userId
+                                local.localUser.user
+                                guildId
+                                guild
+                                channelRoute
+                                loggedIn.channelNameHover
+                            ]
+                        , loggedInAsView local
+                        ]
+                    , channelView channelRoute guildId guild loggedIn local model
+                    , memberColumn local guild
+                    ]
 
         Nothing ->
             homePageLoggedInView model loggedIn local
+
+
+channelView channelRoute guildId guild loggedIn local model =
+    case channelRoute of
+        ChannelRoute channelId ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    conversationView guildId channelId loggedIn model local channel
+
+                Nothing ->
+                    Ui.el
+                        [ Ui.centerY
+                        , Ui.Font.center
+                        , Ui.Font.color MyUi.font1
+                        , Ui.Font.size 20
+                        ]
+                        (Ui.text "Channel does not exist")
+
+        NewChannelRoute ->
+            SeqDict.get guildId loggedIn.newChannelForm
+                |> Maybe.withDefault newChannelFormInit
+                |> newChannelFormView guildId
+
+        EditChannelRoute channelId ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    editChannelFormView
+                        guildId
+                        channelId
+                        channel
+                        (SeqDict.get ( guildId, channelId ) loggedIn.editChannelForm
+                            |> Maybe.withDefault (editChannelFormInit channel)
+                        )
+
+                Nothing ->
+                    Ui.el
+                        [ Ui.centerY
+                        , Ui.Font.center
+                        , Ui.Font.color MyUi.font1
+                        , Ui.Font.size 20
+                        ]
+                        (Ui.text "Channel does not exist")
+
+        InviteLinkCreatorRoute ->
+            inviteLinkCreatorForm model guildId guild
+
+        JoinRoute _ ->
+            Ui.none
 
 
 inviteLinkCreatorForm : LoadedFrontend -> Id GuildId -> FrontendGuild -> Element FrontendMsg
@@ -3401,7 +3469,8 @@ conversationView guildId channelId loggedIn model local channel =
             LocalState.allUsers local
     in
     Ui.column
-        [ Ui.height Ui.fill ]
+        [ Ui.height Ui.fill
+        ]
         [ Ui.el
             [ case loggedIn.showEmojiSelector of
                 EmojiSelectorHidden ->
