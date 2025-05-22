@@ -5,7 +5,7 @@ module NonemptyDict exposing
     , updateIfExists
     , keys, values, fromNonemptyList, toNonemptyList, toList, fromList
     , map, toSeqDict, fromSeqDict
-    , any, foldl, foldr, head, insert, updateOrInsert
+    , any, foldl, foldr, head, insert, merge, updateOrInsert
     )
 
 {-| A dictionary mapping unique keys to values.
@@ -223,3 +223,15 @@ foldr f acc (NonemptyDict k1 v1 dict) =
 head : NonemptyDict k v -> ( k, v )
 head (NonemptyDict k v _) =
     ( k, v )
+
+
+merge :
+    (key -> a -> result -> result)
+    -> (key -> a -> b -> result -> result)
+    -> (key -> b -> result -> result)
+    -> NonemptyDict key a
+    -> NonemptyDict key b
+    -> result
+    -> result
+merge left both right dict1 dict2 result =
+    SeqDict.merge left both right (toSeqDict dict1) (toSeqDict dict2) result

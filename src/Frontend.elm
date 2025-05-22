@@ -36,7 +36,7 @@ import LoginForm
 import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import Pages.Admin
 import Pages.Home
@@ -51,7 +51,7 @@ import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), Drag(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -118,7 +118,7 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= -1 && loaded.previousTouches == SeqDict.empty then
+                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= -1 && loaded.drag == NoDrag then
                                 Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
 
                             else
@@ -197,11 +197,11 @@ initLoadedFrontend loading time loginResult =
             , lastCopied = Nothing
             , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
-            , previousTouches = SeqDict.empty
+            , drag = NoDrag
             }
 
         ( model2, cmdA ) =
-            routeRequest loading.route model
+            routeRequest Nothing model
     in
     ( model2
     , Command.batch [ cmdB, cmdA ]
@@ -377,7 +377,7 @@ update msg model =
             updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
 
-routeRequest : Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routeRequest : Maybe Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routeRequest previousRoute model =
     case model.route of
         HomePageRoute ->
@@ -443,30 +443,44 @@ routeRequest previousRoute model =
                                 NotLoggedIn _ ->
                                     model.loginStatus
                     }
-
-                sameGuild : Bool
-                sameGuild =
-                    case previousRoute of
-                        GuildRoute previousGuildId _ ->
-                            guildId == previousGuildId
-
-                        _ ->
-                            False
             in
             case channelRoute of
-                ChannelRoute _ ->
+                ChannelRoute channelId ->
+                    let
+                        ( sameGuild, sameChannel ) =
+                            case previousRoute of
+                                Just (GuildRoute previousGuildId (ChannelRoute previousChannelId)) ->
+                                    ( guildId == previousGuildId
+                                    , guildId == previousGuildId && channelId == previousChannelId
+                                    )
+
+                                Just (GuildRoute previousGuildId _) ->
+                                    ( guildId == previousGuildId, False )
+
+                                _ ->
+                                    ( False, False )
+                    in
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
                                 | sidebarOffset =
-                                    if sameGuild then
+                                    if sameGuild || previousRoute == Nothing then
                                         loggedIn.sidebarOffset
                                             - Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
 
                                     else
                                         loggedIn.sidebarOffset
                               }
-                            , setFocus model2 channelTextInputId
+                            , Command.batch
+                                [ setFocus model2 channelTextInputId
+                                , if sameChannel then
+                                    Command.none
+
+                                  else
+                                    Process.sleep Duration.millisecond
+                                        |> Task.andThen (\() -> Dom.setViewportOf conversationContainerId 0 9999999)
+                                        |> Task.attempt (\_ -> ScrolledToBottom)
+                                ]
                             )
                         )
                         model2
@@ -509,6 +523,11 @@ routeRequest previousRoute model =
                                         Command.none
                                 ]
                             )
+
+
+conversationContainerId : HtmlId
+conversationContainerId =
+    Dom.id "conversationContainer"
 
 
 routeRequiresLogin : Route -> Bool
@@ -568,7 +587,7 @@ updateLoaded msg model =
                     Route.decode url
 
                 ( model2, cmd ) =
-                    routeRequest model.route { model | route = route }
+                    routeRequest (Just model.route) { model | route = route }
             in
             ( model2
             , cmd
@@ -1594,56 +1613,74 @@ updateLoaded msg model =
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
 
-        TouchStart ->
-            ( model, Command.none )
+        TouchStart touches ->
+            ( { model | drag = DragStart touches }, Command.none )
 
-        TouchMoved touches ->
-            let
-                dict : SeqDict Int Touch
-                dict =
-                    NonemptyDict.toSeqDict touches
+        TouchMoved newTouches ->
+            case model.drag of
+                Dragging dragging ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if dragging.horizontalStart then
+                                let
+                                    averageMove : { x : Float, y : Float }
+                                    averageMove =
+                                        averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
 
-                averageMove : Vector2d CssPixels ScreenCoordinate
-                averageMove =
-                    SeqDict.merge
-                        (\_ _ state -> state)
-                        (\_ new old state ->
-                            { total = Vector2d.plus state.total (Vector2d.from old.client new.client)
-                            , count = state.count + 1
-                            }
+                                    tHorizontal : Float
+                                    tHorizontal =
+                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                in
+                                { loggedIn
+                                    | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
+                                    , sidebarPreviousOffset = loggedIn.sidebarOffset
+                                }
+
+                              else
+                                loggedIn
+                            , Command.none
+                            )
                         )
-                        (\_ _ state -> state)
-                        dict
-                        model.previousTouches
-                        { total = Vector2d.zero, count = 0 }
-                        |> (\a ->
-                                if a.count > 0 then
-                                    a.total |> Vector2d.divideBy a.count
+                        { model | drag = Dragging { dragging | touches = newTouches } }
 
-                                else
-                                    Vector2d.zero
-                           )
+                NoDrag ->
+                    ( model, Command.none )
 
-                tHorizontal : Float
-                tHorizontal =
-                    Quantity.unwrap (Vector2d.xComponent averageMove) / toFloat (Coord.xRaw model.windowSize)
-            in
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
-                        , sidebarPreviousOffset = loggedIn.sidebarOffset
-                      }
-                    , Command.none
-                    )
-                )
-                { model | previousTouches = dict }
+                DragStart startTouches ->
+                    let
+                        averageMove : { x : Float, y : Float }
+                        averageMove =
+                            averageTouchMove startTouches newTouches |> Vector2d.unwrap
+
+                        horizontalStart : Bool
+                        horizontalStart =
+                            abs averageMove.x > abs averageMove.y
+                    in
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if horizontalStart then
+                                let
+                                    tHorizontal : Float
+                                    tHorizontal =
+                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                in
+                                { loggedIn
+                                    | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
+                                    , sidebarPreviousOffset = loggedIn.sidebarOffset
+                                }
+
+                              else
+                                loggedIn
+                            , Command.none
+                            )
+                        )
+                        { model | drag = Dragging { horizontalStart = horizontalStart, touches = startTouches } }
 
         TouchEnd ->
-            ( { model | previousTouches = SeqDict.empty }, Command.none )
+            ( { model | drag = NoDrag }, Command.none )
 
         TouchCancel ->
-            ( { model | previousTouches = SeqDict.empty }, Command.none )
+            ( { model | drag = NoDrag }, Command.none )
 
         OnAnimationFrameDelta delta ->
             updateLoggedIn
@@ -1677,6 +1714,31 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        ScrolledToBottom ->
+            ( model, Command.none )
+
+
+averageTouchMove : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Vector2d CssPixels ScreenCoordinate
+averageTouchMove oldTouches newTouches =
+    NonemptyDict.merge
+        (\_ _ state -> state)
+        (\_ new old state ->
+            { total = Vector2d.plus state.total (Vector2d.from old.client new.client)
+            , count = state.count + 1
+            }
+        )
+        (\_ _ state -> state)
+        newTouches
+        oldTouches
+        { total = Vector2d.zero, count = 0 }
+        |> (\a ->
+                if a.count > 0 then
+                    a.total |> Vector2d.divideBy a.count
+
+                else
+                    Vector2d.zero
+           )
 
 
 sidebarSpeed : Quantity Float (Rate Unitless Seconds)
@@ -2206,7 +2268,7 @@ updateLoadedFromBackend msg model =
                                     loadedInitHelper model.time loginData model
 
                                 ( model2, cmdB ) =
-                                    routeRequest model.route { model | loginStatus = LoggedIn loggedIn }
+                                    routeRequest (Just model.route) { model | loginStatus = LoggedIn loggedIn }
                             in
                             ( model2
                             , Command.batch
@@ -2561,21 +2623,8 @@ layout model attributes child =
             :: Ui.background (Ui.rgb 255 255 255)
             :: attributes
             ++ (if isMobile model then
-                    [ Html.Events.on "touchstart" (Json.Decode.succeed TouchStart) |> Ui.htmlAttribute
-                    , Html.Events.on
-                        "touchmove"
-                        (Json.Decode.field "touches" (dynamicListOf touchDecoder)
-                            |> Json.Decode.andThen
-                                (\list ->
-                                    case NonemptyDict.fromList list of
-                                        Just nonempty ->
-                                            TouchMoved nonempty |> Json.Decode.succeed
-
-                                        Nothing ->
-                                            Json.Decode.fail ""
-                                )
-                        )
-                        |> Ui.htmlAttribute
+                    [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
+                    , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
                     , Html.Events.on "touchcancel" (Json.Decode.succeed TouchCancel) |> Ui.htmlAttribute
                     , Ui.clip
@@ -2586,6 +2635,20 @@ layout model attributes child =
                )
         )
         child
+
+
+touchEventDecoder : (NonemptyDict Int Touch -> msg) -> Decoder msg
+touchEventDecoder msg =
+    Json.Decode.field "touches" (dynamicListOf touchDecoder)
+        |> Json.Decode.andThen
+            (\list ->
+                case NonemptyDict.fromList list of
+                    Just nonempty ->
+                        msg nonempty |> Json.Decode.succeed
+
+                    Nothing ->
+                        Json.Decode.fail ""
+            )
 
 
 touchDecoder : Decoder ( Int, Touch )
@@ -3485,7 +3548,11 @@ conversationView guildId channelId loggedIn model local channel =
             , Ui.height Ui.fill
             ]
             (Ui.column
-                [ Ui.height Ui.fill, Ui.paddingXY 0 16, Ui.scrollable ]
+                [ Ui.height Ui.fill
+                , Ui.paddingXY 0 16
+                , Ui.scrollable
+                , Ui.id (Dom.idToString conversationContainerId)
+                ]
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
                     (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))

@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , Drag(..)
     , EditMessage
     , EmojiSelector(..)
     , FrontendModel(..)
@@ -101,8 +102,14 @@ type alias LoadedFrontend =
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     , textInputFocus : Maybe HtmlId
     , notificationPermission : NotificationPermission
-    , previousTouches : SeqDict Int Touch
+    , drag : Drag
     }
+
+
+type Drag
+    = NoDrag
+    | DragStart (NonemptyDict Int Touch)
+    | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch }
 
 
 type LoginStatus
@@ -254,11 +261,12 @@ type FrontendMsg
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
-    | TouchStart
+    | TouchStart (NonemptyDict Int Touch)
     | TouchMoved (NonemptyDict Int Touch)
     | TouchEnd
     | TouchCancel
     | OnAnimationFrameDelta Duration
+    | ScrolledToBottom
 
 
 type ScreenCoordinate
