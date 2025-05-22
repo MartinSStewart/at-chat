@@ -66,6 +66,7 @@ type NotificationPermission
     = NotAsked
     | Denied
     | Granted
+    | Unsupported
 
 
 checkNotificationPermissionResponse : (NotificationPermission -> msg) -> Subscription FrontendOnly msg
@@ -83,6 +84,9 @@ checkNotificationPermissionResponse msg =
 
                             "denied" ->
                                 Denied
+
+                            "unsupported" ->
+                                Unsupported
 
                             _ ->
                                 NotAsked

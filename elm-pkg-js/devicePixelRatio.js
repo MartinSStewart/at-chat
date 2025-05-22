@@ -29,24 +29,33 @@ exports.init = async function init(app)
 
     app.ports.request_notification_permission.subscribe((a) => {
         console.log("request");
-        Notification.requestPermission().then((permission) => {
-            console.log(permission);
-          if (permission === "granted") {
-            console.log("granted");
-            const notification = new Notification("Notifications enabled");
-          }
-          app.ports.check_notification_permission_from_js.send(permission);
-        });
+        if (!("Notification" in window)) {
+            Notification.requestPermission().then((permission) => {
+                console.log(permission);
+              if (permission === "granted") {
+                console.log("granted");
+                const notification = new Notification("Notifications enabled");
+              }
+              app.ports.check_notification_permission_from_js.send(permission);
+            });
+        } else {
+            app.ports.check_notification_permission_from_js.send("unsupported");
+        }
     })
 
     app.ports.check_notification_permission_to_js.subscribe((a) => {
-        console.log(Notification.permission);
-        app.ports.check_notification_permission_from_js.send(Notification.permission);
+        if (!("Notification" in window)) {
+            app.ports.check_notification_permission_from_js.send(Notification.permission);
+        } else {
+            app.ports.check_notification_permission_from_js.send("unsupported");
+        }
     });
 
     app.ports.show_notification.subscribe((a) => {
-        const notification = new Notification(a.title, { body: a.body });
-        console.log(notification);
+        if (!("Notification" in window)) {
+            const notification = new Notification(a.title, { body: a.body });
+            console.log(notification);
+        }
     });
 
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
