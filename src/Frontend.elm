@@ -1617,7 +1617,21 @@ updateLoaded msg model =
                 { model | previousTouches = dict }
 
         TouchEnd ->
-            ( { model | previousTouches = SeqDict.empty }, Command.none )
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
+                        sidebarDelta =
+                            loggedIn.sidebarOffset
+                                - loggedIn.sidebarPreviousOffset
+                                |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                |> CssPixels.cssPixels
+                                |> Quantity.per (Duration.seconds (1 / 60))
+                                |> Debug.log "a"
+                    in
+                    ( loggedIn, Command.none )
+                )
+                { model | previousTouches = SeqDict.empty }
 
         TouchCancel ->
             ( { model | previousTouches = SeqDict.empty }, Command.none )
@@ -1626,20 +1640,28 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
+                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
                         sidebarDelta =
                             loggedIn.sidebarOffset
                                 - loggedIn.sidebarPreviousOffset
-                                |> Debug.log "a"
+                                |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                |> CssPixels.cssPixels
+                                |> Quantity.per (Duration.seconds (1 / 60))
                     in
                     ( { loggedIn
                         | sidebarOffset =
-                            (if sidebarDelta < -0.01 || (loggedIn.sidebarOffset < -0.5 && sidebarDelta < 0.01) then
+                            (if
+                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -300))
+                                    || ((loggedIn.sidebarOffset < -0.5)
+                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 300))
+                                       )
+                             then
                                 loggedIn.sidebarOffset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
 
                              else
                                 loggedIn.sidebarOffset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
                             )
-                                |> clamp -1 0
+                                |> clamp 0 1
                         , sidebarPreviousOffset = loggedIn.sidebarOffset
                       }
                     , Command.none
