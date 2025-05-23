@@ -11,7 +11,7 @@ async function loadAudio(url, context, sounds) {
 
 exports.init = async function init(app)
 {
-    document.body.style.overscrollBehavior = "none";
+    document.body.style.overflow = "hidden";
     document.body.style.backgroundColor = "rgb(14,20,40)";
 
     let context = null;
