@@ -2640,7 +2640,10 @@ layout model attributes child =
             :: Ui.background (Ui.rgb 255 255 255)
             :: attributes
             ++ (if isMobile model then
-                    [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
+                    [ Html.Events.preventDefaultOn
+                        "touchstart"
+                        (touchEventDecoder TouchStart |> Json.Decode.map (\a -> ( a, True )))
+                        |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
                     , Html.Events.on "touchcancel" (Json.Decode.succeed TouchCancel) |> Ui.htmlAttribute
@@ -2670,11 +2673,14 @@ touchEventDecoder msg =
 
 touchDecoder : Decoder ( Int, Touch )
 touchDecoder =
-    Json.Decode.map3
-        (\identifier clientX clientY -> ( identifier, { client = Point2d.xy clientX clientY } ))
+    Json.Decode.map4
+        (\identifier clientX clientY target ->
+            ( identifier, { client = Point2d.xy clientX clientY, target = Dom.id target } )
+        )
         (Json.Decode.field "identifier" Json.Decode.int)
         (Json.Decode.field "clientX" quantityDecoder)
         (Json.Decode.field "clientY" quantityDecoder)
+        (Json.Decode.at [ "target", "id" ] Json.Decode.string)
 
 
 quantityDecoder : Decoder (Quantity Float unit)

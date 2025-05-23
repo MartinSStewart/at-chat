@@ -276,6 +276,7 @@ type ScreenCoordinate
 
 type alias Touch =
     { client : Point2d CssPixels ScreenCoordinate
+    , target : HtmlId
     }
 
 
