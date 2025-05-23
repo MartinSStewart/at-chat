@@ -462,15 +462,11 @@ routeRequest previousRoute model =
                     in
                     updateLoggedIn
                         (\loggedIn ->
-                            ( { loggedIn
-                                | sidebarOffset =
-                                    if sameGuild || previousRoute == Nothing then
-                                        loggedIn.sidebarOffset
-                                            - Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+                            ( if sameGuild || previousRoute == Nothing then
+                                startClosingChannelSidebar loggedIn
 
-                                    else
-                                        loggedIn.sidebarOffset
-                              }
+                              else
+                                loggedIn
                             , Command.batch
                                 [ setFocus model2 channelTextInputId
                                 , if sameChannel then
@@ -1717,6 +1713,27 @@ updateLoaded msg model =
 
         ScrolledToBottom ->
             ( model, Command.none )
+
+        PressedChannelHeaderBackButton ->
+            updateLoggedIn (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none )) model
+
+
+startClosingChannelSidebar : LoggedIn2 -> LoggedIn2
+startClosingChannelSidebar loggedIn =
+    { loggedIn
+        | sidebarOffset =
+            loggedIn.sidebarOffset
+                - Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+    }
+
+
+startOpeningChannelSidebar : LoggedIn2 -> LoggedIn2
+startOpeningChannelSidebar loggedIn =
+    { loggedIn
+        | sidebarOffset =
+            loggedIn.sidebarOffset
+                + Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+    }
 
 
 averageTouchMove : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Vector2d CssPixels ScreenCoordinate
@@ -3106,6 +3123,7 @@ guildView model guildId channelRoute loggedIn local =
             homePageLoggedInView model loggedIn local
 
 
+channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
         ChannelRoute channelId ->
@@ -3517,6 +3535,33 @@ conversationViewHelper guildId channelId channel loggedIn local model =
         |> Tuple.second
 
 
+channelHeader : Bool -> Element FrontendMsg -> Element FrontendMsg
+channelHeader isMobile2 content =
+    Ui.row
+        [ Ui.contentCenterY
+        , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+        , Ui.borderColor MyUi.border2
+        , Ui.background MyUi.background3
+        ]
+        (if isMobile2 then
+            [ Ui.el
+                [ Ui.Input.button PressedChannelHeaderBackButton
+                , Ui.width (Ui.px 36)
+                , Ui.height Ui.fill
+                , Ui.Font.color MyUi.font3
+                , Ui.contentCenterY
+                , Ui.contentCenterX
+                , Ui.padding 8
+                ]
+                (Ui.html Icons.arrowLeft)
+            , Ui.el [ Ui.paddingXY 0 8 ] content
+            ]
+
+         else
+            [ Ui.el [ Ui.paddingXY 16 8 ] content ]
+        )
+
+
 conversationView :
     Id GuildId
     -> Id ChannelId
@@ -3534,7 +3579,13 @@ conversationView guildId channelId loggedIn model local channel =
     Ui.column
         [ Ui.height Ui.fill
         ]
-        [ Ui.el
+        [ channelHeader
+            (isMobile model)
+            (Ui.row
+                [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
+                [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channel.name) ]
+            )
+        , Ui.el
             [ case loggedIn.showEmojiSelector of
                 EmojiSelectorHidden ->
                     Ui.noAttr
@@ -3560,7 +3611,7 @@ conversationView guildId channelId loggedIn model local channel =
                 )
             )
         , Ui.column
-            [ Ui.paddingXY 5 0 ]
+            [ Ui.paddingXY 2 0 ]
             [ case SeqDict.get ( guildId, channelId ) loggedIn.replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
@@ -3657,7 +3708,7 @@ replyToHeader guildId channelId userId local =
         [ Ui.text "Reply to "
         , Ui.el [ Ui.Font.bold ] (Ui.text (userToName userId (LocalState.allUsers local)))
         ]
-        |> Ui.el [ Ui.paddingXY 3 0, Ui.move { x = 0, y = 4, z = 0 } ]
+        |> Ui.el [ Ui.paddingXY 3 0, Ui.move { x = 0, y = 0, z = 0 } ]
 
 
 dropdownButtonId : Int -> HtmlId
@@ -4127,6 +4178,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
             , Ui.Font.color MyUi.font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border1
+            , Ui.height (Ui.px 40)
             ]
             [ Ui.text (GuildName.toString guild.name)
             , Ui.el
@@ -4135,7 +4187,9 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                 , Ui.Font.color MyUi.font2
                 , Ui.width (Ui.px 40)
                 , Ui.alignRight
-                , Ui.paddingXY 8 8
+                , Ui.paddingXY 8 0
+                , Ui.height Ui.fill
+                , Ui.contentCenterY
                 ]
                 (Ui.html Icons.inviteUserIcon)
             ]

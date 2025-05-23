@@ -4,6 +4,7 @@ module MyUi exposing
     , background2
     , background3
     , border1
+    , border2
     , buttonBackground
     , buttonBorder
     , buttonFontColor
@@ -788,6 +789,11 @@ placeholderFont =
 border1 : Ui.Color
 border1 =
     Ui.rgb 60 70 100
+
+
+border2 : Ui.Color
+border2 =
+    Ui.rgb 34 39 56
 
 
 highlightedBorder : Ui.Color

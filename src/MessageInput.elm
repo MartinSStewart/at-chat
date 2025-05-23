@@ -67,6 +67,7 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
+            , Html.Attributes.style "outline" "none"
             , Html.Events.onFocus (msgConfig.textInputGotFocus channelTextInputId)
             , Html.Events.onBlur (msgConfig.textInputLostFocus channelTextInputId)
             , case pingUser of
@@ -147,7 +148,7 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
         ]
         |> Ui.html
         |> Ui.el
-            [ Ui.paddingWith { left = 3, right = 2, top = 3, bottom = 19 }
+            [ Ui.paddingWith { left = 3, right = 2, top = 0, bottom = 19 }
             , Ui.scrollable
             , Ui.heightMin 0
             , Ui.heightMax 400

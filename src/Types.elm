@@ -267,6 +267,7 @@ type FrontendMsg
     | TouchCancel
     | OnAnimationFrameDelta Duration
     | ScrolledToBottom
+    | PressedChannelHeaderBackButton
 
 
 type ScreenCoordinate
