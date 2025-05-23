@@ -51,7 +51,7 @@ import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), Drag(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), Drag(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, NewGuildForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -289,6 +289,7 @@ loadedInitHelper time loginData loading =
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
+            , newGuildForm = Nothing
             , channelNameHover = Nothing
             , typingDebouncer = True
             , pingUser = Nothing
@@ -987,9 +988,49 @@ updateLoaded msg model =
             )
 
         PressedCreateGuild ->
-            ( model
-            , Command.none
-            )
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | newGuildForm = Just newGuildFormInit }
+                    , Command.none
+                    )
+                )
+                model
+
+        NewGuildFormChanged newGuildForm ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | newGuildForm = Just newGuildForm }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitNewGuild newGuildForm ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case GuildName.fromString newGuildForm.name of
+                        Ok guildName ->
+                            handleLocalChange
+                                model.time
+                                (Local_NewGuild model.time guildName EmptyPlaceholder |> Just)
+                                { loggedIn | newGuildForm = Nothing }
+                                Command.none
+
+                        Err _ ->
+                            ( { loggedIn | newGuildForm = Just { newGuildForm | pressedSubmit = True } }
+                            , Command.none
+                            )
+                )
+                model
+
+        PressedCancelNewGuild ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | newGuildForm = Nothing }
+                    , Command.none
+                    )
+                )
+                model
 
         GotPingUserPosition result ->
             updateLoggedIn
@@ -1920,6 +1961,20 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
+                Local_NewGuild time guildName guildIdPlaceholder ->
+                    case guildIdPlaceholder of
+                        EmptyPlaceholder ->
+                            local
+
+                        FilledInByBackend guildId ->
+                            { local
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.createGuildFrontend time local.localUser.userId guildName guildId)
+                                        local.guilds
+                            }
+
                 Local_MemberTyping time guildId channelId ->
                     { local
                         | guilds =
@@ -2099,6 +2154,15 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.addInvite inviteLinkId userId time)
+                                local.guilds
+                    }
+
+                Server_NewGuild time userId guildId guildName ->
+                    { local
+                        | guilds =
+                            SeqDict.insert
+                                guildId
+                                (LocalState.createGuildFrontend time userId guildName guildId)
                                 local.guilds
                     }
 
@@ -2587,6 +2651,9 @@ pendingChangesText localChange =
 
         Local_NewInviteLink posix id toBeFilledInByBackend ->
             "Created invite link"
+
+        Local_NewGuild _ guildName _ ->
+            "Created new guild"
 
         Local_MemberTyping _ _ _ ->
             "Is typing notification"
@@ -4358,6 +4425,11 @@ memberLabel local userId =
 
 newChannelFormInit : NewChannelForm
 newChannelFormInit =
+    { name = "", pressedSubmit = False }
+
+
+newGuildFormInit : NewGuildForm
+newGuildFormInit =
     { name = "", pressedSubmit = False }
 
 

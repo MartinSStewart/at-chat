@@ -21,6 +21,8 @@ module LocalState exposing
     , channelToFrontend
     , createChannel
     , createChannelFrontend
+    , createGuild
+    , createGuildFrontend
     , createMessage
     , createNewUser
     , deleteChannel
@@ -56,6 +58,7 @@ import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 
 
@@ -306,6 +309,66 @@ createMessage message channel =
 
                 DeletedMessage ->
                     channel.lastTypedAt
+    }
+
+
+createGuild : Time.Posix -> Id UserId -> GuildName -> Id GuildId -> BackendGuild
+createGuild time userId guildName guildId =
+    let
+        announcementChannelId : Id ChannelId
+        announcementChannelId =
+            Id.fromInt 0
+    in
+    { createdAt = time
+    , createdBy = userId
+    , name = guildName
+    , icon = Nothing
+    , channels =
+        SeqDict.fromList
+            [ ( announcementChannelId
+              , { createdAt = time
+                , createdBy = userId
+                , name = Unsafe.channelName "general"
+                , messages = Array.empty
+                , status = ChannelActive
+                , lastTypedAt = SeqDict.empty
+                }
+              )
+            ]
+    , members = SeqDict.empty
+    , owner = userId
+    , invites = SeqDict.empty
+    , announcementChannel = announcementChannelId
+    }
+
+
+createGuildFrontend : Time.Posix -> Id UserId -> GuildName -> Id GuildId -> FrontendGuild
+createGuildFrontend time userId guildName guildId =
+    let
+        announcementChannelId : Id ChannelId
+        announcementChannelId =
+            Id.fromInt 0
+    in
+    { createdAt = time
+    , createdBy = userId
+    , name = guildName
+    , icon = Nothing
+    , channels =
+        SeqDict.fromList
+            [ ( announcementChannelId
+              , { createdAt = time
+                , createdBy = userId
+                , name = Unsafe.channelName "general"
+                , messages = Array.empty
+                , isArchived = Nothing
+                , lastTypedAt = SeqDict.empty
+                }
+              )
+            ]
+    , members = SeqDict.empty
+    , owner = userId
+    , invites = SeqDict.empty
+    , announcementChannel = announcementChannelId
     }
 
 

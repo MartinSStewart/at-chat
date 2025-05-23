@@ -20,6 +20,7 @@ module Types exposing
     , LoginTokenData(..)
     , MessageId
     , NewChannelForm
+    , NewGuildForm
     , RevealedSpoilers
     , ScreenCoordinate(..)
     , ServerChange(..)
@@ -124,6 +125,7 @@ type alias LoggedIn2 =
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
+    , newGuildForm : Maybe NewGuildForm
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
@@ -234,6 +236,9 @@ type FrontendMsg
     | FrontendNoOp
     | PressedCopyText String
     | PressedCreateGuild
+    | NewGuildFormChanged NewGuildForm
+    | PressedSubmitNewGuild NewGuildForm
+    | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
     | PressedPingUser (Id GuildId) (Id ChannelId) Int
@@ -281,6 +286,12 @@ type alias Touch =
 
 
 type alias NewChannelForm =
+    { name : String
+    , pressedSubmit : Bool
+    }
+
+
+type alias NewGuildForm =
     { name : String
     , pressedSubmit : Bool
     }
@@ -351,6 +362,7 @@ type ServerChange
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
+    | Server_NewGuild Time.Posix (Id UserId) (Id GuildId) GuildName
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
         (Result
@@ -376,6 +388,7 @@ type LocalChange
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
+    | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix (Id GuildId) (Id ChannelId)
     | Local_AddReactionEmoji MessageId Emoji
     | Local_RemoveReactionEmoji MessageId Emoji

@@ -612,6 +612,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_NewGuild _ guildName _ ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            let
+                                guildId : Id GuildId
+                                guildId =
+                                    Id.nextId model2.guilds
+
+                                newGuild : BackendGuild
+                                newGuild =
+                                    LocalState.createGuild time userId guildName guildId
+                            in
+                            ( { model2
+                                | guilds = SeqDict.insert guildId newGuild model2.guilds
+                              }
+                            , Command.batch
+                                [ Local_NewGuild time guildName (FilledInByBackend guildId)
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , Server_NewGuild time userId guildId guildName
+                                    |> ServerChange
+                                    |> ChangeBroadcast
+                                    |> Lamdera.sendToFrontend clientId
+                                ]
+                            )
+                        )
+
                 Local_MemberTyping _ guildId channelId ->
                     asGuildMember
                         model
