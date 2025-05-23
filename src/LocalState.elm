@@ -22,7 +22,6 @@ module LocalState exposing
     , createChannel
     , createChannelFrontend
     , createGuild
-    , createGuildFrontend
     , createMessage
     , createNewUser
     , deleteChannel
@@ -31,6 +30,7 @@ module LocalState exposing
     , editMessage
     , getUser
     , guildToFrontend
+    , guildToFrontendForUser
     , isAdmin
     , memberIsEditTyping
     , memberIsTyping
@@ -108,8 +108,8 @@ type alias FrontendGuild =
     }
 
 
-guildToFrontend : Id UserId -> BackendGuild -> Maybe FrontendGuild
-guildToFrontend userId guild =
+guildToFrontendForUser : Id UserId -> BackendGuild -> Maybe FrontendGuild
+guildToFrontendForUser userId guild =
     if userId == guild.owner || SeqDict.member userId guild.members then
         { createdAt = guild.createdAt
         , createdBy = guild.createdBy
@@ -125,6 +125,20 @@ guildToFrontend userId guild =
 
     else
         Nothing
+
+
+guildToFrontend : BackendGuild -> FrontendGuild
+guildToFrontend guild =
+    { createdAt = guild.createdAt
+    , createdBy = guild.createdBy
+    , name = guild.name
+    , icon = guild.icon
+    , channels = SeqDict.filterMap (\_ channel -> channelToFrontend channel) guild.channels
+    , members = guild.members
+    , owner = guild.owner
+    , invites = guild.invites
+    , announcementChannel = guild.announcementChannel
+    }
 
 
 type alias BackendChannel =
@@ -312,8 +326,8 @@ createMessage message channel =
     }
 
 
-createGuild : Time.Posix -> Id UserId -> GuildName -> Id GuildId -> BackendGuild
-createGuild time userId guildName guildId =
+createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild
+createGuild time userId guildName =
     let
         announcementChannelId : Id ChannelId
         announcementChannelId =
@@ -331,36 +345,6 @@ createGuild time userId guildName guildId =
                 , name = Unsafe.channelName "general"
                 , messages = Array.empty
                 , status = ChannelActive
-                , lastTypedAt = SeqDict.empty
-                }
-              )
-            ]
-    , members = SeqDict.empty
-    , owner = userId
-    , invites = SeqDict.empty
-    , announcementChannel = announcementChannelId
-    }
-
-
-createGuildFrontend : Time.Posix -> Id UserId -> GuildName -> Id GuildId -> FrontendGuild
-createGuildFrontend time userId guildName guildId =
-    let
-        announcementChannelId : Id ChannelId
-        announcementChannelId =
-            Id.fromInt 0
-    in
-    { createdAt = time
-    , createdBy = userId
-    , name = guildName
-    , icon = Nothing
-    , channels =
-        SeqDict.fromList
-            [ ( announcementChannelId
-              , { createdAt = time
-                , createdBy = userId
-                , name = Unsafe.channelName "general"
-                , messages = Array.empty
-                , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
                 }
               )

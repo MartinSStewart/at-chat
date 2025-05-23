@@ -1971,7 +1971,9 @@ changeUpdate localMsg local =
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.createGuildFrontend time local.localUser.userId guildName guildId)
+                                        (LocalState.createGuild time local.localUser.userId guildName
+                                            |> LocalState.guildToFrontend
+                                        )
                                         local.guilds
                             }
 
@@ -2154,15 +2156,6 @@ changeUpdate localMsg local =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.addInvite inviteLinkId userId time)
-                                local.guilds
-                    }
-
-                Server_NewGuild time userId guildId guildName ->
-                    { local
-                        | guilds =
-                            SeqDict.insert
-                                guildId
-                                (LocalState.createGuildFrontend time userId guildName guildId)
                                 local.guilds
                     }
 

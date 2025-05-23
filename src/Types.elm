@@ -362,7 +362,6 @@ type ServerChange
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
     | Server_NewInviteLink Time.Posix (Id UserId) (Id GuildId) (SecretId InviteLinkId)
-    | Server_NewGuild Time.Posix (Id UserId) (Id GuildId) GuildName
     | Server_MemberJoined Time.Posix (Id UserId) (Id GuildId) FrontendUser
     | Server_YouJoinedGuildByInvite
         (Result
