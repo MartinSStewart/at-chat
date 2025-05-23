@@ -1697,9 +1697,9 @@ updateLoaded msg model =
                     ( { loggedIn
                         | sidebarOffset =
                             (if
-                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -200))
+                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
                                     || ((loggedIn.sidebarOffset < 0.5)
-                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 200))
+                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
                                        )
                              then
                                 loggedIn.sidebarOffset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
@@ -3887,49 +3887,52 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 localUser.userId
                 message2.reactions
                 isHovered
-                [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
-                , userToName message2.createdBy allUsers
-                    ++ " "
-                    |> Ui.text
-                    |> Ui.el [ Ui.Font.bold ]
-                , Html.div
-                    [ Html.Attributes.style "white-space" "pre-wrap" ]
-                    (RichText.view
-                        (PressedSpoiler messageIndex)
-                        (case SeqDict.get messageIndex revealedSpoilers of
-                            Just nonempty ->
-                                NonemptySet.toSeqSet nonempty
+                (Ui.column
+                    []
+                    [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
+                    , userToName message2.createdBy allUsers
+                        ++ " "
+                        |> Ui.text
+                        |> Ui.el [ Ui.Font.bold ]
+                    , Html.div
+                        [ Html.Attributes.style "white-space" "pre-wrap" ]
+                        (RichText.view
+                            (PressedSpoiler messageIndex)
+                            (case SeqDict.get messageIndex revealedSpoilers of
+                                Just nonempty ->
+                                    NonemptySet.toSeqSet nonempty
 
-                            Nothing ->
-                                SeqSet.empty
-                        )
-                        allUsers
-                        message2.content
-                        ++ (if isBeingEdited then
-                                [ Html.span
-                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                    , Html.Attributes.style "font-size" "12px"
-                                    ]
-                                    [ Html.text " (editing...)" ]
-                                ]
-
-                            else
-                                case message2.editedAt of
-                                    Just editedAt ->
-                                        [ Html.span
-                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                            , Html.Attributes.style "font-size" "12px"
-                                            , MyUi.datestamp editedAt |> Html.Attributes.title
-                                            ]
-                                            [ Html.text " (edited)" ]
+                                Nothing ->
+                                    SeqSet.empty
+                            )
+                            allUsers
+                            message2.content
+                            ++ (if isBeingEdited then
+                                    [ Html.span
+                                        [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                        , Html.Attributes.style "font-size" "12px"
                                         ]
+                                        [ Html.text " (editing...)" ]
+                                    ]
 
-                                    Nothing ->
-                                        []
-                           )
-                    )
-                    |> Ui.html
-                ]
+                                else
+                                    case message2.editedAt of
+                                        Just editedAt ->
+                                            [ Html.span
+                                                [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                                , Html.Attributes.style "font-size" "12px"
+                                                , MyUi.datestamp editedAt |> Html.Attributes.title
+                                                ]
+                                                [ Html.text " (edited)" ]
+                                            ]
+
+                                        Nothing ->
+                                            []
+                               )
+                        )
+                        |> Ui.html
+                    ]
+                )
 
         UserJoinedMessage _ userId reactions ->
             messageContainer
@@ -3939,7 +3942,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 localUser.userId
                 reactions
                 isHovered
-                [ userJoinedContent userId allUsers ]
+                (userJoinedContent userId allUsers)
 
         DeletedMessage ->
             Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
@@ -4035,7 +4038,7 @@ messageContainer :
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
     -> Bool
-    -> List (Element FrontendMsg)
+    -> Element FrontendMsg
     -> Element FrontendMsg
 messageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
     let
@@ -4101,7 +4104,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                             [ Ui.background MyUi.mentionColor ]
                )
         )
-        (messageContent ++ Maybe.Extra.toList maybeReactions)
+        (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
 channelColumn :
