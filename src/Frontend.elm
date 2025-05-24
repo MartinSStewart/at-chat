@@ -300,7 +300,6 @@ loadedInitHelper time loginData loading =
             , revealedSpoilers = Nothing
             , sidebarOffset = 0
             , sidebarPreviousOffset = 0
-            , nicknameForm = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -1011,38 +1010,6 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedSetNickname guildId userId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-
-                        currentNickname : String
-                        currentNickname =
-                            case SeqDict.get guildId local.guilds of
-                                Just guild ->
-                                    case SeqDict.get userId guild.nicknames of
-                                        Just nickname ->
-                                            PersonName.toString nickname
-
-                                        Nothing ->
-                                            ""
-
-                                Nothing ->
-                                    ""
-
-                        nicknameForm : NicknameForm
-                        nicknameForm =
-                            { name = currentNickname, pressedSubmit = False }
-                    in
-                    ( { loggedIn | nicknameForm = Just ( guildId, userId, nicknameForm ) }
-                    , Command.none
-                    )
-                )
-                model
-
         NewGuildFormChanged newGuildForm ->
             updateLoggedIn
                 (\loggedIn ->
@@ -1074,47 +1041,6 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn | newGuildForm = Nothing }
-                    , Command.none
-                    )
-                )
-                model
-
-        NicknameFormChanged guildId userId nicknameForm ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | nicknameForm = Just ( guildId, userId, nicknameForm ) }
-                    , Command.none
-                    )
-                )
-                model
-
-        PressedSubmitNickname guildId userId nicknameForm ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case PersonName.fromString nicknameForm.name of
-                        Ok nickname ->
-                            handleLocalChange
-                                model.time
-                                (if String.isEmpty (String.trim nicknameForm.name) then
-                                    Local_SetNickname guildId Nothing |> Just
-
-                                 else
-                                    Local_SetNickname guildId (Just nickname) |> Just
-                                )
-                                { loggedIn | nicknameForm = Nothing }
-                                Command.none
-
-                        Err _ ->
-                            ( { loggedIn | nicknameForm = Just ( guildId, userId, { nicknameForm | pressedSubmit = True } ) }
-                            , Command.none
-                            )
-                )
-                model
-
-        PressedCancelNickname guildId userId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | nicknameForm = Nothing }
                     , Command.none
                     )
                 )
@@ -1583,64 +1509,67 @@ updateLoaded msg model =
                         local : LocalState
                         local =
                             Local.model loggedIn.localState
-
-                        messageCount : Int
-                        messageCount =
-                            Array.length channel.messages
-
-                        mostRecentMessage : Maybe ( Int, Nonempty RichText )
-                        mostRecentMessage =
-                            (if messageCount < 5 then
-                                Array.toList channel.messages |> List.indexedMap Tuple.pair
-
-                             else
-                                Array.slice (messageCount - 5) messageCount channel.messages
-                                    |> Array.toList
-                                    |> List.indexedMap
-                                        (\index message ->
-                                            ( messageCount + index - 5, message )
-                                        )
-                            )
-                                |> List.reverse
-                                |> List.Extra.findMap
-                                    (\( index, message ) ->
-                                        case message of
-                                            UserTextMessage data ->
-                                                if local.localUser.userId == data.createdBy then
-                                                    Just ( index, data.content )
-
-                                                else
-                                                    Nothing
-
-                                            UserJoinedMessage posix id seqDict ->
-                                                Nothing
-
-                                            DeletedMessage ->
-                                                Nothing
-                                    )
                     in
-                    case mostRecentMessage of
-                        Just ( index, message ) ->
-                            ( { loggedIn
-                                | editMessage =
-                                    SeqDict.insert
-                                        ( guildId, channelId )
-                                        { messageIndex = index
-                                        , text =
-                                            RichText.toString
-                                                (LocalState.allUsers local)
-                                                message
-                                        }
-                                        loggedIn.editMessage
-                              }
-                            , setFocus model editMessageTextInputId
-                            )
+                    case getGuildAndChannel guildId channelId local of
+                        Just ( guild, channel ) ->
+                            let
+                                messageCount : Int
+                                messageCount =
+                                    Array.length channel.messages
+
+                                mostRecentMessage : Maybe ( Int, Nonempty RichText )
+                                mostRecentMessage =
+                                    (if messageCount < 5 then
+                                        Array.toList channel.messages |> List.indexedMap Tuple.pair
+
+                                     else
+                                        Array.slice (messageCount - 5) messageCount channel.messages
+                                            |> Array.toList
+                                            |> List.indexedMap
+                                                (\index message ->
+                                                    ( messageCount + index - 5, message )
+                                                )
+                                    )
+                                        |> List.reverse
+                                        |> List.Extra.findMap
+                                            (\( index, message ) ->
+                                                case message of
+                                                    UserTextMessage data ->
+                                                        if local.localUser.userId == data.createdBy then
+                                                            Just ( index, data.content )
+
+                                                        else
+                                                            Nothing
+
+                                                    UserJoinedMessage posix id seqDict ->
+                                                        Nothing
+
+                                                    DeletedMessage ->
+                                                        Nothing
+                                            )
+                            in
+                            case mostRecentMessage of
+                                Just ( index, message ) ->
+                                    ( { loggedIn
+                                        | editMessage =
+                                            SeqDict.insert
+                                                ( guildId, channelId )
+                                                { messageIndex = index
+                                                , text =
+                                                    RichText.toString
+                                                        (LocalState.allUsers local)
+                                                        message
+                                                }
+                                                loggedIn.editMessage
+                                      }
+                                    , setFocus model editMessageTextInputId
+                                    )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
 
                         Nothing ->
                             ( loggedIn, Command.none )
-
-                    Nothing ->
-                        ( loggedIn, Command.none )
                 )
                 model
 
@@ -1998,7 +1927,7 @@ changeUpdate localMsg local =
                                                         ( guildId, channelId )
                                                         (Array.length channel.messages)
                                                         user.lastViewed
-                                                }
+                                            }
                                     }
                             }
 
@@ -2980,18 +2909,6 @@ view model =
 
                                         _ ->
                                             Ui.noAttr
-                                    , -- Add nickname dialog overlay
-                                    case loggedIn.nicknameForm of
-                                        Just ( formGuildId, formUserId, nicknameForm ) ->
-                                            case SeqDict.get formUserId (LocalState.allUsers local) of
-                                                Just user ->
-                                                    Ui.inFront (nicknameDialogView formGuildId formUserId user nicknameForm)
-
-                                                Nothing ->
-                                                    Ui.noAttr
-
-                                        Nothing ->
-                                            Ui.noAttr
                                     ]
                                     (page loggedIn (Local.model loggedIn.localState))
 
@@ -3343,8 +3260,8 @@ guildView model guildId channelRoute loggedIn local =
                                     ]
                                 , loggedInAsView local
                                 ]
-                            , channelView channelRoute guildId guild loggedIn local
-                            , memberColumn guildId local guild
+                            , channelView channelRoute guildId guild loggedIn local model
+                            , memberColumn local guild
                             ]
 
                 Nothing ->
@@ -4310,19 +4227,6 @@ userToName userId allUsers =
             "<missing>"
 
 
-{-| Get the display name for a user in a specific guild context.
-Returns nickname if set, otherwise returns the user's real name.
--}
-userDisplayName : Id UserId -> FrontendGuild -> SeqDict (Id UserId) FrontendUser -> String
-userDisplayName userId guild allUsers =
-    case SeqDict.get userId guild.nicknames of
-        Just nickname ->
-            PersonName.toString nickname
-
-        Nothing ->
-            userToName userId allUsers
-
-
 messageContainer :
     HighlightMessage
     -> Int
@@ -4545,62 +4449,13 @@ friendsColumn local =
             , Ui.Font.color MyUi.font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
             , Ui.borderColor MyUi.border1
-            , Ui.height (Ui.px 40)
             ]
-            [ Ui.text "Direct messages"
-            , Ui.el
-                [ Ui.width Ui.shrink
-                , Ui.Input.button (PressedCreateInviteLink (Id.fromInt 0))
-                , Ui.Font.color MyUi.font2
-                , Ui.width (Ui.px 40)
-                , Ui.alignRight
-                , Ui.paddingXY 8 0
-                , Ui.height Ui.fill
-                , Ui.contentCenterY
-                ]
-                (Ui.html Icons.inviteUserIcon)
-            ]
-        , Ui.column
-            [ Ui.paddingXY 0 8, Ui.scrollable ]
-            (List.map
-                (\( userId, user ) ->
-                    let
-                        displayName : String
-                        displayName =
-                            PersonName.toString user.name
-
-                        isOnline : Bool
-                        isOnline =
-                            SeqDict.get userId local.friendsOnline
-                            |> Maybe.withDefault False
-                    in
-                    Ui.row
-                        [ Ui.paddingXY 8 4
-                        , Ui.spacing 4
-                        , Ui.width Ui.fill
-                        ]
-                        [ Ui.el
-                            [ Ui.width Ui.fill ]
-                            (Ui.text displayName)
-                        , Ui.el
-                            [ Ui.width (Ui.px 16)
-                            , Ui.height (Ui.px 16)
-                            , Ui.Input.button (PressedSetNickname (Id.fromInt 0) userId)
-                            , Ui.Font.color MyUi.font3
-                            , Ui.opacity 0.7
-                            , Ui.Events.onMouseEnter FrontendNoOp
-                            , Ui.Events.onMouseLeave FrontendNoOp
-                            ]
-                            (Ui.html Icons.pencil)
-                        ]
-                )
-                (SeqDict.toList local.otherUsers)
-            )
+            (Ui.text "Direct messages")
         ]
 
 
-memberColumn : Id GuildId -> LocalState -> FrontendGuild -> Element FrontendMsg
-memberColumn guildId local guild =
+memberColumn : LocalState -> FrontendGuild -> Element FrontendMsg
+memberColumn local guild =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.alignRight
@@ -4610,7 +4465,7 @@ memberColumn guildId local guild =
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
             [ Ui.text "Owner"
-            , memberLabel local guild guild.owner
+            , memberLabel local guild.owner
             ]
         , Ui.column
             [ Ui.paddingXY 4 4 ]
@@ -4619,7 +4474,7 @@ memberColumn guildId local guild =
                 [ Ui.height Ui.fill ]
                 (List.map
                     (\( userId, _ ) ->
-                        memberLabel local guild userId
+                        memberLabel local userId
                     )
                     (SeqDict.toList guild.members)
                 )
@@ -4627,148 +4482,191 @@ memberColumn guildId local guild =
         ]
 
 
-memberLabel : LocalState -> FrontendGuild -> Id UserId -> Element FrontendMsg
-memberLabel local guild userId =
-    let
-        allUsers : SeqDict (Id UserId) FrontendUser
-        allUsers =
-            LocalState.allUsers local
-
-        displayName : String
-        displayName =
-            userDisplayName userId guild allUsers
-
-        guildId : Id GuildId
-        guildId =
-            -- We need to find the guild ID from the guild data
-            -- Since we don't have direct access to it, we'll extract it from local.guilds
-            local.guilds
-                |> SeqDict.toList
-                |> List.filterMap
-                    (\( id, g ) ->
-                        if g == guild then
-                            Just id
-
-                        else
-                            Nothing
-                    )
-                |> List.head
-                |> Maybe.withDefault (Id.fromInt 0)
-    in
-    case LocalState.getUser userId local of
-        Just user ->
-            Ui.row
-                [ Ui.paddingXY 4 4
-                , Ui.spacing 4
-                , Ui.width Ui.fill
-                ]
-                [ Ui.el
-                    [ Ui.width Ui.fill ]
-                    (Ui.text displayName)
-                , Ui.el
-                    [ Ui.width (Ui.px 16)
-                    , Ui.height (Ui.px 16)
-                    , Ui.Input.button (PressedSetNickname guildId userId)
-                    , Ui.Font.color MyUi.font3
-                    , Ui.opacity 0.7
-                    , Ui.Events.onMouseEnter FrontendNoOp
-                    , Ui.Events.onMouseLeave FrontendNoOp
-                    ]
-                    (Ui.html Icons.pencil)
-                ]
-
-        Nothing ->
-            Ui.none
-
-
--- Nickname form functions
-nicknameDialogView : Id GuildId -> Id UserId -> FrontendUser -> NicknameForm -> Element FrontendMsg
-nicknameDialogView guildId userId user form =
-    -- Create modal overlay background
+memberLabel : LocalState -> Id UserId -> Element msg
+memberLabel local userId =
     Ui.el
-        [ Ui.width Ui.fill
-        , Ui.height Ui.fill
-        , Ui.background (Ui.rgba 0 0 0 0.5)
-        , Ui.contentCenterX
-        , Ui.contentCenterY
-        ]
-        -- Modal dialog content
-        (Ui.column
-            [ Ui.background MyUi.background1
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.rounded 8
-            , Ui.padding 24
-            , Ui.spacing 16
-            , Ui.widthMax 400
-            , Ui.width Ui.fill
-            , Ui.Shadow.shadows
-                [ { x = 0, y = 4, blur = 8, size = 0, color = Ui.rgba 0 0 0 0.2 }
-                ]
-            ]
-            [ Ui.el [ Ui.Font.size 20, Ui.Font.bold, Ui.Font.color MyUi.font1 ]
-                (Ui.text ("Set nickname for " ++ PersonName.toString user.name))
-            , nicknameInput guildId userId form |> Ui.map (NicknameFormChanged guildId userId)
-            , Ui.row
-                [ Ui.spacing 12, Ui.width Ui.fill ]
-                [ Ui.el
-                    [ Ui.Input.button (PressedCancelNickname guildId userId)
-                    , Ui.paddingXY 16 8
-                    , Ui.background MyUi.cancelButtonBackground
-                    , Ui.rounded 6
-                    , Ui.Font.color MyUi.buttonFontColor
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    , Ui.width Ui.fill
-                    ]
-                    (Ui.el [ Ui.centerX ] (Ui.text "Cancel"))
-                , Ui.el
-                    [ Ui.Input.button (PressedSubmitNickname guildId userId form)
-                    , Ui.paddingXY 16 8
-                    , Ui.background MyUi.buttonBackground
-                    , Ui.rounded 6
-                    , Ui.Font.color MyUi.buttonFontColor
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    , Ui.width Ui.fill
-                    ]
-                    (Ui.el [ Ui.centerX ] (Ui.text "Save"))
-                ]
-            ]
+        [ Ui.paddingXY 4 4 ]
+        (case LocalState.getUser userId local of
+            Just user ->
+                Ui.text (PersonName.toString user.name)
+
+            Nothing ->
+                Ui.none
         )
 
 
-nicknameInput : Id GuildId -> Id UserId -> NicknameForm -> Element NicknameForm
-nicknameInput guildId userId form =
+newChannelFormInit : NewChannelForm
+newChannelFormInit =
+    { name = "", pressedSubmit = False }
+
+
+newGuildFormInit : NewGuildForm
+newGuildFormInit =
+    { name = "", pressedSubmit = False }
+
+
+editChannelFormInit : FrontendChannel -> NewChannelForm
+editChannelFormInit channel =
+    { name = ChannelName.toString channel.name, pressedSubmit = False }
+
+
+editChannelFormView : Id GuildId -> Id ChannelId -> FrontendChannel -> NewChannelForm -> Element FrontendMsg
+editChannelFormView guildId channelId channel form =
+    Ui.column
+        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
+        , channelNameInput guildId form |> Ui.map (EditChannelFormChanged guildId channelId)
+        , Ui.row
+            [ Ui.spacing 16 ]
+            [ Ui.el
+                [ Ui.Input.button (PressedCancelEditChannelChanges guildId channelId)
+                , Ui.paddingXY 16 8
+                , Ui.background MyUi.cancelButtonBackground
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color MyUi.buttonFontColor
+                , Ui.Font.bold
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                ]
+                (Ui.text "Cancel")
+            , submitButton
+                (PressedSubmitEditChannelChanges guildId channelId form)
+                "Save changes"
+            ]
+
+        --, Ui.el [ Ui.height (Ui.px 1), Ui.background splitterColor ] Ui.none
+        , Ui.el
+            [ Ui.Input.button (PressedDeleteChannel guildId channelId)
+            , Ui.paddingXY 16 8
+            , Ui.background MyUi.deleteButtonBackground
+            , Ui.width Ui.shrink
+            , Ui.rounded 8
+            , Ui.Font.color MyUi.deleteButtonFont
+            , Ui.Font.bold
+            , Ui.borderColor MyUi.buttonBorder
+            , Ui.border 1
+            ]
+            (Ui.text "Delete channel")
+        ]
+
+
+newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg
+newChannelFormView guildId form =
+    Ui.column
+        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
+        , channelNameInput guildId form |> Ui.map (NewChannelFormChanged guildId)
+        , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
+        ]
+
+
+submitButton : msg -> String -> Element msg
+submitButton onPress text =
+    Ui.el
+        [ Ui.Input.button onPress
+        , Ui.paddingXY 16 8
+        , Ui.background MyUi.buttonBackground
+        , Ui.width Ui.shrink
+        , Ui.rounded 8
+        , Ui.Font.color MyUi.buttonFontColor
+        , Ui.Font.bold
+        , Ui.borderColor MyUi.buttonBorder
+        , Ui.border 1
+        ]
+        (Ui.text text)
+
+
+channelNameInput : Id GuildId -> NewChannelForm -> Element NewChannelForm
+channelNameInput guildId form =
     let
         nameLabel =
             Ui.Input.label
-                "nicknameInput"
+                "newChannelName"
                 [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
-                (Ui.text "Nickname (leave empty to remove)")
+                (Ui.text "Channel name")
     in
     Ui.column
         []
         [ nameLabel.element
         , Ui.Input.text
-            [ Ui.padding 8
+            [ Ui.padding 6
             , Ui.background MyUi.inputBackground
             , Ui.borderColor MyUi.inputBorder
-            , Ui.width Ui.fill
+            , Ui.widthMax 500
             ]
             { onChange = \text -> { form | name = text }
             , text = form.name
-            , placeholder = Just "Enter a nickname..."
+            , placeholder = Nothing
             , label = nameLabel.id
             }
-        , case ( form.pressedSubmit, PersonName.fromString form.name ) of
+        , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
             ( True, Err error ) ->
-                if String.isEmpty (String.trim form.name) then
-                    Ui.none
-                else
-                    Ui.el [ Ui.paddingXY 2 4, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            _ ->
+                Ui.none
+        ]
+
+
+newGuildFormView : NewGuildForm -> Element FrontendMsg
+newGuildFormView form =
+    Ui.column
+        [ Ui.Font.color MyUi.font1
+        , Ui.padding 16
+        , Ui.alignTop
+        , Ui.spacing 16
+        , Ui.height Ui.fill
+        , Ui.width Ui.fill
+        , Ui.background MyUi.background1
+        ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new guild")
+        , guildNameInput form |> Ui.map NewGuildFormChanged
+        , Ui.row
+            [ Ui.spacing 16 ]
+            [ Ui.el
+                [ Ui.Input.button PressedCancelNewGuild
+                , Ui.paddingXY 16 8
+                , Ui.background MyUi.cancelButtonBackground
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color MyUi.buttonFontColor
+                , Ui.Font.bold
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                ]
+                (Ui.text "Cancel")
+            , submitButton (PressedSubmitNewGuild form) "Create guild"
+            ]
+        ]
+
+
+guildNameInput : NewGuildForm -> Element NewGuildForm
+guildNameInput form =
+    let
+        nameLabel =
+            Ui.Input.label
+                "newGuildName"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Guild name")
+    in
+    Ui.column
+        []
+        [ nameLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | name = text }
+            , text = form.name
+            , placeholder = Nothing
+            , label = nameLabel.id
+            }
+        , case ( form.pressedSubmit, GuildName.fromString form.name ) of
+            ( True, Err error ) ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
             _ ->
                 Ui.none
