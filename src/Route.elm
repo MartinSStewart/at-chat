@@ -4,8 +4,6 @@ module Route exposing
     , UserOverviewRouteData(..)
     , decode
     , encode
-    , push
-    , replace
     )
 
 import AppUrl exposing (AppUrl)
@@ -36,16 +34,6 @@ type ChannelRoute
 type UserOverviewRouteData
     = PersonalRoute
     | SpecificUserRoute (Id UserId)
-
-
-push : BrowserNavigation.Key -> Route -> Command FrontendOnly toMsg msg
-push navkey route =
-    BrowserNavigation.pushUrl navkey (encode route)
-
-
-replace : BrowserNavigation.Key -> Route -> Command FrontendOnly toMsg msg
-replace navkey route =
-    BrowserNavigation.replaceUrl navkey (encode route)
 
 
 decode : Url -> Route
