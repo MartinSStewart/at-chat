@@ -11,9 +11,6 @@ async function loadAudio(url, context, sounds) {
 
 exports.init = async function init(app)
 {
-    document.body.style.overflow = "hidden";
-    document.body.style.backgroundColor = "rgb(14,20,40)";
-
     let context = null;
     let sounds = {};
     app.ports.load_sounds_to_js.subscribe((a) => {

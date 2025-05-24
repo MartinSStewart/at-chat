@@ -592,6 +592,13 @@ a:hover {
 a:visited {
   color: rgb(206,193,225);
 }
+html, body {
+  overscroll-behavior-x: none;
+}
+body {
+  overflow: hidden;
+  backgroundColor: rgb(14,20,40);
+}
 """
             )
         ]
