@@ -2068,6 +2068,15 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Local_SetNickname guildId maybeNickname ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.setNickname local.localUser.userId maybeNickname)
+                                local.guilds
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -2261,6 +2270,15 @@ changeUpdate localMsg local =
                                         guild
                                         |> Result.withDefault guild
                                 )
+                                local.guilds
+                    }
+
+                Server_SetNickname userId guildId maybeNickname ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.setNickname userId maybeNickname)
                                 local.guilds
                     }
 
@@ -2665,6 +2683,14 @@ pendingChangesText localChange =
 
         Local_SetLastViewed id _ int ->
             "Viewed channel"
+
+        Local_SetNickname _ maybeNickname ->
+            case maybeNickname of
+                Just _ ->
+                    "Set nickname"
+
+                Nothing ->
+                    "Removed nickname"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

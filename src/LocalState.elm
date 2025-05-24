@@ -35,6 +35,7 @@ module LocalState exposing
     , memberIsEditTyping
     , memberIsTyping
     , removeReactionEmoji
+    , setNickname
     , updateChannel
     )
 
@@ -92,6 +93,7 @@ type alias BackendGuild =
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     , announcementChannel : Id ChannelId
+    , nicknames : SeqDict (Id UserId) PersonName
     }
 
 
@@ -105,6 +107,7 @@ type alias FrontendGuild =
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     , announcementChannel : Id ChannelId
+    , nicknames : SeqDict (Id UserId) PersonName
     }
 
 
@@ -120,6 +123,7 @@ guildToFrontendForUser userId guild =
         , owner = guild.owner
         , invites = guild.invites
         , announcementChannel = guild.announcementChannel
+        , nicknames = guild.nicknames
         }
             |> Just
 
@@ -138,6 +142,7 @@ guildToFrontend guild =
     , owner = guild.owner
     , invites = guild.invites
     , announcementChannel = guild.announcementChannel
+    , nicknames = guild.nicknames
     }
 
 
@@ -353,6 +358,7 @@ createGuild time userId guildName =
     , owner = userId
     , invites = SeqDict.empty
     , announcementChannel = announcementChannelId
+    , nicknames = SeqDict.empty
     }
 
 
@@ -761,3 +767,16 @@ removeReactionEmoji emoji userId channelId messageIndex guild =
         )
         channelId
         guild
+
+
+setNickname : Id UserId -> Maybe PersonName -> { a | nicknames : SeqDict (Id UserId) PersonName } -> { a | nicknames : SeqDict (Id UserId) PersonName }
+setNickname userId maybeNickname guild =
+    { guild
+        | nicknames =
+            case maybeNickname of
+                Just nickname ->
+                    SeqDict.insert userId nickname guild.nicknames
+
+                Nothing ->
+                    SeqDict.remove userId guild.nicknames
+    }

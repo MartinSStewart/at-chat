@@ -377,6 +377,7 @@ type ServerChange
     | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
+    | Server_SetNickname (Id UserId) (Id GuildId) (Maybe PersonName)
 
 
 type LocalChange
@@ -394,6 +395,7 @@ type LocalChange
     | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
     | Local_MemberEditTyping Time.Posix MessageId
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
+    | Local_SetNickname (Id GuildId) (Maybe PersonName)
 
 
 type ToBeFilledInByBackend a

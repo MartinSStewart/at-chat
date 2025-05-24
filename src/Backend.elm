@@ -129,6 +129,7 @@ init =
             , owner = adminUserId
             , invites = SeqDict.empty
             , announcementChannel = Id.fromInt 0
+            , nicknames = SeqDict.empty
             }
     in
     ( { users =
@@ -171,6 +172,7 @@ init =
                     , owner = adminUserId
                     , invites = SeqDict.empty
                     , announcementChannel = Id.fromInt 0
+                    , nicknames = SeqDict.empty
                     }
                   )
                 ]
@@ -816,6 +818,30 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToUser clientId userId localMsg model
+                                ]
+                            )
+                        )
+
+                Local_SetNickname guildId maybeNickname ->
+                    asGuildMember
+                        model2
+                        sessionId
+                        guildId
+                        (\userId user guild ->
+                            ( { model2
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        (LocalState.setNickname userId maybeNickname guild)
+                                        model2.guilds
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToGuild
+                                    clientId
+                                    (Server_SetNickname userId guildId maybeNickname |> ServerChange)
+                                    model2
                                 ]
                             )
                         )
