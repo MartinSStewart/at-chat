@@ -270,7 +270,7 @@ getLoginData userId user model =
             IsNotAdminLoginData
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
-    , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontend userId guild) model.guilds
+    , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontendForUser userId guild) model.guilds
     , user = user
     , otherUsers =
         NonemptyDict.toList model.users
@@ -612,6 +612,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_NewGuild _ guildName _ ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId _ ->
+                            let
+                                guildId : Id GuildId
+                                guildId =
+                                    Id.nextId model2.guilds
+
+                                newGuild : BackendGuild
+                                newGuild =
+                                    LocalState.createGuild time userId guildName
+                            in
+                            ( { model2
+                                | guilds = SeqDict.insert guildId newGuild model2.guilds
+                              }
+                            , Command.batch
+                                [ Local_NewGuild time guildName (FilledInByBackend guildId)
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , broadcastToUser
+                                    clientId
+                                    userId
+                                    (Local_NewGuild time guildName (FilledInByBackend guildId))
+                                    model2
+                                ]
+                            )
+                        )
+
                 Local_MemberTyping _ guildId channelId ->
                     asGuildMember
                         model
@@ -845,7 +875,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                             modelWithoutUser
                         , case
                             ( NonemptyDict.get guild.owner model2.users
-                            , LocalState.guildToFrontend userId guild2
+                            , LocalState.guildToFrontendForUser userId guild2
                             )
                           of
                             ( Just owner, Just frontendGuild ) ->

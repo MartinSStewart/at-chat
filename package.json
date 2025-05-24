@@ -5,7 +5,6 @@
     "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
     "end-to-end-tests": "lamdera make end-to-end-tests/EndToEndTestsRunner.elm --output end-to-end-tests/EndToEndTestsRunnerElm.js && cd end-to-end-tests && node EndToEndTestsRunner.js"
   },
-  "dependencies": {},
   "devDependencies": {
     "elm-codegen": "^0.5.3",
     "elm-format": "^0.8.7",
