@@ -597,7 +597,7 @@ html, body {
 }
 body {
   overflow: hidden;
-  backgroundColor: rgb(14,20,40);
+  background-color: rgb(14,20,40);
 }
 """
             )
