@@ -2507,7 +2507,19 @@ updateLoadedFromBackend msg model =
                         localState =
                             Local.updateFromBackend changeUpdate (Just changeId) change loggedIn.localState
                     in
-                    ( { loggedIn | localState = localState }, Command.none )
+                    ( { loggedIn | localState = localState }
+                    , case localChange of
+                        Local_NewGuild _ _ (FilledInByBackend guildId) ->
+                            case SeqDict.get guildId (Local.model localState).guilds of
+                                Just guild ->
+                                    routeReplace model (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+
+                                Nothing ->
+                                    Command.none
+
+                        _ ->
+                            Command.none
+                    )
                 )
                 model
 
