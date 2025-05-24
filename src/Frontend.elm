@@ -3049,38 +3049,43 @@ guildColumn route currentUserId currentUser guilds =
 
 homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
 homePageLoggedInView model loggedIn local =
-    if isMobile model then
-        Ui.row
-            [ Ui.height Ui.fill
-            , Ui.background MyUi.background3
-            ]
-            [ Ui.column
-                [ Ui.height Ui.fill
-                ]
-                [ Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
-                    , friendsColumn local
-                    ]
-                , loggedInAsView local
-                ]
-            ]
+    case loggedIn.newGuildForm of
+        Just form ->
+            newGuildFormView form
 
-    else
-        Ui.row
-            [ Ui.height Ui.fill
-            , Ui.background MyUi.background3
-            ]
-            [ Ui.column
-                [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
-                [ Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
-                    , friendsColumn local
+        Nothing ->
+            if isMobile model then
+                Ui.row
+                    [ Ui.height Ui.fill
+                    , Ui.background MyUi.background3
                     ]
-                , loggedInAsView local
-                ]
-            ]
+                    [ Ui.column
+                        [ Ui.height Ui.fill
+                        ]
+                        [ Ui.row
+                            [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                            , friendsColumn local
+                            ]
+                        , loggedInAsView local
+                        ]
+                    ]
+
+            else
+                Ui.row
+                    [ Ui.height Ui.fill
+                    , Ui.background MyUi.background3
+                    ]
+                    [ Ui.column
+                        [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+                        [ Ui.row
+                            [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                            , friendsColumn local
+                            ]
+                        , loggedInAsView local
+                        ]
+                    ]
 
 
 loggedInAsView : LocalState -> Element FrontendMsg
@@ -3130,63 +3135,68 @@ sidebarOffsetAttr loggedIn model =
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
-            if isMobile model then
-                Ui.column
-                    [ Ui.height Ui.fill
-                    , Ui.clip
-                    , Ui.background MyUi.background3
-                    , channelView channelRoute guildId guild loggedIn local model
-                        |> Ui.el
-                            [ Ui.background MyUi.background3
-                            , Ui.height Ui.fill
-                            , sidebarOffsetAttr loggedIn model
-                            ]
-                        |> Ui.inFront
-                    ]
-                    [ Ui.row
-                        [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                        [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
-                        , Ui.Lazy.lazy6
-                            channelColumn
-                            local.localUser.userId
-                            local.localUser.user
-                            guildId
-                            guild
-                            channelRoute
-                            loggedIn.channelNameHover
-                        ]
-                    , loggedInAsView local
-                    ]
-
-            else
-                Ui.row
-                    [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
-                    [ Ui.column
-                        [ Ui.height Ui.fill
-                        , Ui.width (Ui.px 300)
-                        ]
-                        [ Ui.row
-                            [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
-                            , Ui.Lazy.lazy6
-                                channelColumn
-                                local.localUser.userId
-                                local.localUser.user
-                                guildId
-                                guild
-                                channelRoute
-                                loggedIn.channelNameHover
-                            ]
-                        , loggedInAsView local
-                        ]
-                    , channelView channelRoute guildId guild loggedIn local model
-                    , memberColumn local guild
-                    ]
+    case loggedIn.newGuildForm of
+        Just form ->
+            newGuildFormView form
 
         Nothing ->
-            homePageLoggedInView model loggedIn local
+            case SeqDict.get guildId local.guilds of
+                Just guild ->
+                    if isMobile model then
+                        Ui.column
+                            [ Ui.height Ui.fill
+                            , Ui.clip
+                            , Ui.background MyUi.background3
+                            , channelView channelRoute guildId guild loggedIn local model
+                                |> Ui.el
+                                    [ Ui.background MyUi.background3
+                                    , Ui.height Ui.fill
+                                    , sidebarOffsetAttr loggedIn model
+                                    ]
+                                |> Ui.inFront
+                            ]
+                            [ Ui.row
+                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                                , Ui.Lazy.lazy6
+                                    channelColumn
+                                    local.localUser.userId
+                                    local.localUser.user
+                                    guildId
+                                    guild
+                                    channelRoute
+                                    loggedIn.channelNameHover
+                                ]
+                            , loggedInAsView local
+                            ]
+
+                    else
+                        Ui.row
+                            [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
+                            [ Ui.column
+                                [ Ui.height Ui.fill
+                                , Ui.width (Ui.px 300)
+                                ]
+                                [ Ui.row
+                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                                    , Ui.Lazy.lazy6
+                                        channelColumn
+                                        local.localUser.userId
+                                        local.localUser.user
+                                        guildId
+                                        guild
+                                        channelRoute
+                                        loggedIn.channelNameHover
+                                    ]
+                                , loggedInAsView local
+                                ]
+                            , channelView channelRoute guildId guild loggedIn local model
+                            , memberColumn local guild
+                            ]
+
+                Nothing ->
+                    homePageLoggedInView model loggedIn local
 
 
 channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
@@ -4522,6 +4532,70 @@ channelNameInput guildId form =
             , label = nameLabel.id
             }
         , case ( form.pressedSubmit, ChannelName.fromString form.name ) of
+            ( True, Err error ) ->
+                Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
+
+            _ ->
+                Ui.none
+        ]
+
+
+newGuildFormView : NewGuildForm -> Element FrontendMsg
+newGuildFormView form =
+    Ui.column
+        [ Ui.Font.color MyUi.font1
+        , Ui.padding 16
+        , Ui.alignTop
+        , Ui.spacing 16
+        , Ui.height Ui.fill
+        , Ui.width Ui.fill
+        , Ui.background MyUi.background1
+        ]
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new guild")
+        , guildNameInput form |> Ui.map NewGuildFormChanged
+        , Ui.row
+            [ Ui.spacing 16 ]
+            [ Ui.el
+                [ Ui.Input.button PressedCancelNewGuild
+                , Ui.paddingXY 16 8
+                , Ui.background MyUi.cancelButtonBackground
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color MyUi.buttonFontColor
+                , Ui.Font.bold
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                ]
+                (Ui.text "Cancel")
+            , submitButton (PressedSubmitNewGuild form) "Create guild"
+            ]
+        ]
+
+
+guildNameInput : NewGuildForm -> Element NewGuildForm
+guildNameInput form =
+    let
+        nameLabel =
+            Ui.Input.label
+                "newGuildName"
+                [ Ui.Font.color MyUi.font2, Ui.paddingXY 2 0 ]
+                (Ui.text "Guild name")
+    in
+    Ui.column
+        []
+        [ nameLabel.element
+        , Ui.Input.text
+            [ Ui.padding 6
+            , Ui.background MyUi.inputBackground
+            , Ui.borderColor MyUi.inputBorder
+            , Ui.widthMax 500
+            ]
+            { onChange = \text -> { form | name = text }
+            , text = form.name
+            , placeholder = Nothing
+            , label = nameLabel.id
+            }
+        , case ( form.pressedSubmit, GuildName.fromString form.name ) of
             ( True, Err error ) ->
                 Ui.el [ Ui.paddingXY 2 0, Ui.Font.color MyUi.errorColor ] (Ui.text error)
 
