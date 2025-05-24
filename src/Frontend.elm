@@ -512,8 +512,8 @@ routeRequest previousRoute model =
                                 [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
                                 , case SeqDict.get guildId local.guilds of
                                     Just guild ->
-                                        Route.replace
-                                            model2.navigationKey
+                                        routeReplace
+                                            model2
                                             (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
                                     Nothing ->
@@ -660,13 +660,15 @@ updateLoaded msg model =
                             )
 
                         Nothing ->
-                            ( { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Nothing } }
-                            , if routeRequiresLogin model.route then
-                                BrowserNavigation.pushUrl model.navigationKey (Route.encode HomePageRoute)
+                            let
+                                model2 =
+                                    { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Nothing } }
+                            in
+                            if routeRequiresLogin model.route then
+                                routePush model2 HomePageRoute
 
-                              else
-                                Command.none
-                            )
+                            else
+                                ( model2, Command.none )
 
         PressedLogOut ->
             ( model, Lamdera.sendToBackend LogOutRequest )
@@ -687,13 +689,11 @@ updateLoaded msg model =
 
                         _ ->
                             Command.none
+
+                ( model2, cmd ) =
+                    routePush model route
             in
-            ( model
-            , Command.batch
-                [ BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
-                , notificationRequest
-                ]
-            )
+            ( model2, Command.batch [ cmd, notificationRequest ] )
 
         UserOverviewMsg userOverviewMsg ->
             updateLoggedIn
@@ -817,8 +817,8 @@ updateLoaded msg model =
                 model
 
         PressedSubmitNewChannel guildId newChannelForm ->
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     case ChannelName.fromString newChannelForm.name of
                         Ok channelName ->
                             let
@@ -840,28 +840,31 @@ updateLoaded msg model =
 
                                         Nothing ->
                                             Id.fromInt 0
+
+                                ( model2, routeCmd ) =
+                                    routePush
+                                        { model | loginStatus = LoggedIn loggedIn2 }
+                                        (GuildRoute guildId (ChannelRoute nextChannelId))
                             in
-                            ( loggedIn2
-                            , Command.batch
-                                [ Route.push
-                                    model.navigationKey
-                                    (GuildRoute guildId (ChannelRoute nextChannelId))
-                                , cmd
-                                ]
-                            )
+                            ( model2, Command.batch [ routeCmd, cmd ] )
 
                         Err _ ->
-                            ( { loggedIn
-                                | newChannelForm =
-                                    SeqDict.insert
-                                        guildId
-                                        { newChannelForm | pressedSubmit = True }
-                                        loggedIn.newChannelForm
+                            ( { model
+                                | loginStatus =
+                                    LoggedIn
+                                        { loggedIn
+                                            | newChannelForm =
+                                                SeqDict.insert
+                                                    guildId
+                                                    { newChannelForm | pressedSubmit = True }
+                                                    loggedIn.newChannelForm
+                                        }
                               }
                             , Command.none
                             )
-                )
-                model
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         MouseEnteredChannelName guildId channelId ->
             updateLoggedIn
@@ -902,16 +905,21 @@ updateLoaded msg model =
                 model
 
         PressedCancelEditChannelChanges guildId channelId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | editChannelForm =
-                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
-                      }
-                    , Route.push model.navigationKey (GuildRoute guildId (ChannelRoute channelId))
-                    )
-                )
-                model
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    routePush
+                        { model
+                            | loginStatus =
+                                LoggedIn
+                                    { loggedIn
+                                        | editChannelForm =
+                                            SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                                    }
+                        }
+                        (GuildRoute guildId (ChannelRoute channelId))
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         PressedSubmitEditChannelChanges guildId channelId form ->
             updateLoggedIn
@@ -941,32 +949,38 @@ updateLoaded msg model =
                 model
 
         PressedDeleteChannel guildId channelId ->
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     let
                         local : LocalState
                         local =
                             Local.model loggedIn.localState
-                    in
-                    handleLocalChange
-                        model.time
-                        (Local_DeleteChannel guildId channelId |> Just)
-                        { loggedIn
-                            | drafts = SeqDict.remove ( guildId, channelId ) loggedIn.drafts
-                            , editChannelForm =
-                                SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
-                        }
-                        (case SeqDict.get guildId local.guilds of
-                            Just guild ->
-                                Route.push
-                                    model.navigationKey
-                                    (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
-                            Nothing ->
-                                Command.none
-                        )
-                )
-                model
+                        ( model2, cmd ) =
+                            case SeqDict.get guildId local.guilds of
+                                Just guild ->
+                                    routePush
+                                        model
+                                        (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        ( loggedIn2, cmd2 ) =
+                            handleLocalChange
+                                model2.time
+                                (Local_DeleteChannel guildId channelId |> Just)
+                                { loggedIn
+                                    | drafts = SeqDict.remove ( guildId, channelId ) loggedIn.drafts
+                                    , editChannelForm =
+                                        SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
+                                }
+                                cmd
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn2 }, cmd2 )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         PressedCreateInviteLink guildId ->
             updateLoggedIn
@@ -2419,16 +2433,19 @@ updateLoadedFromBackend msg model =
         LoggedOutSession ->
             case model.loginStatus of
                 LoggedIn _ ->
-                    ( { model
-                        | loginStatus =
-                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
-                      }
-                    , if routeRequiresLogin model.route then
-                        BrowserNavigation.pushUrl model.navigationKey (Route.encode HomePageRoute)
+                    let
+                        model2 : LoadedFrontend
+                        model2 =
+                            { model
+                                | loginStatus =
+                                    NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
+                            }
+                    in
+                    if routeRequiresLogin model2.route then
+                        routePush model2 HomePageRoute
 
-                      else
-                        Command.none
-                    )
+                    else
+                        ( model2, Command.none )
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -2512,7 +2529,7 @@ updateLoadedFromBackend msg model =
                             case model.route of
                                 GuildRoute inviteGuildId _ ->
                                     if inviteGuildId == guildId then
-                                        Route.replace model.navigationKey (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+                                        routeReplace model (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
                                     else
                                         Command.none
@@ -2702,7 +2719,7 @@ layout model attributes child =
             ++ (if isMobile model then
                     [ Html.Events.preventDefaultOn
                         "touchstart"
-                        (touchEventDecoder TouchStart |> Json.Decode.map (\a -> ( a, True )))
+                        (touchEventDecoder TouchStart |> Json.Decode.map (\a -> ( a, False )))
                         |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
@@ -2715,6 +2732,20 @@ layout model attributes child =
                )
         )
         child
+
+
+routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routePush model route =
+    if isMobile model then
+        routeRequest (Just model.route) { model | route = route }
+
+    else
+        ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )
+
+
+routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg
+routeReplace model route =
+    BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
 
 
 touchEventDecoder : (NonemptyDict Int Touch -> msg) -> Decoder msg
