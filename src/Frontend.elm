@@ -2733,7 +2733,10 @@ layout model attributes child =
                         "touchstart"
                         (touchEventDecoder TouchStart |> Json.Decode.map (\a -> ( a, False )))
                         |> Ui.htmlAttribute
-                    , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
+                    , Html.Events.preventDefaultOn
+                        "touchmove"
+                        (touchEventDecoder TouchMoved |> Json.Decode.map (\a -> ( a, False )))
+                        |> Ui.htmlAttribute
                     , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
                     , Html.Events.on "touchcancel" (Json.Decode.succeed TouchCancel) |> Ui.htmlAttribute
                     , Ui.clip
@@ -3050,8 +3053,18 @@ guildHasNotifications currentUserId currentUser guildId guild =
         (SeqDict.toList guild.channels)
 
 
-guildColumn : Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Element FrontendMsg
-guildColumn route currentUserId currentUser guilds =
+canScroll : LoadedFrontend -> Bool
+canScroll model =
+    case model.drag of
+        Dragging dragging ->
+            not dragging.horizontalStart
+
+        _ ->
+            True
+
+
+guildColumn : Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Bool -> Element FrontendMsg
+guildColumn route currentUserId currentUser guilds canScroll2 =
     Ui.column
         [ Ui.spacing 4
         , Ui.paddingXY 0 6
@@ -3060,7 +3073,7 @@ guildColumn route currentUserId currentUser guilds =
         , Ui.background MyUi.background1
         , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
-        , Ui.scrollable
+        , scrollable canScroll2
         , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
         ]
         (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
@@ -3107,7 +3120,13 @@ homePageLoggedInView model loggedIn local =
                         ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                            [ Ui.Lazy.lazy5
+                                guildColumn
+                                model.route
+                                local.localUser.userId
+                                local.localUser.user
+                                local.guilds
+                                (canScroll model)
                             , friendsColumn local
                             ]
                         , loggedInAsView local
@@ -3123,7 +3142,13 @@ homePageLoggedInView model loggedIn local =
                         [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                            [ Ui.Lazy.lazy5
+                                guildColumn
+                                model.route
+                                local.localUser.userId
+                                local.localUser.user
+                                local.guilds
+                                (canScroll model)
                             , friendsColumn local
                             ]
                         , loggedInAsView local
@@ -3185,6 +3210,10 @@ guildView model guildId channelRoute loggedIn local =
         Nothing ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
+                    let
+                        canScroll2 =
+                            canScroll model
+                    in
                     if isMobile model then
                         Ui.column
                             [ Ui.height Ui.fill
@@ -3200,9 +3229,20 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                                [ Ui.Lazy.lazy5
+                                    guildColumn
+                                    model.route
+                                    local.localUser.userId
+                                    local.localUser.user
+                                    local.guilds
+                                    canScroll2
                                 , Ui.Lazy.lazy6
-                                    channelColumn
+                                    (if canScroll2 then
+                                        channelColumnCanScroll
+
+                                     else
+                                        channelColumnCannotScroll
+                                    )
                                     local.localUser.userId
                                     local.localUser.user
                                     guildId
@@ -3222,9 +3262,20 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ Ui.Lazy.lazy4 guildColumn model.route local.localUser.userId local.localUser.user local.guilds
+                                    [ Ui.Lazy.lazy5
+                                        guildColumn
+                                        model.route
+                                        local.localUser.userId
+                                        local.localUser.user
+                                        local.guilds
+                                        canScroll2
                                     , Ui.Lazy.lazy6
-                                        channelColumn
+                                        (if canScroll2 then
+                                            channelColumnCanScroll
+
+                                         else
+                                            channelColumnCannotScroll
+                                        )
                                         local.localUser.userId
                                         local.localUser.user
                                         guildId
@@ -3300,7 +3351,7 @@ inviteLinkCreatorForm model guildId guild =
             , Ui.padding 16
             , Ui.alignTop
             , Ui.spacing 16
-            , Ui.scrollable
+            , scrollable (canScroll model)
             ]
             [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Invite member to guild")
             , submitButton (PressedCreateInviteLink guildId) "Create invite link"
@@ -3681,6 +3732,15 @@ channelHeader isMobile2 content =
         )
 
 
+scrollable : Bool -> Ui.Attribute msg
+scrollable canScroll2 =
+    if canScroll2 then
+        Ui.scrollable
+
+    else
+        Ui.clip
+
+
 conversationView :
     Id GuildId
     -> Id ChannelId
@@ -3720,7 +3780,7 @@ conversationView guildId channelId loggedIn model local channel =
             (Ui.column
                 [ Ui.height Ui.fill
                 , Ui.paddingXY 0 16
-                , Ui.scrollable
+                , scrollable (canScroll model)
                 , Ui.id (Dom.idToString conversationContainerId)
                 ]
                 (Ui.el
@@ -4277,6 +4337,16 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
         (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
+channelColumnCanScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCanScroll currentUserId currentUser guildId guild channelRoute channelNameHover =
+    channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover True
+
+
+channelColumnCannotScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCannotScroll currentUserId currentUser guildId guild channelRoute channelNameHover =
+    channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover False
+
+
 channelColumn :
     Id UserId
     -> BackendUser
@@ -4284,8 +4354,9 @@ channelColumn :
     -> FrontendGuild
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId )
+    -> Bool
     -> Element FrontendMsg
-channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover =
+channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background MyUi.background2
@@ -4313,7 +4384,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                 (Ui.html Icons.inviteUserIcon)
             ]
         , Ui.column
-            [ Ui.paddingXY 0 8, Ui.scrollable ]
+            [ Ui.paddingXY 0 8, scrollable canScroll2 ]
             (List.map
                 (\( channelId, channel ) ->
                     let
@@ -4489,7 +4560,7 @@ editChannelFormView guildId channelId channel form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text ("Edit #" ++ ChannelName.toString channel.name))
-        , channelNameInput guildId form |> Ui.map (EditChannelFormChanged guildId channelId)
+        , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
         , Ui.row
             [ Ui.spacing 16 ]
             [ Ui.el
@@ -4530,7 +4601,7 @@ newChannelFormView guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
-        , channelNameInput guildId form |> Ui.map (NewChannelFormChanged guildId)
+        , channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
         , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
         ]
 
@@ -4551,8 +4622,8 @@ submitButton onPress text =
         (Ui.text text)
 
 
-channelNameInput : Id GuildId -> NewChannelForm -> Element NewChannelForm
-channelNameInput guildId form =
+channelNameInput : NewChannelForm -> Element NewChannelForm
+channelNameInput form =
     let
         nameLabel =
             Ui.Input.label
