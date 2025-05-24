@@ -136,6 +136,7 @@ type alias LoggedIn2 =
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarOffset : Float
     , sidebarPreviousOffset : Float
+    , nicknameForm : Maybe ( Id GuildId, Id UserId, NicknameForm )
     }
 
 
@@ -273,6 +274,10 @@ type FrontendMsg
     | OnAnimationFrameDelta Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
+    | PressedSetNickname (Id GuildId) (Id UserId)
+    | NicknameFormChanged (Id GuildId) (Id UserId) NicknameForm
+    | PressedSubmitNickname (Id GuildId) (Id UserId) NicknameForm
+    | PressedCancelNickname (Id GuildId) (Id UserId)
 
 
 type ScreenCoordinate
@@ -292,6 +297,12 @@ type alias NewChannelForm =
 
 
 type alias NewGuildForm =
+    { name : String
+    , pressedSubmit : Bool
+    }
+
+
+type alias NicknameForm =
     { name : String
     , pressedSubmit : Bool
     }
