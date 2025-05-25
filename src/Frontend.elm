@@ -192,7 +192,7 @@ initLoadedFrontend loading time loginResult =
             }
 
         ( model2, cmdA ) =
-            routeRequest Nothing model
+            routeRequest Nothing model.route model
     in
     ( model2
     , Command.batch [ cmdB, cmdA ]
@@ -369,18 +369,23 @@ update msg model =
             updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
 
-routeRequest : Maybe Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-routeRequest previousRoute model =
-    case model.route of
+routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+routeRequest previousRoute newRoute model =
+    let
+        model2 : LoadedFrontend
+        model2 =
+            { model | route = newRoute }
+    in
+    case newRoute of
         HomePageRoute ->
-            ( { model
+            ( { model2
                 | loginStatus =
-                    case model.loginStatus of
+                    case model2.loginStatus of
                         NotLoggedIn notLoggedIn ->
                             NotLoggedIn { notLoggedIn | loginForm = Nothing }
 
                         LoggedIn _ ->
-                            model.loginStatus
+                            model2.loginStatus
               }
             , Command.none
             )
@@ -400,12 +405,12 @@ routeRequest previousRoute model =
                     , Command.none
                     )
                 )
-                model
+                model2
 
         UserOverviewRoute maybeUserId ->
             case maybeUserId of
                 SpecificUserRoute _ ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
                 PersonalRoute ->
                     updateLoggedIn
@@ -417,23 +422,23 @@ routeRequest previousRoute model =
                                 |> SpecificUserRoute
                                 |> UserOverviewRoute
                                 |> Route.encode
-                                |> BrowserNavigation.replaceUrl model.navigationKey
+                                |> BrowserNavigation.replaceUrl model2.navigationKey
                             )
                         )
-                        model
+                        model2
 
         GuildRoute guildId channelRoute ->
             let
-                model2 : LoadedFrontend
-                model2 =
-                    { model
+                model3 : LoadedFrontend
+                model3 =
+                    { model2
                         | loginStatus =
-                            case model.loginStatus of
+                            case model2.loginStatus of
                                 LoggedIn loggedIn ->
                                     LoggedIn { loggedIn | revealedSpoilers = Nothing }
 
                                 NotLoggedIn _ ->
-                                    model.loginStatus
+                                    model2.loginStatus
                     }
             in
             case channelRoute of
@@ -460,7 +465,7 @@ routeRequest previousRoute model =
                               else
                                 loggedIn
                             , Command.batch
-                                [ setFocus model2 Pages.Guild.channelTextInputId
+                                [ setFocus model3 Pages.Guild.channelTextInputId
                                 , if sameChannel then
                                     Command.none
 
@@ -471,21 +476,21 @@ routeRequest previousRoute model =
                                 ]
                             )
                         )
-                        model2
+                        model3
 
                 NewChannelRoute ->
-                    ( model2, Command.none )
+                    ( model3, Command.none )
 
                 EditChannelRoute _ ->
-                    ( model2, Command.none )
+                    ( model3, Command.none )
 
                 InviteLinkCreatorRoute ->
-                    ( model2, Command.none )
+                    ( model3, Command.none )
 
                 JoinRoute inviteLinkId ->
-                    case model2.loginStatus of
+                    case model3.loginStatus of
                         NotLoggedIn notLoggedIn ->
-                            ( { model2
+                            ( { model3
                                 | loginStatus =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
@@ -498,13 +503,13 @@ routeRequest previousRoute model =
                                 local =
                                     Local.model loggedIn.localState
                             in
-                            ( model2
+                            ( model3
                             , Command.batch
                                 [ JoinGuildByInviteRequest guildId inviteLinkId |> Lamdera.sendToBackend
                                 , case SeqDict.get guildId local.guilds of
                                     Just guild ->
                                         routeReplace
-                                            model2
+                                            model3
                                             (GuildRoute guildId (ChannelRoute guild.announcementChannel))
 
                                     Nothing ->
@@ -564,12 +569,7 @@ updateLoaded msg model =
                     ( model, BrowserNavigation.load url )
 
         UrlChanged url ->
-            let
-                route : Route
-                route =
-                    Route.decode url
-            in
-            routeRequest (Just model.route) { model | route = route }
+            routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
             ( { model | time = time }, Command.none )
@@ -642,10 +642,11 @@ updateLoaded msg model =
 
                         Nothing ->
                             let
+                                model2 : LoadedFrontend
                                 model2 =
                                     { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Nothing } }
                             in
-                            if routeRequiresLogin model.route then
+                            if routeRequiresLogin model2.route then
                                 routePush model2 HomePageRoute
 
                             else
@@ -803,6 +804,10 @@ updateLoaded msg model =
                     case ChannelName.fromString newChannelForm.name of
                         Ok channelName ->
                             let
+                                oldLoggedIn : LoggedIn2
+                                oldLoggedIn =
+                                    loggedIn
+
                                 ( loggedIn2, cmd ) =
                                     handleLocalChange
                                         model.time
@@ -815,7 +820,7 @@ updateLoaded msg model =
 
                                 nextChannelId : Id ChannelId
                                 nextChannelId =
-                                    case SeqDict.get guildId (Local.model loggedIn.localState).guilds of
+                                    case SeqDict.get guildId (Local.model oldLoggedIn.localState).guilds of
                                         Just guild ->
                                             Id.nextId guild.channels
 
@@ -2319,25 +2324,16 @@ updateLoadedFromBackend msg model =
                                     loadedInitHelper model.time loginData model
 
                                 ( model2, cmdB ) =
-                                    routeRequest (Just model.route) { model | loginStatus = LoggedIn loggedIn }
+                                    routeRequest
+                                        (Just model.route)
+                                        model.route
+                                        { model | loginStatus = LoggedIn loggedIn }
                             in
                             ( model2
                             , Command.batch
                                 [ cmdA
                                 , cmdB
-                                , case model2.route of
-                                    HomePageRoute ->
-                                        Command.none
-
-                                    AdminRoute _ ->
-                                        Command.none
-
-                                    UserOverviewRoute _ ->
-                                        Command.none
-
-                                    GuildRoute _ _ ->
-                                        Command.none
-                                , case ( model.route, notLoggedIn.useInviteAfterLoggedIn ) of
+                                , case ( model2.route, notLoggedIn.useInviteAfterLoggedIn ) of
                                     ( GuildRoute guildId _, Just inviteLinkId ) ->
                                         JoinGuildByInviteRequest guildId inviteLinkId
                                             |> Lamdera.sendToBackend
@@ -2715,7 +2711,7 @@ layout model attributes child =
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routePush model route =
     if Pages.Guild.isMobile model then
-        routeRequest (Just model.route) { model | route = route }
+        routeRequest (Just model.route) route model
 
     else
         ( model, BrowserNavigation.pushUrl model.navigationKey (Route.encode route) )

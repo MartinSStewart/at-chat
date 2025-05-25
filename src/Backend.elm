@@ -868,7 +868,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                             )
                             modelWithoutUser
                         , case
-                            ( NonemptyDict.get guild.owner model2.users
+                            ( NonemptyDict.get guild2.owner model2.users
                             , LocalState.guildToFrontendForUser userId guild2
                             )
                           of
@@ -882,7 +882,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                                             NonemptyDict.get userId2 model.users
                                                 |> Maybe.map User.backendToFrontendForUser
                                         )
-                                        guild.members
+                                        guild2.members
                                 }
                                     |> Ok
                                     |> Server_YouJoinedGuildByInvite
@@ -1443,6 +1443,7 @@ loginEmailSubject =
     NonemptyString 'L' "ogin code"
 
 
+isLoginTooOld : { a | loginAttempts : number, creationTime : Time.Posix } -> Time.Posix -> Bool
 isLoginTooOld pendingLogin time =
     (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
         && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)

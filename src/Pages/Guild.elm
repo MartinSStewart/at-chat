@@ -1531,6 +1531,7 @@ channelColumnCannotScroll currentUserId currentUser guildId guild channelRoute c
     channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover False
 
 
+insetTop : String
 insetTop =
     --"40px"
     "env(safe-area-inset-top)"

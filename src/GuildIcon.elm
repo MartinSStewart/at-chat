@@ -142,10 +142,12 @@ view mode guild =
         )
 
 
+size : number
 size =
     50
 
 
+sidePadding : Ui.Attribute msg
 sidePadding =
     Ui.paddingXY 4 0
 

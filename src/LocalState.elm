@@ -319,7 +319,7 @@ createGuild time userId guildName =
             [ ( announcementChannelId
               , { createdAt = time
                 , createdBy = userId
-                , name = Unsafe.channelName "general"
+                , name = defaultChannelName
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
@@ -331,6 +331,11 @@ createGuild time userId guildName =
     , invites = SeqDict.empty
     , announcementChannel = announcementChannelId
     }
+
+
+defaultChannelName : ChannelName
+defaultChannelName =
+    Unsafe.channelName "general"
 
 
 createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild -> BackendGuild
