@@ -3094,8 +3094,6 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
             , Ui.width Ui.shrink
             , Ui.height Ui.fill
             , Ui.background MyUi.background1
-            , Ui.borderColor MyUi.border1
-            , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
             , scrollable canScroll2
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
             , Html.Attributes.style "padding" "max(8px, env(safe-area-inset-top)) 0 4px 0" |> Ui.htmlAttribute
@@ -4386,10 +4384,13 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
         [ Ui.height Ui.fill
         , Ui.background MyUi.background2
         , Html.Attributes.style "padding-top" "env(safe-area-inset-top)" |> Ui.htmlAttribute
+        , Html.Attributes.style "border-radius" "env(safe-area-inset-top * 0.5) 0 0 0" |> Ui.htmlAttribute
+        , Ui.borderWith { left = 1, right = 0, bottom = 0, top = 0 }
+        , Ui.borderColor MyUi.border1
         ]
         [ Ui.row
             [ Ui.Font.bold
-            , Ui.paddingWith { left = 8, right = 4, top = 0, bottom = 0 }
+            , Html.Attributes.style "padding" "0 4px 0 calc(env(safe-area-inset-top) * 0.5 + 8px)" |> Ui.htmlAttribute
             , Ui.spacing 8
             , Ui.Font.color MyUi.font1
             , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
