@@ -319,7 +319,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         FinishUserCreationRequest personName ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForUserDataForSignup pendingLogin) ->
-                    if NonemptyDict.values model.users |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress) then
+                    if NonemptyDict.values model2.users |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress) then
                         -- It's maybe possible to end up here if a user initiates two account creations for the same email address and then completes both. We'll just silently fail in that case, not worth the effort to give a good error message.
                         ( model2, Command.none )
 
@@ -353,7 +353,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 _ ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
         LoginWithTwoFactorRequest loginCode ->
             case SeqDict.get sessionId model2.pendingLogins of
@@ -510,12 +510,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         guildId
                         (\userId _ guild ->
-                            ( { model
+                            ( { model2
                                 | guilds =
                                     SeqDict.insert
                                         guildId
                                         (LocalState.createChannel time userId channelName guild)
-                                        model.guilds
+                                        model2.guilds
                               }
                             , Command.batch
                                 [ Local_NewChannel time guildId channelName
@@ -638,16 +638,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_MemberTyping _ guildId channelId ->
                     asGuildMember
-                        model
+                        model2
                         sessionId
                         guildId
                         (\userId _ guild ->
-                            ( { model
+                            ( { model2
                                 | guilds =
                                     SeqDict.insert
                                         guildId
                                         (LocalState.memberIsTyping userId time channelId guild)
-                                        model.guilds
+                                        model2.guilds
                               }
                             , Command.batch
                                 [ Local_MemberTyping time guildId channelId
@@ -656,18 +656,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , broadcastToGuild
                                     clientId
                                     (Server_MemberTyping time userId guildId channelId |> ServerChange)
-                                    model
+                                    model2
                                 ]
                             )
                         )
 
                 Local_AddReactionEmoji messageId emoji ->
                     asGuildMember
-                        model
+                        model2
                         sessionId
                         messageId.guildId
                         (\userId _ guild ->
-                            ( { model
+                            ( { model2
                                 | guilds =
                                     SeqDict.insert
                                         messageId.guildId
@@ -678,7 +678,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             messageId.messageIndex
                                             guild
                                         )
-                                        model.guilds
+                                        model2.guilds
                               }
                             , Command.batch
                                 [ Local_AddReactionEmoji messageId emoji
@@ -687,18 +687,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , broadcastToGuild
                                     clientId
                                     (Server_AddReactionEmoji userId messageId emoji |> ServerChange)
-                                    model
+                                    model2
                                 ]
                             )
                         )
 
                 Local_RemoveReactionEmoji messageId emoji ->
                     asGuildMember
-                        model
+                        model2
                         sessionId
                         messageId.guildId
                         (\userId _ guild ->
-                            ( { model
+                            ( { model2
                                 | guilds =
                                     SeqDict.insert
                                         messageId.guildId
@@ -709,7 +709,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             messageId.messageIndex
                                             guild
                                         )
-                                        model.guilds
+                                        model2.guilds
                               }
                             , Command.batch
                                 [ Local_RemoveReactionEmoji messageId emoji
@@ -718,14 +718,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , broadcastToGuild
                                     clientId
                                     (Server_RemoveReactionEmoji userId messageId emoji |> ServerChange)
-                                    model
+                                    model2
                                 ]
                             )
                         )
 
                 Local_SendEditMessage _ messageId newContent ->
                     asGuildMember
-                        model
+                        model2
                         sessionId
                         messageId.guildId
                         (\userId _ guild ->
@@ -739,7 +739,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     guild
                             of
                                 Ok guild2 ->
-                                    ( { model | guilds = SeqDict.insert messageId.guildId guild2 model.guilds }
+                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
                                     , Command.batch
                                         [ Local_SendEditMessage time messageId newContent
                                             |> LocalChangeResponse changeId
@@ -749,19 +749,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Server_SendEditMessage time userId messageId newContent
                                                 |> ServerChange
                                             )
-                                            model
+                                            model2
                                         ]
                                     )
 
                                 Err () ->
-                                    ( model
+                                    ( model2
                                     , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                     )
                         )
 
                 Local_MemberEditTyping _ messageId ->
                     asGuildMember
-                        model
+                        model2
                         sessionId
                         messageId.guildId
                         (\userId _ guild ->
@@ -774,7 +774,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     guild
                             of
                                 Ok guild2 ->
-                                    ( { model | guilds = SeqDict.insert messageId.guildId guild2 model.guilds }
+                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
                                     , Command.batch
                                         [ Local_MemberEditTyping time messageId
                                             |> LocalChangeResponse changeId
@@ -784,32 +784,32 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Server_MemberEditTyping time userId messageId
                                                 |> ServerChange
                                             )
-                                            model
+                                            model2
                                         ]
                                     )
 
                                 Err () ->
-                                    ( model
+                                    ( model2
                                     , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                     )
                         )
 
                 Local_SetLastViewed guildId channelId messageIndex ->
                     asUser
-                        model
+                        model2
                         sessionId
                         (\userId user ->
-                            ( { model
+                            ( { model2
                                 | users =
                                     NonemptyDict.insert
                                         userId
                                         { user | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed }
-                                        model.users
+                                        model2.users
                               }
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToUser clientId userId localMsg model
+                                , broadcastToUser clientId userId localMsg model2
                                 ]
                             )
                         )
@@ -868,7 +868,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                             )
                             modelWithoutUser
                         , case
-                            ( NonemptyDict.get guild.owner model2.users
+                            ( NonemptyDict.get guild2.owner model2.users
                             , LocalState.guildToFrontendForUser userId guild2
                             )
                           of
@@ -879,10 +879,10 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                                 , members =
                                     SeqDict.filterMap
                                         (\userId2 _ ->
-                                            NonemptyDict.get userId2 model.users
+                                            NonemptyDict.get userId2 model2.users
                                                 |> Maybe.map User.backendToFrontendForUser
                                         )
-                                        guild.members
+                                        guild2.members
                                 }
                                     |> Ok
                                     |> Server_YouJoinedGuildByInvite
@@ -1443,6 +1443,7 @@ loginEmailSubject =
     NonemptyString 'L' "ogin code"
 
 
+isLoginTooOld : { a | loginAttempts : number, creationTime : Time.Posix } -> Time.Posix -> Bool
 isLoginTooOld pendingLogin time =
     (pendingLogin.loginAttempts < LoginForm.maxLoginAttempts)
         && (Duration.from pendingLogin.creationTime time |> Quantity.lessThan Duration.hour)

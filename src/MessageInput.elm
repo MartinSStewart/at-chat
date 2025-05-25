@@ -314,14 +314,14 @@ pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inpu
         ( Just { charIndex }, Just ( _, user ) ) ->
             let
                 applyText : NonemptyString -> NonemptyString
-                applyText text =
+                applyText nonempty =
                     let
                         name : String
                         name =
                             PersonName.toString user.name
 
                         text2 =
-                            String.Nonempty.toString text
+                            String.Nonempty.toString nonempty
 
                         followingText : String
                         followingText =
@@ -348,7 +348,7 @@ pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inpu
                         ++ name
                         ++ followingText
                         |> String.Nonempty.fromString
-                        |> Maybe.withDefault text
+                        |> Maybe.withDefault nonempty
             in
             ( Nothing
             , applyText inputText

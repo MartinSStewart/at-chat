@@ -212,7 +212,6 @@ type FrontendMsg
     | UrlChanged Url
     | GotTime Time.Posix
     | GotWindowSize Int Int
-    | ScrolledToTop
     | LoginFormMsg LoginForm.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg
@@ -246,7 +245,6 @@ type FrontendMsg
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | RemovedFocus
     | MouseEnteredMessage Int
     | MouseExitedMessage Int
     | PressedShowReactionEmojiSelector Int

@@ -483,14 +483,14 @@ viewHelper :
     -> ( Int, List (Html msg) )
 viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
     List.foldl
-        (\item ( spoilerIndex2, list ) ->
+        (\item ( spoilerIndex2, currentList ) ->
             case item of
                 UserMention userId ->
-                    ( spoilerIndex2, list ++ [ MyUi.userLabelHtml userId allUsers ] )
+                    ( spoilerIndex2, currentList ++ [ MyUi.userLabelHtml userId allUsers ] )
 
                 NormalText char text ->
                     ( spoilerIndex2
-                    , list
+                    , currentList
                         ++ [ Html.span
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -503,7 +503,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
 
                 Italic nonempty2 ->
                     let
-                        ( spoilerIndex3, list2 ) =
+                        ( spoilerIndex3, list ) =
                             viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
@@ -512,11 +512,11 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 allUsers
                                 nonempty2
                     in
-                    ( spoilerIndex3, list ++ list2 )
+                    ( spoilerIndex3, currentList ++ list )
 
                 Underline nonempty2 ->
                     let
-                        ( spoilerIndex3, list2 ) =
+                        ( spoilerIndex3, list ) =
                             viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
@@ -525,11 +525,11 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 allUsers
                                 nonempty2
                     in
-                    ( spoilerIndex3, list ++ list2 )
+                    ( spoilerIndex3, currentList ++ list )
 
                 Bold nonempty2 ->
                     let
-                        ( spoilerIndex3, list2 ) =
+                        ( spoilerIndex3, list ) =
                             viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
@@ -538,7 +538,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 allUsers
                                 nonempty2
                     in
-                    ( spoilerIndex3, list ++ list2 )
+                    ( spoilerIndex3, currentList ++ list )
 
                 Spoiler nonempty2 ->
                     let
@@ -546,7 +546,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                             SeqSet.member spoilerIndex2 revealedSpoilers
 
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
-                        ( _, list2 ) =
+                        ( _, list ) =
                             viewHelper
                                 pressedSpoiler
                                 spoilerIndex2
@@ -561,7 +561,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
-                    , list
+                    , currentList
                         ++ [ Html.span
                                 ([ Html.Attributes.style "padding" "0 2px 0 2px"
                                  , Html.Attributes.style "border-radius" "2px"
@@ -576,7 +576,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                             ]
                                        )
                                 )
-                                list2
+                                list
                            ]
                     )
 
@@ -587,7 +587,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                             hyperlinkToString protocol rest
                     in
                     ( spoilerIndex2
-                    , list
+                    , currentList
                         ++ [ if state.spoiler then
                                 Html.span
                                     [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
@@ -612,7 +612,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
 
                 InlineCode char rest ->
                     ( spoilerIndex2
-                    , list
+                    , currentList
                         ++ [ Html.span
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
