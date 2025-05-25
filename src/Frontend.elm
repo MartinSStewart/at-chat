@@ -3082,7 +3082,7 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
                     --    , Ui.Gradient.percent 100 MyUi.background1
                     --    ]
                     ]
-                , Html.Attributes.style "height" "max(8px, env(safe-area-inset-top))" |> Ui.htmlAttribute
+                , Html.Attributes.style "height" ("calc(max(6px, " ++ insetTop ++ "))") |> Ui.htmlAttribute
                 ]
                 Ui.none
             )
@@ -3096,7 +3096,7 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
             , Ui.background MyUi.background1
             , scrollable canScroll2
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            , Html.Attributes.style "padding" "max(8px, env(safe-area-inset-top)) 0 4px 0" |> Ui.htmlAttribute
+            , Html.Attributes.style "padding" ("calc(max(6px, " ++ insetTop ++ ")) 0 4px 0") |> Ui.htmlAttribute
             ]
             (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
@@ -3136,7 +3136,7 @@ homePageLoggedInView model loggedIn local =
             if isMobile model then
                 Ui.row
                     [ Ui.height Ui.fill
-                    , Ui.background MyUi.background3
+                    , Ui.background MyUi.background1
                     ]
                     [ Ui.column
                         [ Ui.height Ui.fill
@@ -3159,7 +3159,7 @@ homePageLoggedInView model loggedIn local =
             else
                 Ui.row
                     [ Ui.height Ui.fill
-                    , Ui.background MyUi.background3
+                    , Ui.background MyUi.background1
                     ]
                     [ Ui.column
                         [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
@@ -3176,6 +3176,7 @@ homePageLoggedInView model loggedIn local =
                             ]
                         , loggedInAsView local
                         ]
+                    , Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] (Ui.text "Work in progress")
                     ]
 
 
@@ -3240,12 +3241,13 @@ guildView model guildId channelRoute loggedIn local =
                     if isMobile model then
                         Ui.column
                             [ Ui.height Ui.fill
+                            , Ui.background MyUi.background1
                             , Ui.clip
-                            , Ui.background MyUi.background3
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
-                                    [ Ui.background MyUi.background3
-                                    , Ui.height Ui.fill
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Html.Attributes.style "padding" (insetTop ++ " 0 0 0") |> Ui.htmlAttribute
                                     , sidebarOffsetAttr loggedIn model
                                     ]
                                 |> Ui.inFront
@@ -3278,7 +3280,7 @@ guildView model guildId channelRoute loggedIn local =
 
                     else
                         Ui.row
-                            [ Ui.height Ui.fill, Ui.background MyUi.background3 ]
+                            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
                                 , Ui.width (Ui.px 300)
@@ -3309,7 +3311,22 @@ guildView model guildId channelRoute loggedIn local =
                                 , loggedInAsView local
                                 ]
                             , channelView channelRoute guildId guild loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Html.Attributes.style "padding-top" insetTop |> Ui.htmlAttribute
+                                    ]
                             , memberColumn local guild
+                                |> Ui.el
+                                    [ Ui.width Ui.shrink
+                                    , Ui.height Ui.fill
+                                    , Html.Attributes.style "padding-top" insetTop |> Ui.htmlAttribute
+                                    ]
                             ]
 
                 Nothing ->
@@ -4370,6 +4387,37 @@ channelColumnCannotScroll currentUserId currentUser guildId guild channelRoute c
     channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover False
 
 
+insetTop =
+    --"40px"
+    "env(safe-area-inset-top)"
+
+
+channelColumnContainer : List (Element msg) -> Element msg -> Element msg
+channelColumnContainer header content =
+    Ui.el
+        [ Ui.height Ui.fill, Html.Attributes.style "padding-top" insetTop |> Ui.htmlAttribute ]
+        (Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Html.Attributes.style "border-radius" ("calc(" ++ insetTop ++ " * 0.5) 0 0 0") |> Ui.htmlAttribute
+            , Ui.borderWith { left = 1, right = 0, bottom = 0, top = 1 }
+            , Ui.borderColor MyUi.border1
+            ]
+            [ Ui.row
+                [ Ui.Font.bold
+                , Html.Attributes.style "padding" ("0 4px 0 calc(max(" ++ insetTop ++ " * 0.25, 8px))") |> Ui.htmlAttribute
+                , Ui.spacing 8
+                , Ui.Font.color MyUi.font1
+                , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+                , Ui.borderColor MyUi.border1
+                , Ui.height (Ui.px 40)
+                ]
+                header
+            , content
+            ]
+        )
+
+
 channelColumn :
     Id UserId
     -> BackendUser
@@ -4380,37 +4428,21 @@ channelColumn :
     -> Bool
     -> Element FrontendMsg
 channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
-    Ui.column
-        [ Ui.height Ui.fill
-        , Ui.background MyUi.background2
-        , Html.Attributes.style "padding-top" "env(safe-area-inset-top)" |> Ui.htmlAttribute
-        , Html.Attributes.style "border-radius" "env(safe-area-inset-top * 0.5) 0 0 0" |> Ui.htmlAttribute
-        , Ui.borderWith { left = 1, right = 0, bottom = 0, top = 0 }
-        , Ui.borderColor MyUi.border1
+    channelColumnContainer
+        [ Ui.text (GuildName.toString guild.name)
+        , Ui.el
+            [ Ui.width Ui.shrink
+            , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
+            , Ui.Font.color MyUi.font2
+            , Ui.width (Ui.px 40)
+            , Ui.alignRight
+            , Ui.paddingXY 8 0
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            ]
+            (Ui.html Icons.inviteUserIcon)
         ]
-        [ Ui.row
-            [ Ui.Font.bold
-            , Html.Attributes.style "padding" "0 4px 0 calc(env(safe-area-inset-top) * 0.5 + 8px)" |> Ui.htmlAttribute
-            , Ui.spacing 8
-            , Ui.Font.color MyUi.font1
-            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
-            , Ui.borderColor MyUi.border1
-            , Ui.height (Ui.px 40)
-            ]
-            [ Ui.text (GuildName.toString guild.name)
-            , Ui.el
-                [ Ui.width Ui.shrink
-                , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
-                , Ui.Font.color MyUi.font2
-                , Ui.width (Ui.px 40)
-                , Ui.alignRight
-                , Ui.paddingXY 8 0
-                , Ui.height Ui.fill
-                , Ui.contentCenterY
-                ]
-                (Ui.html Icons.inviteUserIcon)
-            ]
-        , Ui.column
+        (Ui.column
             [ Ui.paddingXY 0 8, scrollable canScroll2 ]
             (List.map
                 (\( channelId, channel ) ->
@@ -4505,15 +4537,12 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                         Ui.none
                    ]
             )
-        ]
+        )
 
 
 friendsColumn : LocalState -> Element FrontendMsg
 friendsColumn local =
-    Ui.column
-        [ Ui.height Ui.fill
-        , Ui.background MyUi.background2
-        ]
+    channelColumnContainer
         [ Ui.el
             [ Ui.Font.bold
             , Ui.paddingXY 8 8
@@ -4524,6 +4553,7 @@ friendsColumn local =
             ]
             (Ui.text "Direct messages")
         ]
+        Ui.none
 
 
 memberColumn : LocalState -> FrontendGuild -> Element FrontendMsg
@@ -4533,6 +4563,7 @@ memberColumn local guild =
         , Ui.alignRight
         , Ui.background MyUi.background2
         , Ui.Font.color MyUi.font1
+        , Ui.width (Ui.px 200)
         ]
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
