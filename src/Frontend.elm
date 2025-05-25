@@ -299,7 +299,7 @@ loadedInitHelper time loginData loading =
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
-            , sidebarOffset = 0
+            , sidebarOffset = 1
             , sidebarPreviousOffset = 0
             }
 
@@ -3200,6 +3200,7 @@ loggedInAsView local =
         ]
 
 
+sidebarOffsetAttr : LoggedIn2 -> LoadedFrontend -> Ui.Attribute msg
 sidebarOffsetAttr loggedIn model =
     let
         width : Int
