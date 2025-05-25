@@ -270,12 +270,14 @@ emailInput onSubmit onChange text labelText maybeError =
             [ label.element
             , Ui.Input.email
                 [ Ui.Events.onKey Ui.Events.enter onSubmit
+                , Ui.background MyUi.inputBackground
+                , Ui.Font.color MyUi.font1
                 , case maybeError of
                     Just _ ->
                         Ui.borderColor MyUi.errorColor
 
                     Nothing ->
-                        Ui.noAttr
+                        Ui.borderColor MyUi.inputBorder
                 ]
                 { text = text
                 , onChange = onChange
@@ -300,7 +302,14 @@ errorView errorMessage =
 view : LoginForm -> Element Msg
 view loginForm =
     Ui.column
-        [ MyUi.montserrat, Ui.padding 16, Ui.centerX, Ui.centerY, Ui.widthMax 520, Ui.spacing 24 ]
+        [ MyUi.montserrat
+        , Ui.padding 16
+        , Ui.centerX
+        , Ui.centerY
+        , Ui.widthMax 520
+        , Ui.spacing 24
+        , Ui.Font.color MyUi.font1
+        ]
         [ case loginForm of
             EnterEmail enterEmail2 ->
                 enterEmailView enterEmail2
@@ -326,7 +335,10 @@ view loginForm =
                         []
                         [ label.element
                         , Ui.Input.text
-                            []
+                            [ Ui.background MyUi.inputBackground
+                            , Ui.borderColor MyUi.inputBorder
+                            , Ui.Font.color MyUi.font1
+                            ]
                             { onChange = TypedName
                             , text = data.name
                             , label = label.id
@@ -342,11 +354,12 @@ view loginForm =
                     , Ui.el
                         [ Ui.Input.button PressedSubmitUserData
                         , Ui.paddingXY 16 8
-                        , Ui.background (Ui.rgb 240 240 240)
+                        , Ui.background MyUi.buttonBackground
                         , Ui.width Ui.shrink
                         , Ui.border 1
-                        , Ui.borderColor (Ui.rgb 220 220 220)
+                        , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
+                        , Ui.Font.color MyUi.buttonFontColor
                         ]
                         (Ui.text "Submit")
                     ]
@@ -380,7 +393,7 @@ loginCodeInput codeLength onInput loginCode label =
                                     [ Ui.height (Ui.px 54)
                                     , Ui.paddingXY 0 24
                                     , Ui.width (Ui.px 32)
-                                    , Ui.Font.color (Ui.rgba 0 0 0 1)
+                                    , Ui.Font.color MyUi.font1
                                     , if index == (codeLength - 1) // 2 then
                                         Ui.onRight
                                             (Ui.el
@@ -401,7 +414,8 @@ loginCodeInput codeLength onInput loginCode label =
                                         Ui.noAttr
                                     , Ui.border 1
                                     , Ui.rounded 8
-                                    , Ui.borderColor MyUi.gray
+                                    , Ui.borderColor MyUi.inputBorder
+                                    , Ui.background MyUi.inputBackground
                                     , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.2 } ]
                                     , MyUi.noPointerEvents
                                     ]
@@ -423,6 +437,7 @@ loginCodeInput codeLength onInput loginCode label =
             , Html.Attributes.attribute "inputmode" "numeric" |> Ui.htmlAttribute
             , Ui.border 0
             , Ui.background (Ui.rgba 0 0 0 0)
+            , Ui.Font.color MyUi.font1
             ]
             { onChange = onInput
             , text = loginCode
@@ -630,7 +645,7 @@ enterEmailView model =
             PressedSubmitEmail
             TypedLoginFormEmail
             model.email
-            "Enter your email address"
+            "Enter your email address to login/signup"
             (case ( model.pressedSubmitEmail, validateEmail model.email ) of
                 ( True, Err error ) ->
                     Just error
