@@ -579,9 +579,6 @@ updateLoaded msg model =
             , Command.none
             )
 
-        ScrolledToTop ->
-            ( model, Command.none )
-
         PressedShowLogin ->
             case model.loginStatus of
                 LoggedIn _ ->
@@ -1170,9 +1167,6 @@ updateLoaded msg model =
 
                 _ ->
                     ( model, Command.none )
-
-        RemovedFocus ->
-            ( model, Command.none )
 
         MouseEnteredMessage messageIndex ->
             case model.route of
