@@ -56,6 +56,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
 import Ui.Font
+import Ui.Gradient
 import Ui.Input
 import Ui.Lazy
 import Ui.Prose
@@ -3075,6 +3076,26 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
         , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
         , scrollable canScroll2
         , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
+        , Html.Attributes.style "padding-top" "env(safe-area-inset-top)" |> Ui.htmlAttribute
+        , Ui.inFront
+            (Ui.el
+                [ Ui.backgroundGradient
+                    [ Ui.Gradient.linear
+                        (Ui.radians 0)
+                        [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
+                        , Ui.Gradient.percent 100 MyUi.background1
+                        ]
+
+                    --, Ui.Gradient.linear
+                    --    (Ui.radians 0)
+                    --    [ Ui.Gradient.percent 20 (Ui.rgba 0 0 0 0)
+                    --    , Ui.Gradient.percent 100 MyUi.background1
+                    --    ]
+                    ]
+                , Html.Attributes.style "height" "env(safe-area-inset-top)" |> Ui.htmlAttribute
+                ]
+                Ui.none
+            )
         ]
         (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
             :: List.map
@@ -4360,6 +4381,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
     Ui.column
         [ Ui.height Ui.fill
         , Ui.background MyUi.background2
+        , Html.Attributes.style "padding-top" "env(safe-area-inset-top)" |> Ui.htmlAttribute
         ]
         [ Ui.row
             [ Ui.Font.bold
