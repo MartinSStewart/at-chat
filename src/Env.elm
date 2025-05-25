@@ -48,3 +48,13 @@ noReplyEmailAddress =
 adminEmail : String
 adminEmail =
     "a@a.se"
+
+
+vapidPublicKey : String
+vapidPublicKey =
+    "BNz8vNFNoA1018dOyKch2Vm5eNK9W0Zzxf2SVJL7Hd1l-LgmX4QvrE587iH3TEEthM2xh1ftwrANWvuh48IbxCg"
+
+
+vapidPrivateKey : String
+vapidPrivateKey =
+    "GfK4aiJoIsU36vFerEWeDEMmpJjLnMXP-XfA6XnjC7k"

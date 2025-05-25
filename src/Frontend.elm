@@ -118,6 +118,7 @@ subscriptions model =
                         NotLoggedIn _ ->
                             Subscription.none
                     ]
+        , Ports.registerPushSubscription GotRegisterPushSubscription
         ]
 
 
@@ -153,6 +154,7 @@ init url key =
         , Lamdera.sendToBackend CheckLoginRequest
         , Ports.loadSounds
         , Ports.checkNotificationPermission
+        , Ports.registerPushSubscriptionToJs
         ]
     )
 
@@ -1751,6 +1753,20 @@ updateLoaded msg model =
 
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none )) model
+
+        GotRegisterPushSubscription result ->
+            let
+                _ =
+                    Debug.log "GotRegisterPushSubscription" result
+            in
+            ( model
+            , case result of
+                Ok endpoint ->
+                    Lamdera.sendToBackend (RegisterPushSubscriptionRequest endpoint)
+
+                Err _ ->
+                    Command.none
+            )
 
 
 startClosingChannelSidebar : LoggedIn2 -> LoggedIn2

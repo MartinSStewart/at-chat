@@ -2,6 +2,7 @@ port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
     , NotificationPermission(..)
+    , PushSubscription
     , checkNotificationPermission
     , checkNotificationPermissionResponse
     , copyToClipboard
@@ -9,6 +10,8 @@ port module Ports exposing
     , cropImageToJs
     , loadSounds
     , playSound
+    , registerPushSubscription
+    , registerPushSubscriptionToJs
     , requestNotificationPermission
     , showNotification
     , textInputSelectAll
@@ -19,10 +22,12 @@ import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Env
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
+import Url exposing (Url)
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -47,6 +52,46 @@ port check_notification_permission_from_js : (Json.Encode.Value -> msg) -> Sub m
 
 
 port request_notification_permission : Json.Encode.Value -> Cmd msg
+
+
+port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
+
+
+registerPushSubscriptionToJs : Command FrontendOnly toMsg msg
+registerPushSubscriptionToJs =
+    Command.sendToJs
+        "register_push_subscription_to_js"
+        register_push_subscription_to_js
+        (Json.Encode.string Env.vapidPublicKey)
+
+
+type alias PushSubscription =
+    { endpoint : String
+    , auth : String
+    , p256dh : String
+    }
+
+
+registerPushSubscription : (Result String PushSubscription -> msg) -> Subscription FrontendOnly msg
+registerPushSubscription msg =
+    Subscription.fromJs
+        "register_push_subscription_from_js"
+        register_push_subscription_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map3
+                    PushSubscription
+                    (Json.Decode.field "endpoint" Json.Decode.string)
+                    (Json.Decode.at [ "keys", "auth" ] Json.Decode.string)
+                    (Json.Decode.at [ "keys", "p256dh" ] Json.Decode.string)
+                )
+                json
+                |> Result.mapError Json.Decode.errorToString
+                |> msg
+        )
 
 
 requestNotificationPermission : Command FrontendOnly toMsg msg

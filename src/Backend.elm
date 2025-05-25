@@ -10,6 +10,7 @@ module Backend exposing
 import Array
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
@@ -241,6 +242,13 @@ update msg model =
 
                 Err error ->
                     addLog time (Log.SendLogErrorEmailFailed error email) model
+
+        PushedMessage result ->
+            let
+                _ =
+                    Debug.log "Pushed" result
+            in
+            ( model, Command.none )
 
 
 updateFromFrontend :
@@ -827,6 +835,39 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
+
+        RegisterPushSubscriptionRequest request ->
+            let
+                _ =
+                    Debug.log "Send notification" request
+            in
+            ( model
+            , Http.request
+                { method = "POST"
+                , url = request.endpoint
+                , body = Http.emptyBody
+                , headers =
+                    [ Http.header "Authorization" ("vapid t=" ++ jwt3 ++ ",k=" ++ Env.vapidPublicKey)
+                    , Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
+                    ]
+                , expect = Http.expectWhatever PushedMessage
+                , timeout = Just (Duration.seconds 30)
+                , tracker = Nothing
+                }
+            )
+
+
+jwt : String
+jwt =
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJtYWlsdG86bWFydGluc3N0ZXdhcnRAZ21haWwuY29tIiwiYXVkIjoiaHR0cHM6Ly9hdC1jaGF0LmFwcCIsImV4cCI6IjE4NDgxOTk1MDkifQ.L-FBkMbXTZpweTNi0vldwTJGkJkQo7TD5UKE9bMzOwI"
+
+
+jwt2 =
+    "eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiJtYWlsdG86bWFydGluc3N0ZXdhcnRAZ21haWwuY29tIiwiYXVkIjoiaHR0cHM6Ly9hdC1jaGF0LmFwcCIsImV4cCI6IjE4NDgxOTk1MDkifQ.nxv4_2dV19dWI3XAAwcMgHKuPgn9SWxSTsKje459i1l2fmn2ds14ALJACWVfyg6t"
+
+
+jwt3 =
+    "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJtYWlsdG86bWFydGluc3N0ZXdhcnRAZ21haWwuY29tIiwiYXVkIjoiaHR0cHM6Ly9hdC1jaGF0LmFwcCIsImV4cCI6IjE4NDgxOTk1MDkifQ.3jDvVWQvvzkcDAgmgElbBGi1n2_FZ_lFCs9ApvbyV0AM6k-OZ8YySu7fjx68dODChiLHt9hawJM6LWT5uvgUAg"
 
 
 joinGuildByInvite :

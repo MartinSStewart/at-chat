@@ -40,6 +40,7 @@ import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
+import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
@@ -58,7 +59,7 @@ import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Point2d exposing (Point2d)
-import Ports exposing (NotificationPermission)
+import Ports exposing (NotificationPermission, PushSubscription)
 import Postmark
 import RichText exposing (RichText)
 import Route exposing (Route)
@@ -270,6 +271,7 @@ type FrontendMsg
     | OnAnimationFrameDelta Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
+    | GotRegisterPushSubscription (Result String PushSubscription)
 
 
 type ScreenCoordinate
@@ -305,6 +307,7 @@ type ToBackend
     | UserOverviewToBackend Pages.UserOverview.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
+    | RegisterPushSubscriptionRequest PushSubscription
 
 
 type BackendMsg
@@ -313,6 +316,7 @@ type BackendMsg
     | Disconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    | PushedMessage (Result Http.Error ())
 
 
 type LoginResult
