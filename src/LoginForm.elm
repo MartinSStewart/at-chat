@@ -302,7 +302,14 @@ errorView errorMessage =
 view : LoginForm -> Element Msg
 view loginForm =
     Ui.column
-        [ MyUi.montserrat, Ui.padding 16, Ui.centerX, Ui.centerY, Ui.widthMax 520, Ui.spacing 24, Ui.background MyUi.background1, Ui.Font.color MyUi.font1 ]
+        [ MyUi.montserrat
+        , Ui.padding 16
+        , Ui.centerX
+        , Ui.centerY
+        , Ui.widthMax 520
+        , Ui.spacing 24
+        , Ui.Font.color MyUi.font1
+        ]
         [ case loginForm of
             EnterEmail enterEmail2 ->
                 enterEmailView enterEmail2
@@ -638,7 +645,7 @@ enterEmailView model =
             PressedSubmitEmail
             TypedLoginFormEmail
             model.email
-            "Enter your email address"
+            "Enter your email address to login/signup"
             (case ( model.pressedSubmitEmail, validateEmail model.email ) of
                 ( True, Err error ) ->
                     Just error

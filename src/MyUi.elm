@@ -573,7 +573,6 @@ html, body {
 }
 body {
   overflow: hidden;
-  background-color: rgb(14,20,40);
 }
 """
             )

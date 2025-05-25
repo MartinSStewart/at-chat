@@ -15,24 +15,25 @@ import Ui.Input
 import Ui.Shadow
 
 
-header : Int -> LoginStatus -> Element FrontendMsg
-header windowWidth loginStatus =
+header : LoginStatus -> Element FrontendMsg
+header loginStatus =
     Ui.el
-        [ Ui.background (Ui.rgb 255 255 255)
+        [ Ui.background MyUi.background2
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ if windowWidth < 800 then
-                Ui.paddingXY 24 16
-
-              else
-                Ui.paddingXY 48 16
+            [ Ui.paddingXY 16 0
             , Ui.contentCenterY
             , MyUi.montserrat
             , Ui.widthMax 1280
             , Ui.centerX
             ]
-            [ Ui.text "A logo would fit nicely here"
+            [ Ui.image
+                [ Ui.width (Ui.px 64), Ui.padding 8 ]
+                { source = "/at-logo-no-background.png"
+                , description = "Logo"
+                , onLoad = Nothing
+                }
             , case loginStatus of
                 LoggedIn _ ->
                     Ui.el
@@ -68,8 +69,7 @@ openDashboardButtonId =
 
 buttonAttributes : List (Ui.Attribute msg)
 buttonAttributes =
-    [ Ui.Font.color (Ui.rgb 113 128 150)
-    , Ui.Anim.hovered (Ui.Anim.ms 10) [ Ui.Anim.backgroundColor (Ui.rgb 247 250 252) ]
+    [ Ui.Anim.hovered (Ui.Anim.ms 10) [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
     , Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
@@ -94,5 +94,5 @@ view windowWidth =
         , Ui.widthMax 1280
         , Ui.centerX
         ]
-        [ Ui.el [ Ui.Font.size 48 ] (Ui.text "Your very own website!")
+        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "at-chat, a place to chat with friends")
         ]

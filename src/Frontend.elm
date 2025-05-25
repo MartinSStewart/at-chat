@@ -2679,7 +2679,7 @@ layout model attributes child =
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
             :: Ui.Font.size 16
-            :: Ui.background (Ui.rgb 255 255 255)
+            :: Ui.Font.color MyUi.font1
             :: attributes
             ++ (if Pages.Guild.isMobile model then
                     [ Html.Events.preventDefaultOn
@@ -2852,14 +2852,14 @@ view model =
                     HomePageRoute ->
                         layout
                             loaded
-                            []
+                            [ Ui.background MyUi.background3 ]
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView loaded loggedIn (Local.model loggedIn.localState)
 
                                 NotLoggedIn { loginForm } ->
                                     Ui.el
-                                        [ Ui.inFront (Pages.Home.header windowWidth loaded.loginStatus)
+                                        [ Ui.inFront (Pages.Home.header loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
                                         (case loginForm of
