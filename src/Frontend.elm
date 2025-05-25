@@ -2846,7 +2846,10 @@ view model =
                                 LoginForm.view
                                     (Maybe.withDefault LoginForm.init loginForm)
                                     |> Ui.map LoginFormMsg
-                                    |> layout loaded []
+                                    |> layout loaded
+                                        [ Ui.background MyUi.background3
+                                        , Ui.inFront (Pages.Home.header loaded.loginStatus)
+                                        ]
                 in
                 case loaded.route of
                     HomePageRoute ->
