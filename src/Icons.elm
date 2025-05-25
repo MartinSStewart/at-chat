@@ -1,7 +1,5 @@
 module Icons exposing
-    ( admin
-    , arrowLeft
-    , close
+    ( arrowLeft
     , collapseContainer
     , copy
     , copyIcon
@@ -11,7 +9,6 @@ module Icons exposing
     , hashtag
     , inviteUserIcon
     , link
-    , logout
     , pencil
     , plusIcon
     , reply
@@ -20,7 +17,6 @@ module Icons exposing
     , smile
     , sortAscending
     , sortDescending
-    , user
     , users
     , x
     )
@@ -35,16 +31,6 @@ import Ui
 reset : Ui.Element msg
 reset =
     Phosphor.arrowCounterClockwise Phosphor.Regular |> icon
-
-
-logout : Ui.Element msg
-logout =
-    Phosphor.signOut Phosphor.Regular |> icon
-
-
-admin : Ui.Element msg
-admin =
-    Phosphor.wrench Phosphor.Regular |> icon
 
 
 link : Ui.Element msg
@@ -77,11 +63,6 @@ delete =
     Phosphor.trash Phosphor.Bold |> icon
 
 
-close : Ui.Element msg
-close =
-    Phosphor.x Phosphor.Bold |> icon
-
-
 icon : Phosphor.IconVariant -> Ui.Element msg
 icon i =
     i |> Phosphor.toHtml [] |> Ui.html
@@ -90,11 +71,6 @@ icon i =
 copy : Ui.Element msg
 copy =
     Phosphor.copy Phosphor.Regular |> icon
-
-
-user : Ui.Element msg
-user =
-    Phosphor.user Phosphor.Regular |> icon
 
 
 plusIcon : Html msg

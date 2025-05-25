@@ -1,9 +1,9 @@
 module GuildIcon exposing (Mode(..), NotificationType(..), addGuildButton, notificationView, showFriendsButton, view)
 
-import GuildName exposing (GuildName)
+import GuildName
 import Icons
-import Image exposing (Image)
-import LocalState exposing (BackendGuild, FrontendGuild)
+import Image
+import LocalState exposing (FrontendGuild)
 import MyUi
 import Ui exposing (Element)
 import Ui.Font

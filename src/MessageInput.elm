@@ -7,10 +7,10 @@ import Effect.Task as Task
 import Html
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
-import LocalState exposing (FrontendChannel, LocalState)
+import LocalState exposing (LocalState)
 import MyUi
 import PersonName
 import RichText

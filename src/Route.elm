@@ -6,10 +6,8 @@ module Route exposing
     , encode
     )
 
-import AppUrl exposing (AppUrl)
+import AppUrl
 import Dict
-import Effect.Browser.Navigation as BrowserNavigation
-import Effect.Command exposing (Command, FrontendOnly)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)

@@ -1,5 +1,6 @@
 port module Ports exposing
-    ( CropImageDataResponse
+    ( CropImageData
+    , CropImageDataResponse
     , NotificationPermission(..)
     , checkNotificationPermission
     , checkNotificationPermissionResponse
@@ -10,7 +11,6 @@ port module Ports exposing
     , playSound
     , requestNotificationPermission
     , showNotification
-    , soundsLoaded
     , textInputSelectAll
     )
 
@@ -114,14 +114,6 @@ showNotification title body =
 loadSounds : Command FrontendOnly toMsg msg
 loadSounds =
     Command.sendToJs "load_sounds_to_js" load_sounds_to_js Json.Encode.null
-
-
-soundsLoaded : msg -> Subscription FrontendOnly msg
-soundsLoaded msg =
-    Subscription.fromJs
-        "load_sounds_from_js"
-        load_sounds_from_js
-        (\_ -> msg)
 
 
 playSound : String -> Command FrontendOnly toMsg msg

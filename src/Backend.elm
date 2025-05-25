@@ -8,7 +8,6 @@ module Backend exposing
     )
 
 import Array
-import ChannelName exposing (ChannelName)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -29,18 +28,15 @@ import LocalState exposing (BackendGuild, ChannelStatus(..), JoinGuildError(..),
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
-import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import Pages.UserOverview
 import Pagination
-import PersonName
 import Postmark
 import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict
 import SeqSet
-import Sha256
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
@@ -118,8 +114,7 @@ init =
                         , createdBy = adminUserId
                         , name = Unsafe.channelName "First Channel"
                         , messages =
-                            Array.fromList
-                                []
+                            Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         }
@@ -160,8 +155,7 @@ init =
                                 , createdBy = adminUserId
                                 , name = Unsafe.channelName "First Channel"
                                 , messages =
-                                    Array.fromList
-                                        []
+                                    Array.empty
                                 , status = ChannelActive
                                 , lastTypedAt = SeqDict.empty
                                 }
@@ -515,7 +509,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         guildId
-                        (\userId user guild ->
+                        (\userId _ guild ->
                             ( { model
                                 | guilds =
                                     SeqDict.insert
@@ -540,7 +534,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         guildId
-                        (\userId user guild ->
+                        (\_ _ guild ->
                             ( { model2
                                 | guilds =
                                     SeqDict.insert
@@ -564,7 +558,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         guildId
-                        (\userId user guild ->
+                        (\userId _ guild ->
                             ( { model2
                                 | guilds =
                                     SeqDict.insert
@@ -588,7 +582,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         guildId
-                        (\userId user guild ->
+                        (\userId _ guild ->
                             let
                                 ( model3, id ) =
                                     SecretId.getShortUniqueId time model2

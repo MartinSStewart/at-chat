@@ -4,7 +4,6 @@ module RichText exposing
     , append
     , fromNonemptyString
     , mentionsUser
-    , parser
     , textInputView
     , toString
     , view
@@ -21,8 +20,8 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import String.Nonempty exposing (NonemptyString(..))
-import Url exposing (Protocol(..), Url)
+import String.Nonempty exposing (NonemptyString)
+import Url exposing (Protocol(..))
 
 
 type RichText
@@ -32,7 +31,7 @@ type RichText
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
     | Spoiler (Nonempty RichText)
-    | Hyperlink Url.Protocol String
+    | Hyperlink Protocol String
     | InlineCode Char String
 
 
@@ -106,7 +105,7 @@ fromNonemptyString users string =
                 Nothing ->
                     Nonempty (normalTextFromNonempty string) []
 
-        Err error ->
+        Err _ ->
             Nonempty (normalTextFromNonempty string) []
 
 
@@ -276,7 +275,7 @@ parser users modifiers =
                     |> Parser.map
                         (\( protocol, rest ) ->
                             (case Url.fromString ("https://" ++ rest) of
-                                Just url ->
+                                Just _ ->
                                     { current = Array.empty
                                     , rest =
                                         Array.append
@@ -451,7 +450,7 @@ mentionsUser userId nonempty =
                 Hyperlink _ _ ->
                     False
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     False
         )
         nonempty

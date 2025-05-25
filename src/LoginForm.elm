@@ -6,6 +6,7 @@ module LoginForm exposing
     , EnterUserData2
     , LoginForm(..)
     , Msg(..)
+    , SubmitStatus
     , emailInputId
     , errorView
     , init
@@ -28,7 +29,6 @@ module LoginForm exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
-import Env
 import Html.Attributes
 import MyUi
 import PersonName exposing (PersonName)
@@ -582,7 +582,7 @@ rateLimited loginForm =
             EnterEmail
                 { email = "", pressedSubmitEmail = False, rateLimited = True }
 
-        EnterUserData enterUserData ->
+        EnterUserData _ ->
             loginForm
 
 
@@ -603,7 +603,7 @@ invalidCode loginCode loginForm =
             }
                 |> EnterTwoFactorCode
 
-        EnterUserData enterUserData ->
+        EnterUserData _ ->
             loginForm
 
 

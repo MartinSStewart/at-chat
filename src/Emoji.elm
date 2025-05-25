@@ -13,7 +13,6 @@ emojis =
 
 type Emoji
     = UnicodeEmoji String
-    | CustomEmoji
 
 
 toString : Emoji -> String
@@ -22,15 +21,9 @@ toString emoji =
         UnicodeEmoji text ->
             text
 
-        CustomEmoji ->
-            ""
-
 
 view : Emoji -> Ui.Element msg
 view emoji =
     case emoji of
         UnicodeEmoji text ->
             Ui.el [ Ui.Font.size 20 ] (Ui.text text)
-
-        CustomEmoji ->
-            Ui.text "?"

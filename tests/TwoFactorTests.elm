@@ -1,7 +1,6 @@
 module TwoFactorTests exposing (makeSureWeDontChangeTheSettings)
 
 import Expect
-import Id
 import SecretId
 import Test exposing (Test)
 import Time

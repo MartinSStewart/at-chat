@@ -1,15 +1,10 @@
-module GuildName exposing (GuildName(..), fromString, toString, unknown)
+module GuildName exposing (GuildName(..), fromString, toString)
 
 import String.Nonempty exposing (NonemptyString)
 
 
 type GuildName
     = GuildName NonemptyString
-
-
-unknown : GuildName
-unknown =
-    GuildName (String.Nonempty.NonemptyString '<' "unknown>")
 
 
 fromString : String -> Result String GuildName

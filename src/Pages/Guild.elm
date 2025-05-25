@@ -700,10 +700,6 @@ conversationViewHelper guildId channelId channel loggedIn local model =
         lastViewedIndex : Int
         lastViewedIndex =
             SeqDict.get ( guildId, channelId ) local.localUser.user.lastViewed |> Maybe.withDefault -1
-
-        allUsers : SeqDict (Id UserId) FrontendUser
-        allUsers =
-            LocalState.allUsers local
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -777,7 +773,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                                 Nothing ->
                                     Nothing
 
-                        UserJoinedMessage posix id seqDict ->
+                        UserJoinedMessage _ _ _ ->
                             Nothing
 
                         DeletedMessage ->

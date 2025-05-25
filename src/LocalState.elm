@@ -1,6 +1,7 @@
 module LocalState exposing
     ( AdminData
     , AdminStatus(..)
+    , Archived
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
@@ -18,7 +19,6 @@ module LocalState exposing
     , addReactionEmoji
     , allUsers
     , allUsers2
-    , channelToFrontend
     , createChannel
     , createChannelFrontend
     , createGuild
@@ -31,11 +31,9 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
-    , isAdmin
     , memberIsEditTyping
     , memberIsTyping
     , removeReactionEmoji
-    , updateChannel
     )
 
 import Array exposing (Array)
@@ -57,7 +55,7 @@ import Quantity
 import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
+import SeqSet
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
 
@@ -178,16 +176,6 @@ channelToFrontend channel =
             }
                 |> Just
 
-        ChannelArchived archive ->
-            { createdAt = channel.createdAt
-            , createdBy = channel.createdBy
-            , name = channel.name
-            , messages = channel.messages
-            , isArchived = Just archive
-            , lastTypedAt = channel.lastTypedAt
-            }
-                |> Just
-
         ChannelDeleted _ ->
             Nothing
 
@@ -198,7 +186,6 @@ type alias Archived =
 
 type ChannelStatus
     = ChannelActive
-    | ChannelArchived Archived
     | ChannelDeleted { deletedAt : Time.Posix, deletedBy : Id UserId }
 
 
@@ -256,16 +243,6 @@ getUser userId local =
 
     else
         SeqDict.get userId local.localUser.otherUsers
-
-
-isAdmin : LocalState -> Bool
-isAdmin { adminData } =
-    case adminData of
-        IsAdmin _ ->
-            True
-
-        IsNotAdmin ->
-            False
 
 
 createMessage :

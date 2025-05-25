@@ -24,7 +24,6 @@ module MyUi exposing
     , font2
     , font3
     , gray
-    , green500
     , heightAttr
     , highlightedBorder
     , hoverAndMentionColor
@@ -33,31 +32,21 @@ module MyUi exposing
     , hoverText
     , inputBackground
     , inputBorder
-    , internalLink
     , label
-    , labelFontColor
-    , listToText
     , mentionColor
     , montserrat
     , noPointerEvents
     , padding
-    , placeholderFont
     , primaryButton
     , radioRowWithSeparators
     , replyToColor
     , rounded
-    , row
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
-    , splitterColor
-    , spoilerColor
-    , spoilerRevealedColor
     , textLinkColor
     , timeElapsedView
     , touchPress
-    , userLabel
-    , userLabel2
     , userLabelHtml
     , white
     , widthAttr
@@ -74,7 +63,6 @@ import Id exposing (Id, UserId)
 import PersonName exposing (PersonName)
 import Quantity
 import Round
-import Route exposing (Route, UserOverviewRouteData(..))
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
 import Ui exposing (Element)
@@ -101,13 +89,6 @@ spacing =
 rounded : Ui.Attribute msg
 rounded =
     Ui.rounded rhythm
-
-
-{-| Row with preapplied standard spacing.
--}
-row : List (Ui.Attribute msg) -> List (Element msg) -> Element msg
-row attrs children =
-    Ui.row (spacing :: attrs) children
 
 
 {-| Column with preapplied standard spacing.
@@ -509,11 +490,6 @@ montserrat =
     Ui.Font.family [ Ui.Font.typeface "Montserrat", Ui.Font.typeface "Helvetica", Ui.Font.sansSerif ]
 
 
-internalLink : Route -> Ui.Attribute msg
-internalLink route =
-    Ui.link (Route.encode route)
-
-
 secondaryButton : HtmlId -> List (Ui.Attribute msg) -> msg -> String -> Element msg
 secondaryButton id attrs onPress label2 =
     button
@@ -628,52 +604,6 @@ heightAttr height =
     Html.Attributes.style "height" (String.fromInt height ++ "px")
 
 
-listToText : List String -> String
-listToText list =
-    case List.reverse list of
-        [] ->
-            ""
-
-        [ single ] ->
-            single
-
-        [ one, two ] ->
-            two ++ " and " ++ one
-
-        one :: many ->
-            String.join ", " (List.reverse many) ++ ", and " ++ one
-
-
-userLabel : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Element msg
-userLabel userId allUsers =
-    case SeqDict.get userId allUsers of
-        Just user ->
-            userLabel2 user
-
-        Nothing ->
-            Ui.el
-                [ errorBackground
-                , Ui.width Ui.shrink
-                , Ui.paddingXY 4 0
-                , Ui.Font.color (Ui.rgb 50 70 240)
-                , Ui.rounded 2
-                ]
-                (Ui.text "<name missing>")
-
-
-userLabel2 : { a | name : PersonName } -> Element msg
-userLabel2 user =
-    Ui.el
-        [ Ui.background labelBackgroundColor
-        , Ui.width Ui.shrink
-        , Ui.paddingWith { left = 1, right = 1, top = 0, bottom = 1 }
-        , Ui.Font.color labelFontColor
-        , Ui.rounded 2
-        , Ui.Font.noWrap
-        ]
-        (Ui.text ("@" ++ PersonName.toString user.name))
-
-
 userLabelHtml : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Html msg
 userLabelHtml userId allUsers =
     case SeqDict.get userId allUsers of
@@ -703,16 +633,6 @@ userLabel2Html user =
         [ Html.text ("@" ++ PersonName.toString user.name) ]
 
 
-labelBackgroundColor : Ui.Color
-labelBackgroundColor =
-    Ui.rgb 50 70 240
-
-
-labelFontColor : Ui.Color
-labelFontColor =
-    Ui.rgb 215 235 255
-
-
 background1 : Ui.Color
 background1 =
     Ui.rgb 14 20 40
@@ -736,11 +656,6 @@ inputBackground =
 inputBorder : Ui.Color
 inputBorder =
     Ui.rgb 97 104 124
-
-
-splitterColor : Ui.Color
-splitterColor =
-    background1
 
 
 buttonBackground : Ui.Color
@@ -788,11 +703,6 @@ font3 =
     Ui.rgb 200 200 200
 
 
-placeholderFont : Ui.Color
-placeholderFont =
-    Ui.rgb 180 180 180
-
-
 border1 : Ui.Color
 border1 =
     Ui.rgb 60 70 100
@@ -836,16 +746,6 @@ hoverAndReplyToColor =
 hoverAndMentionColor : Ui.Color
 hoverAndMentionColor =
     Ui.rgb 156 132 130
-
-
-spoilerColor : Ui.Color
-spoilerColor =
-    Ui.rgb 0 0 0
-
-
-spoilerRevealedColor : Ui.Color
-spoilerRevealedColor =
-    Ui.rgb 30 30 30
 
 
 alertColor : Ui.Color

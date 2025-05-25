@@ -12,7 +12,6 @@ module Id exposing
 
 import List.Extra
 import SeqDict exposing (SeqDict)
-import UInt64 exposing (UInt64)
 
 
 type UserId

@@ -1,15 +1,10 @@
-module ChannelName exposing (ChannelName(..), fromString, toString, unknown)
+module ChannelName exposing (ChannelName(..), fromString, toString)
 
 import String.Nonempty exposing (NonemptyString)
 
 
 type ChannelName
     = ChannelName NonemptyString
-
-
-unknown : ChannelName
-unknown =
-    ChannelName (String.Nonempty.NonemptyString '<' "unknown>")
 
 
 fromString : String -> Result String ChannelName

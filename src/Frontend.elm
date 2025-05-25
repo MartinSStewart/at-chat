@@ -28,12 +28,12 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), BackendChannel, BackendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..), UserTextMessageData)
+import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, Message(..))
 import LoginForm
-import MessageInput exposing (MentionUserDropdown, MsgConfig)
+import MessageInput
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -42,17 +42,16 @@ import Pagination
 import Point2d
 import Ports
 import Quantity exposing (Quantity, Rate, Unitless)
-import RichText exposing (RichText(..))
+import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
-import SeqDict exposing (SeqDict)
-import String.Nonempty exposing (NonemptyString)
-import Types exposing (AdminStatusLoginData(..), Drag(..), EditMessage, EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageId, NewChannelForm, NewGuildForm, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import SeqDict
+import String.Nonempty
+import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser)
 import Vector2d exposing (Vector2d)
 
 
@@ -569,13 +568,8 @@ updateLoaded msg model =
                 route : Route
                 route =
                     Route.decode url
-
-                ( model2, cmd ) =
-                    routeRequest (Just model.route) { model | route = route }
             in
-            ( model2
-            , cmd
-            )
+            routeRequest (Just model.route) { model | route = route }
 
         GotTime time ->
             ( { model | time = time }, Command.none )
@@ -1498,7 +1492,7 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
                     in
                     case getGuildAndChannel guildId channelId local of
-                        Just ( guild, channel ) ->
+                        Just ( _, channel ) ->
                             let
                                 messageCount : Int
                                 messageCount =
@@ -1528,7 +1522,7 @@ updateLoaded msg model =
                                                         else
                                                             Nothing
 
-                                                    UserJoinedMessage posix id seqDict ->
+                                                    UserJoinedMessage _ _ _ ->
                                                         Nothing
 
                                                     DeletedMessage ->
@@ -2631,37 +2625,37 @@ pendingChangesText localChange =
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
-        Local_NewChannel posix id channelName ->
+        Local_NewChannel _ _ _ ->
             "Created new channel"
 
-        Local_EditChannel id _ channelName ->
+        Local_EditChannel _ _ _ ->
             "Edited channel"
 
-        Local_DeleteChannel _ id ->
+        Local_DeleteChannel _ _ ->
             "Deleted channel"
 
-        Local_NewInviteLink posix id toBeFilledInByBackend ->
+        Local_NewInviteLink _ _ _ ->
             "Created invite link"
 
-        Local_NewGuild _ guildName _ ->
+        Local_NewGuild _ _ _ ->
             "Created new guild"
 
         Local_MemberTyping _ _ _ ->
             "Is typing notification"
 
-        Local_AddReactionEmoji messageId emoji ->
+        Local_AddReactionEmoji _ _ ->
             "Added reaction emoji"
 
-        Local_RemoveReactionEmoji messageId emoji ->
+        Local_RemoveReactionEmoji _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage posix messageId nonempty ->
+        Local_SendEditMessage _ _ _ ->
             "Edit message"
 
-        Local_MemberEditTyping posix messageId ->
+        Local_MemberEditTyping _ _ ->
             "Editing message"
 
-        Local_SetLastViewed id _ int ->
+        Local_SetLastViewed _ _ _ ->
             "Viewed channel"
 
 
@@ -2682,7 +2676,7 @@ layout model attributes child =
                                 LocalChange _ localChange ->
                                     pendingChangesText localChange
 
-                                ServerChange serverChange ->
+                                ServerChange _ ->
                                     ""
                         )
                         model.time

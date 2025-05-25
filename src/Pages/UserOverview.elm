@@ -95,7 +95,7 @@ init twoFactorStatusEnabled maybeUser =
 update : Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
 update msg model =
     case msg of
-        SelectedNotificationFrequency emailNotifications ->
+        SelectedNotificationFrequency _ ->
             ( model, Command.none )
 
         PressedStart2FaSetup ->

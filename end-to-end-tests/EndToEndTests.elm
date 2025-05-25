@@ -7,7 +7,6 @@ import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
-import Env
 import Frontend
 import Json.Decode
 import Json.Encode

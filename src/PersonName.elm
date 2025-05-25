@@ -1,16 +1,10 @@
-module PersonName exposing (PersonName(..), fromString, toString, unknown)
+module PersonName exposing (PersonName(..), fromString, toString)
 
-import Set
 import String.Nonempty exposing (NonemptyString)
 
 
 type PersonName
     = PersonName NonemptyString
-
-
-unknown : PersonName
-unknown =
-    PersonName (String.Nonempty.NonemptyString '<' "unknown>")
 
 
 fromString : String -> Result String PersonName

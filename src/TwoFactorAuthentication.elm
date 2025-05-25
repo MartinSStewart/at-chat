@@ -9,8 +9,6 @@ module TwoFactorAuthentication exposing
 
 import Duration
 import Effect.Time as Time
-import Env
-import Id exposing (Id)
 import SecretId exposing (SecretId)
 import TOTP.Algorithm
 import TOTP.Key

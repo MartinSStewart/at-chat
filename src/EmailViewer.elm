@@ -4,13 +4,12 @@ import Backend
 import Email.Html
 import Html exposing (Html)
 import Html.Attributes
-import String.Nonempty exposing (NonemptyString(..))
+import String.Nonempty exposing (NonemptyString)
 
 
 main : Html msg
 main =
     [ loginEmail ]
-        |> List.intersperse (Html.hr [] [])
         |> Html.div []
 
 
