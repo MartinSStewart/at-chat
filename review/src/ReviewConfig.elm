@@ -49,8 +49,7 @@ config =
         |> defaultIgnore
 
     --, NoUnusedFields.rule |> defaultIgnore
-    , NoUnused.CustomTypeConstructors.rule []
-        |> defaultIgnore
+    , NoUnused.CustomTypeConstructors.rule [] |> defaultIgnore
     , NoUnused.Patterns.rule |> defaultIgnore
     , Docs.ReviewAtDocs.rule |> defaultIgnore
     , NoConfusingPrefixOperator.rule |> defaultIgnore
@@ -101,7 +100,13 @@ config =
                 (\v -> "src/Evergreen/V" ++ String.fromInt v)
                 (List.range 1 1000)
             )
-        |> defaultIgnore
+        |> Review.Rule.ignoreErrorsForFiles
+            [ "src/Coord.elm"
+            , "src/NonemptyDict.elm"
+            , "src/NonemptySet.elm"
+            , "src/LamderaRPC.elm"
+            ]
+        |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
     , NoBrokenParserFunctions.rule
     , BackendOnly.rule
         { functions =
@@ -125,4 +130,4 @@ defaultIgnore rule =
         , "src/LamderaRPC.elm"
         ]
         rule
-        |> Review.Rule.ignoreErrorsForDirectories [ "vendored" ]
+        |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]

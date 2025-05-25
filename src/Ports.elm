@@ -28,9 +28,6 @@ import Quantity exposing (Quantity)
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
 
 
-port load_sounds_from_js : (Json.Decode.Value -> msg) -> Sub msg
-
-
 port play_sound : Json.Encode.Value -> Cmd msg
 
 

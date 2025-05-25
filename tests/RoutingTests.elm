@@ -55,26 +55,3 @@ routeFuzzer =
 idFuzzer : Fuzzer (Id a)
 idFuzzer =
     Fuzz.map Id.Id (Fuzz.intRange 0 10000)
-
-
-stringFuzzer : Fuzzer String
-stringFuzzer =
-    urlSafeCharacterFuzzer
-        |> Fuzz.listOfLengthBetween 5 10
-        |> Fuzz.map String.fromList
-
-
-urlSafeCharacterFuzzer : Fuzzer Char
-urlSafeCharacterFuzzer =
-    Fuzz.oneOfValues
-        (charRange 'a' 'z'
-            ++ charRange 'A' 'Z'
-            ++ charRange '0' '9'
-            ++ [ '-', '.', '_', '~' ]
-        )
-
-
-charRange : Char -> Char -> List Char
-charRange from to =
-    List.range (Char.toCode from) (Char.toCode to)
-        |> List.map Char.fromCode

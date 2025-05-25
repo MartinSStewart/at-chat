@@ -1,4 +1,4 @@
-module RichTextTests exposing (..)
+module RichTextTests exposing (test)
 
 import Expect
 import Fuzz
@@ -8,7 +8,7 @@ import PersonName exposing (PersonName)
 import RichText exposing (RichText(..))
 import SeqDict
 import String.Nonempty exposing (NonemptyString(..))
-import Test
+import Test exposing (Test)
 import Unsafe
 
 
@@ -17,6 +17,7 @@ users =
     SeqDict.fromList [ ( Id.fromInt 123, { name = Unsafe.personName "a" } ) ]
 
 
+test : Test
 test =
     Test.describe
         "Rich text tests"
