@@ -3066,18 +3066,8 @@ canScroll model =
 
 guildColumn : Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Bool -> Element FrontendMsg
 guildColumn route currentUserId currentUser guilds canScroll2 =
-    Ui.column
-        [ Ui.spacing 4
-        , Ui.paddingXY 0 6
-        , Ui.width Ui.shrink
-        , Ui.height Ui.fill
-        , Ui.background MyUi.background1
-        , Ui.borderColor MyUi.border1
-        , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
-        , scrollable canScroll2
-        , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-        , Html.Attributes.style "padding-top" "env(safe-area-inset-top)" |> Ui.htmlAttribute
-        , Ui.inFront
+    Ui.el
+        [ Ui.inFront
             (Ui.el
                 [ Ui.backgroundGradient
                     [ Ui.Gradient.linear
@@ -3092,35 +3082,49 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
                     --    , Ui.Gradient.percent 100 MyUi.background1
                     --    ]
                     ]
-                , Html.Attributes.style "height" "env(safe-area-inset-top)" |> Ui.htmlAttribute
+                , Html.Attributes.style "height" "max(8px, env(safe-area-inset-top))" |> Ui.htmlAttribute
                 ]
                 Ui.none
             )
+        , Ui.width Ui.shrink
+        , Ui.height Ui.fill
         ]
-        (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
-            :: List.map
-                (\( guildId, guild ) ->
-                    Ui.el
-                        [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute guild.announcementChannel)))
-                        ]
-                        (GuildIcon.view
-                            (case route of
-                                GuildRoute a _ ->
-                                    if a == guildId then
-                                        GuildIcon.IsSelected
+        (Ui.column
+            [ Ui.spacing 4
+            , Ui.width Ui.shrink
+            , Ui.height Ui.fill
+            , Ui.background MyUi.background1
+            , Ui.borderColor MyUi.border1
+            , Ui.borderWith { left = 0, right = 1, bottom = 0, top = 0 }
+            , scrollable canScroll2
+            , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
+            , Html.Attributes.style "padding" "max(8px, env(safe-area-inset-top)) 0 4px 0" |> Ui.htmlAttribute
+            ]
+            (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
+                :: List.map
+                    (\( guildId, guild ) ->
+                        Ui.el
+                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute guild.announcementChannel)))
+                            ]
+                            (GuildIcon.view
+                                (case route of
+                                    GuildRoute a _ ->
+                                        if a == guildId then
+                                            GuildIcon.IsSelected
 
-                                    else
-                                        guildHasNotifications currentUserId currentUser guildId guild
-                                            |> GuildIcon.Normal
+                                        else
+                                            guildHasNotifications currentUserId currentUser guildId guild
+                                                |> GuildIcon.Normal
 
-                                _ ->
-                                    guildHasNotifications currentUserId currentUser guildId guild |> GuildIcon.Normal
+                                    _ ->
+                                        guildHasNotifications currentUserId currentUser guildId guild |> GuildIcon.Normal
+                                )
+                                guild
                             )
-                            guild
-                        )
-                )
-                (SeqDict.toList guilds)
-            ++ [ GuildIcon.addGuildButton False PressedCreateGuild ]
+                    )
+                    (SeqDict.toList guilds)
+                ++ [ GuildIcon.addGuildButton False PressedCreateGuild ]
+            )
         )
 
 
