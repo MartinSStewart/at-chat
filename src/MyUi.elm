@@ -775,7 +775,7 @@ buttonFontColor =
 
 font1 : Ui.Color
 font1 =
-    Ui.rgb 0 255 255
+    Ui.rgb 255 255 255
 
 
 font2 : Ui.Color
