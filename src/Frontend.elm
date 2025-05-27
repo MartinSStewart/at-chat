@@ -95,6 +95,7 @@ subscriptions model =
         , Time.every Duration.second GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
+        , Ports.checkPwaStatusResponse CheckedPwaStatus
         , case model of
             Loading _ ->
                 Subscription.none
@@ -145,6 +146,7 @@ init url key =
         , time = Nothing
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
+        , pwaStatus = Ports.BrowserView
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -153,6 +155,7 @@ init url key =
         , Lamdera.sendToBackend CheckLoginRequest
         , Ports.loadSounds
         , Ports.checkNotificationPermission
+        , Ports.checkPwaStatus
         ]
     )
 
@@ -188,6 +191,7 @@ initLoadedFrontend loading time loginResult =
             , lastCopied = Nothing
             , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
+            , pwaStatus = loading.pwaStatus
             , drag = NoDrag
             }
 
@@ -361,6 +365,9 @@ update msg model =
 
                 CheckedNotificationPermission permission ->
                     ( Loading { loading | notificationPermission = permission }, Command.none )
+
+                CheckedPwaStatus pwaStatus ->
+                    ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
 
                 _ ->
                     ( model, Command.none )
@@ -1643,6 +1650,9 @@ updateLoaded msg model =
 
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
+
+        CheckedPwaStatus pwaStatus ->
+            ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart touches ->
             ( { model | drag = DragStart touches }, Command.none )

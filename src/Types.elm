@@ -58,7 +58,7 @@ import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Point2d exposing (Point2d)
-import Ports exposing (NotificationPermission)
+import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import RichText exposing (RichText)
 import Route exposing (Route)
@@ -83,6 +83,7 @@ type alias LoadingFrontend =
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
     , notificationPermission : NotificationPermission
+    , pwaStatus : PwaStatus
     }
 
 
@@ -102,6 +103,7 @@ type alias LoadedFrontend =
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     , textInputFocus : Maybe HtmlId
     , notificationPermission : NotificationPermission
+    , pwaStatus : PwaStatus
     , drag : Drag
     }
 
@@ -263,6 +265,7 @@ type FrontendMsg
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
+    | CheckedPwaStatus PwaStatus
     | TouchStart (NonemptyDict Int Touch)
     | TouchMoved (NonemptyDict Int Touch)
     | TouchEnd
