@@ -2855,6 +2855,8 @@ view model =
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
                                     (Maybe.withDefault LoginForm.init loginForm)
+                                    (Pages.Guild.isMobile loaded)
+                                    loaded.pwaStatus
                                     |> Ui.map LoginFormMsg
                                     |> layout loaded
                                         [ Ui.background MyUi.background3
@@ -2877,7 +2879,7 @@ view model =
                                         ]
                                         (case loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loginForm2 |> Ui.map LoginFormMsg
+                                                LoginForm.view loginForm2 (Pages.Guild.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth

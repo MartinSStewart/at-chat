@@ -32,6 +32,7 @@ import EmailAddress exposing (EmailAddress)
 import Html.Attributes
 import MyUi
 import PersonName exposing (PersonName)
+import Ports exposing (PwaStatus(..))
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
 import Ui.Events
@@ -299,8 +300,8 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
-view : LoginForm -> Element Msg
-view loginForm =
+view : LoginForm -> Bool -> PwaStatus -> Element Msg
+view loginForm isMobile pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , Ui.padding 16
@@ -310,7 +311,33 @@ view loginForm =
         , Ui.spacing 24
         , Ui.Font.color MyUi.font1
         ]
-        [ case loginForm of
+        [ -- PWA warning for mobile users not using installed PWA
+          if isMobile && pwaStatus == BrowserView then
+            Ui.el
+                [ Ui.background (Ui.rgba 255 242 204 26)  -- Light yellow/orange background (0.1 alpha = 26)
+                , Ui.border 1
+                , Ui.borderColor (Ui.rgba 255 242 204 204)  -- Light yellow/orange border (0.8 alpha = 204)
+                , Ui.rounded 8
+                , Ui.padding 16
+                , Ui.width Ui.fill
+                ]
+                (Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.el
+                        [ Ui.Font.bold
+                        , Ui.Font.color (Ui.rgba 204 153 0 255)  -- Orange/brown text
+                        ]
+                        (Ui.text "⚠️ Install App for Better Experience")
+                    , Ui.Prose.paragraph
+                        [ Ui.Font.color (Ui.rgba 179 128 0 255)  -- Darker orange/brown text
+                        , Ui.Font.size 14
+                        ]
+                        [ Ui.text "For the best mobile experience, install this app from your browser's menu (Add to Home Screen)." ]
+                    ]
+                )
+          else
+            Ui.none
+        , case loginForm of
             EnterEmail enterEmail2 ->
                 enterEmailView enterEmail2
 
