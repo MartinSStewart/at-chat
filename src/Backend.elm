@@ -65,6 +65,7 @@ import Unsafe
 import Url
 import User exposing (BackendUser)
 import VendoredBase64
+import Vapid
 
 
 app :
