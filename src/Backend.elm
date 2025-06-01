@@ -8,6 +8,8 @@ module Backend exposing
     )
 
 import Array
+import Bytes
+import Bytes.Decode
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -21,6 +23,8 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import Hex
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Json.Encode
+import JsonWebToken
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -58,7 +62,9 @@ import Types
         , ToFrontend(..)
         )
 import Unsafe
+import Url
 import User exposing (BackendUser)
+import VendoredBase64
 
 
 app :
@@ -840,21 +846,98 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             let
                 _ =
                     Debug.log "Send notification" request
+
+                jwt4 : String
+                jwt4 =
+                    JsonWebToken.encode
+                        JsonWebToken.hmacSha256
+                        (\a ->
+                            Json.Encode.object
+                                [ ( "aud", Json.Encode.string a.aud )
+                                , ( "exp", Json.Encode.int a.exp )
+                                , ( "sub", Json.Encode.string a.sub )
+                                ]
+                        )
+                        Env.vapidPrivateKey
+                        { aud = "https://" ++ request.endpoint.host
+                        , exp =
+                            Duration.addTo time (Duration.hours 12)
+                                |> Time.posixToMillis
+                                |> (\a -> a // 1000)
+                        , sub = "https://at-chat.app/"
+                        }
+                        |> String.filter (\char -> char /= '=')
+
+                bytes =
+                    case VendoredBase64.toBytes Env.vapidPrivateKey of
+                        Just bytes2 ->
+                            let
+                                _ =
+                                    Bytes.Decode.decode
+                                        (Bytes.Decode.loop
+                                            ( Array.empty, Bytes.width bytes2 )
+                                            (\( state, count ) ->
+                                                if count <= 0 then
+                                                    Bytes.Decode.succeed (Bytes.Decode.Done state)
+
+                                                else
+                                                    Bytes.Decode.map
+                                                        (\byte ->
+                                                            ( Array.push (Hex.toString byte) state, count - 1 ) |> Bytes.Decode.Loop
+                                                        )
+                                                        Bytes.Decode.unsignedInt8
+                                            )
+                                        )
+                                        bytes2
+                                        |> Debug.log "bytes"
+                            in
+                            bytes2
+
+                        Nothing ->
+                            Debug.todo ""
+
+                jwt5 : String
+                jwt5 =
+                    JsonWebToken.encode
+                        JsonWebToken.hmacSha256
+                        (\a ->
+                            Json.Encode.object
+                                [ ( "aud", Json.Encode.string a.aud )
+                                , ( "exp", Json.Encode.int a.exp )
+                                , ( "sub", Json.Encode.string a.sub )
+                                ]
+                        )
+                        (String.replace "\u{000D}" "" """-----BEGIN EC PRIVATE KEY-----
+MDECAQEEIPJN9sCMoFe8V1nnds2d2lkztt5ibg5/Xb4IduX988uboAoGCCqGSM49
+AwEH
+-----END EC PRIVATE KEY-----""")
+                        { aud = "https://fcm.googleapis.com"
+                        , exp = 1748317488
+                        , sub = "https://example.com"
+                        }
+                        |> String.filter (\char -> char /= '=')
+                        |> Debug.log "a"
             in
             ( model
             , Http.request
                 { method = "POST"
-                , url = request.endpoint
+                , url = Url.toString request.endpoint
                 , body = Http.emptyBody
                 , headers =
-                    [ Http.header "Authorization" ("vapid t=" ++ jwt3 ++ ",k=" ++ Env.vapidPublicKey)
-                    , Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
+                    [ --Http.header "Authorization" ("vapid t=" ++ jwt4 ++ ",k=" ++ Env.vapidPublicKey)
+                      Http.header "Authorization" authorization
+
+                    --, Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
                     ]
                 , expect = Http.expectWhatever PushedMessage
                 , timeout = Just (Duration.seconds 30)
                 , tracker = Nothing
                 }
             )
+
+
+authorization =
+    "vapid t=eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwczovL2ZjbS5nb29nbGVhcGlzLmNvbSIsImV4cCI6MTc0ODMxMjgyOCwic3ViIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS8ifQ.tfglaaYqKYZbIsciiNUldOtUkpkdB_iBqgccDOQGNL58slawo5WvfECqQpvmzq9sMnJLLQTuogYwNNyDDA1MDQ, k=BD_VrLjhb7FzVfqV7uGDBAl8X3YyGtAQu7VZRyCkLiSTO3Bm3hhWnNM6mg9Q7-YCHdGIFYN938UOHtmQksGwoFo"
 
 
 jwt : String

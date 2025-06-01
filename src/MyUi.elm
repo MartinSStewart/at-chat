@@ -649,7 +649,7 @@ background3 =
 
 inputBackground : Ui.Color
 inputBackground =
-    Ui.rgb 32 40 70
+    Ui.rgb 35 42 70
 
 
 inputBorder : Ui.Color

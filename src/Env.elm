@@ -52,9 +52,9 @@ adminEmail =
 
 vapidPublicKey : String
 vapidPublicKey =
-    "BNz8vNFNoA1018dOyKch2Vm5eNK9W0Zzxf2SVJL7Hd1l-LgmX4QvrE587iH3TEEthM2xh1ftwrANWvuh48IbxCg"
+    "BD_VrLjhb7FzVfqV7uGDBAl8X3YyGtAQu7VZRyCkLiSTO3Bm3hhWnNM6mg9Q7-YCHdGIFYN938UOHtmQksGwoFo"
 
 
 vapidPrivateKey : String
 vapidPrivateKey =
-    "GfK4aiJoIsU36vFerEWeDEMmpJjLnMXP-XfA6XnjC7k"
+    "8k32wIygV7xXWed2zZ3aWTO23mJuDn9dvgh25f3zy5s"

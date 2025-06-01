@@ -69,7 +69,7 @@ registerPushSubscriptionToJs =
 
 
 type alias PushSubscription =
-    { endpoint : String
+    { endpoint : Url
     , auth : String
     , p256dh : String
     }
@@ -84,7 +84,17 @@ registerPushSubscription msg =
             Json.Decode.decodeValue
                 (Json.Decode.map3
                     PushSubscription
-                    (Json.Decode.field "endpoint" Json.Decode.string)
+                    (Json.Decode.field "endpoint" Json.Decode.string
+                        |> Json.Decode.andThen
+                            (\text ->
+                                case Url.fromString text of
+                                    Just url ->
+                                        Json.Decode.succeed url
+
+                                    Nothing ->
+                                        Json.Decode.fail "Invalid endpoint"
+                            )
+                    )
                     (Json.Decode.at [ "keys", "auth" ] Json.Decode.string)
                     (Json.Decode.at [ "keys", "p256dh" ] Json.Decode.string)
                 )
