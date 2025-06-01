@@ -1,6 +1,7 @@
 module Vapid exposing (generateRequestDetails)
 
 import Array
+import Bitwise
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
@@ -79,10 +80,88 @@ generateRequestDetails time subscriptionEndpoint =
         securedInput =
             encodedHeader ++ "." ++ encodedPayload
 
-        a =
-            Sha256.sha256
+        sig : Bytes
+        sig =
+            0
+
+        --SubtleCrypto.sign { name = "ECDSA", hash = "SHA-256" } pemKey securedInput
+        jwt =
+            securedInput ++ "." ++ derToJose sig
     in
     ""
+
+
+maxOctet =
+    0x80
+
+
+derToJose signature =
+    let
+        paramBytes =
+            getParamSize 256
+
+        maxEncodedParamLength =
+            paramBytes + 1
+
+        inputLength =
+            Bytes.width signature
+
+        seqLength =
+            if bytesGetAt 1 signature == Bitwise.or 1 maxOctet then
+                bytesGetAt 2 signature
+
+            else
+                bytesGetAt 1 signature
+
+        offset0 =
+            if seqLength == Bitwise.or 1 maxOctet then
+                4
+
+            else
+                3
+
+        offset1 =
+            offset0 + rLength + 2
+
+        sLength =
+            bytesGetAt offset1 signature
+
+        sOffset =
+            offset1 + 1
+
+        rPadding =
+            paramBytes - rLength
+
+        sPadding =
+            paramBytes - sLength
+
+        i =
+            offset1 + 1 + sLength
+    in
+    0
+
+
+bytesGetAt : Int -> Bytes -> Int
+bytesGetAt index bytes =
+    Bytes.Decode.decode
+        (Bytes.Decode.map2
+            (\_ value -> value)
+            (Bytes.Decode.bytes index)
+            Bytes.Decode.unsignedInt8
+        )
+        bytes
+        |> Maybe.withDefault 0
+
+
+getParamSize : Int -> Int
+getParamSize keySize =
+    (keySize // 8)
+        + (if modBy 8 keySize == 0 then
+            0
+
+           else
+            1
+          )
 
 
 stringToBytes text =
