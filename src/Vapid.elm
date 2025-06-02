@@ -120,6 +120,12 @@ derToJose signature =
             else
                 3
 
+        rLength =
+            bytesGetAt offset0 signature
+
+        rOffset =
+            offset0 + 1
+
         offset1 =
             offset0 + rLength + 2
 
