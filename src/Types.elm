@@ -33,6 +33,7 @@ module Types exposing
 
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
+import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -317,6 +318,7 @@ type BackendMsg
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | PushedMessage (Result Http.Error ())
+    | GotVapidDetails PushSubscription (Result {} { jwt : String, publicKey : String })
 
 
 type LoginResult
