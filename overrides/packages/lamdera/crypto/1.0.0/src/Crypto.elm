@@ -52,40 +52,38 @@ module Crypto exposing
     , importRsaOaepPrivateKeyFromJwk, importRsaOaepPrivateKeyFromPkcs8
     , importRsaPssPublicKeyFromJwk, importRsaPssPublicKeyFromSpki
     , importRsaPssPrivateKeyFromJwk, importRsaPssPrivateKeyFromPkcs8
-    , importRsaSsaPkcs1V1_5PublicKeyFromJwk, importRsaSsaPkcs1V1_5PublicKeyFromSpki
     , importRsaSsaPkcs1V1_5PrivateKeyFromJwk, importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8
+    , importRsaSsaPkcs1V1_5PublicKeyFromJwk, importRsaSsaPkcs1V1_5PublicKeyFromSpki
     , ImportAesKeyError(..)
-    , importAesCtrKeyFromRaw, importAesCtrKeyFromJwk
-    , importAesCbcKeyFromRaw, importAesCbcKeyFromJwk
-    , importAesGcmKeyFromRaw, importAesGcmKeyFromJwk
+    , importAesCbcKeyFromJwk, importAesCbcKeyFromRaw
+    , importAesCtrKeyFromJwk, importAesCtrKeyFromRaw
+    , importAesGcmKeyFromJwk, importAesGcmKeyFromRaw
     , ImportEcKeyError(..)
-    , importEcdsaPublicKeyFromRaw, importEcdsaPublicKeyFromSpki, importEcdsaPublicKeyFromJwk
-    , importEcdsaPrivateKeyFromPkcs8, importEcdsaPrivateKeyFromSpki, importEcdsaPrivateKeyFromJwk
+    , importEcdsaPrivateKeyFromJwk, importEcdsaPrivateKeyFromPkcs8, importEcdsaPrivateKeyFromSpki
+    , importEcdsaPublicKeyFromJwk, importEcdsaPublicKeyFromRaw, importEcdsaPublicKeyFromSpki
     , ImportHmacKeyError(..)
     , importHmacKeyFromJwk, importHmacKeyFromRaw
     )
 
-
-{-|
-
-This module gives access to various cryptograhic functions provided by the Web
+{-| This module gives access to various cryptograhic functions provided by the Web
 Crypto API.
 
 In addition to supporting generating random values and [UUIDs](#randomUuidV4), this
 module supports the following algorithms and operations:
 
-- RSA-OAEP - [Encryption](#encryptWithRsaOaep) and [decryption](#decryptWithRsaOaep)
-- AES-CTR - [Encryption](#encryptWithAesCtr) and [decryption](#decryptWithAesCtr)
-- AES-CBC - [Encryption](#encryptWithAesCbc) and [decryption](#decryptWithAesCbc)
-- AES-GCM - [Encryption](#encryptWithAesGcm) and [decryption](#decryptWithAesGcm)
-- RSA-SSAPKCS1v1.5 - [Signing](#signWithRsaSsaPkcs1V1_5) and [verifying](#verifyWithRsaSsaPkcs1V1_5)
-- RSA-PSS - [Signing](#signWithRsaPss) and [verifying](#verifyWithRsaPss)
-- ECDSA - [Signing](#signWithEcdsa) and [verifying](#verifyWithEcdsa)
-- HMAC - [Signing](#signWithHmac) and [verifying](#verifyWithHmac)
-- SHA - [Digest](#digest)
+  - RSA-OAEP - [Encryption](#encryptWithRsaOaep) and [decryption](#decryptWithRsaOaep)
+  - AES-CTR - [Encryption](#encryptWithAesCtr) and [decryption](#decryptWithAesCtr)
+  - AES-CBC - [Encryption](#encryptWithAesCbc) and [decryption](#decryptWithAesCbc)
+  - AES-GCM - [Encryption](#encryptWithAesGcm) and [decryption](#decryptWithAesGcm)
+  - RSA-SSAPKCS1v1.5 - [Signing](#signWithRsaSsaPkcs1V1_5) and [verifying](#verifyWithRsaSsaPkcs1V1_5)
+  - RSA-PSS - [Signing](#signWithRsaPss) and [verifying](#verifyWithRsaPss)
+  - ECDSA - [Signing](#signWithEcdsa) and [verifying](#verifyWithEcdsa)
+  - HMAC - [Signing](#signWithHmac) and [verifying](#verifyWithHmac)
+  - SHA - [Digest](#digest)
 
 All of the above algorithms also have appropriate key generation, import, and
 export functions.
+
 
 ## Secure Context
 
@@ -94,6 +92,7 @@ and correctly. Before you use any functions, it's likely that you'll need to obt
 and store the SecureContext value in your model.
 
 @docs SecureContext, getSecureContext
+
 
 ## Generate Random Values
 
@@ -115,15 +114,18 @@ is 32768 values.
 
 @docs getRandomInt32Values, getRandomUInt32Values
 
+
 ## Generate Random UUIDs
 
 @docs randomUuidV4
+
 
 ## Encryption & Decryption
 
 Encrypt and decrypt values. Each operation requires a specific key for the algorithm
 being used. You can learn more about key generation in the "Key Generation" section of
 this module.
+
 
 ### Encrypt & decrypt with the RSA-OAEP algorithm
 
@@ -137,6 +139,7 @@ generate one with the [`generateRsaOaepKeyPair`](#generateRsaOaepKeyPair) functi
 
 @docs RsaOaepDecryptionError, decryptWithRsaOaep
 
+
 ### Encrypt & decrypt with the AES-CTR algorithm
 
 Encrypt and decrypt `Bytes` with the AES-CTR (Advanced Encryption Standard - Counter Mode)
@@ -148,6 +151,7 @@ algorithm. These functions require an AES-CTR key. You can generate one with the
 @docs AesCtrEncryptionError, encryptWithAesCtr
 
 @docs AesCtrDecryptionError, decryptWithAesCtr
+
 
 ### Encrypt & decrypt with the AES-CBC algorithm
 
@@ -161,6 +165,7 @@ Chaining) algorithm. These functions require an AES-CBC key. You can generate on
 
 @docs AesCbcDecryptionError, decryptWithAesCbc
 
+
 ### Encrypt & decrypt with the AES-GCM algorithm
 
 Encrypt and decrypt `Bytes` with the AES-GCM (Advanced Encryption Standard - Galois/Counter Mode)
@@ -173,6 +178,7 @@ algorithm. These functions require an AES-GCM key. You can generate one with the
 
 @docs AesGcmDecryptionError, decryptWithAesGcm
 
+
 ## Signing & Verifying
 
 Sign and verify values. Each operation requires a specific key for the algorithm being used. You can
@@ -180,15 +186,17 @@ learn more about key generation in the "Key Generation" section of this module.
 
 @docs Signature
 
-### Sign & verify with the RSASSA-PKCS1-v1_5 algorithm
 
-Sign and verify some `Bytes` with the RSASSA-PKCS1-v1_5 (Rivest, Shamir, and Adleman Signature Scheme
-with Appendix ...) algorithm. These functions require an RSASSA-PKCS1-v1_5 key. You can generate one
+### Sign & verify with the RSASSA-PKCS1-v1\_5 algorithm
+
+Sign and verify some `Bytes` with the RSASSA-PKCS1-v1\_5 (Rivest, Shamir, and Adleman Signature Scheme
+with Appendix ...) algorithm. These functions require an RSASSA-PKCS1-v1\_5 key. You can generate one
 with the [`generateRsaSsaPkcs1V1_5KeyPair`](#generateRsaSsaPkcs1V1_5KeyPair) function.
 
 @docs RsaSsaPkcs1V1_5SigningError, signWithRsaSsaPkcs1V1_5
 
 @docs verifyWithRsaSsaPkcs1V1_5
+
 
 ### Sign & verify with the RSA-PSS algorithm
 
@@ -200,6 +208,7 @@ Scheme) algorithm. These functions require an RSA-PSS key. You can generate one 
 
 @docs signWithRsaPss, verifyWithRsaPss
 
+
 ### Sign & verify with the ECDSA algorithm
 
 Sign and verify some `Bytes` with the ECDSA (Elliptic Curve Digital Signature Algorithm) algorithm.
@@ -207,6 +216,7 @@ These functions require an RSA-PSS key. You can generate one with the
 [`generateEcdsaKeyPair`](#generateEcdsaKeyPair) function.
 
 @docs signWithEcdsa, verifyWithEcdsa
+
 
 ### Sign & verify with the HMAC algorithm
 
@@ -216,9 +226,11 @@ These functions require an RSA-PSS key. You can generate one with the
 
 @docs signWithHmac, verifyWithHmac
 
+
 ## Digest
 
 @docs DigestAlgorithm, digest
+
 
 ## Generate Keys
 
@@ -228,6 +240,7 @@ Generate, import, and export keys for completing cryptographic operations.
 
 @docs Extractable
 
+
 ### Generate RSA Keys
 
 Generate keys to use with RSA (Rivest-Shamir-Adleman) algorithm.
@@ -235,6 +248,7 @@ Generate keys to use with RSA (Rivest-Shamir-Adleman) algorithm.
 @docs RsaKeyParams, RsaKeyGenerationError
 
 @docs generateRsaOaepKeyPair, generateRsaPssKeyPair, generateRsaSsaPkcs1V1_5KeyPair
+
 
 ### Generate AES Keys
 
@@ -244,6 +258,7 @@ Generate keys to use with AES (Advanced Encryption Standard) algorithm.
 
 @docs generateAesCtrKey, generateAesCbcKey, generateAesGcmKey
 
+
 ### Generate EC Keys
 
 Generate keys to use with EC (Elliptic Curve) algorithm.
@@ -251,6 +266,7 @@ Generate keys to use with EC (Elliptic Curve) algorithm.
 @docs EcKeyParams, EcNamedCurve
 
 @docs generateEcdsaKeyPair
+
 
 ### Generate HMAC Keys
 
@@ -260,6 +276,7 @@ Generate keys to use with HMAC (Hash-Based Message Authentication Code) algorith
 
 @docs generateHmacKey
 
+
 ## Export Keys
 
 Export keys in various formats. Available formats depend on the key being exported. For more
@@ -267,6 +284,7 @@ information on exporting keys, check out the [MDN web docs](https://developer.mo
 for the Web Crypto API.
 
 @docs ExportKeyError
+
 
 ### Export RSA Keys
 
@@ -282,6 +300,7 @@ for the Web Crypto API.
 
 @docs exportRsaSsaPkcs1V1_5PrivateKeyAsPkcs8, exportRsaSsaPkcs1V1_5PrivateKeyAsJwk
 
+
 ### Export AES Keys
 
 @docs exportAesCtrKeyAsRaw, exportAesCtrKeyAsJwk
@@ -290,21 +309,25 @@ for the Web Crypto API.
 
 @docs exportAesGcmKeyAsRaw, exportAesGcmKeyAsJwk
 
+
 ### Export EC Keys
 
 @docs exportEcdsaPublicKeyAsRaw, exportEcdsaPublicKeyAsSpki, exportEcdsaPublicKeyAsJwk
 
 @docs exportEcdsaPrivateKeyAsPkcs8, exportEcdsaPrivateKeyAsJwk
 
+
 ### Export HMAC Keys
 
 @docs exportHmacKeyAsRaw, exportHmacKeyAsJwk
+
 
 ## Import Keys
 
 Import keys generated in this module or generated elsewhere. For more information on exporting keys,
 check out the [MDN web docs](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey)
 for the Web Crypto API.
+
 
 ### Import RSA Keys
 
@@ -322,6 +345,7 @@ for the Web Crypto API.
 
 @docs importRsaSsaPkcs1V1_5PublicKeyFromJwk, importRsaSsaPkcs1V1_5PublicKeyFromSpki
 
+
 ### Import AES Keys
 
 @docs ImportAesKeyError
@@ -332,6 +356,7 @@ for the Web Crypto API.
 
 @docs importAesGcmKeyFromJwk, importAesGcmKeyFromRaw
 
+
 ### Import EC Keys
 
 @docs ImportEcKeyError
@@ -339,6 +364,7 @@ for the Web Crypto API.
 @docs importEcdsaPrivateKeyFromJwk, importEcdsaPrivateKeyFromPkcs8, importEcdsaPrivateKeyFromSpki
 
 @docs importEcdsaPublicKeyFromJwk, importEcdsaPublicKeyFromRaw, importEcdsaPublicKeyFromSpki
+
 
 ### Import HMAC Keys
 
@@ -348,17 +374,16 @@ for the Web Crypto API.
 
 -}
 
-
-import Elm.Kernel.Crypto
-import Task exposing (Task)
-import Debug
-import Bytes exposing ( Bytes )
-import Bytes.Encode
-import Maybe exposing ( Maybe(..) )
-import Result exposing ( Result(..) )
-import Set exposing ( Set )
 import Bitwise
+import Bytes exposing (Bytes)
+import Bytes.Encode
+import Debug
+import Elm.Kernel.Crypto
 import Json.Encode
+import Maybe exposing (Maybe(..))
+import Result exposing (Result(..))
+import Set exposing (Set)
+import Task exposing (Task)
 
 
 
@@ -368,7 +393,7 @@ import Json.Encode
 {-| Generate a random UUID using the UUID v4 algorithm.
 -}
 randomUuidV4 : SecureContext -> Task x String
-randomUuidV4 _context =
+randomUuidV4 _ =
     Elm.Kernel.Crypto.randomUUID
 
 
@@ -408,7 +433,7 @@ getRandomUInt16Values int =
     Elm.Kernel.Crypto.getRandomValues (clamp 0 32768 int) "uint16"
 
 
-{-|Get some `Bytes` of random, signed, 32-bit values equal to the length of the passed `Int`
+{-| Get some `Bytes` of random, signed, 32-bit values equal to the length of the passed `Int`
 with a maximum of 16384 values.
 -}
 getRandomInt32Values : Int -> Task x Bytes
@@ -444,6 +469,7 @@ are running a version of `node` that does not support the Web Crypto APIs.
 
 While running this function on the `browser` platform, it will succeed if the
 application being run is [considered as being in a secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts).
+
 -}
 getSecureContext : Task {} SecureContext
 getSecureContext =
@@ -509,7 +535,7 @@ type RsaPssKey
     = RsaPssKey
 
 
-{-| A key generated for use with the RSASSA-PKCS1-v1_5 algorithm. Used to sign
+{-| A key generated for use with the RSASSA-PKCS1-v1\_5 algorithm. Used to sign
 and verify values.
 -}
 type RsaSsaPkcs1V1_5Key
@@ -518,17 +544,18 @@ type RsaSsaPkcs1V1_5Key
 
 {-| Parameters required to generate a key for use with the RSA algorithm.
 
-- `modulusLength` is clamped be at least 2048 and no greater than 4096. If the
-`Int` used is outside of that range, it will be corrected. It also needs to be
-divisible by 8.
-- `hash` is the `DigestAlgorithm` that's used for key generation
-- `extractable` denotes that if this key is extractable or not. For more information,
-see the [`Extractable` type documentation](#Extractable).
+  - `modulusLength` is clamped be at least 2048 and no greater than 4096. If the
+    `Int` used is outside of that range, it will be corrected. It also needs to be
+    divisible by 8.
+  - `hash` is the `DigestAlgorithm` that's used for key generation
+  - `extractable` denotes that if this key is extractable or not. For more information,
+    see the [`Extractable` type documentation](#Extractable).
 
 A missing part of these parameters is the public exponent. Generated keys will always
 have a `[ 1, 0, 1 ]` or `65537` public exponent. This is a recommended value and a value
 that works across the `browser` and `node` platforms. If you have need for other public
 exponents, please file a ticket!
+
 -}
 type alias RsaKeyParams =
     { modulusLength : Int
@@ -540,8 +567,9 @@ type alias RsaKeyParams =
 {-| Errors that can happen when generating a key for use with the RSA algorithm. There is
 a single case where this function can fail at runtime:
 
-- When the passed `modulusLength` is not divisible by 8, as is required by the algorithm.
-This is captured by `ModulusLengthNotDivisibleByEight`.
+  - When the passed `modulusLength` is not divisible by 8, as is required by the algorithm.
+    This is captured by `ModulusLengthNotDivisibleByEight`.
+
 -}
 type RsaKeyGenerationError
     = ModulusLengthNotDivisibleByEight
@@ -551,9 +579,10 @@ type RsaKeyGenerationError
 
 Produces a `KeyPair` that can be used to encrypt data with [`encryptWithRsaOaep`](#encryptWithRsaOaep)
 and decrypt data with [`decryptWithRsaOaep`](#decryptWithRsaOaep).
+
 -}
 generateRsaOaepKeyPair : RsaKeyParams -> SecureContext -> Task RsaKeyGenerationError (KeyPair RsaOaepKey RsaKeyParams)
-generateRsaOaepKeyPair params _context =
+generateRsaOaepKeyPair params _ =
     generateRsaKeyHelper
         "RSA-OAEP"
         [ "encrypt", "decrypt" ]
@@ -564,30 +593,32 @@ generateRsaOaepKeyPair params _context =
 
 Produces a `KeyPair` that can be used to sign data with [`signWithRsaPss`](#signWithRsaPss)
 and verify data with [`verifyWithRsaPss`](#verifyWithRsaPss).
+
 -}
 generateRsaPssKeyPair : RsaKeyParams -> SecureContext -> Task RsaKeyGenerationError (KeyPair RsaPssKey RsaKeyParams)
-generateRsaPssKeyPair params _context =
+generateRsaPssKeyPair params _ =
     generateRsaKeyHelper
         "RSA-PSS"
         [ "sign", "verify" ]
         params
 
 
-{-| Generate a new key using the RSASSA-PKCS1-v1_5 algorithm.
+{-| Generate a new key using the RSASSA-PKCS1-v1\_5 algorithm.
 
 Produces a `KeyPair` that can be used to sign data with
 [`signWithRsaSsaPkcs1V1_5`](#signWithRsaSsaPkcs1V1_5) and verify data with
 [`verifyWithRsaSsaPkcs1V1_5`](#verifyWithRsaSsaPkcs1V1_5).
+
 -}
 generateRsaSsaPkcs1V1_5KeyPair : RsaKeyParams -> SecureContext -> Task RsaKeyGenerationError (KeyPair RsaSsaPkcs1V1_5Key RsaKeyParams)
-generateRsaSsaPkcs1V1_5KeyPair params _context =
+generateRsaSsaPkcs1V1_5KeyPair params _ =
     generateRsaKeyHelper
         "RSASSA-PKCS1-v1_5"
         [ "sign", "verify" ]
         params
 
 
-{-|-}
+{-| -}
 generateRsaKeyHelper : String -> List String -> RsaKeyParams -> Task RsaKeyGenerationError a
 generateRsaKeyHelper name permissions { modulusLength, hash, extractable } =
     let
@@ -598,10 +629,12 @@ generateRsaKeyHelper name permissions { modulusLength, hash, extractable } =
         Elm.Kernel.Crypto.generateRsaKey
             name
             clampedModulusLength
-            [ 1, 0, 1 ] -- Public exponent
+            [ 1, 0, 1 ]
+            -- Public exponent
             (digestAlgorithmToString hash)
             (extractableToBool extractable)
             permissions
+
     else
         Task.fail ModulusLengthNotDivisibleByEight
 
@@ -633,10 +666,11 @@ type AesGcmKey
 
 {-| Parameters required to generates an AES key.
 
-- `length` is the length, in bits, of the generated key. It must be one of the
-[`AesLength`](#AesLength) type.
-- `extractable` denotes that if this key is extractable or not. For more information,
-see the [`Extractable` type documentation](#Extractable).
+  - `length` is the length, in bits, of the generated key. It must be one of the
+    [`AesLength`](#AesLength) type.
+  - `extractable` denotes that if this key is extractable or not. For more information,
+    see the [`Extractable` type documentation](#Extractable).
+
 -}
 type alias AesKeyParams =
     { length : AesLength
@@ -649,6 +683,7 @@ algorithm. These are the only values that can be chosen.
 
 The Web Crypto API supports a length of 192, but some browsers do not implement
 this. To keep compatability across the `browser` platform, the option is not provided.
+
 -}
 type AesLength
     = AesLength128
@@ -660,9 +695,10 @@ type AesLength
 
 Produces a `Key` that can be used to encrypt data with [`encryptWithAesCtr`](#encryptWithAesCtr)
 and decrypt data with [`decryptWithAesCtr`](#decryptWithAesCtr).
+
 -}
 generateAesCtrKey : AesKeyParams -> SecureContext -> Task x (Key AesCtrKey AesKeyParams)
-generateAesCtrKey { length, extractable } _context =
+generateAesCtrKey { length, extractable } _ =
     Elm.Kernel.Crypto.generateAesKey
         "AES-CTR"
         (aesLengthToInt length)
@@ -674,9 +710,10 @@ generateAesCtrKey { length, extractable } _context =
 
 Produces a `Key` that can be used to encrypt data with [`encryptWithAesCbc`](#encryptWithAesCbc)
 and decrypt data with [`decryptWithAesCbc`](#decryptWithAesCbc).
+
 -}
 generateAesCbcKey : AesKeyParams -> SecureContext -> Task x (Key AesCbcKey AesKeyParams)
-generateAesCbcKey { length, extractable } _context =
+generateAesCbcKey { length, extractable } _ =
     Elm.Kernel.Crypto.generateAesKey
         "AES-CBC"
         (aesLengthToInt length)
@@ -688,9 +725,10 @@ generateAesCbcKey { length, extractable } _context =
 
 Produces a `Key` that can be used to encrypt data with [`encryptWithAesGcm`](#encryptWithAesGcm)
 and decrypt data with [`decryptWithAesGcm`](#decryptWithAesGcm).
+
 -}
 generateAesGcmKey : AesKeyParams -> SecureContext -> Task x (Key AesGcmKey AesKeyParams)
-generateAesGcmKey { length, extractable } _context =
+generateAesGcmKey { length, extractable } _ =
     Elm.Kernel.Crypto.generateAesKey
         "AES-GCM"
         (aesLengthToInt length)
@@ -718,10 +756,11 @@ type EcdhKey
 
 {-| Parameters required to generates an AES key.
 
-- `namedCurve` is the curve used to generate the key. It must be one of the
-[`EcNamedCurve`](#EcNamedCurve) variant.
-- `extractable` denotes that if this key is extractable or not. For more information,
-see the [`Extractable` type documentation](#Extractable).
+  - `namedCurve` is the curve used to generate the key. It must be one of the
+    [`EcNamedCurve`](#EcNamedCurve) variant.
+  - `extractable` denotes that if this key is extractable or not. For more information,
+    see the [`Extractable` type documentation](#Extractable).
+
 -}
 type alias EcKeyParams =
     { namedCurve : EcNamedCurve
@@ -741,9 +780,10 @@ type EcNamedCurve
 
 Produces a `KeyPair` that can be used to sign data with [`signWithEcdsa`](#signWithEcdsa)
 and verify data with [`verifyWithEcdsa`](#verifyWithEcdsa).
+
 -}
 generateEcdsaKeyPair : EcKeyParams -> SecureContext -> Task x (KeyPair EcdsaKey EcKeyParams)
-generateEcdsaKeyPair { namedCurve, extractable } _context =
+generateEcdsaKeyPair { namedCurve, extractable } _ =
     Elm.Kernel.Crypto.generateEcKey
         "ECDSA"
         (ecNamedCurveToString namedCurve)
@@ -754,7 +794,7 @@ generateEcdsaKeyPair { namedCurve, extractable } _context =
 {-| Generate a new key using the ECDH algorithm.
 -}
 generateEcdhKeyPair : EcKeyParams -> SecureContext -> Task x (KeyPair EcdhKey EcKeyParams)
-generateEcdhKeyPair { namedCurve, extractable } _context =
+generateEcdhKeyPair { namedCurve, extractable } _ =
     Elm.Kernel.Crypto.generateEcKey
         "ECDH"
         (ecNamedCurveToString namedCurve)
@@ -769,8 +809,8 @@ generateEcdhKeyPair { namedCurve, extractable } _context =
 {-| A key generated and for use with the HMAC algorithm used to sign and verify
 values.
 -}
-type HmacKey =
-    HmacKey
+type HmacKey
+    = HmacKey
 
 
 {-| Errors that can happen when generating a key for use with the RSA algorithm.
@@ -778,8 +818,9 @@ type HmacKey =
 Errors that can happen when enerating a key for use with the HMAC algorithm.
 There's a single case where this function can fail:
 
-- When the passed `modulusLength` is not divisible by 8, as is required by the
-algorithm. This is captured by `HmacLengthNotDivisibleByEight`.
+  - When the passed `modulusLength` is not divisible by 8, as is required by the
+    algorithm. This is captured by `HmacLengthNotDivisibleByEight`.
+
 -}
 type HmacKeyGenerationError
     = HmacLengthNotDivisibleByEight
@@ -787,14 +828,15 @@ type HmacKeyGenerationError
 
 {-| Parameters required to generate a key for use with the HMAC algorithm.
 
-- `length` is the length of the resulting key in bits. If `Nothing`, the key
-will be equal in bits to the passed `DigestAlgorithm`. It's recommended to pass
-`Nothing` and let the length of the key be equal to the hash function (`DigestAlgorithm`).
-If passed, the `length` is clamped be at least 8 and no greater than 2048.
-If the `Int` used is outside of that range, it will be corrected.
-- `hash` is the `DigestAlgorithm` that's used for key generation
-- `extractable` denotes that if this key is extractable or not. For more information,
-see the [`Extractable` type documentation](#Extractable).
+  - `length` is the length of the resulting key in bits. If `Nothing`, the key
+    will be equal in bits to the passed `DigestAlgorithm`. It's recommended to pass
+    `Nothing` and let the length of the key be equal to the hash function (`DigestAlgorithm`).
+    If passed, the `length` is clamped be at least 8 and no greater than 2048.
+    If the `Int` used is outside of that range, it will be corrected.
+  - `hash` is the `DigestAlgorithm` that's used for key generation
+  - `extractable` denotes that if this key is extractable or not. For more information,
+    see the [`Extractable` type documentation](#Extractable).
+
 -}
 type alias HmacKeyParams =
     { length : Maybe Int
@@ -807,10 +849,11 @@ type alias HmacKeyParams =
 
 Produces a `Key` that can be used to sign data with [`signWithHmac`](#signWithHmac)
 and verify data with [`verifyWithHmac`](#verifyWithHmac).
+
 -}
 generateHmacKey : HmacKeyParams -> SecureContext -> Task HmacKeyGenerationError (Key HmacKey HmacKeyParams)
-generateHmacKey { hash, length, extractable } _context =
-    when length is
+generateHmacKey { hash, length, extractable } _ =
+    case length of
         Just passedLength ->
             let
                 clampedLength =
@@ -842,8 +885,9 @@ generateHmacKey { hash, length, extractable } _context =
 
 {-| Errors that can arise when exporting keys.
 
-- `KeyNotExportable` happens when trying to export a key that was not made
-`Extractable` during creation or import.
+  - `KeyNotExportable` happens when trying to export a key that was not made
+    `Extractable` during creation or import.
+
 -}
 type ExportKeyError
     = KeyNotExportable
@@ -873,190 +917,198 @@ exportRsaOaepPrivateKeyAsJwk (PrivateKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportRsaPssPublicKeyAsSpki : PublicKey RsaPssKey RsaKeyParams -> Task ExportKeyError Bytes
-exportRsaPssPublicKeyAsSpki (PublicKey key)=
+exportRsaPssPublicKeyAsSpki (PublicKey key) =
     exportKeyAsSpki key
 
 
-{-|-}
+{-| -}
 exportRsaPssPublicKeyAsJwk : PublicKey RsaPssKey RsaKeyParams -> Task ExportKeyError Json.Encode.Value
 exportRsaPssPublicKeyAsJwk (PublicKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
-exportRsaPssPrivateKeyAsPkcs8 : PrivateKey RsaPssKey RsaKeyParams-> Task ExportKeyError Bytes
+{-| -}
+exportRsaPssPrivateKeyAsPkcs8 : PrivateKey RsaPssKey RsaKeyParams -> Task ExportKeyError Bytes
 exportRsaPssPrivateKeyAsPkcs8 (PrivateKey key) =
     exportKeyAsPkcs8 key
 
 
-{-|-}
+{-| -}
 exportRsaPssPrivateKeyAsJwk : PrivateKey RsaPssKey RsaKeyParams -> Task ExportKeyError Json.Encode.Value
 exportRsaPssPrivateKeyAsJwk (PrivateKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportRsaSsaPkcs1V1_5PublicKeyAsSpki : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Bytes
 exportRsaSsaPkcs1V1_5PublicKeyAsSpki (PublicKey key) =
     exportKeyAsSpki key
 
 
-{-|-}
+{-| -}
 exportRsaSsaPkcs1V1_5PublicKeyAsJwk : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Json.Encode.Value
 exportRsaSsaPkcs1V1_5PublicKeyAsJwk (PublicKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportRsaSsaPkcs1V1_5PrivateKeyAsPkcs8 : PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Bytes
-exportRsaSsaPkcs1V1_5PrivateKeyAsPkcs8 (PrivateKey key)=
+exportRsaSsaPkcs1V1_5PrivateKeyAsPkcs8 (PrivateKey key) =
     exportKeyAsPkcs8 key
 
 
-{-|-}
+{-| -}
 exportRsaSsaPkcs1V1_5PrivateKeyAsJwk : PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Json.Encode.Value
 exportRsaSsaPkcs1V1_5PrivateKeyAsJwk (PrivateKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportAesCtrKeyAsRaw : Key AesCtrKey AesKeyParams -> Task ExportKeyError Bytes
 exportAesCtrKeyAsRaw =
     exportKeyAsRaw
 
 
-{-|-}
-exportAesCtrKeyAsJwk :  Key AesCtrKey AesKeyParams -> Task ExportKeyError Json.Encode.Value
+{-| -}
+exportAesCtrKeyAsJwk : Key AesCtrKey AesKeyParams -> Task ExportKeyError Json.Encode.Value
 exportAesCtrKeyAsJwk =
     exportKeyAsJwk
 
 
-{-|-}
+{-| -}
 exportAesCbcKeyAsRaw : Key AesCbcKey AesKeyParams -> Task ExportKeyError Bytes
 exportAesCbcKeyAsRaw =
     exportKeyAsRaw
 
 
-{-|-}
+{-| -}
 exportAesCbcKeyAsJwk : Key AesCbcKey AesKeyParams -> Task ExportKeyError Json.Encode.Value
 exportAesCbcKeyAsJwk =
     exportKeyAsJwk
 
 
-{-|-}
+{-| -}
 exportAesGcmKeyAsRaw : Key AesGcmKey AesKeyParams -> Task ExportKeyError Bytes
 exportAesGcmKeyAsRaw =
     exportKeyAsRaw
 
 
-{-|-}
+{-| -}
 exportAesGcmKeyAsJwk : Key AesGcmKey AesKeyParams -> Task ExportKeyError Json.Encode.Value
 exportAesGcmKeyAsJwk =
     exportKeyAsJwk
 
 
-{-|-}
+{-| -}
 exportEcdsaPublicKeyAsRaw : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdsaPublicKeyAsRaw (PublicKey key) =
     exportKeyAsRaw key
 
 
-{-|-}
+{-| -}
 exportEcdsaPublicKeyAsSpki : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdsaPublicKeyAsSpki (PublicKey key) =
     exportKeyAsSpki key
 
 
-{-|-}
+{-| -}
 exportEcdsaPublicKeyAsJwk : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
 exportEcdsaPublicKeyAsJwk (PublicKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportEcdsaPrivateKeyAsPkcs8 : PrivateKey EcdsaKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdsaPrivateKeyAsPkcs8 (PrivateKey key) =
     exportKeyAsPkcs8 key
 
 
-{-|-}
+{-| -}
 exportEcdsaPrivateKeyAsJwk : PrivateKey EcdsaKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
-exportEcdsaPrivateKeyAsJwk (PrivateKey key)=
+exportEcdsaPrivateKeyAsJwk (PrivateKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
-exportEcdhPublicKeyAsRaw :  PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
+{-| -}
+exportEcdhPublicKeyAsRaw : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdhPublicKeyAsRaw (PublicKey key) =
     exportKeyAsRaw key
 
 
-{-|-}
+{-| -}
 exportEcdhPublicKeyAsSpki : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdhPublicKeyAsSpki (PublicKey key) =
     exportKeyAsSpki key
 
 
-{-|-}
+{-| -}
 exportEcdhPublicKeyAsJwk : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
 exportEcdhPublicKeyAsJwk (PublicKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportEcdhPrivateKeyAsPkcs8 : PrivateKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
 exportEcdhPrivateKeyAsPkcs8 (PrivateKey key) =
     exportKeyAsPkcs8 key
 
 
-{-|-}
+{-| -}
 exportEcdhPrivateKeyAsJwk : PrivateKey EcdhKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
 exportEcdhPrivateKeyAsJwk (PrivateKey key) =
     exportKeyAsJwk key
 
 
-{-|-}
+{-| -}
 exportHmacKeyAsRaw : Key HmacKey HmacKeyParams -> Task ExportKeyError Bytes
 exportHmacKeyAsRaw =
     exportKeyAsRaw
 
 
-{-|-}
+{-| -}
 exportHmacKeyAsJwk : Key HmacKey HmacKeyParams -> Task ExportKeyError Json.Encode.Value
 exportHmacKeyAsJwk =
     exportKeyAsJwk
 
 
-{-|-}
+{-| -}
 exportKeyHelperV2 : String -> Key a b -> Task ExportKeyError c
 exportKeyHelperV2 keyType (Key { key }) =
     Elm.Kernel.Crypto.exportKey keyType key
 
 
-{-|-}
+{-| -}
 exportKeyAsRaw : Key a b -> Task ExportKeyError Bytes
 exportKeyAsRaw =
     exportKeyHelperV2 "raw"
 
 
-{-|-}
+{-| -}
 exportKeyAsPkcs8 : Key a b -> Task ExportKeyError Bytes
 exportKeyAsPkcs8 =
     exportKeyHelperV2 "pkcs8"
 
 
-{-|-}
+{-| -}
 exportKeyAsSpki : Key a b -> Task ExportKeyError Bytes
 exportKeyAsSpki =
     exportKeyHelperV2 "spki"
 
 
-{-|-}
+{-| -}
 exportKeyAsJwk : Key a b -> Task ExportKeyError Json.Encode.Value
 exportKeyAsJwk key =
-    Task.map Gren.Kernel.Json.wrap (exportKeyHelperV2 "jwk" key)
+    Task.map wrap (exportKeyHelperV2 "jwk" key)
+
+
+wrap =
+    identity
+
+
+unwrap =
+    identity
 
 
 
@@ -1073,33 +1125,34 @@ type alias ImportRsaKeyParams =
 {-| Errors that can happen when importing a key using an RSA algorithm. There are a few possible
 reasons this error happens:
 
-- The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key and cannot be
-imported.
-- The `hash` passed to the function does not match the `hash` of the imported key. This only
-happens when importing a JSON Web Key. It is recommended to _always_ match the hash of the
-imported key or you will get different results when using the imported key, even when not importing
-in the JSON Web Key format.
+  - The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key and cannot be
+    imported.
+  - The `hash` passed to the function does not match the `hash` of the imported key. This only
+    happens when importing a JSON Web Key. It is recommended to _always_ match the hash of the
+    imported key or you will get different results when using the imported key, even when not importing
+    in the JSON Web Key format.
+
 -}
 type ImportRsaKeyError
     = ImportRsaKeyError
 
 
-{-|-}
+{-| -}
 importRsaOaepPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
-importRsaOaepPublicKeyFromJwk jwk { hash } extractable _context =
+importRsaOaepPublicKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSA-OAEP"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "encrypt" ]
 
 
-{-|-}
+{-| -}
 importRsaOaepPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
-importRsaOaepPublicKeyFromSpki bytes { hash } extractable _context =
+importRsaOaepPublicKeyFromSpki bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1110,22 +1163,22 @@ importRsaOaepPublicKeyFromSpki bytes { hash } extractable _context =
         [ "encrypt" ]
 
 
-{-|-}
+{-| -}
 importRsaPssPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
-importRsaPssPublicKeyFromJwk jwk { hash } extractable _context =
+importRsaPssPublicKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSA-PSS"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importRsaPssPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
-importRsaPssPublicKeyFromSpki bytes { hash } extractable _context =
+importRsaPssPublicKeyFromSpki bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1136,22 +1189,22 @@ importRsaPssPublicKeyFromSpki bytes { hash } extractable _context =
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importRsaOaepPrivateKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaOaepKey RsaKeyParams)
-importRsaOaepPrivateKeyFromJwk jwk { hash } extractable _context =
+importRsaOaepPrivateKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSA-OAEP"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "decrypt" ]
 
 
-{-|-}
+{-| -}
 importRsaOaepPrivateKeyFromPkcs8 : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaOaepKey RsaKeyParams)
-importRsaOaepPrivateKeyFromPkcs8 bytes { hash } extractable _context =
+importRsaOaepPrivateKeyFromPkcs8 bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "pkcs8"
@@ -1162,22 +1215,22 @@ importRsaOaepPrivateKeyFromPkcs8 bytes { hash } extractable _context =
         [ "decrypt" ]
 
 
-{-|-}
+{-| -}
 importRsaPssPrivateKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaPssKey RsaKeyParams)
-importRsaPssPrivateKeyFromJwk jwk { hash } extractable _context =
+importRsaPssPrivateKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSA-PSS"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importRsaPssPrivateKeyFromPkcs8 : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaPssKey RsaKeyParams)
-importRsaPssPrivateKeyFromPkcs8 bytes { hash } extractable _context =
+importRsaPssPrivateKeyFromPkcs8 bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "pkcs8"
@@ -1188,22 +1241,22 @@ importRsaPssPrivateKeyFromPkcs8 bytes { hash } extractable _context =
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importRsaSsaPkcs1V1_5PublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } extractable _context =
+importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSASSA-PKCS1-v1_5"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importRsaSsaPkcs1V1_5PublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } extractable _context =
+importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1214,22 +1267,22 @@ importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } extractable _context =
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importRsaSsaPkcs1V1_5PrivateKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PrivateKeyFromJwk jwk { hash } extractable _context =
+importRsaSsaPkcs1V1_5PrivateKeyFromJwk jwk { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "RSASSA-PKCS1-v1_5"
         (digestAlgorithmToString hash)
         (extractableToBool extractable)
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8 : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8 bytes { hash } extractable _context =
+importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8 bytes { hash } extractable _ =
     Elm.Kernel.Crypto.importRsaKey
         "private"
         "pkcs8"
@@ -1243,16 +1296,17 @@ importRsaSsaPkcs1V1_5PrivateKeyFromPkcs8 bytes { hash } extractable _context =
 {-| Errors that can happen when importing a key using an AES algorithm. There's only one known
 instance where this error can appear:
 
-- The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key and cannot be
-imported.
+  - The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key and cannot be
+    imported.
+
 -}
 type ImportAesKeyError
     = ImportAesKeyError
 
 
-{-|-}
+{-| -}
 importAesCtrKeyFromRaw : Bytes -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesCtrKeyFromRaw bytes extractable _context =
+importAesCtrKeyFromRaw bytes extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "raw"
         bytes
@@ -1261,20 +1315,20 @@ importAesCtrKeyFromRaw bytes extractable _context =
         [ "encrypt", "decrypt" ]
 
 
-{-|-}
+{-| -}
 importAesCtrKeyFromJwk : Json.Encode.Value -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesCtrKeyFromJwk jwk extractable _context =
+importAesCtrKeyFromJwk jwk extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "AES-CTR"
         (extractableToBool extractable)
         [ "encrypt", "decrypt" ]
 
 
-{-|-}
-importAesCbcKeyFromRaw : Bytes -> Extractable -> SecureContext ->  Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesCbcKeyFromRaw bytes extractable _context =
+{-| -}
+importAesCbcKeyFromRaw : Bytes -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
+importAesCbcKeyFromRaw bytes extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "raw"
         bytes
@@ -1283,20 +1337,20 @@ importAesCbcKeyFromRaw bytes extractable _context =
         [ "encrypt", "decrypt" ]
 
 
-{-|-}
+{-| -}
 importAesCbcKeyFromJwk : Json.Encode.Value -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesCbcKeyFromJwk jwk extractable _context =
+importAesCbcKeyFromJwk jwk extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "AES-CBC"
         (extractableToBool extractable)
         [ "encrypt", "decrypt" ]
 
 
-{-|-}
+{-| -}
 importAesGcmKeyFromRaw : Bytes -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesGcmKeyFromRaw bytes extractable _context =
+importAesGcmKeyFromRaw bytes extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "raw"
         bytes
@@ -1305,12 +1359,12 @@ importAesGcmKeyFromRaw bytes extractable _context =
         [ "encrypt", "decrypt" ]
 
 
-{-|-}
+{-| -}
 importAesGcmKeyFromJwk : Json.Encode.Value -> Extractable -> SecureContext -> Task ImportAesKeyError (Key AesCtrKey AesKeyParams)
-importAesGcmKeyFromJwk jwk extractable _context =
+importAesGcmKeyFromJwk jwk extractable _ =
     Elm.Kernel.Crypto.importAesKey
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "AES-GCM"
         (extractableToBool extractable)
         [ "encrypt", "decrypt" ]
@@ -1319,18 +1373,19 @@ importAesGcmKeyFromJwk jwk extractable _context =
 {-| Errors that can happen when importing a key using an EC algorithm. There are two
 possible reasons this error happens:
 
-- The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key
-and cannot be imported.
-- The `EcNamedCurve` passed to the function does not match the `EcNamedCurve` of
-the imported key.
+  - The passed key value (either `Json.Encode.Value` or `Bytes`) is not a valid key
+    and cannot be imported.
+  - The `EcNamedCurve` passed to the function does not match the `EcNamedCurve` of
+    the imported key.
+
 -}
 type ImportEcKeyError
     = ImportEcKeyError
 
 
-{-|-}
+{-| -}
 importEcdsaPublicKeyFromRaw : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromRaw namedCurve bytes extractable _context =
+importEcdsaPublicKeyFromRaw namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "raw"
@@ -1341,9 +1396,9 @@ importEcdsaPublicKeyFromRaw namedCurve bytes extractable _context =
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importEcdsaPublicKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromSpki namedCurve bytes extractable _context =
+importEcdsaPublicKeyFromSpki namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "spki"
@@ -1354,22 +1409,22 @@ importEcdsaPublicKeyFromSpki namedCurve bytes extractable _context =
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importEcdsaPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromJwk namedCurve jwk extractable _context =
+importEcdsaPublicKeyFromJwk namedCurve jwk extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "ECDSA"
         (ecNamedCurveToString namedCurve)
         (extractableToBool extractable)
         [ "verify" ]
 
 
-{-|-}
+{-| -}
 importEcdhPublicKeyFromRaw : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromRaw namedCurve bytes extractable _context =
+importEcdhPublicKeyFromRaw namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "raw"
@@ -1380,9 +1435,9 @@ importEcdhPublicKeyFromRaw namedCurve bytes extractable _context =
         []
 
 
-{-|-}
+{-| -}
 importEcdhPublicKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromSpki namedCurve bytes extractable _context =
+importEcdhPublicKeyFromSpki namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "spki"
@@ -1393,22 +1448,22 @@ importEcdhPublicKeyFromSpki namedCurve bytes extractable _context =
         []
 
 
-{-|-}
+{-| -}
 importEcdhPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromJwk namedCurve jwk extractable _context =
+importEcdhPublicKeyFromJwk namedCurve jwk extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "ECDH"
         (ecNamedCurveToString namedCurve)
         (extractableToBool extractable)
         []
 
 
-{-|-}
+{-| -}
 importEcdsaPrivateKeyFromPkcs8 : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdsaKey EcKeyParams)
-importEcdsaPrivateKeyFromPkcs8 namedCurve bytes extractable _context =
+importEcdsaPrivateKeyFromPkcs8 namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "pkcs8"
@@ -1419,9 +1474,9 @@ importEcdsaPrivateKeyFromPkcs8 namedCurve bytes extractable _context =
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importEcdsaPrivateKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdsaKey EcKeyParams)
-importEcdsaPrivateKeyFromSpki namedCurve bytes extractable _context =
+importEcdsaPrivateKeyFromSpki namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "spki"
@@ -1432,22 +1487,22 @@ importEcdsaPrivateKeyFromSpki namedCurve bytes extractable _context =
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importEcdsaPrivateKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdsaKey EcKeyParams)
-importEcdsaPrivateKeyFromJwk namedCurve jwk extractable _context =
+importEcdsaPrivateKeyFromJwk namedCurve jwk extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "ECDSA"
         (ecNamedCurveToString namedCurve)
         (extractableToBool extractable)
         [ "sign" ]
 
 
-{-|-}
+{-| -}
 importEcdhPrivateKeyFromPkcs8 : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdhKey EcKeyParams)
-importEcdhPrivateKeyFromPkcs8 namedCurve bytes extractable _context =
+importEcdhPrivateKeyFromPkcs8 namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "pkcs8"
@@ -1458,9 +1513,9 @@ importEcdhPrivateKeyFromPkcs8 namedCurve bytes extractable _context =
         [ "deriveKey", "deriveBits" ]
 
 
-{-|-}
+{-| -}
 importEcdhPrivateKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdhKey EcKeyParams)
-importEcdhPrivateKeyFromSpki namedCurve bytes extractable _context =
+importEcdhPrivateKeyFromSpki namedCurve bytes extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "spki"
@@ -1471,13 +1526,13 @@ importEcdhPrivateKeyFromSpki namedCurve bytes extractable _context =
         [ "deriveKey", "deriveBits" ]
 
 
-{-|-}
+{-| -}
 importEcdhPrivateKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PrivateKey EcdhKey EcKeyParams)
-importEcdhPrivateKeyFromJwk namedCurve jwk extractable _context =
+importEcdhPrivateKeyFromJwk namedCurve jwk extractable _ =
     Elm.Kernel.Crypto.importEcKey
         "private"
         "jwk"
-        (Gren.Kernel.Json.unwrap jwk)
+        (unwrap jwk)
         "ECDH"
         (ecNamedCurveToString namedCurve)
         (extractableToBool extractable)
@@ -1487,26 +1542,27 @@ importEcdhPrivateKeyFromJwk namedCurve jwk extractable _context =
 {-| Errors that can happen when importing a key using an HMAC algorithm. There are three
 known reasons an errors can happen when importing HMAC keys:
 
-- The passed key `Bytes` value (either `Json.Encode.Value` or `Bytes`) is not a valid key
-and cannot be imported.
-- The `length` passed to the function is not correct for the imported key.
-- The `hash` passed to the function does not match the `hash` of the imported key.
-This only happens when importing a JSON Web Key. It is recommended to _always_ match
-the hash of the imported key or you will get different results when using the imported
-key for cryptographic functions.
+  - The passed key `Bytes` value (either `Json.Encode.Value` or `Bytes`) is not a valid key
+    and cannot be imported.
+  - The `length` passed to the function is not correct for the imported key.
+  - The `hash` passed to the function does not match the `hash` of the imported key.
+    This only happens when importing a JSON Web Key. It is recommended to _always_ match
+    the hash of the imported key or you will get different results when using the imported
+    key for cryptographic functions.
+
 -}
 type ImportHmacKeyError
     = ImportHmacKeyError
 
 
-{-|-}
+{-| -}
 importHmacKeyFromJwk : Json.Encode.Value -> DigestAlgorithm -> Maybe Int -> Extractable -> SecureContext -> Task ImportHmacKeyError (Key HmacKey HmacKeyParams)
-importHmacKeyFromJwk jwk hash passedLength extractable _context =
-    when passedLength is
+importHmacKeyFromJwk jwk hash passedLength extractable _ =
+    case passedLength of
         Just length ->
             Elm.Kernel.Crypto.importHmacKey
                 "jwk"
-                (Gren.Kernel.Json.unwrap jwk)
+                (unwrap jwk)
                 "HMAC"
                 (digestAlgorithmToString hash)
                 length
@@ -1516,7 +1572,7 @@ importHmacKeyFromJwk jwk hash passedLength extractable _context =
         Nothing ->
             Elm.Kernel.Crypto.importHmacKey
                 "jwk"
-                (Gren.Kernel.Json.unwrap jwk)
+                (unwrap jwk)
                 "HMAC"
                 (digestAlgorithmToString hash)
                 ""
@@ -1524,15 +1580,15 @@ importHmacKeyFromJwk jwk hash passedLength extractable _context =
                 [ "sign", "verify" ]
 
 
-{-|-}
+{-| -}
 importHmacKeyFromRaw : Bytes -> DigestAlgorithm -> Maybe Int -> Extractable -> SecureContext -> Task ImportHmacKeyError (Key HmacKey HmacKeyParams)
-importHmacKeyFromRaw bytes hash passedLength extractable _context =
-    when passedLength is
+importHmacKeyFromRaw bytes hash passedLength extractable _ =
+    case passedLength of
         Just length ->
             Elm.Kernel.Crypto.importHmacKey
                 "raw"
                 bytes
-                 "HMAC"
+                "HMAC"
                 (digestAlgorithmToString hash)
                 length
                 (extractableToBool extractable)
@@ -1567,6 +1623,7 @@ function.
 
 This error should only appear if there are problems in kernel code. If you run into it, please
 file a ticket!
+
 -}
 type RsaOaepEncryptionError
     = RsaOaepEncryptionError
@@ -1575,9 +1632,9 @@ type RsaOaepEncryptionError
 {-| Encrypt some `Bytes` with a `PublicKey RsaOaepKey`. You can generate the apporpriate
 key with the [`generateRsaOaepKeyPair`](#generateRsaOaepKeyPair) function.
 -}
-encryptWithRsaOaep : RsaOaepParams  -> PublicKey RsaOaepKey RsaKeyParams -> Bytes -> Task RsaOaepEncryptionError Bytes
+encryptWithRsaOaep : RsaOaepParams -> PublicKey RsaOaepKey RsaKeyParams -> Bytes -> Task RsaOaepEncryptionError Bytes
 encryptWithRsaOaep { label } (PublicKey (Key { key })) bytes =
-    when label is
+    case label of
         Nothing ->
             Elm.Kernel.Crypto.encryptWithRsaOaep
                 ""
@@ -1594,9 +1651,10 @@ encryptWithRsaOaep { label } (PublicKey (Key { key })) bytes =
 {-| Errors that can happen when encrypting using the [`encryptWithAesCtr`](#encryptWithAesCtr)
 function. There are two cases where this function can fail:
 
-- When the passed `counter` in `AesCtrParams` is greater or less than than the required 16 bytes.
-This is captured by `AesCtrEncryptionErrorCounterTooLong`.
-- Any unknown or unexpected errors are captured with `AesCtrEncryptionError`.
+  - When the passed `counter` in `AesCtrParams` is greater or less than than the required 16 bytes.
+    This is captured by `AesCtrEncryptionErrorCounterTooLong`.
+  - Any unknown or unexpected errors are captured with `AesCtrEncryptionError`.
+
 -}
 type AesCtrEncryptionError
     = AesCtrEncryptionError
@@ -1605,9 +1663,10 @@ type AesCtrEncryptionError
 
 {-| Required paramaters to encrypt and decrypt values with the AES-CTR algorithm.
 
-- `counter` must be exactly 16 bytes, or else encryption and decryption will fail.
-- `length` must be between 1 and 128. If provided an `Int` that is below or above that
-range, it will be clamped to prevent the operation from failing.
+  - `counter` must be exactly 16 bytes, or else encryption and decryption will fail.
+  - `length` must be between 1 and 128. If provided an `Int` that is below or above that
+    range, it will be clamped to prevent the operation from failing.
+
 -}
 type alias AesCtrParams =
     { counter : Bytes
@@ -1621,7 +1680,7 @@ with the [`generateAesCtrKey`](#generateAesCtrKey) function.
 encryptWithAesCtr : AesCtrParams -> Key AesCtrKey AesKeyParams -> Bytes -> Task AesCtrEncryptionError Bytes
 encryptWithAesCtr { counter, length } (Key { key }) bytes =
     -- The counter must be exactly 16 bytes long
-    if Bytes.length counter == 16 then
+    if Bytes.width counter == 16 then
         Elm.Kernel.Crypto.encryptWithAesCtr
             counter
             (clamp 1 128 length)
@@ -1635,11 +1694,12 @@ encryptWithAesCtr { counter, length } (Key { key }) bytes =
 {-| Errors that can happen when encrypting `Bytes` using the [`encryptWithAesCbc`](#encryptWithAesCbc)
 function. There are a few cases where this function can fail:
 
-- The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
-`AesCbcDecryptionError`.
-- When the passed `iv` in `AesCtrParams` is greater or less than than the required 16 bytes.
-This is captured by `AesCbcEncryptionErrorIvTooLong`
-- Any unknown or unexpected errors are captured by `AesCbcDecryptionError`.
+  - The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
+    `AesCbcDecryptionError`.
+  - When the passed `iv` in `AesCtrParams` is greater or less than than the required 16 bytes.
+    This is captured by `AesCbcEncryptionErrorIvTooLong`
+  - Any unknown or unexpected errors are captured by `AesCbcDecryptionError`.
+
 -}
 type AesCbcEncryptionError
     = AesCbcEncryptionErrorIvTooLong
@@ -1648,8 +1708,9 @@ type AesCbcEncryptionError
 
 {-| Required paramaters to encrypt and decrypt values with the AES-CBC algorithm.
 
-- `iv` should be exactly 16 bytes. These bytes should be random, but do not need to
-be secret.
+  - `iv` should be exactly 16 bytes. These bytes should be random, but do not need to
+    be secret.
+
 -}
 type alias AesCbcParams =
     { iv : Bytes
@@ -1661,7 +1722,7 @@ with the [`generateAesCbcKey`](#generateAesCbcKey) function.
 -}
 encryptWithAesCbc : AesCbcParams -> Key AesCbcKey AesKeyParams -> Bytes -> Task AesCbcEncryptionError Bytes
 encryptWithAesCbc { iv } (Key { key }) bytes =
-    if Bytes.length iv == 16 then
+    if Bytes.width iv == 16 then
         Elm.Kernel.Crypto.encryptWithAesCbc
             iv
             key
@@ -1683,14 +1744,15 @@ type AesGcmTagLength
 
 {-| Required paramaters to encrypt and decrypt values with the AES-GCM algorithm.
 
-- `iv` needs to be be greater than 12 bytes, but less than 128 bytes. The recommended
-length is 96 bytes.
-- `additionalData` is completely optional data that is not encrypted, but will be
-a part of the completed, encrypted, `Bytes`. If provided when encrypting data, the
-same value must be provided when decrypting it or else the operation will fail.
-- `tagLength` is optional and defaults to `AesTagLength128`, which is recommended.
-You can find more information about this on the
-[Web Crypto API docs](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams#taglength).
+  - `iv` needs to be be greater than 12 bytes, but less than 128 bytes. The recommended
+    length is 96 bytes.
+  - `additionalData` is completely optional data that is not encrypted, but will be
+    a part of the completed, encrypted, `Bytes`. If provided when encrypting data, the
+    same value must be provided when decrypting it or else the operation will fail.
+  - `tagLength` is optional and defaults to `AesTagLength128`, which is recommended.
+    You can find more information about this on the
+    [Web Crypto API docs](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams#taglength).
+
 -}
 type alias AesGcmParams =
     { iv : Bytes
@@ -1702,9 +1764,10 @@ type alias AesGcmParams =
 {-| Errors that can happen when encrypting `Bytes` using the [`encryptWithAesGcm`](#encryptWithAesGcm)
 function. There are a few cases where this function can fail:
 
-- When the passed `iv` in `AesGcmParams` is longer or shorter than required. This is captured by
-`AesGcmEncryptionErrorInvalidIvByteLegth`.
-- Any unknown or unexpected errors are captured with `AesCtrEncryptionError`.
+  - When the passed `iv` in `AesGcmParams` is longer or shorter than required. This is captured by
+    `AesGcmEncryptionErrorInvalidIvByteLegth`.
+  - Any unknown or unexpected errors are captured with `AesCtrEncryptionError`.
+
 -}
 type AesGcmEncryptionError
     = AesGcmEncryptionErrorInvalidIvByteLegth
@@ -1718,11 +1781,11 @@ encryptWithAesGcm : AesGcmParams -> Key AesGcmKey AesKeyParams -> Bytes -> Task 
 encryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
     let
         byteWidth =
-            Bytes.length iv
+            Bytes.width iv
     in
     if byteWidth <= 128 && byteWidth >= 12 then
-        when { ad = additionalData, tl = tagLength } is
-            { ad = Nothing, tl = Nothing } ->
+        case ( additionalData, tagLength ) of
+            ( Nothing, Nothing ) ->
                 Elm.Kernel.Crypto.encryptWithAesGcm
                     iv
                     ""
@@ -1730,7 +1793,7 @@ encryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Just ad, tl = Nothing} ->
+            ( Just ad, Nothing ) ->
                 Elm.Kernel.Crypto.encryptWithAesGcm
                     iv
                     ad
@@ -1738,7 +1801,7 @@ encryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Nothing, tl = Just tl } ->
+            ( Nothing, Just tl ) ->
                 Elm.Kernel.Crypto.encryptWithAesGcm
                     iv
                     ""
@@ -1746,7 +1809,7 @@ encryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Just ad, tl = Just tl } ->
+            ( Just ad, Just tl ) ->
                 Elm.Kernel.Crypto.encryptWithAesGcm
                     iv
                     ad
@@ -1765,39 +1828,41 @@ encryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
 {-| Errors that can happen when decrypting `Bytes` using the [`decryptWithRsaOaep`](#decryptWithRsaOaep) function.
 There are two cases where the function can fail:
 
-- The `label` used to encrypt the data does not match the label used when decrypting the data
-- The decryption algorithm fails due to the passed `Bytes` not being suitable for decryption (for whatever reason)
+  - The `label` used to encrypt the data does not match the label used when decrypting the data
+  - The decryption algorithm fails due to the passed `Bytes` not being suitable for decryption (for whatever reason)
+
 -}
-type RsaOaepDecryptionError =
-    RsaOaepDecryptionError
+type RsaOaepDecryptionError
+    = RsaOaepDecryptionError
 
 
 {-| Decrypt some `Bytes` with a `PrivateKey RsaOaepKey`. You can generate the apporpriate key with the
 [`generateRsaOaepKeyPair`](#generateRsaOaepKeyPair) function.
 -}
 decryptWithRsaOaep : RsaOaepParams -> PrivateKey RsaOaepKey RsaKeyParams -> Bytes -> Task RsaOaepDecryptionError Bytes
-decryptWithRsaOaep { label } (PrivateKey (Key { key = privateKey })) bytes =
-    when label is
+decryptWithRsaOaep { label } (PrivateKey (Key { key })) bytes =
+    case label of
         Nothing ->
             Elm.Kernel.Crypto.decryptWithRsaOaep
                 ""
-                privateKey
+                key
                 bytes
 
         Just actualLabel ->
             Elm.Kernel.Crypto.decryptWithRsaOaep
                 actualLabel
-                privateKey
+                key
                 bytes
 
 
 {-| Errors that can happen when decrypting `Bytes` using the [`decryptWithAesCtr`](#decryptWithAesCtr) function.
 There are a few cases where this function can fail:
 
-- The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by `AesCtrDecryptionError`.
-- When the passed `counter` in `AesCtrParams` is greater or less than than the required 16 bytes. This is captured
-by `AesCtrDecryptionErrorCounterTooLong`
-- Any unknown or unexpected errors are captured by `AesCtrDecryptionError`.
+  - The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by `AesCtrDecryptionError`.
+  - When the passed `counter` in `AesCtrParams` is greater or less than than the required 16 bytes. This is captured
+    by `AesCtrDecryptionErrorCounterTooLong`
+  - Any unknown or unexpected errors are captured by `AesCtrDecryptionError`.
+
 -}
 type AesCtrDecryptionError
     = AesCtrDecryptionError
@@ -1809,7 +1874,7 @@ with the [`generateAesCtrKey`](#generateAesCtrKey) function.
 -}
 decryptWithAesCtr : AesCtrParams -> Key AesCtrKey AesKeyParams -> Bytes -> Task AesCtrDecryptionError Bytes
 decryptWithAesCtr { counter, length } (Key { key }) bytes =
-    if Bytes.length counter == 16 then
+    if Bytes.width counter == 16 then
         Elm.Kernel.Crypto.decryptWithAesCtr
             counter
             (clamp 1 128 length)
@@ -1823,13 +1888,14 @@ decryptWithAesCtr { counter, length } (Key { key }) bytes =
 {-| Errors that can happen when decrypting `Bytes` using the [`decryptWithAesCbc`](#decryptWithAesCbc)
 function. There are a few cases where this function can fail:
 
-- The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
-`AesCbcDecryptionError`.
-- The passed `iv` does not match the `iv` used when the data was encrypted. This is captured by
-`AesCbcDecryptionError`.
-- When the passed `iv` in `AesCbcParams` is greater or less than than the required 16 bytes. This is
-captured by `AesCtrDecryptionErrorIvTooLong`
-- Any unknown or unexpected errors are captured by `AesCtrDecryptionError`.
+  - The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
+    `AesCbcDecryptionError`.
+  - The passed `iv` does not match the `iv` used when the data was encrypted. This is captured by
+    `AesCbcDecryptionError`.
+  - When the passed `iv` in `AesCbcParams` is greater or less than than the required 16 bytes. This is
+    captured by `AesCtrDecryptionErrorIvTooLong`
+  - Any unknown or unexpected errors are captured by `AesCtrDecryptionError`.
+
 -}
 type AesCbcDecryptionError
     = AesCtrDecryptionErrorIvTooLong
@@ -1841,7 +1907,7 @@ type AesCbcDecryptionError
 -}
 decryptWithAesCbc : AesCbcParams -> Key AesCbcKey AesKeyParams -> Bytes -> Task AesCbcDecryptionError Bytes
 decryptWithAesCbc { iv } (Key { key }) bytes =
-    if Bytes.length iv == 16 then
+    if Bytes.width iv == 16 then
         Elm.Kernel.Crypto.decryptWithAesCbc
             iv
             key
@@ -1854,13 +1920,14 @@ decryptWithAesCbc { iv } (Key { key }) bytes =
 {-| Errors that can happen when decrypting `Bytes` using the [`decryptWithAesGcm`](#decryptWithAesGcm)
 function. There are a few cases where this function can fail:
 
-- The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
-`AesGcmDecryptionError`.
-- When the passed `iv` in `AesGcmParams` is longer or shorter than required. This is captured by
-`AesGcmDecryptionErrorInvalidIvByteLegth`.
-- If the passed `iv` for encrypting the data does not match the `iv` being used to decrypt the data.
-This is captured with `AesCtrDecryptionError`.
-- Any unknown or unexpected errors are captured with `AesCtrDecryptionError`.
+  - The passed `Bytes` are unable to be decrypted for whatever reason. This is captured by
+    `AesGcmDecryptionError`.
+  - When the passed `iv` in `AesGcmParams` is longer or shorter than required. This is captured by
+    `AesGcmDecryptionErrorInvalidIvByteLegth`.
+  - If the passed `iv` for encrypting the data does not match the `iv` being used to decrypt the data.
+    This is captured with `AesCtrDecryptionError`.
+  - Any unknown or unexpected errors are captured with `AesCtrDecryptionError`.
+
 -}
 type AesGcmDecryptionError
     = AesGcmDecryptionErrorInvalidIvByteLegth
@@ -1874,11 +1941,11 @@ decryptWithAesGcm : AesGcmParams -> Key AesGcmKey AesKeyParams -> Bytes -> Task 
 decryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
     let
         byteWidth =
-            Bytes.length iv
+            Bytes.width iv
     in
     if byteWidth <= 128 && byteWidth >= 12 then
-        when { ad = additionalData, tl = tagLength } is
-            { ad = Nothing, tl = Nothing } ->
+        case ( additionalData, tagLength ) of
+            ( Nothing, Nothing ) ->
                 Elm.Kernel.Crypto.decryptWithAesGcm
                     iv
                     ""
@@ -1886,7 +1953,7 @@ decryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Just ad, tl = Nothing} ->
+            ( Just ad, Nothing ) ->
                 Elm.Kernel.Crypto.decryptWithAesGcm
                     iv
                     ad
@@ -1894,7 +1961,7 @@ decryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Nothing, tl = Just tl } ->
+            ( Nothing, Just tl ) ->
                 Elm.Kernel.Crypto.decryptWithAesGcm
                     iv
                     ""
@@ -1902,7 +1969,7 @@ decryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
                     key
                     bytes
 
-            { ad = Just ad, tl = Just tl } ->
+            ( Just ad, Just tl ) ->
                 Elm.Kernel.Crypto.decryptWithAesGcm
                     iv
                     ad
@@ -1921,8 +1988,8 @@ decryptWithAesGcm { iv, additionalData, tagLength } (Key { key }) bytes =
 {-| A handy alias for differentiating between artibrary `Bytes` and the `Bytes` of a generated
 signature (using a signing function).
 -}
-type alias Signature
-    = Bytes
+type alias Signature =
+    Bytes
 
 
 
@@ -1934,6 +2001,7 @@ type alias Signature
 
 This error should only appear if there are problems in kernel code. If you run into it, please
 file a ticket!
+
 -}
 type RsaSsaPkcs1V1_5SigningError
     = RsaSsaPkcs1V1_5SigningError
@@ -1960,11 +2028,12 @@ type alias RsaPssParams =
 {-| Errors that can happen when signing using the [`signWithRsaPss`](#signWithRsaPss) function. There are
 a few cases where this function can fail:
 
-- If the passed `salt` as part of the `RsaPssParams` is not equal to or less than the amount of bytes of
-the `DigestAlgorithm` that was used to generate the key. For example, if  the `RsaPssKey` was generated
-with SHA-256, the maximum number for the `salt` value must be 32 or less. This is captured by
-`RsaPssSigningErrorInvalidSalt`.
-- Any unknown or unexpected errors are captured with `RsaPssSigningError`.
+  - If the passed `salt` as part of the `RsaPssParams` is not equal to or less than the amount of bytes of
+    the `DigestAlgorithm` that was used to generate the key. For example, if the `RsaPssKey` was generated
+    with SHA-256, the maximum number for the `salt` value must be 32 or less. This is captured by
+    `RsaPssSigningErrorInvalidSalt`.
+  - Any unknown or unexpected errors are captured with `RsaPssSigningError`.
+
 -}
 type RsaPssSigningError
     = RsaPssSigningErrorInvalidSalt
@@ -1976,16 +2045,16 @@ is just some `Bytes`). The `Signature` can be used with the cooresponding verifi
 to verify that the passed `Bytes` were signed with the passed key.
 -}
 signWithRsaPss : RsaPssParams -> PrivateKey RsaPssKey RsaKeyParams -> Bytes -> Task RsaPssSigningError Signature
-signWithRsaPss { salt } (PrivateKey (Key { key, data = { modulusLength, hash, extractable }})) bytes =
+signWithRsaPss { salt } (PrivateKey (Key { key, data })) bytes =
     let
         clampedSaltBytes =
             clamp 0 2147483647 salt
 
         {- Safari (Webkit) will error if the `salt` length is greater than the `hash` of the
-        created key. The `maxSalt` values ensures consistent behavior across platforms.
+           created key. The `maxSalt` values ensures consistent behavior across platforms.
         -}
         maxSalt =
-            when hash is
+            case data.hash of
                 Sha256 ->
                     32
 
@@ -2010,6 +2079,7 @@ is just some `Bytes`). The `Signature` can be used with the cooresponding verifi
 to verify that the passed `Bytes` were signed with the passed key.
 
 The returned `Task` should not fail. If it does, please file a ticket!
+
 -}
 signWithEcdsa : DigestAlgorithm -> PrivateKey EcdsaKey EcKeyParams -> Bytes -> Task x Signature
 signWithEcdsa hash (PrivateKey (Key { key })) bytes =
@@ -2024,6 +2094,7 @@ is just some `Bytes`). The `Signature` can be used with the cooresponding verifi
 to verify that the passed `Bytes` were signed with the passed key.
 
 The returned `Task` should not fail. If it does, please file a ticket!
+
 -}
 signWithHmac : Key HmacKey HmacKeyParams -> Bytes -> Task x Signature
 signWithHmac (Key { key }) bytes =
@@ -2041,6 +2112,7 @@ RSA-SSAPKCS1v1.5 algorithm.
 
 This function produces no values. Instead, the `Task` succeeds if the passed
 signature is valid and fails otherwise.
+
 -}
 verifyWithRsaSsaPkcs1V1_5 : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Signature -> Bytes -> Task x a
 verifyWithRsaSsaPkcs1V1_5 (PublicKey (Key { key })) signature bytes =
@@ -2055,6 +2127,7 @@ RSA-PSS algorithm.
 
 This function produces no values. Instead, the `Task` succeeds if the passed
 signature is valid and fails otherwise.
+
 -}
 verifyWithRsaPss : RsaPssParams -> PublicKey RsaPssKey RsaKeyParams -> Signature -> Bytes -> Task x a
 verifyWithRsaPss { salt } (PublicKey (Key { key })) signature bytes =
@@ -2070,6 +2143,7 @@ ECDSA algorithm.
 
 This function produces no values. Instead, the `Task` succeeds if the passed
 signature is valid and fails otherwise.
+
 -}
 verifyWithEcdsa : DigestAlgorithm -> PublicKey EcdsaKey EcKeyParams -> Signature -> Bytes -> Task x a
 verifyWithEcdsa hash (PublicKey (Key { key })) signature bytes =
@@ -2085,6 +2159,7 @@ HMAC algorithm.
 
 This function produces no values. Instead, the `Task` succeeds if the passed
 signature is valid and fails otherwise.
+
 -}
 verifyWithHmac : Key HmacKey HmacKeyParams -> Signature -> Bytes -> Task x a
 verifyWithHmac (Key { key }) signature bytes =
@@ -2102,6 +2177,7 @@ verifyWithHmac (Key { key }) signature bytes =
 
 Note: The algorithm `SHA1` is supported by the WebCrypto API, but not available
 in this package due to known security vunerabilities.
+
 -}
 type DigestAlgorithm
     = Sha256
@@ -2113,7 +2189,7 @@ type DigestAlgorithm
 This operation should always succeed.
 -}
 digest : SecureContext -> DigestAlgorithm -> Bytes -> Task x Bytes
-digest _context algorithm data =
+digest _ algorithm data =
     Elm.Kernel.Crypto.digest
         (digestAlgorithmToString algorithm)
         data
@@ -2123,10 +2199,10 @@ digest _context algorithm data =
 -- UTILITIES
 
 
-{-|-}
+{-| -}
 ecNamedCurveToString : EcNamedCurve -> String
 ecNamedCurveToString namedCurve =
-    when namedCurve is
+    case namedCurve of
         P256 ->
             "P-256"
 
@@ -2137,10 +2213,10 @@ ecNamedCurveToString namedCurve =
             "P-521"
 
 
-{-|-}
+{-| -}
 aesLengthToInt : AesLength -> Int
 aesLengthToInt length =
-    when length is
+    case length of
         AesLength128 ->
             128
 
@@ -2151,9 +2227,9 @@ aesLengthToInt length =
             256
 
 
-{-|-}
+{-| -}
 aesTagLengthToInt aesTagLength =
-    when aesTagLength is
+    case aesTagLength of
         AesGcmTagLength96 ->
             96
 
@@ -2170,10 +2246,10 @@ aesTagLengthToInt aesTagLength =
             128
 
 
-{-|-}
+{-| -}
 extractableToBool : Extractable -> Bool
 extractableToBool extractable =
-    when extractable is
+    case extractable of
         CanBeExtracted ->
             True
 
@@ -2181,10 +2257,10 @@ extractableToBool extractable =
             False
 
 
-{-|-}
+{-| -}
 digestAlgorithmToString : DigestAlgorithm -> String
 digestAlgorithmToString digestAlgorithm =
-    when digestAlgorithm is
+    case digestAlgorithm of
         Sha256 ->
             "SHA-256"
 
@@ -2195,10 +2271,10 @@ digestAlgorithmToString digestAlgorithm =
             "SHA-512"
 
 
-{-|-}
+{-| -}
 digestAlgorithmToBytes : DigestAlgorithm -> Int
 digestAlgorithmToBytes digestAlgorithm =
-    when digestAlgorithm is
+    case digestAlgorithm of
         Sha256 ->
             32
 

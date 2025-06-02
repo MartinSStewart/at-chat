@@ -5,10 +5,13 @@ import Bitwise
 import Bytes exposing (Bytes)
 import Bytes.Decode
 import Bytes.Encode
+import Crypto
 import Duration
+import Effect.Command as Command exposing (BackendOnly, Command)
 import Env
 import Hex
 import Sha256
+import Task exposing (Task)
 import Time
 import Unsafe
 import Url exposing (Url)
@@ -23,8 +26,8 @@ privateKey =
     Unsafe.base64Decode Env.vapidPrivateKey
 
 
-generateRequestDetails : Time.Posix -> Url -> String
-generateRequestDetails time subscriptionEndpoint =
+generateRequestDetails : (Result {} Bytes -> msg) -> Time.Posix -> Url -> Command BackendOnly toMsg msg
+generateRequestDetails onResult time subscriptionEndpoint =
     let
         parsedUrl =
             "https://" ++ subscriptionEndpoint.host
@@ -77,24 +80,28 @@ generateRequestDetails time subscriptionEndpoint =
                 |> stringToBytes
                 |> bytesToBase64
 
+        securedInput : Bytes
         securedInput =
-            encodedHeader ++ "." ++ encodedPayload
-
-        sig : Bytes
-        sig =
-            0
-
-        --SubtleCrypto.sign { name = "ECDSA", hash = "SHA-256" } pemKey securedInput
-        jwt =
-            securedInput ++ "." ++ derToJose sig
+            encodedHeader ++ "." ++ encodedPayload |> stringToBytes
     in
-    ""
+    Crypto.getSecureContext
+        |> Task.andThen
+            (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CannotBeExtracted })
+        |> Task.andThen (\keyPair -> Crypto.signWithEcdsa Crypto.Sha256 keyPair.privateKey securedInput)
+        |> Task.map (\sig -> appendBytes [ securedInput, stringToBytes ".", derToJose sig ])
+        |> Task.attempt onResult
+        |> Command.fromCmd "Crypto"
+
+
+appendBytes list =
+    Bytes.Encode.sequence (List.map Bytes.Encode.bytes list) |> Bytes.Encode.encode
 
 
 maxOctet =
     0x80
 
 
+derToJose : Bytes -> Bytes
 derToJose signature =
     let
         paramBytes =
