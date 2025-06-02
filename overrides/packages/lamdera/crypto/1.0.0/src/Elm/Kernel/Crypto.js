@@ -1,5 +1,6 @@
 /*
 
+import Elm.Kernel.List exposing (toArray)
 import Elm.Kernel.Scheduler exposing (binding, succeed, fail)
 import Elm.Kernel.Bytes exposing (writeBytes)
 import Crypto exposing (RsaSsaPkcs1V1_5SigningError, RsaPssSigningError, AesCtrEncryptionError, RsaOaepEncryptionError, P256, P384, P521, AesLength128, AesLength192, AesLength256, CanBeExtracted, CannotBeExtracted, HmacKey, Sha256, Sha384, Sha512, SignWithRsaPssError, AesGcmDecryptionError, AesGcmEncryptionError, AesCbcDecryptionError, AesCbcEncryptionError, AesCtrDecryptionError, DecryptWithRsaOaepError, ImportRsaKeyError, ImportHmacKeyError, ImportEcKeyError, ImportAesKeyError, Key, SecureContext, PublicKey, PrivateKey)
@@ -157,7 +158,7 @@ var _Crypto_generateRsaKey = F6(
         hash: hash,
       };
       _Crypto_impl.subtle
-        .generateKey(algorithm, extractable, permissions)
+        .generateKey(algorithm, extractable, __List_toArray(permissions))
         .then(function (key) {
           return callback(
             __Scheduler_succeed({
@@ -185,7 +186,7 @@ var _Crypto_generateAesKey = F4(
         length: length,
       };
       _Crypto_impl.subtle
-        .generateKey(algorithm, extractable, permissions)
+        .generateKey(algorithm, extractable, __List_toArray(permissions))
         .then(function (key) {
           return callback(__Scheduler_succeed(_Crypto_constructAesKey(key)));
         })
@@ -204,7 +205,7 @@ var _Crypto_generateEcKey = F4(
         namedCurve: namedCurve,
       };
       _Crypto_impl.subtle
-        .generateKey(algorithm, extractable, permissions)
+        .generateKey(algorithm, extractable, __List_toArray(permissions))
         .then(function (key) {
           return callback(
             __Scheduler_succeed({
@@ -241,7 +242,7 @@ var _Crypto_generateHmacKey = F5(
         };
       }
       _Crypto_impl.subtle
-        .generateKey(algorithm, extractable, permissions)
+        .generateKey(algorithm, extractable, __List_toArray(permissions))
         .then(function (key) {
           return callback(__Scheduler_succeed(_Crypto_constructHmacKey(key)));
         })
