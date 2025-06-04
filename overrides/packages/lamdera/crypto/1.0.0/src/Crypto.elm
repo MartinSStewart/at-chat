@@ -1089,13 +1089,13 @@ As the function suggests, is used when exporting public keys. These exports cann
 fail because public keys cannot be marked as not exportable.
 
 -}
-exportPublicKeyHelper : String -> Key a b -> Task {} c
+exportPublicKeyHelper : String -> Key a b -> Task x c
 exportPublicKeyHelper keyType (Key { key }) =
     Elm.Kernel.Crypto.exportKey keyType key
 
 
 {-| -}
-exportPublicKeyAsRaw : Key a b -> Task {} Bytes
+exportPublicKeyAsRaw : Key a b -> Task x Bytes
 exportPublicKeyAsRaw =
     exportPublicKeyHelper "raw"
 
@@ -1113,7 +1113,7 @@ exportKeyAsPkcs8 =
 
 
 {-| -}
-exportPublicKeyAsSpki : Key a b -> Task {} Bytes
+exportPublicKeyAsSpki : Key a b -> Task x Bytes
 exportPublicKeyAsSpki =
     exportPublicKeyHelper "spki"
 
@@ -1125,7 +1125,7 @@ exportKeyAsSpki =
 
 
 {-| -}
-exportPublicKeyAsJwk : Key a b -> Task {} Json.Encode.Value
+exportPublicKeyAsJwk : Key a b -> Task x Json.Encode.Value
 exportPublicKeyAsJwk key =
     Task.map Elm.Kernel.Json.wrap (exportPublicKeyHelper "jwk" key)
 
