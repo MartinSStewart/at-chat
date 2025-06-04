@@ -5,7 +5,7 @@ module Crypto exposing
     , getRandomInt32Values, getRandomUInt32Values
     , randomUuidV4
     , RsaOaepParams
-    , RsaOaepEncryptionError(..), encryptWithRsaOaep
+    , encryptWithRsaOaep
     , RsaOaepDecryptionError(..), decryptWithRsaOaep
     , AesCtrParams
     , AesCtrEncryptionError(..), encryptWithAesCtr
@@ -17,7 +17,7 @@ module Crypto exposing
     , AesGcmEncryptionError(..), encryptWithAesGcm
     , AesGcmDecryptionError(..), decryptWithAesGcm
     , Signature
-    , RsaSsaPkcs1V1_5SigningError(..), signWithRsaSsaPkcs1V1_5
+    , signWithRsaSsaPkcs1V1_5
     , verifyWithRsaSsaPkcs1V1_5
     , RsaPssParams, RsaPssSigningError(..)
     , signWithRsaPss, verifyWithRsaPss
@@ -135,7 +135,7 @@ generate one with the [`generateRsaOaepKeyPair`](#generateRsaOaepKeyPair) functi
 
 @docs RsaOaepParams
 
-@docs RsaOaepEncryptionError, encryptWithRsaOaep
+@docs encryptWithRsaOaep
 
 @docs RsaOaepDecryptionError, decryptWithRsaOaep
 
@@ -193,7 +193,7 @@ Sign and verify some `Bytes` with the RSASSA-PKCS1-v1\_5 (Rivest, Shamir, and Ad
 with Appendix ...) algorithm. These functions require an RSASSA-PKCS1-v1\_5 key. You can generate one
 with the [`generateRsaSsaPkcs1V1_5KeyPair`](#generateRsaSsaPkcs1V1_5KeyPair) function.
 
-@docs RsaSsaPkcs1V1_5SigningError, signWithRsaSsaPkcs1V1_5
+@docs signWithRsaSsaPkcs1V1_5
 
 @docs verifyWithRsaSsaPkcs1V1_5
 
@@ -483,6 +483,10 @@ getSecureContext =
 {-| Denotes if a key can be exported using the `exportKey` or `exportKeyPair`
 functions. If a key is not marked as exportable when it is created or imported,
 any attempts to export the key will fail.
+
+Public keys will always be exportable when generated or imported, regardless of
+the `Extractable` value provided when generating the key.
+
 -}
 type Extractable
     = CanBeExtracted
@@ -886,7 +890,8 @@ generateHmacKey { hash, length, extractable } _ =
 {-| Errors that can arise when exporting keys.
 
   - `KeyNotExportable` happens when trying to export a key that was not made
-    `Extractable` during creation or import.
+    `Extractable` during creation or import. This only applies to private keys,
+    as public keys are always exportable.
 
 -}
 type ExportKeyError
@@ -894,15 +899,15 @@ type ExportKeyError
 
 
 {-| -}
-exportRsaOaepPublicKeyAsSpki : PublicKey RsaOaepKey RsaKeyParams -> Task ExportKeyError Bytes
+exportRsaOaepPublicKeyAsSpki : PublicKey RsaOaepKey RsaKeyParams -> Task x Bytes
 exportRsaOaepPublicKeyAsSpki (PublicKey key) =
-    exportKeyAsSpki key
+    exportPublicKeyAsSpki key
 
 
 {-| -}
-exportRsaOaepPublicKeyAsJwk : PublicKey RsaOaepKey RsaKeyParams -> Task ExportKeyError Json.Encode.Value
+exportRsaOaepPublicKeyAsJwk : PublicKey RsaOaepKey RsaKeyParams -> Task x Json.Encode.Value
 exportRsaOaepPublicKeyAsJwk (PublicKey key) =
-    exportKeyAsJwk key
+    exportPublicKeyAsJwk key
 
 
 {-| -}
@@ -918,15 +923,15 @@ exportRsaOaepPrivateKeyAsJwk (PrivateKey key) =
 
 
 {-| -}
-exportRsaPssPublicKeyAsSpki : PublicKey RsaPssKey RsaKeyParams -> Task ExportKeyError Bytes
+exportRsaPssPublicKeyAsSpki : PublicKey RsaPssKey RsaKeyParams -> Task x Bytes
 exportRsaPssPublicKeyAsSpki (PublicKey key) =
-    exportKeyAsSpki key
+    exportPublicKeyAsSpki key
 
 
 {-| -}
-exportRsaPssPublicKeyAsJwk : PublicKey RsaPssKey RsaKeyParams -> Task ExportKeyError Json.Encode.Value
+exportRsaPssPublicKeyAsJwk : PublicKey RsaPssKey RsaKeyParams -> Task x Json.Encode.Value
 exportRsaPssPublicKeyAsJwk (PublicKey key) =
-    exportKeyAsJwk key
+    exportPublicKeyAsJwk key
 
 
 {-| -}
@@ -942,15 +947,15 @@ exportRsaPssPrivateKeyAsJwk (PrivateKey key) =
 
 
 {-| -}
-exportRsaSsaPkcs1V1_5PublicKeyAsSpki : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Bytes
+exportRsaSsaPkcs1V1_5PublicKeyAsSpki : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task x Bytes
 exportRsaSsaPkcs1V1_5PublicKeyAsSpki (PublicKey key) =
-    exportKeyAsSpki key
+    exportPublicKeyAsSpki key
 
 
 {-| -}
-exportRsaSsaPkcs1V1_5PublicKeyAsJwk : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task ExportKeyError Json.Encode.Value
+exportRsaSsaPkcs1V1_5PublicKeyAsJwk : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Task x Json.Encode.Value
 exportRsaSsaPkcs1V1_5PublicKeyAsJwk (PublicKey key) =
-    exportKeyAsJwk key
+    exportPublicKeyAsJwk key
 
 
 {-| -}
@@ -1002,21 +1007,21 @@ exportAesGcmKeyAsJwk =
 
 
 {-| -}
-exportEcdsaPublicKeyAsRaw : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Bytes
+exportEcdsaPublicKeyAsRaw : PublicKey EcdsaKey EcKeyParams -> Task x Bytes
 exportEcdsaPublicKeyAsRaw (PublicKey key) =
-    exportKeyAsRaw key
+    exportPublicKeyAsRaw key
 
 
 {-| -}
-exportEcdsaPublicKeyAsSpki : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Bytes
+exportEcdsaPublicKeyAsSpki : PublicKey EcdsaKey EcKeyParams -> Task x Bytes
 exportEcdsaPublicKeyAsSpki (PublicKey key) =
-    exportKeyAsSpki key
+    exportPublicKeyAsSpki key
 
 
 {-| -}
-exportEcdsaPublicKeyAsJwk : PublicKey EcdsaKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
+exportEcdsaPublicKeyAsJwk : PublicKey EcdsaKey EcKeyParams -> Task x Json.Encode.Value
 exportEcdsaPublicKeyAsJwk (PublicKey key) =
-    exportKeyAsJwk key
+    exportPublicKeyAsJwk key
 
 
 {-| -}
@@ -1032,21 +1037,21 @@ exportEcdsaPrivateKeyAsJwk (PrivateKey key) =
 
 
 {-| -}
-exportEcdhPublicKeyAsRaw : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
+exportEcdhPublicKeyAsRaw : PublicKey EcdhKey EcKeyParams -> Task x Bytes
 exportEcdhPublicKeyAsRaw (PublicKey key) =
-    exportKeyAsRaw key
+    exportPublicKeyAsRaw key
 
 
 {-| -}
-exportEcdhPublicKeyAsSpki : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Bytes
+exportEcdhPublicKeyAsSpki : PublicKey EcdhKey EcKeyParams -> Task x Bytes
 exportEcdhPublicKeyAsSpki (PublicKey key) =
-    exportKeyAsSpki key
+    exportPublicKeyAsSpki key
 
 
 {-| -}
-exportEcdhPublicKeyAsJwk : PublicKey EcdhKey EcKeyParams -> Task ExportKeyError Json.Encode.Value
+exportEcdhPublicKeyAsJwk : PublicKey EcdhKey EcKeyParams -> Task x Json.Encode.Value
 exportEcdhPublicKeyAsJwk (PublicKey key) =
-    exportKeyAsJwk key
+    exportPublicKeyAsJwk key
 
 
 {-| -}
@@ -1073,34 +1078,62 @@ exportHmacKeyAsJwk =
     exportKeyAsJwk
 
 
-{-| -}
-exportKeyHelperV2 : String -> Key a b -> Task ExportKeyError c
-exportKeyHelperV2 keyType (Key { key }) =
+exportKeyHelper : String -> Key a b -> Task ExportKeyError c
+exportKeyHelper keyType (Key { key }) =
     Elm.Kernel.Crypto.exportKey keyType key
+
+
+{-| Identical to `exportKeyHelper`, only different in the return type.
+
+As the function suggests, is used when exporting public keys. These exports cannot
+fail because public keys cannot be marked as not exportable.
+
+-}
+exportPublicKeyHelper : String -> Key a b -> Task {} c
+exportPublicKeyHelper keyType (Key { key }) =
+    Elm.Kernel.Crypto.exportKey keyType key
+
+
+{-| -}
+exportPublicKeyAsRaw : Key a b -> Task {} Bytes
+exportPublicKeyAsRaw =
+    exportPublicKeyHelper "raw"
 
 
 {-| -}
 exportKeyAsRaw : Key a b -> Task ExportKeyError Bytes
 exportKeyAsRaw =
-    exportKeyHelperV2 "raw"
+    exportKeyHelper "raw"
 
 
 {-| -}
 exportKeyAsPkcs8 : Key a b -> Task ExportKeyError Bytes
 exportKeyAsPkcs8 =
-    exportKeyHelperV2 "pkcs8"
+    exportKeyHelper "pkcs8"
+
+
+{-| -}
+exportPublicKeyAsSpki : Key a b -> Task {} Bytes
+exportPublicKeyAsSpki =
+    exportPublicKeyHelper "spki"
 
 
 {-| -}
 exportKeyAsSpki : Key a b -> Task ExportKeyError Bytes
 exportKeyAsSpki =
-    exportKeyHelperV2 "spki"
+    exportKeyHelper "spki"
+
+
+{-| -}
+exportPublicKeyAsJwk : Key a b -> Task {} Json.Encode.Value
+exportPublicKeyAsJwk key =
+    Task.map Elm.Kernel.Json.wrap (exportPublicKeyHelper "jwk" key)
 
 
 {-| -}
 exportKeyAsJwk : Key a b -> Task ExportKeyError Json.Encode.Value
 exportKeyAsJwk key =
-    Task.map wrap (exportKeyHelperV2 "jwk" key)
+    Task.map wrap (exportKeyHelper "jwk" key)
 
 
 wrap =
@@ -1146,7 +1179,7 @@ importRsaOaepPublicKeyFromJwk jwk { hash } extractable _ =
         (unwrap jwk)
         "RSA-OAEP"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "encrypt" ]
 
 
@@ -1159,7 +1192,7 @@ importRsaOaepPublicKeyFromSpki bytes { hash } extractable _ =
         bytes
         "RSA-OAEP"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "encrypt" ]
 
 
@@ -1172,7 +1205,7 @@ importRsaPssPublicKeyFromJwk jwk { hash } extractable _ =
         (unwrap jwk)
         "RSA-PSS"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1185,7 +1218,7 @@ importRsaPssPublicKeyFromSpki bytes { hash } extractable _ =
         bytes
         "RSA-PSS"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1250,7 +1283,7 @@ importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } extractable _ =
         (unwrap jwk)
         "RSASSA-PKCS1-v1_5"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "sign" ]
 
 
@@ -1263,7 +1296,7 @@ importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } extractable _ =
         bytes
         "RSASSA-PKCS1-v1_5"
         (digestAlgorithmToString hash)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1392,7 +1425,7 @@ importEcdsaPublicKeyFromRaw namedCurve bytes extractable _ =
         bytes
         "ECDSA"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1405,7 +1438,7 @@ importEcdsaPublicKeyFromSpki namedCurve bytes extractable _ =
         bytes
         "ECDSA"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1418,7 +1451,7 @@ importEcdsaPublicKeyFromJwk namedCurve jwk extractable _ =
         (unwrap jwk)
         "ECDSA"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         [ "verify" ]
 
 
@@ -1431,7 +1464,7 @@ importEcdhPublicKeyFromRaw namedCurve bytes extractable _ =
         bytes
         "ECDH"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         []
 
 
@@ -1444,7 +1477,7 @@ importEcdhPublicKeyFromSpki namedCurve bytes extractable _ =
         bytes
         "ECDH"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         []
 
 
@@ -1457,7 +1490,7 @@ importEcdhPublicKeyFromJwk namedCurve jwk extractable _ =
         (unwrap jwk)
         "ECDH"
         (ecNamedCurveToString namedCurve)
-        (extractableToBool extractable)
+        True
         []
 
 
@@ -1618,21 +1651,10 @@ type alias RsaOaepParams =
     }
 
 
-{-| Errors that can happen when encrypting using the [`encryptWithRsaOaep`](#encryptWithRsaOaep)
-function.
-
-This error should only appear if there are problems in kernel code. If you run into it, please
-file a ticket!
-
--}
-type RsaOaepEncryptionError
-    = RsaOaepEncryptionError
-
-
 {-| Encrypt some `Bytes` with a `PublicKey RsaOaepKey`. You can generate the apporpriate
 key with the [`generateRsaOaepKeyPair`](#generateRsaOaepKeyPair) function.
 -}
-encryptWithRsaOaep : RsaOaepParams -> PublicKey RsaOaepKey RsaKeyParams -> Bytes -> Task RsaOaepEncryptionError Bytes
+encryptWithRsaOaep : RsaOaepParams -> PublicKey RsaOaepKey RsaKeyParams -> Bytes -> Task x Bytes
 encryptWithRsaOaep { label } (PublicKey (Key { key })) bytes =
     case label of
         Nothing ->
@@ -1996,22 +2018,11 @@ type alias Signature =
 -- SIGN
 
 
-{-| Errors that can happen when signing using the
-[`signWithRsaSsaPkcs1V1_5`](#signWithRsaSsaPkcs1V1_5) function.
-
-This error should only appear if there are problems in kernel code. If you run into it, please
-file a ticket!
-
--}
-type RsaSsaPkcs1V1_5SigningError
-    = RsaSsaPkcs1V1_5SigningError
-
-
 {-| Sign some `Bytes` with the RSA-SSAPKCS1v1.5 algorithm. This produces a `Signature` (which
 is just some `Bytes`). The `Signature` can be used with the cooresponding verification function
 to verify that the passed `Bytes` were signed with the passed key.
 -}
-signWithRsaSsaPkcs1V1_5 : PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Bytes -> Task RsaSsaPkcs1V1_5SigningError Signature
+signWithRsaSsaPkcs1V1_5 : PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Bytes -> Task x Signature
 signWithRsaSsaPkcs1V1_5 (PrivateKey (Key { key })) bytes =
     Elm.Kernel.Crypto.signWithRsaSsaPkcs1V1_5
         key
@@ -2110,11 +2121,11 @@ signWithHmac (Key { key }) bytes =
 {-| Verify that some `Bytes` were signed with the passed `Signature` with the
 RSA-SSAPKCS1v1.5 algorithm.
 
-This function produces no values. Instead, the `Task` succeeds if the passed
-signature is valid and fails otherwise.
+The `Task` succeeds with the verified `Bytes` if the passed signature is valid and
+fails otherwise.
 
 -}
-verifyWithRsaSsaPkcs1V1_5 : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Signature -> Bytes -> Task x a
+verifyWithRsaSsaPkcs1V1_5 : PublicKey RsaSsaPkcs1V1_5Key RsaKeyParams -> Signature -> Bytes -> Task x Bytes
 verifyWithRsaSsaPkcs1V1_5 (PublicKey (Key { key })) signature bytes =
     Elm.Kernel.Crypto.verifyWithRsaSsaPkcs1V1_5
         key
@@ -2125,11 +2136,11 @@ verifyWithRsaSsaPkcs1V1_5 (PublicKey (Key { key })) signature bytes =
 {-| Verify that some `Bytes` were signed with the passed `Signature` with the
 RSA-PSS algorithm.
 
-This function produces no values. Instead, the `Task` succeeds if the passed
-signature is valid and fails otherwise.
+The `Task` succeeds with the verified `Bytes` if the passed signature is valid and
+fails otherwise.
 
 -}
-verifyWithRsaPss : RsaPssParams -> PublicKey RsaPssKey RsaKeyParams -> Signature -> Bytes -> Task x a
+verifyWithRsaPss : RsaPssParams -> PublicKey RsaPssKey RsaKeyParams -> Signature -> Bytes -> Task x Bytes
 verifyWithRsaPss { salt } (PublicKey (Key { key })) signature bytes =
     Elm.Kernel.Crypto.verifyWithRsaPss
         salt
@@ -2141,11 +2152,11 @@ verifyWithRsaPss { salt } (PublicKey (Key { key })) signature bytes =
 {-| Verify that some `Bytes` were signed with the passed `Signature` with the
 ECDSA algorithm.
 
-This function produces no values. Instead, the `Task` succeeds if the passed
-signature is valid and fails otherwise.
+The `Task` succeeds with the verified `Bytes` if the passed signature is valid and
+fails otherwise.
 
 -}
-verifyWithEcdsa : DigestAlgorithm -> PublicKey EcdsaKey EcKeyParams -> Signature -> Bytes -> Task x a
+verifyWithEcdsa : DigestAlgorithm -> PublicKey EcdsaKey EcKeyParams -> Signature -> Bytes -> Task x Bytes
 verifyWithEcdsa hash (PublicKey (Key { key })) signature bytes =
     Elm.Kernel.Crypto.verifyWithEcdsa
         (digestAlgorithmToString hash)
@@ -2157,11 +2168,11 @@ verifyWithEcdsa hash (PublicKey (Key { key })) signature bytes =
 {-| Verify that some `Bytes` were signed with the passed `Signature` with the
 HMAC algorithm.
 
-This function produces no values. Instead, the `Task` succeeds if the passed
-signature is valid and fails otherwise.
+The `Task` succeeds with the verified `Bytes` if the passed signature is valid and
+fails otherwise.
 
 -}
-verifyWithHmac : Key HmacKey HmacKeyParams -> Signature -> Bytes -> Task x a
+verifyWithHmac : Key HmacKey HmacKeyParams -> Signature -> Bytes -> Task x Bytes
 verifyWithHmac (Key { key }) signature bytes =
     Elm.Kernel.Crypto.verifyWithHmac
         key
