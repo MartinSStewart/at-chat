@@ -1171,8 +1171,8 @@ type ImportRsaKeyError
 
 
 {-| -}
-importRsaOaepPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
-importRsaOaepPublicKeyFromJwk jwk { hash } extractable _ =
+importRsaOaepPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
+importRsaOaepPublicKeyFromJwk jwk { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
@@ -1184,8 +1184,8 @@ importRsaOaepPublicKeyFromJwk jwk { hash } extractable _ =
 
 
 {-| -}
-importRsaOaepPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
-importRsaOaepPublicKeyFromSpki bytes { hash } extractable _ =
+importRsaOaepPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaOaepKey RsaKeyParams)
+importRsaOaepPublicKeyFromSpki bytes { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1197,8 +1197,8 @@ importRsaOaepPublicKeyFromSpki bytes { hash } extractable _ =
 
 
 {-| -}
-importRsaPssPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
-importRsaPssPublicKeyFromJwk jwk { hash } extractable _ =
+importRsaPssPublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
+importRsaPssPublicKeyFromJwk jwk { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
@@ -1210,8 +1210,8 @@ importRsaPssPublicKeyFromJwk jwk { hash } extractable _ =
 
 
 {-| -}
-importRsaPssPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
-importRsaPssPublicKeyFromSpki bytes { hash } extractable _ =
+importRsaPssPublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PublicKey RsaPssKey RsaKeyParams)
+importRsaPssPublicKeyFromSpki bytes { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1275,8 +1275,8 @@ importRsaPssPrivateKeyFromPkcs8 bytes { hash } extractable _ =
 
 
 {-| -}
-importRsaSsaPkcs1V1_5PublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } extractable _ =
+importRsaSsaPkcs1V1_5PublicKeyFromJwk : Json.Encode.Value -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
+importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "jwk"
@@ -1288,8 +1288,8 @@ importRsaSsaPkcs1V1_5PublicKeyFromJwk jwk { hash } extractable _ =
 
 
 {-| -}
-importRsaSsaPkcs1V1_5PublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> Extractable -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
-importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } extractable _ =
+importRsaSsaPkcs1V1_5PublicKeyFromSpki : Bytes -> ImportRsaKeyParams -> SecureContext -> Task ImportRsaKeyError (PrivateKey RsaSsaPkcs1V1_5Key RsaKeyParams)
+importRsaSsaPkcs1V1_5PublicKeyFromSpki bytes { hash } _ =
     Elm.Kernel.Crypto.importRsaKey
         "public"
         "spki"
@@ -1417,8 +1417,8 @@ type ImportEcKeyError
 
 
 {-| -}
-importEcdsaPublicKeyFromRaw : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromRaw namedCurve bytes extractable _ =
+importEcdsaPublicKeyFromRaw : EcNamedCurve -> Bytes -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
+importEcdsaPublicKeyFromRaw namedCurve bytes _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "raw"
@@ -1430,8 +1430,8 @@ importEcdsaPublicKeyFromRaw namedCurve bytes extractable _ =
 
 
 {-| -}
-importEcdsaPublicKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromSpki namedCurve bytes extractable _ =
+importEcdsaPublicKeyFromSpki : EcNamedCurve -> Bytes -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
+importEcdsaPublicKeyFromSpki namedCurve bytes _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "spki"
@@ -1443,8 +1443,8 @@ importEcdsaPublicKeyFromSpki namedCurve bytes extractable _ =
 
 
 {-| -}
-importEcdsaPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
-importEcdsaPublicKeyFromJwk namedCurve jwk extractable _ =
+importEcdsaPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> SecureContext -> Task ImportEcKeyError (PublicKey EcdsaKey EcKeyParams)
+importEcdsaPublicKeyFromJwk namedCurve jwk _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "jwk"
@@ -1456,8 +1456,8 @@ importEcdsaPublicKeyFromJwk namedCurve jwk extractable _ =
 
 
 {-| -}
-importEcdhPublicKeyFromRaw : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromRaw namedCurve bytes extractable _ =
+importEcdhPublicKeyFromRaw : EcNamedCurve -> Bytes -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
+importEcdhPublicKeyFromRaw namedCurve bytes _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "raw"
@@ -1469,8 +1469,8 @@ importEcdhPublicKeyFromRaw namedCurve bytes extractable _ =
 
 
 {-| -}
-importEcdhPublicKeyFromSpki : EcNamedCurve -> Bytes -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromSpki namedCurve bytes extractable _ =
+importEcdhPublicKeyFromSpki : EcNamedCurve -> Bytes -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
+importEcdhPublicKeyFromSpki namedCurve bytes _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "spki"
@@ -1482,8 +1482,8 @@ importEcdhPublicKeyFromSpki namedCurve bytes extractable _ =
 
 
 {-| -}
-importEcdhPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> Extractable -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
-importEcdhPublicKeyFromJwk namedCurve jwk extractable _ =
+importEcdhPublicKeyFromJwk : EcNamedCurve -> Json.Encode.Value -> SecureContext -> Task ImportEcKeyError (PublicKey EcdhKey EcKeyParams)
+importEcdhPublicKeyFromJwk namedCurve jwk _ =
     Elm.Kernel.Crypto.importEcKey
         "public"
         "jwk"

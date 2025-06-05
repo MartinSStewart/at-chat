@@ -26,7 +26,7 @@ toHtml html =
         InlineImage { content, imageType } attributes children ->
             Html.img
                 (Html.Attributes.src
-                    ("data:" ++ mimeType imageType ++ ";base64," ++ Maybe.withDefault "" (VendoredBase64.fromBytes content))
+                    ("data:" ++ mimeType imageType ++ ";base64," ++ VendoredBase64.fromBytes content)
                     :: List.map toHtmlAttribute attributes
                 )
                 (List.map toHtml children)

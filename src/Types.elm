@@ -21,6 +21,7 @@ module Types exposing
     , MessageId
     , NewChannelForm
     , NewGuildForm
+    , RawKeyPair
     , RevealedSpoilers
     , ScreenCoordinate(..)
     , ServerChange(..)
@@ -137,6 +138,7 @@ type alias LoggedIn2 =
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarOffset : Float
     , sidebarPreviousOffset : Float
+    , vapidPublicKey : Maybe Bytes
     }
 
 
@@ -174,6 +176,7 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , vapidKey : Maybe RawKeyPair
     }
 
 
@@ -319,6 +322,11 @@ type BackendMsg
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | PushedMessage (Result Http.Error ())
     | GotVapidDetails PushSubscription (Result {} { jwt : String, publicKey : String })
+    | GeneratedVapidKey (Result {} RawKeyPair)
+
+
+type alias RawKeyPair =
+    { publicKey : Bytes, privateKey : Bytes }
 
 
 type LoginResult
@@ -346,6 +354,7 @@ type alias LoginData =
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , vapidPublicKey : Maybe Bytes
     }
 
 

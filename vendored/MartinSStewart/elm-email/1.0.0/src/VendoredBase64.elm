@@ -236,15 +236,10 @@ unsafeConvertChar char =
 
 {-| Convert bytes to a Base64 string.
 If you want more control over the process, you should use [`decoder`](#decoder).
-
-This function should never return `Nothing`, but it uses
-[`Bytes.Decode.decode`](https://package.elm-lang.org/packages/elm/bytes/latest/Bytes-Decode#decode),
-which returns a `Maybe String`.
-
 -}
-fromBytes : Bytes -> Maybe String
+fromBytes : Bytes -> String
 fromBytes bytes =
-    Decode.decode (decoder (Bytes.width bytes)) bytes
+    Decode.decode (decoder (Bytes.width bytes)) bytes |> Maybe.withDefault ""
 
 
 decoder : Int -> Decode.Decoder String

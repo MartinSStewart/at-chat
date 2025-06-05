@@ -17,6 +17,7 @@ port module Ports exposing
     , textInputSelectAll
     )
 
+import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -28,6 +29,7 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url exposing (Url)
+import VendoredBase64
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -60,12 +62,16 @@ port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
 
 
-registerPushSubscriptionToJs : Command FrontendOnly toMsg msg
-registerPushSubscriptionToJs =
+registerPushSubscriptionToJs : Bytes -> Command FrontendOnly toMsg msg
+registerPushSubscriptionToJs publicKey =
+    let
+        _ =
+            Debug.log "register_push_subscription_to_js" ()
+    in
     Command.sendToJs
         "register_push_subscription_to_js"
         register_push_subscription_to_js
-        (Json.Encode.string Env.vapidPublicKey)
+        (Json.Encode.string (VendoredBase64.fromBytes publicKey))
 
 
 type alias PushSubscription =

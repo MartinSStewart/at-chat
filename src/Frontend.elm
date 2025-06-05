@@ -109,7 +109,11 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= -1 && loaded.drag == NoDrag then
+                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= 1 && loaded.drag == NoDrag then
+                                let
+                                    _ =
+                                        Debug.log "offset" loggedIn.sidebarOffset
+                                in
                                 Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
 
                             else
@@ -154,7 +158,6 @@ init url key =
         , Lamdera.sendToBackend CheckLoginRequest
         , Ports.loadSounds
         , Ports.checkNotificationPermission
-        , Ports.registerPushSubscriptionToJs
         ]
     )
 
@@ -293,6 +296,7 @@ loadedInitHelper time loginData loading =
             , revealedSpoilers = Nothing
             , sidebarOffset = 1
             , sidebarPreviousOffset = 0
+            , vapidPublicKey = loginData.vapidPublicKey
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -546,15 +550,6 @@ updateLoaded msg model =
                         route : Route
                         route =
                             Route.decode url
-
-                        notificationRequest : Command FrontendOnly toMsg msg
-                        notificationRequest =
-                            case model.notificationPermission of
-                                Ports.NotAsked ->
-                                    Ports.requestNotificationPermission
-
-                                _ ->
-                                    Command.none
                     in
                     ( model
                     , Command.batch
@@ -563,7 +558,6 @@ updateLoaded msg model =
 
                           else
                             BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
-                        , notificationRequest
                         ]
                     )
 
@@ -674,7 +668,23 @@ updateLoaded msg model =
                 ( model2, cmd ) =
                     routePush model route
             in
-            ( model2, Command.batch [ cmd, notificationRequest ] )
+            ( model2
+            , Command.batch
+                [ cmd
+                , notificationRequest
+                , case model.loginStatus of
+                    LoggedIn loggedIn ->
+                        case loggedIn.vapidPublicKey of
+                            Just publicKey ->
+                                Ports.registerPushSubscriptionToJs publicKey
+
+                            Nothing ->
+                                Command.none
+
+                    NotLoggedIn _ ->
+                        Command.none
+                ]
+            )
 
         UserOverviewMsg userOverviewMsg ->
             updateLoggedIn
@@ -1757,7 +1767,7 @@ updateLoaded msg model =
         GotRegisterPushSubscription result ->
             let
                 _ =
-                    Debug.log "GotRegisterPushSubscription" result
+                    Debug.log "Got register PushSubscription" result
             in
             ( model
             , case result of

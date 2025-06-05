@@ -10,6 +10,8 @@ module Backend exposing
 import Array
 import Bytes
 import Bytes.Decode
+import Bytes.Encode
+import Crypto
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -44,6 +46,7 @@ import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
+import Task as RegularTask
 import TwoFactorAuthentication
 import Types
     exposing
@@ -56,6 +59,7 @@ import Types
         , LoginData
         , LoginResult(..)
         , LoginTokenData(..)
+        , RawKeyPair
         , ServerChange(..)
         , ToBackend(..)
         , ToBeFilledInByBackend(..)
@@ -176,6 +180,7 @@ init =
                     }
                   )
                 ]
+      , vapidKey = Nothing
       }
     , Command.none
     )
@@ -216,7 +221,18 @@ update msg model =
                         )
                         model.connections
               }
-            , Command.none
+            , Crypto.getSecureContext
+                |> RegularTask.andThen
+                    (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
+                |> RegularTask.andThen
+                    (\keyPair ->
+                        RegularTask.map2
+                            RawKeyPair
+                            (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
+                            (Crypto.exportEcdsaPrivateKeyAsPkcs8 keyPair.privateKey |> RegularTask.mapError (\_ -> {}))
+                    )
+                |> RegularTask.attempt GeneratedVapidKey
+                |> Command.fromCmd "GenerateVapidKey"
             )
 
         Disconnected sessionId clientId ->
@@ -261,26 +277,39 @@ update msg model =
             case result of
                 Ok ok ->
                     ( model
-                    , Http.request
-                        { method = "POST"
-                        , url = Url.toString request.endpoint
-                        , body = Http.emptyBody
-                        , headers =
-                            [ --Http.header "Authorization" ("vapid t=" ++ jwt4 ++ ",k=" ++ Env.vapidPublicKey)
-                              Http.header "Authorization" ("vapid t=" ++ ok.jwt ++ ", k=" ++ ok.publicKey)
-
-                            --, Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
-                            ]
-                        , expect = Http.expectWhatever PushedMessage
-                        , timeout = Just (Duration.seconds 30)
-                        , tracker = Nothing
-                        }
+                    , Command.none
+                      --, Http.request
+                      --    { method = "POST"
+                      --    , url = Url.toString request.endpoint
+                      --    , body = Http.emptyBody
+                      --    , headers =
+                      --        [ --Http.header "Authorization" ("vapid t=" ++ jwt4 ++ ",k=" ++ Env.vapidPublicKey)
+                      --          Http.header "Authorization" ("vapid t=" ++ ok.jwt ++ ", k=" ++ ok.publicKey)
+                      --
+                      --        --, Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
+                      --        ]
+                      --    , expect = Http.expectWhatever PushedMessage
+                      --    , timeout = Just (Duration.seconds 30)
+                      --    , tracker = Nothing
+                      --    }
                     )
 
                 Err _ ->
                     let
                         _ =
                             Debug.log "Crypto error" ()
+                    in
+                    ( model, Command.none )
+
+        GeneratedVapidKey result ->
+            case result of
+                Ok vapidKey ->
+                    ( { model | vapidKey = Just vapidKey }, Command.none )
+
+                Err _ ->
+                    let
+                        _ =
+                            Debug.log "Failed to generate vapid key" ()
                     in
                     ( model, Command.none )
 
@@ -319,6 +348,7 @@ getLoginData userId user model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
+    , vapidPublicKey = Maybe.map .publicKey model.vapidKey
     }
 
 

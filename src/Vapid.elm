@@ -53,7 +53,7 @@ generateRequestDetails onResult time subscriptionEndpoint =
             "{\"typ\":\"JWT\",\"alg\":\"ES256\"}"
 
         encodedHeader =
-            stringToBytes jwtConfig |> bytesToBase64
+            stringToBytes jwtConfig |> VendoredBase64.fromBytes
 
         expirationTime =
             Duration.addTo time (Duration.weeks 4)
@@ -73,7 +73,7 @@ generateRequestDetails onResult time subscriptionEndpoint =
                 ++ subject
                 ++ """}"""
                 |> stringToBytes
-                |> bytesToBase64
+                |> VendoredBase64.fromBytes
 
         securedInput : Bytes
         securedInput =
@@ -86,14 +86,14 @@ generateRequestDetails onResult time subscriptionEndpoint =
             (\keyPair ->
                 Task.map2
                     Tuple.pair
-                    (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey |> Task.mapError (\_ -> {}))
+                    (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
                     (Crypto.signWithEcdsa Crypto.Sha256 keyPair.privateKey securedInput)
                     |> Task.map
                         (\( publicKey, sig ) ->
                             { jwt =
                                 appendBytes [ securedInput, stringToBytes ".", derToJose sig ]
                                     |> bytesToString
-                            , publicKey = bytesToBase64 publicKey
+                            , publicKey = VendoredBase64.fromBytes publicKey
                             }
                         )
             )
@@ -308,11 +308,6 @@ getParamSize keySize =
 
 stringToBytes text =
     Bytes.Encode.encode (Bytes.Encode.string text)
-
-
-bytesToBase64 : Bytes -> String
-bytesToBase64 bytes =
-    VendoredBase64.fromBytes bytes |> Maybe.withDefault ""
 
 
 encodeHex : List Int -> Bytes.Encode.Encoder
