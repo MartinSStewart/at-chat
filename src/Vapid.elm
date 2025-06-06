@@ -1,4 +1,4 @@
-module Vapid exposing (bytesToHex, derToJose, encodeHex, generateRequestDetails)
+module Vapid exposing (NotificationError(..), RawKeyPair, bytesToHex, derToJose, encodeHex, generateRequestDetails)
 
 import Array
 import Bitwise
@@ -10,6 +10,7 @@ import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Env
 import Hex
+import Http
 import Sha256
 import Task exposing (Task)
 import Time
@@ -19,11 +20,12 @@ import VendoredBase64
 
 
 generateRequestDetails :
-    (Result {} { jwt : String, publicKey : String } -> msg)
+    (Result NotificationError String -> msg)
+    -> RawKeyPair
     -> Time.Posix
     -> Url
     -> Command BackendOnly toMsg msg
-generateRequestDetails onResult time subscriptionEndpoint =
+generateRequestDetails onResult keyPair time subscriptionEndpoint =
     let
         parsedUrl =
             "https://" ++ subscriptionEndpoint.host
@@ -53,7 +55,7 @@ generateRequestDetails onResult time subscriptionEndpoint =
             "{\"typ\":\"JWT\",\"alg\":\"ES256\"}"
 
         encodedHeader =
-            stringToBytes jwtConfig |> VendoredBase64.fromBytes
+            stringToBytes jwtConfig |> urlSafeBase64
 
         expirationTime =
             Duration.addTo time (Duration.weeks 4)
@@ -73,32 +75,91 @@ generateRequestDetails onResult time subscriptionEndpoint =
                 ++ subject
                 ++ """}"""
                 |> stringToBytes
-                |> VendoredBase64.fromBytes
+                |> urlSafeBase64
 
-        securedInput : Bytes
+        securedInput : String
         securedInput =
-            encodedHeader ++ "." ++ encodedPayload |> stringToBytes
+            encodedHeader ++ "." ++ encodedPayload
     in
     Crypto.getSecureContext
+        |> Task.mapError (\_ -> GetSecureContextFailed)
+        --|> Task.andThen
+        --        (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
         |> Task.andThen
-            (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
-        |> Task.andThen
-            (\keyPair ->
-                Task.map2
-                    Tuple.pair
-                    (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
-                    (Crypto.signWithEcdsa Crypto.Sha256 keyPair.privateKey securedInput)
+            (\context ->
+                Crypto.importEcdsaPrivateKeyFromPkcs8 Crypto.P256 keyPair.privateKey Crypto.CanBeExtracted context
+                    |> Task.mapError (\_ -> ImportKeyFailed)
+                    |> Task.andThen (\privateKey -> Crypto.signWithEcdsa Crypto.Sha256 privateKey (stringToBytes securedInput))
                     |> Task.map
-                        (\( publicKey, sig ) ->
-                            { jwt =
-                                appendBytes [ securedInput, stringToBytes ".", derToJose sig ]
-                                    |> bytesToString
-                            , publicKey = VendoredBase64.fromBytes publicKey
-                            }
+                        (\sig ->
+                            securedInput ++ "." ++ urlSafeBase64 (derToJose sig)
                         )
+            )
+        --|> Task.andThen
+        --    (\keyPair ->
+        --        Task.map2
+        --            Tuple.pair
+        --            (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
+        --            (Crypto.signWithEcdsa Crypto.Sha256 keyPair.privateKey securedInput)
+        --            |> Task.map
+        --                (\( publicKey, sig ) ->
+        --                    { jwt =
+        --
+        --                    , publicKey = VendoredBase64.fromBytes publicKey
+        --                    }
+        --                )
+        --    )
+        |> Task.andThen
+            (\jwt ->
+                Http.task
+                    { method = "POST"
+                    , url = Url.toString subscriptionEndpoint
+                    , body = Http.emptyBody
+                    , headers =
+                        [ --Http.header "Authorization" ("vapid t=" ++ jwt4 ++ ",k=" ++ Env.vapidPublicKey)
+                          Http.header "Authorization" ("vapid t=" ++ jwt ++ ", k=" ++ urlSafeBase64 keyPair.publicKey)
+
+                        --, Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
+                        ]
+                    , resolver =
+                        Http.stringResolver
+                            (\result ->
+                                case result of
+                                    Http.BadUrl_ badUrl ->
+                                        VapidHttpRequestFailed (Http.BadUrl badUrl) |> Err
+
+                                    Http.Timeout_ ->
+                                        VapidHttpRequestFailed Http.Timeout |> Err
+
+                                    Http.NetworkError_ ->
+                                        VapidHttpRequestFailed Http.NetworkError |> Err
+
+                                    Http.BadStatus_ metadata body ->
+                                        VapidHttpRequestFailed (Http.BadBody body) |> Err
+
+                                    Http.GoodStatus_ metadata body ->
+                                        Ok body
+                            )
+                    , timeout = Just 30000
+                    }
             )
         |> Task.attempt onResult
         |> Command.fromCmd "Crypto"
+
+
+urlSafeBase64 : Bytes -> String
+urlSafeBase64 bytes =
+    VendoredBase64.fromBytes bytes |> String.replace "=" "" |> String.replace "+" "-" |> String.replace "/" "_"
+
+
+type alias RawKeyPair =
+    { publicKey : Bytes, privateKey : Bytes }
+
+
+type NotificationError
+    = GetSecureContextFailed
+    | ImportKeyFailed
+    | VapidHttpRequestFailed Http.Error
 
 
 bytesToString : Bytes -> String

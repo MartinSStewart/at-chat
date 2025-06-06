@@ -59,7 +59,6 @@ import Types
         , LoginData
         , LoginResult(..)
         , LoginTokenData(..)
-        , RawKeyPair
         , ServerChange(..)
         , ToBackend(..)
         , ToBeFilledInByBackend(..)
@@ -221,18 +220,45 @@ update msg model =
                         )
                         model.connections
               }
-            , Crypto.getSecureContext
-                |> RegularTask.andThen
-                    (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
-                |> RegularTask.andThen
-                    (\keyPair ->
-                        RegularTask.map2
-                            RawKeyPair
-                            (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
-                            (Crypto.exportEcdsaPrivateKeyAsPkcs8 keyPair.privateKey |> RegularTask.mapError (\_ -> {}))
-                    )
-                |> RegularTask.attempt GeneratedVapidKey
-                |> Command.fromCmd "GenerateVapidKey"
+            , case model.vapidKey of
+                Just _ ->
+                    Command.none
+
+                Nothing ->
+                    Crypto.getSecureContext
+                        |> RegularTask.andThen
+                            (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
+                        |> RegularTask.andThen
+                            (\keyPair ->
+                                --RegularTask.map2
+                                --    (\_ a -> a)
+                                --    (Crypto.getSecureContext
+                                --        |> RegularTask.andThen
+                                --            (\context ->
+                                --                Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P521, extractable = Crypto.CanBeExtracted } context
+                                --                    |> RegularTask.andThen (\keys -> Crypto.exportEcdsaPrivateKeyAsPkcs8 keys.privateKey)
+                                --                    |> RegularTask.mapError (\_ -> {})
+                                --                    |> RegularTask.andThen
+                                --                        (\key ->
+                                --                            Crypto.importEcdsaPrivateKeyFromPkcs8 Crypto.P521 key Crypto.CanBeExtracted context
+                                --                                |> RegularTask.mapError
+                                --                                    (\_ ->
+                                --                                        let
+                                --                                            _ =
+                                --                                                Debug.log "importEcdsaPrivateKeyFromPkcs8" ()
+                                --                                        in
+                                --                                        {}
+                                --                                    )
+                                --                        )
+                                --            )
+                                --    )
+                                RegularTask.map2
+                                    Vapid.RawKeyPair
+                                    (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
+                                    (Crypto.exportEcdsaPrivateKeyAsPkcs8 keyPair.privateKey |> RegularTask.mapError (\_ -> {}))
+                            )
+                        |> RegularTask.attempt GeneratedVapidKey
+                        |> Command.fromCmd "GenerateVapidKey"
             )
 
         Disconnected sessionId clientId ->
@@ -273,34 +299,6 @@ update msg model =
             in
             ( model, Command.none )
 
-        GotVapidDetails request result ->
-            case result of
-                Ok ok ->
-                    ( model
-                    , Command.none
-                      --, Http.request
-                      --    { method = "POST"
-                      --    , url = Url.toString request.endpoint
-                      --    , body = Http.emptyBody
-                      --    , headers =
-                      --        [ --Http.header "Authorization" ("vapid t=" ++ jwt4 ++ ",k=" ++ Env.vapidPublicKey)
-                      --          Http.header "Authorization" ("vapid t=" ++ ok.jwt ++ ", k=" ++ ok.publicKey)
-                      --
-                      --        --, Http.header "Crypto-Key" ("p256ecdsa=" ++ request.p256dh)
-                      --        ]
-                      --    , expect = Http.expectWhatever PushedMessage
-                      --    , timeout = Just (Duration.seconds 30)
-                      --    , tracker = Nothing
-                      --    }
-                    )
-
-                Err _ ->
-                    let
-                        _ =
-                            Debug.log "Crypto error" ()
-                    in
-                    ( model, Command.none )
-
         GeneratedVapidKey result ->
             case result of
                 Ok vapidKey ->
@@ -311,6 +309,14 @@ update msg model =
                         _ =
                             Debug.log "Failed to generate vapid key" ()
                     in
+                    ( model, Command.none )
+
+        GotVapidDetails result ->
+            case Debug.log "result" result of
+                Ok ok ->
+                    ( model, Command.none )
+
+                Err error ->
                     ( model, Command.none )
 
 
@@ -901,11 +907,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
 
         RegisterPushSubscriptionRequest request ->
-            let
-                _ =
-                    Debug.log "Send notification" request
-            in
-            ( model, Vapid.generateRequestDetails (GotVapidDetails request) time request.endpoint )
+            case model.vapidKey of
+                Just vapidKey ->
+                    let
+                        _ =
+                            Debug.log "Send notification" request
+                    in
+                    ( model, Vapid.generateRequestDetails GotVapidDetails vapidKey time request.endpoint )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 joinGuildByInvite :

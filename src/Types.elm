@@ -21,7 +21,6 @@ module Types exposing
     , MessageId
     , NewChannelForm
     , NewGuildForm
-    , RawKeyPair
     , RevealedSpoilers
     , ScreenCoordinate(..)
     , ServerChange(..)
@@ -72,6 +71,7 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
+import Vapid exposing (NotificationError, RawKeyPair)
 
 
 type FrontendModel
@@ -321,12 +321,8 @@ type BackendMsg
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | PushedMessage (Result Http.Error ())
-    | GotVapidDetails PushSubscription (Result {} { jwt : String, publicKey : String })
     | GeneratedVapidKey (Result {} RawKeyPair)
-
-
-type alias RawKeyPair =
-    { publicKey : Bytes, privateKey : Bytes }
+    | GotVapidDetails (Result Vapid.NotificationError String)
 
 
 type LoginResult

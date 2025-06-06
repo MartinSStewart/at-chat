@@ -297,7 +297,7 @@ var _Crypto_importRsaKey = F7(
           keyData,
           { name: algorithm, hash: hash },
           extractable,
-          keyUsages,
+          __List_toArray(keyUsages),
         )
         .then(function (key) {
           switch (wrapper) {
@@ -328,7 +328,7 @@ var _Crypto_importAesKey = F5(
   function (format, keyData, algorithm, extractable, keyUsages) {
     return __Scheduler_binding(function (callback) {
       _Crypto_impl.subtle
-        .importKey(format, keyData, { name: algorithm }, extractable, keyUsages)
+        .importKey(format, keyData, { name: algorithm }, extractable, __List_toArray(keyUsages))
         .then(function (key) {
           return callback(__Scheduler_succeed(_Crypto_constructAesKey(key)));
         })
@@ -357,9 +357,9 @@ var _Crypto_importEcKey = F7(
           {
             name: algorithm,
             namedCurve: namedCurve,
-          },
+          } ,
           extractable,
-          keyUsages,
+          __List_toArray(keyUsages),
         )
         .then(function (key) {
           switch (wrapper) {
@@ -411,7 +411,7 @@ var _Crypto_importHmacKey = F7(
         };
       }
       _Crypto_impl.subtle
-        .importKey(format, keyData, algorithm, extractable, keyUsages)
+        .importKey(format, keyData, algorithm, extractable, __List_toArray(keyUsages))
         .then(function (key) {
           return callback(__Scheduler_succeed(_Crypto_constructHmacKey(key)));
         })

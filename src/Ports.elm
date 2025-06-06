@@ -65,13 +65,13 @@ port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
 registerPushSubscriptionToJs : Bytes -> Command FrontendOnly toMsg msg
 registerPushSubscriptionToJs publicKey =
     let
-        _ =
-            Debug.log "register_push_subscription_to_js" ()
+        publicKey2 =
+            Debug.log "register_push_subscription_to_js" (VendoredBase64.fromBytes publicKey |> String.filter (\char -> char /= '='))
     in
     Command.sendToJs
         "register_push_subscription_to_js"
         register_push_subscription_to_js
-        (Json.Encode.string (VendoredBase64.fromBytes publicKey))
+        (Json.Encode.string publicKey2)
 
 
 type alias PushSubscription =

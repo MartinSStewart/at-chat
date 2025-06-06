@@ -12,10 +12,12 @@ async function loadAudio(url, context, sounds) {
 exports.init = async function init(app)
 {
     // Register a Service Worker.
-    navigator.serviceWorker.register('/service-worker.js');
+
 
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+        navigator.serviceWorker.register('/service-worker.js');
+
         navigator.serviceWorker.ready
         .then(function(registration) {
             console.log(registration)
@@ -32,7 +34,7 @@ exports.init = async function init(app)
                 // send notifications that don't have a visible effect for the user).
                 return registration.pushManager.subscribe({
                     userVisibleOnly: true,
-                    applicationServerKey: "BNz8vNFNoA1018dOyKch2Vm5eNK9W0Zzxf2SVJL7Hd1l-LgmX4QvrE587iH3TEEthM2xh1ftwrANWvuh48IbxCg"
+                    applicationServerKey: publicKey
                 });
             });
         }).then(function(subscription) {
