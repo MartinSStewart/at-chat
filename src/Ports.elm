@@ -29,6 +29,7 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url exposing (Url)
+import Vapid
 import VendoredBase64
 
 
@@ -66,7 +67,7 @@ registerPushSubscriptionToJs : Bytes -> Command FrontendOnly toMsg msg
 registerPushSubscriptionToJs publicKey =
     let
         publicKey2 =
-            Debug.log "register_push_subscription_to_js" (VendoredBase64.fromBytes publicKey |> String.filter (\char -> char /= '='))
+            Debug.log "register_push_subscription_to_js" (Vapid.urlSafeBase64 publicKey)
     in
     Command.sendToJs
         "register_push_subscription_to_js"

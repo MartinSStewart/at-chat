@@ -179,7 +179,24 @@ init =
                     }
                   )
                 ]
-      , vapidKey = Nothing
+      , vapidKey =
+            case
+                ( Vapid.urlSafeBase64ToBytes "BKUb_vkU2YRb7d-ybxMoJ44-21RAhTHufbZ_szx2yEYtx6OosuQ0goTngtjkJiw1vs0Y5p7Y5A8c43xuLNQm4_E"
+                , Vapid.urlSafeBase64ToBytes "95RlptcaIk5N2YbDgTJV8iNdkb6e7pAkWa7EVYwJQvE"
+                )
+            of
+                ( Just public, Just private ) ->
+                    let
+                        _ =
+                            Debug.log "privateKey" (Vapid.bytesToHexString private)
+                    in
+                    { publicKey = public
+                    , privateKey = private
+                    }
+                        |> Just
+
+                _ ->
+                    Nothing
       }
     , Command.none
     )
@@ -220,6 +237,7 @@ update msg model =
                         )
                         model.connections
               }
+              --, Command.none
             , case model.vapidKey of
                 Just _ ->
                     Command.none
@@ -230,28 +248,6 @@ update msg model =
                             (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
                         |> RegularTask.andThen
                             (\keyPair ->
-                                --RegularTask.map2
-                                --    (\_ a -> a)
-                                --    (Crypto.getSecureContext
-                                --        |> RegularTask.andThen
-                                --            (\context ->
-                                --                Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P521, extractable = Crypto.CanBeExtracted } context
-                                --                    |> RegularTask.andThen (\keys -> Crypto.exportEcdsaPrivateKeyAsPkcs8 keys.privateKey)
-                                --                    |> RegularTask.mapError (\_ -> {})
-                                --                    |> RegularTask.andThen
-                                --                        (\key ->
-                                --                            Crypto.importEcdsaPrivateKeyFromPkcs8 Crypto.P521 key Crypto.CanBeExtracted context
-                                --                                |> RegularTask.mapError
-                                --                                    (\_ ->
-                                --                                        let
-                                --                                            _ =
-                                --                                                Debug.log "importEcdsaPrivateKeyFromPkcs8" ()
-                                --                                        in
-                                --                                        {}
-                                --                                    )
-                                --                        )
-                                --            )
-                                --    )
                                 RegularTask.map2
                                     Vapid.RawKeyPair
                                     (Crypto.exportEcdsaPublicKeyAsRaw keyPair.publicKey)
@@ -302,6 +298,10 @@ update msg model =
         GeneratedVapidKey result ->
             case result of
                 Ok vapidKey ->
+                    let
+                        _ =
+                            Debug.log "GeneratedVapidKey" ()
+                    in
                     ( { model | vapidKey = Just vapidKey }, Command.none )
 
                 Err _ ->

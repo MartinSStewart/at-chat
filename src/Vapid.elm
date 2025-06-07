@@ -1,4 +1,4 @@
-module Vapid exposing (NotificationError(..), RawKeyPair, bytesToHex, derToJose, encodeHex, generateRequestDetails)
+module Vapid exposing (NotificationError(..), RawKeyPair, bytesToHex, bytesToHexString, derToJose, encodeHex, generateRequestDetails, urlSafeBase64, urlSafeBase64ToBytes)
 
 import Array
 import Bitwise
@@ -27,30 +27,37 @@ generateRequestDetails :
     -> Command BackendOnly toMsg msg
 generateRequestDetails onResult keyPair time subscriptionEndpoint =
     let
+        _ =
+            Debug.log "privateKey2" (bytesToHexString keyPair.privateKey)
+    in
+    let
         parsedUrl =
             "https://" ++ subscriptionEndpoint.host
 
-        --buf : Bytes
-        --buf =
-        --    Bytes.Encode.sequence
-        --        [ encodeHex [ 0x30, 0x81, 0x35, 0x02, 0x81, 0x01, 0x01, 0x04, 0x81, 0x20 ]
-        --        , Bytes.Encode.bytes privateKey
-        --        , encodeHex [ 0xA0, 0x81, 0x0B, 0x06, 0x81, 0x08 ]
-        --        , encodeHex [ 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07 ]
-        --        ]
-        --        |> Bytes.Encode.encode
-        --
-        --p : String
-        --p =
-        --    bytesToBase64 buf
-        --
-        --pemKey =
-        --    [ "-----BEGIN EC PRIVATE KEY-----"
-        --    , String.left 64 p
-        --    , String.dropLeft 64 p
-        --    , "-----END EC PRIVATE KEY-----"
-        --    ]
-        --        |> String.join "\n"
+        buf : Bytes
+        buf =
+            Bytes.Encode.sequence
+                [ encodeHex [ 0x30, 0x81, 0x35, 0x02, 0x81, 0x01, 0x01, 0x04, 0x81, 0x20 ]
+                , Bytes.Encode.bytes keyPair.privateKey
+                , encodeHex [ 0xA0, 0x81, 0x0B, 0x06, 0x81, 0x08 ]
+                , encodeHex [ 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07 ]
+                ]
+                |> Bytes.Encode.encode
+
+        p : String
+        p =
+            VendoredBase64.fromBytes buf
+
+        pemKey : String
+        pemKey =
+            [ "-----BEGIN EC PRIVATE KEY-----"
+            , String.left 64 p
+            , String.dropLeft 64 p
+            , "-----END EC PRIVATE KEY-----"
+            ]
+                |> String.join "\n"
+                |> Debug.log "pemKey"
+
         jwtConfig =
             "{\"typ\":\"JWT\",\"alg\":\"ES256\"}"
 
@@ -58,28 +65,32 @@ generateRequestDetails onResult keyPair time subscriptionEndpoint =
             stringToBytes jwtConfig |> urlSafeBase64
 
         expirationTime =
-            Duration.addTo time (Duration.weeks 4)
-                |> Time.posixToMillis
-                |> (\a -> a // 1000)
-                |> String.fromInt
+            --Duration.addTo time (Duration.weeks 4)
+            --    |> Time.posixToMillis
+            --    |> (\a -> a // 1000)
+            --    |> String.fromInt
+            1749379987 |> String.fromInt
 
         subject =
             "https://at-chat.app"
 
+        -- {"aud":"https://fcm.googleapis.com","exp":1749379987,"sub":"https://at-chat.app"}
+        -- {"aud":"https://fcm.googleapis.com"",\"exp\":1749379987,\"sub\":\"https://at-chat.app\"\"}
+        -- {"aud":"https://fcm.googleapis.com","exp":1749379987,"sub":"https://at-chat.app"}
         encodedPayload =
-            """{"aud":"""
+            "{\"aud\":\""
                 ++ parsedUrl
-                ++ ""","exp":"""
+                ++ "\",\"exp\":"
                 ++ expirationTime
-                ++ ""","sub":"""
+                ++ ",\"sub\":\""
                 ++ subject
-                ++ """}"""
+                ++ "\"}"
                 |> stringToBytes
                 |> urlSafeBase64
 
         securedInput : String
         securedInput =
-            encodedHeader ++ "." ++ encodedPayload
+            encodedHeader ++ "." ++ encodedPayload |> Debug.log "securedInput"
     in
     Crypto.getSecureContext
         |> Task.mapError (\_ -> GetSecureContextFailed)
@@ -87,14 +98,27 @@ generateRequestDetails onResult keyPair time subscriptionEndpoint =
         --        (Crypto.generateEcdsaKeyPair { namedCurve = Crypto.P256, extractable = Crypto.CanBeExtracted })
         |> Task.andThen
             (\context ->
-                Crypto.importEcdsaPrivateKeyFromPkcs8 Crypto.P256 keyPair.privateKey Crypto.CanBeExtracted context
-                    |> Task.mapError (\_ -> ImportKeyFailed)
-                    |> Task.andThen (\privateKey -> Crypto.signWithEcdsa Crypto.Sha256 privateKey (stringToBytes securedInput))
+                --Crypto.importEcdsaPrivateKeyFromPkcs8 Crypto.P256 (stringToBytes pemKey) Crypto.CanBeExtracted context
+                Crypto.importRsaPssPrivateKeyFromPkcs8 (stringToBytes pemKey) { hash = Crypto.Sha256 } Crypto.CanBeExtracted context
+                    |> Task.mapError (\_ -> Debug.log "ImportKeyFailed" ImportKeyFailed)
+                    |> Task.andThen
+                        (\privateKey ->
+                            Crypto.signWithRsaPss
+                                { salt = 0 }
+                                privateKey
+                                (stringToBytes securedInput)
+                                |> Task.mapError (\_ -> Debug.log "Sign" SignFailed)
+                        )
                     |> Task.map
                         (\sig ->
+                            let
+                                _ =
+                                    Debug.log "sig" (bytesToHex sig)
+                            in
                             securedInput ++ "." ++ urlSafeBase64 (derToJose sig)
                         )
             )
+        -- 3046022100af7694fe695e88622eca2485d7ba6bfaee0ea8698c174e79709944612a79bcca022100ff33b3d14b86fe2025b0c86893d78f41a4a160c74bccc32aeffc409b4f627357
         --|> Task.andThen
         --    (\keyPair ->
         --        Task.map2
@@ -152,6 +176,11 @@ urlSafeBase64 bytes =
     VendoredBase64.fromBytes bytes |> String.replace "=" "" |> String.replace "+" "-" |> String.replace "/" "_"
 
 
+urlSafeBase64ToBytes : String -> Maybe Bytes
+urlSafeBase64ToBytes text =
+    String.replace "-" "+" text |> String.replace "_" "/" |> VendoredBase64.toBytes
+
+
 type alias RawKeyPair =
     { publicKey : Bytes, privateKey : Bytes }
 
@@ -159,6 +188,7 @@ type alias RawKeyPair =
 type NotificationError
     = GetSecureContextFailed
     | ImportKeyFailed
+    | SignFailed
     | VapidHttpRequestFailed Http.Error
 
 
@@ -398,3 +428,11 @@ bytesToHex bytes2 =
         )
         bytes2
         |> Maybe.withDefault Array.empty
+
+
+bytesToHexString : Bytes -> String
+bytesToHexString bytes2 =
+    bytesToHex bytes2
+        |> Array.toList
+        |> List.map (\int -> Hex.toString int |> String.padLeft 2 '0')
+        |> String.join " "
