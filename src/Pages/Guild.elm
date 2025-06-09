@@ -26,6 +26,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
+import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
 import Maybe.Extra
@@ -932,6 +933,25 @@ messageInputConfig guildId channelId =
     }
 
 
+scrollToBottomDecoder : Bool -> Json.Decode.Decoder FrontendMsg
+scrollToBottomDecoder isScrolledToBottomOfChannel =
+    Json.Decode.map3
+        (\scrollTop scrollHeight clientHeight ->
+            scrollTop + clientHeight >= scrollHeight - 5
+        )
+        (Json.Decode.at [ "target", "scrollTop" ] Json.Decode.float)
+        (Json.Decode.at [ "target", "scrollHeight" ] Json.Decode.float)
+        (Json.Decode.at [ "target", "clientHeight" ] Json.Decode.float)
+        |> Json.Decode.andThen
+            (\isAtBottom ->
+                if isAtBottom == isScrolledToBottomOfChannel then
+                    Json.Decode.fail ""
+
+                else
+                    UserScrolled { scrolledToBottomOfChannel = isAtBottom } |> Json.Decode.succeed
+            )
+
+
 conversationView :
     Id GuildId
     -> Id ChannelId
@@ -977,6 +997,7 @@ conversationView guildId channelId loggedIn model local channel =
                 , Ui.paddingXY 0 16
                 , scrollable (canScroll model)
                 , Ui.id (Dom.idToString conversationContainerId)
+                , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
                 , Ui.heightMin 0
                 ]
                 (Ui.el

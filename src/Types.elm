@@ -103,6 +103,7 @@ type alias LoadedFrontend =
     , textInputFocus : Maybe HtmlId
     , notificationPermission : NotificationPermission
     , drag : Drag
+    , scrolledToBottomOfChannel : Bool
     }
 
 
@@ -270,6 +271,7 @@ type FrontendMsg
     | OnAnimationFrameDelta Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
+    | UserScrolled { scrolledToBottomOfChannel : Bool }
 
 
 type ScreenCoordinate

@@ -28,7 +28,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, Message(..))
+import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
 import LoginForm
 import MessageInput
 import MyUi
@@ -52,6 +52,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
+import User exposing (BackendUser)
 import Vector2d exposing (Vector2d)
 
 
@@ -109,7 +110,7 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            if loggedIn.sidebarOffset /= 0 && loggedIn.sidebarOffset /= -1 && loaded.drag == NoDrag then
+                            if loggedIn.sidebarOffset <= 0 && loggedIn.sidebarOffset >= -1 && loaded.drag == NoDrag then
                                 Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
 
                             else
@@ -189,6 +190,7 @@ initLoadedFrontend loading time loginResult =
             , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
             , drag = NoDrag
+            , scrolledToBottomOfChannel = True
             }
 
         ( model2, cmdA ) =
@@ -802,7 +804,7 @@ updateLoaded msg model =
                                     | drafts = SeqDict.remove ( guildId, channelId ) loggedIn.drafts
                                     , replyTo = SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
                                 }
-                                Command.none
+                                scrollToBottomOfChannel
 
                         Nothing ->
                             ( loggedIn, Command.none )
@@ -1790,6 +1792,9 @@ updateLoaded msg model =
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none )) model
 
+        UserScrolled { scrolledToBottomOfChannel } ->
+            ( { model | scrolledToBottomOfChannel = scrolledToBottomOfChannel }, Command.none )
+
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
 isTouchingTextInput touches =
@@ -2098,11 +2103,13 @@ changeUpdate localMsg local =
                     case getGuildAndChannel guildId channelId local of
                         Just ( guild, channel ) ->
                             let
-                                user =
-                                    local.localUser.user
-
+                                localUser : LocalUser
                                 localUser =
                                     local.localUser
+
+                                user : BackendUser
+                                user =
+                                    localUser.user
                             in
                             { local
                                 | guilds =
@@ -2558,26 +2565,20 @@ updateLoadedFromBackend msg model =
                         ServerChange (Server_SendMessage userId _ guildId channelId content maybeRepliedTo) ->
                             case getGuildAndChannel guildId channelId local of
                                 Just ( _, channel ) ->
-                                    if
-                                        ((Pages.Guild.repliedToUserId maybeRepliedTo channel /= Just userId)
-                                            || RichText.mentionsUser userId content
-                                        )
-                                            && (userId /= local.localUser.userId)
-                                    then
-                                        Command.batch
-                                            [ Ports.playSound "pop"
-                                            , case model.notificationPermission of
-                                                Ports.Granted ->
-                                                    Ports.showNotification
-                                                        (Pages.Guild.userToName userId (LocalState.allUsers local))
-                                                        (RichText.toString (LocalState.allUsers local) content)
+                                    Command.batch
+                                        [ playNotificationSound
+                                            userId
+                                            maybeRepliedTo
+                                            channel
+                                            local
+                                            content
+                                            model
+                                        , if model.scrolledToBottomOfChannel then
+                                            scrollToBottomOfChannel
 
-                                                _ ->
-                                                    Command.none
-                                            ]
-
-                                    else
-                                        Command.none
+                                          else
+                                            Command.none
+                                        ]
 
                                 Nothing ->
                                     Command.none
@@ -2620,6 +2621,42 @@ updateLoadedFromBackend msg model =
                             ( loggedIn, Command.none )
                 )
                 model
+
+
+scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
+scrollToBottomOfChannel =
+    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999 |> Task.attempt (\_ -> ScrolledToBottom)
+
+
+playNotificationSound :
+    Id UserId
+    -> Maybe Int
+    -> FrontendChannel
+    -> LocalState
+    -> Nonempty RichText
+    -> LoadedFrontend
+    -> Command FrontendOnly toMsg msg
+playNotificationSound userId maybeRepliedTo channel local content model =
+    if
+        ((Pages.Guild.repliedToUserId maybeRepliedTo channel /= Just userId)
+            || RichText.mentionsUser userId content
+        )
+            && (userId /= local.localUser.userId)
+    then
+        Command.batch
+            [ Ports.playSound "pop"
+            , case model.notificationPermission of
+                Ports.Granted ->
+                    Ports.showNotification
+                        (Pages.Guild.userToName userId (LocalState.allUsers local))
+                        (RichText.toString (LocalState.allUsers local) content)
+
+                _ ->
+                    Command.none
+            ]
+
+    else
+        Command.none
 
 
 getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )

@@ -127,7 +127,7 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
         , Html.div
             [ Html.Attributes.style "pointer-events" "none"
             , Html.Attributes.style "padding" "0 9px 0 9px"
-            , Html.Attributes.style "transform" "translateY(9px)"
+            , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
             , Html.Attributes.style "white-space" "pre-wrap"
             , Html.Attributes.style "color"
                 (if text == "" then
