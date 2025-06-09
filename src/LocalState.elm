@@ -756,7 +756,7 @@ markAllChannelsAsViewed guildId guild user =
         | lastViewed =
             SeqDict.foldl
                 (\channelId channel state ->
-                    SeqDict.insert ( guildId, channelId ) (Array.length channel.messages) state
+                    SeqDict.insert ( guildId, channelId ) (Array.length channel.messages - 1) state
                 )
                 user.lastViewed
                 guild.channels

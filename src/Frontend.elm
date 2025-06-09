@@ -1664,7 +1664,12 @@ updateLoaded msg model =
         VisibilityChanged visibility ->
             case visibility of
                 Effect.Browser.Events.Visible ->
-                    ( model, setFocus model Pages.Guild.channelTextInputId )
+                    ( model
+                    , Command.batch
+                        [ setFocus model Pages.Guild.channelTextInputId
+                        , Ports.setFavicon "favicon.ico"
+                        ]
+                    )
 
                 Effect.Browser.Events.Hidden ->
                     ( model, Command.none )
@@ -1940,7 +1945,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         ( guildId, channelId )
-                                                        (Array.length channel.messages)
+                                                        (Array.length channel.messages - 1)
                                                         user.lastViewed
                                             }
                                     }
@@ -2637,14 +2642,19 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound userId maybeRepliedTo channel local content model =
+    let
+        repliedTo =
+            Pages.Guild.repliedToUserId maybeRepliedTo channel
+    in
     if
-        ((Pages.Guild.repliedToUserId maybeRepliedTo channel /= Just userId)
+        ((repliedTo /= Just userId && repliedTo /= Nothing)
             || RichText.mentionsUser userId content
         )
             && (userId /= local.localUser.userId)
     then
         Command.batch
             [ Ports.playSound "pop"
+            , Ports.setFavicon "/favicon-red.ico"
             , case model.notificationPermission of
                 Ports.Granted ->
                     Ports.showNotification

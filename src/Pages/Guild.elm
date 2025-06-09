@@ -84,7 +84,9 @@ channelHasNotifications currentUserId currentUser guildId channelId channel =
     let
         lastViewed : Int
         lastViewed =
-            SeqDict.get ( guildId, channelId ) currentUser.lastViewed |> Maybe.withDefault 0
+            SeqDict.get ( guildId, channelId ) currentUser.lastViewed
+                |> Maybe.withDefault -1
+                |> (+) 1
     in
     Array.slice lastViewed (Array.length channel.messages) channel.messages
         |> Array.toList

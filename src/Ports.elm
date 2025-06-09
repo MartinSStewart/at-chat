@@ -10,6 +10,7 @@ port module Ports exposing
     , loadSounds
     , playSound
     , requestNotificationPermission
+    , setFavicon
     , showNotification
     , textInputSelectAll
     )
@@ -47,6 +48,17 @@ port check_notification_permission_from_js : (Json.Encode.Value -> msg) -> Sub m
 
 
 port request_notification_permission : Json.Encode.Value -> Cmd msg
+
+
+port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
+
+
+setFavicon : String -> Command FrontendOnly toMsg msg
+setFavicon faviconPath =
+    Command.sendToJs
+        "martinsstewart_set_favicon_to_js"
+        martinsstewart_set_favicon_to_js
+        (Json.Encode.string faviconPath)
 
 
 requestNotificationPermission : Command FrontendOnly toMsg msg
