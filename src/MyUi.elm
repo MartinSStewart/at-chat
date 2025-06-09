@@ -667,7 +667,7 @@ inputBorder =
 
 buttonBackground : Ui.Color
 buttonBackground =
-    Ui.rgb 69 140 210
+    Ui.rgb 64 122 178
 
 
 cancelButtonBackground : Ui.Color

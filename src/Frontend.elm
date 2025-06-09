@@ -1689,7 +1689,13 @@ updateLoaded msg model =
                                         averageMove.x / toFloat (Coord.xRaw model.windowSize)
                                 in
                                 { loggedIn
-                                    | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
+                                    | sidebarOffset =
+                                        case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
+                                            ( Just _, True ) ->
+                                                loggedIn.sidebarOffset
+
+                                            _ ->
+                                                loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
                                     , sidebarPreviousOffset = loggedIn.sidebarOffset
                                 }
 
@@ -1722,7 +1728,13 @@ updateLoaded msg model =
                                         averageMove.x / toFloat (Coord.xRaw model.windowSize)
                                 in
                                 { loggedIn
-                                    | sidebarOffset = loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
+                                    | sidebarOffset =
+                                        case ( model.textInputFocus, isTouchingTextInput startTouches ) of
+                                            ( Just _, True ) ->
+                                                loggedIn.sidebarOffset
+
+                                            _ ->
+                                                loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
                                     , sidebarPreviousOffset = loggedIn.sidebarOffset
                                 }
 
@@ -1777,6 +1789,16 @@ updateLoaded msg model =
 
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none )) model
+
+
+isTouchingTextInput : NonemptyDict Int Touch -> Bool
+isTouchingTextInput touches =
+    NonemptyDict.any
+        (\_ touch ->
+            (touch.target == Pages.Guild.editMessageTextInputId)
+                || (touch.target == Pages.Guild.channelTextInputId)
+        )
+        touches
 
 
 startClosingChannelSidebar : LoggedIn2 -> LoggedIn2

@@ -1790,7 +1790,6 @@ submitButton onPress text =
         , Ui.background MyUi.buttonBackground
         , Ui.width Ui.shrink
         , Ui.rounded 8
-        , Ui.Font.color MyUi.buttonFontColor
         , Ui.Font.bold
         , Ui.borderColor MyUi.buttonBorder
         , Ui.border 1
