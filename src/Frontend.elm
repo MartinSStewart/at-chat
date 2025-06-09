@@ -440,23 +440,19 @@ routeRequest previousRoute newRoute model =
                                 NotLoggedIn _ ->
                                     model2.loginStatus
                     }
+
+                ( sameGuild, sameChannel ) =
+                    case previousRoute of
+                        Just (GuildRoute previousGuildId previousChannelRoute) ->
+                            ( guildId == previousGuildId
+                            , guildId == previousGuildId && channelRoute == previousChannelRoute
+                            )
+
+                        _ ->
+                            ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId ->
-                    let
-                        ( sameGuild, sameChannel ) =
-                            case previousRoute of
-                                Just (GuildRoute previousGuildId (ChannelRoute previousChannelId)) ->
-                                    ( guildId == previousGuildId
-                                    , guildId == previousGuildId && channelId == previousChannelId
-                                    )
-
-                                Just (GuildRoute previousGuildId _) ->
-                                    ( guildId == previousGuildId, False )
-
-                                _ ->
-                                    ( False, False )
-                    in
+                ChannelRoute _ ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
@@ -479,13 +475,43 @@ routeRequest previousRoute newRoute model =
                         model3
 
                 NewChannelRoute ->
-                    ( model3, Command.none )
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startClosingChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , Command.none
+                            )
+                        )
+                        model3
 
                 EditChannelRoute _ ->
-                    ( model3, Command.none )
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startClosingChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , Command.none
+                            )
+                        )
+                        model3
 
                 InviteLinkCreatorRoute ->
-                    ( model3, Command.none )
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startClosingChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , Command.none
+                            )
+                        )
+                        model3
 
                 JoinRoute inviteLinkId ->
                     case model3.loginStatus of

@@ -485,7 +485,7 @@ channelView channelRoute guildId guild loggedIn local model =
         NewChannelRoute ->
             SeqDict.get guildId loggedIn.newChannelForm
                 |> Maybe.withDefault newChannelFormInit
-                |> newChannelFormView guildId
+                |> newChannelFormView (isMobile model) guildId
 
         EditChannelRoute channelId ->
             case SeqDict.get channelId guild.channels of
@@ -1772,11 +1772,11 @@ editChannelFormView guildId channelId channel form =
         ]
 
 
-newChannelFormView : Id GuildId -> NewChannelForm -> Element FrontendMsg
-newChannelFormView guildId form =
+newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
+newChannelFormView isMobile2 guildId form =
     Ui.column
-        [ Ui.Font.color MyUi.font1, Ui.padding 16, Ui.alignTop, Ui.spacing 16 ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new channel")
+        [ Ui.Font.color MyUi.font1, Ui.alignTop, Ui.spacing 16 ]
+        [ channelHeader isMobile2 (Ui.text "Create new channel")
         , channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
         , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
         ]
