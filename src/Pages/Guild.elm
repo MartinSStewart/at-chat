@@ -520,16 +520,19 @@ inviteLinkCreatorForm model guildId guild =
         [ Ui.height Ui.fill ]
         (Ui.column
             [ Ui.Font.color MyUi.font1
-            , Ui.padding 16
             , Ui.alignTop
             , Ui.spacing 16
             , scrollable (canScroll model)
             ]
-            [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Invite member to guild")
-            , submitButton (PressedCreateInviteLink guildId) "Create invite link"
-            , Ui.el [ Ui.Font.bold ] (Ui.text "Existing invites")
+            [ channelHeader (isMobile model) (Ui.text "Invite member to guild")
+            , Ui.el [ Ui.paddingXY 16 0 ] (submitButton (PressedCreateInviteLink guildId) "Create invite link")
+            , if SeqDict.isEmpty guild.invites then
+                Ui.none
+
+              else
+                Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Existing invites")
             , Ui.column
-                [ Ui.spacing 8 ]
+                [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                 (SeqDict.toList guild.invites
                     |> List.sortBy (\( _, data ) -> -(Time.posixToMillis data.createdAt))
                     |> List.map
@@ -941,6 +944,9 @@ conversationView guildId channelId loggedIn model local channel =
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             LocalState.allUsers local
+
+        replyTo =
+            SeqDict.get ( guildId, channelId ) loggedIn.replyTo
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -980,7 +986,7 @@ conversationView guildId channelId loggedIn model local channel =
             )
         , Ui.column
             [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
-            [ case SeqDict.get ( guildId, channelId ) loggedIn.replyTo of
+            [ case replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
@@ -998,6 +1004,7 @@ conversationView guildId channelId loggedIn model local channel =
                 Nothing ->
                     Ui.none
             , MessageInput.view
+                (replyTo == Nothing)
                 (isMobile model)
                 (messageInputConfig guildId channelId)
                 channelTextInputId
@@ -1061,7 +1068,7 @@ replyToHeader guildId channelId userId local =
         , Ui.background MyUi.background2
         , Ui.paddingXY 32 10
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
-        , Ui.border 1
+        , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
         , Ui.borderColor MyUi.border1
         , Ui.inFront
             (Ui.el
@@ -1078,7 +1085,7 @@ replyToHeader guildId channelId userId local =
         [ Ui.text "Reply to "
         , Ui.el [ Ui.Font.bold ] (Ui.text (userToName userId (LocalState.allUsers local)))
         ]
-        |> Ui.el [ Ui.paddingXY 3 0, Ui.move { x = 0, y = 0, z = 0 } ]
+        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 0, z = 0 } ]
 
 
 dropdownButtonId : Int -> HtmlId
@@ -1188,6 +1195,7 @@ messageEditingView isMobile2 messageId message maybeRepliedTo revealedSpoilers e
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , MessageInput.view
+                    True
                     isMobile2
                     (editMessageTextInputConfig messageId.guildId messageId.channelId)
                     editMessageTextInputId

@@ -96,13 +96,13 @@ networkError msgToString currentTime (Local localModel_) =
     in
     if hasNetworkIssue then
         Ui.column
-            [ Ui.background (Ui.rgb 255 245 245)
+            [ Ui.background (Ui.rgb 77 42 42)
             , Ui.centerX
             , Ui.alignBottom
-            , Ui.padding 8
+            , Ui.paddingXY 16 8
             , Ui.rounded 8
             , Ui.border 1
-            , Ui.borderColor (Ui.rgb 240 200 200)
+            , Ui.borderColor (Ui.rgb 40 26 26)
             , Ui.Shadow.shadows
                 [ { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 6, size = -1 }
                 , { color = Ui.rgba 0 0 0 0.2, x = 0, y = 0, blur = 4, size = -2 }
@@ -121,13 +121,7 @@ networkError msgToString currentTime (Local localModel_) =
                     , Ui.scrollable
                     , Ui.heightMax 100
                     ]
-                |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 8 } ]
-            , Ui.Prose.paragraph
-                []
-                [ Ui.text "Contact "
-                , MyUi.emailAddressLink Env.contactEmail
-                , Ui.text " if you need assistance"
-                ]
+                |> Ui.el [ Ui.paddingWith { left = 0, right = 0, top = 4, bottom = 4 } ]
             ]
 
     else

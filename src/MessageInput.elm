@@ -44,8 +44,17 @@ type alias MsgConfig msg =
     }
 
 
-view : Bool -> MsgConfig msg -> HtmlId -> String -> String -> Maybe MentionUserDropdown -> LocalState -> Element msg
-view isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
+view :
+    Bool
+    -> Bool
+    -> MsgConfig msg
+    -> HtmlId
+    -> String
+    -> String
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> Element msg
+view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -152,7 +161,11 @@ view isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser
             , Ui.scrollable
             , Ui.border 1
             , Ui.borderColor MyUi.border1
-            , Ui.rounded 8
+            , if roundTopCorners then
+                Ui.rounded 8
+
+              else
+                Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
             , Ui.heightMin 0
             , Ui.heightMax 400
             , Ui.htmlAttribute (Html.Attributes.style "scrollbar-color" "black")
