@@ -13,6 +13,7 @@ module Icons exposing
     , plusIcon
     , reply
     , reset
+    , sendMessage
     , signoutSvg
     , smile
     , sortAscending
@@ -149,3 +150,15 @@ hashtag =
 arrowLeft : Html msg
 arrowLeft =
     Svg.svg [ Svg.Attributes.viewBox "0 0 16 16", Svg.Attributes.fill "currentColor" ] [ Svg.path [ Svg.Attributes.fillRule "evenodd", Svg.Attributes.d "M14 8a.75.75 0 0 1-.75.75H4.56l3.22 3.22a.75.75 0 1 1-1.06 1.06l-4.5-4.5a.75.75 0 0 1 0-1.06l4.5-4.5a.75.75 0 0 1 1.06 1.06L4.56 7.25h8.69A.75.75 0 0 1 14 8Z", Svg.Attributes.clipRule "evenodd" ] [] ]
+
+
+sendMessage : Html msg
+sendMessage =
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" ] [] ]

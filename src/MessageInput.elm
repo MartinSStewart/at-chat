@@ -7,6 +7,7 @@ import Effect.Task as Task
 import Html
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
@@ -43,8 +44,8 @@ type alias MsgConfig msg =
     }
 
 
-view : MsgConfig msg -> HtmlId -> String -> String -> Maybe MentionUserDropdown -> LocalState -> Element msg
-view msgConfig channelTextInputId placeholderText text pingUser local =
+view : Bool -> MsgConfig msg -> HtmlId -> String -> String -> Maybe MentionUserDropdown -> LocalState -> Element msg
+view isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -60,9 +61,8 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
             , Html.Attributes.style "width" "calc(100% - 18px)"
             , Html.Attributes.style "height" "calc(100% - 2px)"
             , Dom.idToAttribute channelTextInputId
-            , Html.Attributes.style "background-color" "rgb(32,40,70)"
-            , Html.Attributes.style "border" "solid 1px rgb(60,70,100)"
-            , Html.Attributes.style "border-radius" "4px"
+            , Html.Attributes.style "background-color" "transparent"
+            , Html.Attributes.style "border" "0"
             , Html.Attributes.style "resize" "none"
             , Html.Attributes.style "overflow" "hidden"
             , Html.Attributes.style "caret-color" "white"
@@ -104,7 +104,7 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
                                     if key == "ArrowUp" && text == "" then
                                         Json.Decode.succeed ( msgConfig.pressedArrowUpInEmptyInput, True )
 
-                                    else if key == "Enter" && not shiftHeld then
+                                    else if key == "Enter" && not shiftHeld && not isMobileKeyboard then
                                         Json.Decode.succeed ( msgConfig.pressedSendMessage, True )
 
                                     else
@@ -148,11 +148,33 @@ view msgConfig channelTextInputId placeholderText text pingUser local =
         ]
         |> Ui.html
         |> Ui.el
-            [ Ui.paddingWith { left = 3, right = 2, top = 0, bottom = 19 }
+            [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
             , Ui.scrollable
+            , Ui.border 1
+            , Ui.borderColor MyUi.border1
+            , Ui.rounded 8
             , Ui.heightMin 0
             , Ui.heightMax 400
             , Ui.htmlAttribute (Html.Attributes.style "scrollbar-color" "black")
+            , Ui.background MyUi.background2
+            ]
+        |> Ui.el
+            [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.Input.button msgConfig.pressedSendMessage
+                    , Ui.alignRight
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 4 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.move { x = -2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
+                    ]
+                    (Ui.html Icons.sendMessage)
+                )
             ]
 
 

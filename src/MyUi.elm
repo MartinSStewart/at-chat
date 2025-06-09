@@ -573,6 +573,8 @@ html, body {
 }
 body {
   overflow: hidden;
+  position:fixed;
+  width:100%;
 }
 """
             )
@@ -659,7 +661,7 @@ inputBorder =
 
 buttonBackground : Ui.Color
 buttonBackground =
-    Ui.rgb 220 230 240
+    Ui.rgb 69 140 210
 
 
 cancelButtonBackground : Ui.Color

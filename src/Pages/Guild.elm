@@ -304,6 +304,7 @@ guildView model guildId channelRoute loggedIn local =
                         Ui.column
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
+                            , Ui.heightMin 0
                             , Ui.clip
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
@@ -376,6 +377,7 @@ guildView model guildId channelRoute loggedIn local =
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
                                     , Ui.borderColor MyUi.border1
                                     , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
                                     ]
@@ -784,6 +786,7 @@ conversationViewHelper guildId channelId channel loggedIn local model =
                 ++ (case isEditing of
                         Just editing ->
                             messageEditingView
+                                (isMobile model)
                                 { guildId = guildId, channelId = channelId, messageIndex = index }
                                 message
                                 maybeRepliedTo
@@ -941,6 +944,7 @@ conversationView guildId channelId loggedIn model local channel =
     in
     Ui.column
         [ Ui.height Ui.fill
+        , Ui.heightMin 0
         ]
         [ channelHeader
             (isMobile model)
@@ -966,6 +970,7 @@ conversationView guildId channelId loggedIn model local channel =
                 , Ui.paddingXY 0 16
                 , scrollable (canScroll model)
                 , Ui.id (Dom.idToString conversationContainerId)
+                , Ui.heightMin 0
                 ]
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
@@ -974,7 +979,7 @@ conversationView guildId channelId loggedIn model local channel =
                 )
             )
         , Ui.column
-            [ Ui.paddingXY 2 0 ]
+            [ Ui.paddingXY 2 0, Ui.heightMin 0 ]
             [ case SeqDict.get ( guildId, channelId ) loggedIn.replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
@@ -993,6 +998,7 @@ conversationView guildId channelId loggedIn model local channel =
                 Nothing ->
                     Ui.none
             , MessageInput.view
+                (isMobile model)
                 (messageInputConfig guildId channelId)
                 channelTextInputId
                 ("Write a message in #" ++ ChannelName.toString channel.name)
@@ -1142,7 +1148,8 @@ reactionEmojiView messageIndex currentUserId reactions =
 
 
 messageEditingView :
-    MessageId
+    Bool
+    -> MessageId
     -> Message
     -> Maybe ( Int, Message )
     -> SeqDict Int (NonemptySet Int)
@@ -1150,7 +1157,7 @@ messageEditingView :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
+messageEditingView isMobile2 messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1180,6 +1187,7 @@ messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pin
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , MessageInput.view
+                    isMobile2
                     (editMessageTextInputConfig messageId.guildId messageId.channelId)
                     editMessageTextInputId
                     ""
