@@ -31,6 +31,7 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
+    , markAllChannelsAsViewed
     , memberIsEditTyping
     , memberIsTyping
     , removeReactionEmoji
@@ -743,3 +744,20 @@ removeReactionEmoji emoji userId channelId messageIndex guild =
         )
         channelId
         guild
+
+
+markAllChannelsAsViewed :
+    Id GuildId
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
+    -> BackendUser
+    -> BackendUser
+markAllChannelsAsViewed guildId guild user =
+    { user
+        | lastViewed =
+            SeqDict.foldl
+                (\channelId channel state ->
+                    SeqDict.insert ( guildId, channelId ) (Array.length channel.messages) state
+                )
+                user.lastViewed
+                guild.channels
+    }

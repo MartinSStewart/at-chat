@@ -2215,6 +2215,11 @@ changeUpdate localMsg local =
                                                 ok.owner
                                                 localUser.otherUsers
                                                 |> SeqDict.union ok.members
+                                        , user =
+                                            LocalState.markAllChannelsAsViewed
+                                                ok.guildId
+                                                ok.guild
+                                                localUser.user
                                     }
                             }
 

@@ -853,6 +853,11 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                         model2 =
                             { model
                                 | guilds = SeqDict.insert guildId guild2 model.guilds
+                                , users =
+                                    NonemptyDict.insert
+                                        userId
+                                        (LocalState.markAllChannelsAsViewed guildId guild2 user)
+                                        model.users
                             }
                     in
                     ( model2
