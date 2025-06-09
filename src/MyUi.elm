@@ -570,12 +570,11 @@ a:visited {
   color: rgb(206,193,225);
 }
 html, body {
-  overscroll-behavior-x: none;
+  overscroll-behavior: none;
 }
 body {
   overflow: hidden;
-  position:fixed;
-  width:100%;
+  height:100vh;
 }
 """
             )

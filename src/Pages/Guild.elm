@@ -5,6 +5,7 @@ module Pages.Guild exposing
     , editMessageTextInputId
     , guildView
     , homePageLoggedInView
+    , insetBottom
     , isMobile
     , messageInputConfig
     , newGuildFormInit
@@ -211,11 +212,11 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
 loggedInAsView : LocalState -> Element FrontendMsg
 loggedInAsView local =
     Ui.row
-        [ Ui.paddingXY 4 4
-        , Ui.Font.color MyUi.font2
+        [ Ui.Font.color MyUi.font2
         , Ui.borderColor MyUi.border1
         , Ui.borderWith { left = 0, bottom = 0, top = 1, right = 0 }
         , Ui.background MyUi.background1
+        , Ui.htmlAttribute (Html.Attributes.style "padding" ("4px 4px calc(" ++ insetBottom ++ " + 4px) 4px"))
         ]
         [ Ui.text (PersonName.toString local.localUser.user.name)
         , Ui.el
@@ -1018,46 +1019,57 @@ conversationView guildId channelId loggedIn model local channel =
                 )
                 loggedIn.pingUser
                 local
+            , (case
+                SeqDict.filter
+                    (\_ a ->
+                        (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
+                            && (a.messageIndex == Nothing)
+                    )
+                    (SeqDict.remove local.localUser.userId channel.lastTypedAt)
+                    |> SeqDict.keys
+               of
+                [] ->
+                    ""
+
+                [ single ] ->
+                    userToName single allUsers ++ " is typing..."
+
+                [ one, two ] ->
+                    userToName one allUsers ++ " and " ++ userToName two allUsers ++ " are typing..."
+
+                [ one, two, three ] ->
+                    userToName one allUsers
+                        ++ ", "
+                        ++ userToName two allUsers
+                        ++ ", and "
+                        ++ userToName three allUsers
+                        ++ " are typing..."
+
+                _ :: _ :: _ :: _ ->
+                    "Several people are typing..."
+              )
+                |> Ui.text
+                |> Ui.el
+                    [ Ui.Font.bold
+                    , Ui.Font.size 13
+                    , Ui.Font.color MyUi.font3
+                    , Ui.htmlAttribute (Html.Attributes.style "white-space" "pre-wrap")
+                    , MyUi.noShrinking
+                    , Ui.contentCenterY
+                    , Ui.htmlAttribute
+                        (Html.Attributes.style
+                            "padding"
+                            ("0 calc(12px + "
+                                ++ insetBottom
+                                ++ " * 0.5) "
+                                ++ insetBottom
+                                ++ " calc(12px + "
+                                ++ insetBottom
+                                ++ " * 0.5)"
+                            )
+                        )
+                    ]
             ]
-        , (case
-            SeqDict.filter
-                (\_ a ->
-                    (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
-                        && (a.messageIndex == Nothing)
-                )
-                (SeqDict.remove local.localUser.userId channel.lastTypedAt)
-                |> SeqDict.keys
-           of
-            [] ->
-                ""
-
-            [ single ] ->
-                userToName single allUsers ++ " is typing..."
-
-            [ one, two ] ->
-                userToName one allUsers ++ " and " ++ userToName two allUsers ++ " are typing..."
-
-            [ one, two, three ] ->
-                userToName one allUsers
-                    ++ ", "
-                    ++ userToName two allUsers
-                    ++ ", and "
-                    ++ userToName three allUsers
-                    ++ " are typing..."
-
-            _ :: _ :: _ :: _ ->
-                "Several people are typing..."
-          )
-            |> Ui.text
-            |> Ui.el
-                [ Ui.Font.bold
-                , Ui.Font.size 13
-                , Ui.Font.color MyUi.font3
-                , Ui.height (Ui.px 18)
-                , MyUi.noShrinking
-                , Ui.contentCenterY
-                , Ui.paddingXY 12 0
-                ]
         ]
 
 
@@ -1554,6 +1566,12 @@ insetTop =
     "env(safe-area-inset-top)"
 
 
+insetBottom : String
+insetBottom =
+    --"40px"
+    "env(safe-area-inset-bottom)"
+
+
 channelColumnContainer : List (Element msg) -> Element msg -> Element msg
 channelColumnContainer header content =
     Ui.el
@@ -1775,10 +1793,13 @@ editChannelFormView guildId channelId channel form =
 newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
-        [ Ui.Font.color MyUi.font1, Ui.alignTop, Ui.spacing 16 ]
+        [ Ui.Font.color MyUi.font1, Ui.alignTop ]
         [ channelHeader isMobile2 (Ui.text "Create new channel")
-        , channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
-        , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
+        , Ui.column
+            [ Ui.spacing 16, Ui.padding 16 ]
+            [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
+            , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
+            ]
         ]
 
 
@@ -1839,6 +1860,7 @@ newGuildFormView form =
         , Ui.height Ui.fill
         , Ui.width Ui.fill
         , Ui.background MyUi.background1
+        , Html.Attributes.style "padding-top" insetTop |> Ui.htmlAttribute
         ]
         [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new guild")
         , guildNameInput form |> Ui.map NewGuildFormChanged
