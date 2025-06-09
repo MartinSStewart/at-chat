@@ -979,7 +979,7 @@ conversationView guildId channelId loggedIn model local channel =
                 )
             )
         , Ui.column
-            [ Ui.paddingXY 2 0, Ui.heightMin 0 ]
+            [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
             [ case SeqDict.get ( guildId, channelId ) loggedIn.replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
@@ -1047,6 +1047,7 @@ conversationView guildId channelId loggedIn model local channel =
                 , Ui.Font.size 13
                 , Ui.Font.color MyUi.font3
                 , Ui.height (Ui.px 18)
+                , MyUi.noShrinking
                 , Ui.contentCenterY
                 , Ui.paddingXY 12 0
                 ]

@@ -36,6 +36,7 @@ module MyUi exposing
     , mentionColor
     , montserrat
     , noPointerEvents
+    , noShrinking
     , padding
     , primaryButton
     , radioRowWithSeparators
@@ -632,6 +633,11 @@ userLabel2Html user =
         , Html.Attributes.style "white-space" "nowrap"
         ]
         [ Html.text ("@" ++ PersonName.toString user.name) ]
+
+
+noShrinking : Ui.Attribute msg
+noShrinking =
+    Ui.htmlAttribute (Html.Attributes.style "flex-shrink" "0")
 
 
 background1 : Ui.Color
