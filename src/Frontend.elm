@@ -2567,12 +2567,12 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     Command.none
 
-                        ServerChange (Server_SendMessage userId _ guildId channelId content maybeRepliedTo) ->
+                        ServerChange (Server_SendMessage senderId _ guildId channelId content maybeRepliedTo) ->
                             case getGuildAndChannel guildId channelId local of
                                 Just ( _, channel ) ->
                                     Command.batch
                                         [ playNotificationSound
-                                            userId
+                                            senderId
                                             maybeRepliedTo
                                             channel
                                             local
@@ -2641,16 +2641,12 @@ playNotificationSound :
     -> Nonempty RichText
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
-playNotificationSound userId maybeRepliedTo channel local content model =
-    let
-        repliedTo =
-            Pages.Guild.repliedToUserId maybeRepliedTo channel
-    in
+playNotificationSound senderId maybeRepliedTo channel local content model =
     if
-        ((repliedTo /= Just userId && repliedTo /= Nothing)
-            || RichText.mentionsUser userId content
-        )
-            && (userId /= local.localUser.userId)
+        (senderId /= local.localUser.userId)
+            && ((Pages.Guild.repliedToUserId maybeRepliedTo channel == Just local.localUser.userId)
+                    || Debug.log "mentionsUser" (RichText.mentionsUser local.localUser.userId content)
+               )
     then
         Command.batch
             [ Ports.playSound "pop"
@@ -2658,7 +2654,7 @@ playNotificationSound userId maybeRepliedTo channel local content model =
             , case model.notificationPermission of
                 Ports.Granted ->
                     Ports.showNotification
-                        (Pages.Guild.userToName userId (LocalState.allUsers local))
+                        (Pages.Guild.userToName senderId (LocalState.allUsers local))
                         (RichText.toString (LocalState.allUsers local) content)
 
                 _ ->
