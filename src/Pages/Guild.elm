@@ -1029,7 +1029,7 @@ conversationView guildId channelId loggedIn model local channel =
                     |> SeqDict.keys
                of
                 [] ->
-                    ""
+                    " "
 
                 [ single ] ->
                     userToName single allUsers ++ " is typing..."
