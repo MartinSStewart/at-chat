@@ -626,6 +626,9 @@ emojiSelector =
         , Ui.border 1
         , Ui.borderColor MyUi.border1
         , Ui.Font.size 24
+        , Ui.Events.stopPropagationOn
+            "click"
+            (Json.Decode.succeed ( PressedReactionEmojiContainer, True ))
         ]
         (List.map
             (\emojiRow ->
@@ -1134,7 +1137,11 @@ messageHoverButton onPress svg =
         [ Ui.width (Ui.px 32)
         , Ui.paddingXY 4 3
         , Ui.height Ui.fill
-        , Ui.Input.button onPress
+        , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
+
+        --, Ui.Input.button onPress
+        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
+        , Ui.pointer
         ]
         (Ui.html svg)
 
@@ -1146,7 +1153,9 @@ reactionEmojiView messageIndex currentUserId reactions =
 
     else
         Ui.row
-            [ Ui.wrap, Ui.spacing 4 ]
+            [ Ui.wrap
+            , Ui.spacing 4
+            ]
             (List.map
                 (\( emoji, users ) ->
                     let

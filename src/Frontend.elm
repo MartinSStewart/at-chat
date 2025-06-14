@@ -698,9 +698,40 @@ updateLoaded msg model =
                             Command.none
 
                 ( model2, cmd ) =
-                    routePush model route
+                    updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            handleLocalChange
+                                model.time
+                                (case model.route of
+                                    GuildRoute guildId (ChannelRoute channelId) ->
+                                        case getGuildAndChannel guildId channelId local of
+                                            Just ( _, channel ) ->
+                                                Local_SetLastViewed
+                                                    guildId
+                                                    channelId
+                                                    (Array.length channel.messages - 1)
+                                                    |> Just
+
+                                            Nothing ->
+                                                Nothing
+
+                                    _ ->
+                                        Nothing
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                ( model3, routeCmd ) =
+                    routePush model2 route
             in
-            ( model2, Command.batch [ cmd, notificationRequest ] )
+            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
 
         UserOverviewMsg userOverviewMsg ->
             updateLoggedIn
@@ -1238,6 +1269,10 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         PressedShowReactionEmojiSelector messageIndex ->
+            let
+                _ =
+                    Debug.log "PressedShowReactionEmojiSelector" ()
+            in
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId) ->
                     updateLoggedIn
@@ -1800,6 +1835,20 @@ updateLoaded msg model =
         UserScrolled { scrolledToBottomOfChannel } ->
             ( { model | scrolledToBottomOfChannel = scrolledToBottomOfChannel }, Command.none )
 
+        PressedBody ->
+            let
+                _ =
+                    Debug.log "PressedBody" ()
+            in
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }, Command.none )
+                )
+                model
+
+        PressedReactionEmojiContainer ->
+            ( model, Command.none )
+
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
 isTouchingTextInput touches =
@@ -1945,7 +1994,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         ( guildId, channelId )
-                                                        (Array.length channel.messages - 1)
+                                                        (Array.length channel.messages)
                                                         user.lastViewed
                                             }
                                     }
@@ -2792,7 +2841,8 @@ layout model attributes child =
                     ]
 
                 else
-                    []
+                    [ Html.Events.onClick PressedBody |> Ui.htmlAttribute
+                    ]
                )
         )
         child

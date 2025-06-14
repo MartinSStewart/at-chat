@@ -272,6 +272,8 @@ type FrontendMsg
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
     | UserScrolled { scrolledToBottomOfChannel : Bool }
+    | PressedBody
+    | PressedReactionEmojiContainer
 
 
 type ScreenCoordinate
