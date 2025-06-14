@@ -18,6 +18,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , MessageHoverExtraOptions
     , MessageId
     , NewChannelForm
     , NewGuildForm
@@ -130,12 +131,19 @@ type alias LoggedIn2 =
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
     , messageHover : Maybe MessageId
+    , showMessageHoverExtraOptions : Maybe MessageHoverExtraOptions
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarOffset : Float
     , sidebarPreviousOffset : Float
+    }
+
+
+type alias MessageHoverExtraOptions =
+    { position : Coord CssPixels
+    , messageId : MessageId
     }
 
 
@@ -248,7 +256,7 @@ type FrontendMsg
     | KeyDown String
     | MouseEnteredMessage Int
     | MouseExitedMessage Int
-    | PressedShowReactionEmojiSelector Int
+    | PressedShowReactionEmojiSelector Int (Coord CssPixels)
     | PressedEditMessage Int
     | PressedEmojiSelectorEmoji Emoji
     | PressedReactionEmoji_Add Int Emoji
@@ -274,6 +282,8 @@ type FrontendMsg
     | UserScrolled { scrolledToBottomOfChannel : Bool }
     | PressedBody
     | PressedReactionEmojiContainer
+    | PressedShowMessageHoverExtraOptions Int (Coord CssPixels)
+    | PressedDeleteMessage MessageId
 
 
 type ScreenCoordinate
@@ -378,6 +388,7 @@ type ServerChange
     | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
+    | Server_DeleteMessage (Id UserId) MessageId
 
 
 type LocalChange
@@ -395,6 +406,7 @@ type LocalChange
     | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
     | Local_MemberEditTyping Time.Posix MessageId
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
+    | Local_DeleteMessage MessageId
 
 
 type ToBeFilledInByBackend a

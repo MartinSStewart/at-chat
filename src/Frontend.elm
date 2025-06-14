@@ -22,6 +22,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Lamdera as LamderaCore
@@ -46,10 +47,11 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
+import Ui.Input
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
@@ -293,6 +295,7 @@ loadedInitHelper time loginData loading =
             , revealedSpoilers = Nothing
             , sidebarOffset = 1
             , sidebarPreviousOffset = 0
+            , showMessageHoverExtraOptions = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -1169,20 +1172,24 @@ updateLoaded msg model =
                 "Escape" ->
                     updateLoggedIn
                         (\loggedIn ->
-                            case loggedIn.pingUser of
+                            let
+                                loggedIn2 =
+                                    { loggedIn | showMessageHoverExtraOptions = Nothing }
+                            in
+                            case loggedIn2.pingUser of
                                 Just _ ->
-                                    ( { loggedIn | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
+                                    ( { loggedIn2 | pingUser = Nothing, showEmojiSelector = EmojiSelectorHidden }
                                     , setFocus model Pages.Guild.channelTextInputId
                                     )
 
                                 Nothing ->
-                                    case loggedIn.showEmojiSelector of
+                                    case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
                                             case model.route of
                                                 GuildRoute guildId (ChannelRoute channelId) ->
                                                     let
                                                         local =
-                                                            Local.model loggedIn.localState
+                                                            Local.model loggedIn2.localState
                                                     in
                                                     handleLocalChange
                                                         model.time
@@ -1202,25 +1209,25 @@ updateLoaded msg model =
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        (if SeqDict.member ( guildId, channelId ) loggedIn.editMessage then
-                                                            { loggedIn
+                                                        (if SeqDict.member ( guildId, channelId ) loggedIn2.editMessage then
+                                                            { loggedIn2
                                                                 | editMessage =
-                                                                    SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
+                                                                    SeqDict.remove ( guildId, channelId ) loggedIn2.editMessage
                                                             }
 
                                                          else
-                                                            { loggedIn
+                                                            { loggedIn2
                                                                 | replyTo =
-                                                                    SeqDict.remove ( guildId, channelId ) loggedIn.replyTo
+                                                                    SeqDict.remove ( guildId, channelId ) loggedIn2.replyTo
                                                             }
                                                         )
                                                         (setFocus model Pages.Guild.channelTextInputId)
 
                                                 _ ->
-                                                    ( loggedIn, Command.none )
+                                                    ( loggedIn2, Command.none )
 
                                         _ ->
-                                            ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }, Command.none )
+                                            ( { loggedIn2 | showEmojiSelector = EmojiSelectorHidden }, Command.none )
                         )
                         model
 
@@ -1268,11 +1275,7 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        PressedShowReactionEmojiSelector messageIndex ->
-            let
-                _ =
-                    Debug.log "PressedShowReactionEmojiSelector" ()
-            in
+        PressedShowReactionEmojiSelector messageIndex clickedAt ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId) ->
                     updateLoggedIn
@@ -1836,18 +1839,57 @@ updateLoaded msg model =
             ( { model | scrolledToBottomOfChannel = scrolledToBottomOfChannel }, Command.none )
 
         PressedBody ->
-            let
-                _ =
-                    Debug.log "PressedBody" ()
-            in
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | showEmojiSelector = EmojiSelectorHidden }, Command.none )
+                    ( { loggedIn
+                        | showEmojiSelector = EmojiSelectorHidden
+                        , showMessageHoverExtraOptions = Nothing
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
         PressedReactionEmojiContainer ->
             ( model, Command.none )
+
+        PressedShowMessageHoverExtraOptions messageIndex clickedAt ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | showMessageHoverExtraOptions =
+                                    Just
+                                        { position =
+                                            Coord.plus
+                                                (Coord.xy (-messageHoverExtraOptionsWidth - 8) -8)
+                                                clickedAt
+                                        , messageId =
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
+                                        }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
+
+        PressedDeleteMessage messageId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_DeleteMessage messageId))
+                        { loggedIn | showMessageHoverExtraOptions = Nothing }
+                        Command.none
+                )
+                model
 
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
@@ -2151,6 +2193,28 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Local_DeleteMessage messageId ->
+                    case SeqDict.get messageId.guildId local.guilds of
+                        Just guild ->
+                            case
+                                LocalState.deleteMessage
+                                    local.localUser.userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                    guild
+                            of
+                                Ok guild2 ->
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert messageId.guildId guild2 local.guilds
+                                    }
+
+                                Err () ->
+                                    local
+
+                        Nothing ->
+                            local
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -2353,6 +2417,28 @@ changeUpdate localMsg local =
                                 )
                                 local.guilds
                     }
+
+                Server_DeleteMessage userId messageId ->
+                    case SeqDict.get messageId.guildId local.guilds of
+                        Just guild ->
+                            case
+                                LocalState.deleteMessage
+                                    userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                    guild
+                            of
+                                Ok guild2 ->
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert messageId.guildId guild2 local.guilds
+                                    }
+
+                                Err () ->
+                                    local
+
+                        Nothing ->
+                            local
 
 
 handleLocalChange :
@@ -2694,7 +2780,7 @@ playNotificationSound senderId maybeRepliedTo channel local content model =
     if
         (senderId /= local.localUser.userId)
             && ((Pages.Guild.repliedToUserId maybeRepliedTo channel == Just local.localUser.userId)
-                    || Debug.log "mentionsUser" (RichText.mentionsUser local.localUser.userId content)
+                    || RichText.mentionsUser local.localUser.userId content
                )
     then
         Command.batch
@@ -2793,6 +2879,9 @@ pendingChangesText localChange =
         Local_SetLastViewed _ _ _ ->
             "Viewed channel"
 
+        Local_DeleteMessage messageId ->
+            "Delete message"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -2802,25 +2891,32 @@ layout model attributes child =
         , breakpoints = Nothing
         }
         model.elmUiState
-        (Ui.inFront
-            (case model.loginStatus of
-                LoggedIn loggedIn ->
-                    Local.networkError
-                        (\change ->
-                            case change of
-                                LocalChange _ localChange ->
-                                    pendingChangesText localChange
+        ((case model.loginStatus of
+            LoggedIn loggedIn ->
+                [ Local.networkError
+                    (\change ->
+                        case change of
+                            LocalChange _ localChange ->
+                                pendingChangesText localChange
 
-                                ServerChange _ ->
-                                    ""
-                        )
-                        model.time
-                        loggedIn.localState
+                            ServerChange _ ->
+                                ""
+                    )
+                    model.time
+                    loggedIn.localState
+                    |> Ui.inFront
+                , case loggedIn.showMessageHoverExtraOptions of
+                    Just extraOptions ->
+                        messageHoverExtraOptionsView extraOptions |> Ui.inFront
 
-                NotLoggedIn _ ->
-                    Ui.none
-            )
-            :: Ui.Font.family [ Ui.Font.sansSerif ]
+                    Nothing ->
+                        Ui.noAttr
+                ]
+
+            NotLoggedIn _ ->
+                []
+         )
+            ++ Ui.Font.family [ Ui.Font.sansSerif ]
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
             :: Ui.Font.size 16
@@ -2846,6 +2942,57 @@ layout model attributes child =
                )
         )
         child
+
+
+messageHoverExtraOptionsWidth : number
+messageHoverExtraOptionsWidth =
+    200
+
+
+messageHoverExtraOptionsView : MessageHoverExtraOptions -> Element FrontendMsg
+messageHoverExtraOptionsView extraOptions =
+    Ui.column
+        [ Ui.move
+            { x = Coord.xRaw extraOptions.position
+            , y = Coord.yRaw extraOptions.position
+            , z = 0
+            }
+        , Ui.background MyUi.background1
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.width (Ui.px messageHoverExtraOptionsWidth)
+        , Ui.rounded 8
+        ]
+        [ messageHoverExtraOptionsButton
+            Icons.smile
+            "Add reaction emoji"
+            (PressedShowReactionEmojiSelector
+                extraOptions.messageId.messageIndex
+                extraOptions.position
+            )
+        , messageHoverExtraOptionsButton
+            Icons.reply
+            "Reply to"
+            (PressedReply extraOptions.messageId.messageIndex)
+        , Ui.el
+            [ Ui.Font.color MyUi.errorColor ]
+            (messageHoverExtraOptionsButton
+                Icons.delete
+                "Delete message"
+                (PressedDeleteMessage extraOptions.messageId)
+            )
+        ]
+
+
+messageHoverExtraOptionsButton : Html msg -> String -> msg -> Element msg
+messageHoverExtraOptionsButton icon text msg =
+    Ui.row
+        [ Ui.Input.button msg
+        , Ui.spacing 8
+        , Ui.contentCenterY
+        , Ui.paddingXY 8 8
+        ]
+        [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
 
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

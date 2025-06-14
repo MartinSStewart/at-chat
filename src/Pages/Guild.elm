@@ -15,7 +15,8 @@ module Pages.Guild exposing
 
 import Array
 import ChannelName
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -685,15 +686,15 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
         messageHoverIndex : Maybe Int
         messageHoverIndex =
-            case loggedIn.messageHover of
-                Just messageHover ->
+            case ( loggedIn.messageHover, loggedIn.showMessageHoverExtraOptions ) of
+                ( Just messageHover, Nothing ) ->
                     if messageHover.guildId == guildId && messageHover.channelId == channelId then
                         Just messageHover.messageIndex
 
                     else
                         Nothing
 
-                Nothing ->
+                _ ->
                     Nothing
 
         revealedSpoilers : SeqDict Int (NonemptySet Int)
@@ -1131,7 +1132,7 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-messageHoverButton : msg -> Html msg -> Element msg
+messageHoverButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
 messageHoverButton onPress svg =
     Ui.el
         [ Ui.width (Ui.px 32)
@@ -1140,7 +1141,12 @@ messageHoverButton onPress svg =
         , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
 
         --, Ui.Input.button onPress
-        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
+        , Ui.Events.stopPropagationOn "click"
+            (Json.Decode.map2
+                (\x y -> ( onPress (Coord.xy (round x) (round y)), True ))
+                (Json.Decode.field "clientX" Json.Decode.float)
+                (Json.Decode.field "clientY" Json.Decode.float)
+            )
         , Ui.pointer
         ]
         (Ui.html svg)
@@ -1547,23 +1553,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
                         MentionHighlight ->
                             Ui.background MyUi.hoverAndMentionColor
-                    , Ui.row
-                        [ Ui.alignRight
-                        , Ui.background MyUi.background1
-                        , Ui.rounded 4
-                        , Ui.borderColor MyUi.border1
-                        , Ui.border 1
-                        , Ui.move { x = -8, y = -16, z = 0 }
-                        , Ui.height (Ui.px 32)
-                        ]
-                        [ messageHoverButton (PressedShowReactionEmojiSelector messageIndex) Icons.smile
-                        , if canEdit then
-                            messageHoverButton (PressedEditMessage messageIndex) Icons.pencil
-
-                          else
-                            Ui.none
-                        , messageHoverButton (PressedReply messageIndex) Icons.reply
-                        ]
+                    , messageHoverMenu canEdit messageIndex
                         |> Ui.inFront
                     ]
 
@@ -1580,6 +1570,28 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                )
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
+
+
+messageHoverMenu : Bool -> Int -> Element FrontendMsg
+messageHoverMenu canEdit messageIndex =
+    Ui.row
+        [ Ui.alignRight
+        , Ui.background MyUi.background1
+        , Ui.rounded 4
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.move { x = -8, y = -16, z = 0 }
+        , Ui.height (Ui.px 32)
+        ]
+        [ messageHoverButton (PressedShowReactionEmojiSelector messageIndex) Icons.smile
+        , if canEdit then
+            messageHoverButton (\_ -> PressedEditMessage messageIndex) Icons.pencil
+
+          else
+            Ui.none
+        , messageHoverButton (\_ -> PressedReply messageIndex) Icons.reply
+        , messageHoverButton (PressedShowMessageHoverExtraOptions messageIndex) Icons.dotDotDot
+        ]
 
 
 channelColumnCanScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg

@@ -26,6 +26,7 @@ module LocalState exposing
     , createNewUser
     , deleteChannel
     , deleteChannelFrontend
+    , deleteMessage
     , editChannel
     , editMessage
     , getUser
@@ -761,3 +762,37 @@ markAllChannelsAsViewed guildId guild user =
                 user.lastViewed
                 guild.channels
     }
+
+
+deleteMessage :
+    Id UserId
+    -> Id ChannelId
+    -> Int
+    -> { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message } }
+    -> Result () { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message } }
+deleteMessage userId channelId messageIndex guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            case Array.get messageIndex channel.messages of
+                Just (UserTextMessage message) ->
+                    if message.createdBy == userId then
+                        { guild
+                            | channels =
+                                SeqDict.insert
+                                    channelId
+                                    { channel
+                                        | messages =
+                                            Array.set messageIndex DeletedMessage channel.messages
+                                    }
+                                    guild.channels
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                _ ->
+                    Err ()
+
+        Nothing ->
+            Err ()

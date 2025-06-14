@@ -814,6 +814,42 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_DeleteMessage messageId ->
+                    asGuildMember
+                        model2
+                        sessionId
+                        messageId.guildId
+                        (\userId _ guild ->
+                            case
+                                LocalState.deleteMessage
+                                    userId
+                                    messageId.channelId
+                                    messageId.messageIndex
+                                    guild
+                            of
+                                Ok guild2 ->
+                                    ( { model2
+                                        | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds
+                                      }
+                                    , Command.batch
+                                        [ Lamdera.sendToFrontend
+                                            clientId
+                                            (LocalChangeResponse changeId localMsg)
+                                        , broadcastToGuild
+                                            clientId
+                                            (Server_DeleteMessage userId messageId |> ServerChange)
+                                            model2
+                                        ]
+                                    )
+
+                                Err _ ->
+                                    ( model2
+                                    , Lamdera.sendToFrontend
+                                        clientId
+                                        (LocalChangeResponse changeId Local_Invalid)
+                                    )
+                        )
+
         UserOverviewToBackend toBackend2 ->
             asUser
                 model2
