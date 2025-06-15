@@ -1,4 +1,4 @@
-module Emoji exposing (Emoji, emojis, toString, view)
+module Emoji exposing (Emoji(..), emojis, toString, view)
 
 import Ui
 import Ui.Font
@@ -11,6 +11,8 @@ emojis =
         |> List.map UnicodeEmoji
 
 
+{-| OpaqueVariants
+-}
 type Emoji
     = UnicodeEmoji String
 
