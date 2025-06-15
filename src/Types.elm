@@ -264,6 +264,7 @@ type FrontendMsg
     | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
     | PressedPingUser (Id GuildId) (Id ChannelId) Int
     | SetFocus
+    | RemoveFocus
     | PressedArrowInDropdown (Id GuildId) Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId

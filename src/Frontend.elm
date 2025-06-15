@@ -1158,6 +1158,9 @@ updateLoaded msg model =
         SetFocus ->
             ( model, Command.none )
 
+        RemoveFocus ->
+            ( model, Command.none )
+
         PressedArrowInDropdown guildId index ->
             updateLoggedIn
                 (\loggedIn ->
@@ -1858,45 +1861,47 @@ updateLoaded msg model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    ( case loggedIn.sidebarMode of
+                    case loggedIn.sidebarMode of
                         ChannelSidebarClosed ->
-                            loggedIn
+                            ( loggedIn, Command.none )
 
                         ChannelSidebarOpened ->
-                            loggedIn
+                            ( loggedIn, Command.none )
 
                         ChannelSidebarOpening { offset } ->
                             let
                                 offset2 =
                                     offset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
                             in
-                            { loggedIn
+                            ( { loggedIn
                                 | sidebarMode =
                                     if offset2 <= 0 then
                                         ChannelSidebarOpened
 
                                     else
                                         ChannelSidebarOpening { offset = offset2 }
-                            }
+                              }
+                            , Command.none
+                            )
 
                         ChannelSidebarClosing { offset } ->
                             let
                                 offset2 =
                                     offset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
                             in
-                            { loggedIn
+                            ( { loggedIn
                                 | sidebarMode =
                                     if offset2 >= 1 then
                                         ChannelSidebarClosed
 
                                     else
                                         ChannelSidebarClosing { offset = offset2 }
-                            }
+                              }
+                            , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
+                            )
 
                         ChannelSidebarDragging _ ->
-                            loggedIn
-                    , Command.none
-                    )
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -3173,6 +3178,7 @@ layout model attributes child =
             :: Ui.behindContent (Ui.html MyUi.css)
             :: Ui.Font.size 16
             :: Ui.Font.color MyUi.font1
+            :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: attributes
             ++ (if Pages.Guild.isMobile model then
                     [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
@@ -3193,8 +3199,7 @@ layout model attributes child =
                     ]
 
                 else
-                    [ Html.Events.onClick PressedBody |> Ui.htmlAttribute
-                    ]
+                    []
                )
         )
         child
