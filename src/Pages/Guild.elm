@@ -440,15 +440,16 @@ memberColumn local guild =
 
 memberLabel : LocalState -> Id UserId -> Element msg
 memberLabel local userId =
-    Ui.el
-        [ Ui.paddingXY 4 4 ]
-        (case LocalState.getUser userId local of
+    Ui.row
+        [ Ui.spacing 8, Ui.paddingXY 4 4 ]
+        [ userProfileImage
+        , case LocalState.getUser userId local of
             Just user ->
                 Ui.text (PersonName.toString user.name)
 
             Nothing ->
                 Ui.none
-        )
+        ]
 
 
 sidebarOffsetAttr : LoggedIn2 -> LoadedFrontend -> Ui.Attribute msg
@@ -1354,6 +1355,17 @@ type HighlightMessage
     | UrlHighlight
 
 
+userProfileImage : Element msg
+userProfileImage =
+    Ui.el
+        [ Ui.background (Ui.rgb 100 100 100)
+        , Ui.rounded 99
+        , Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        ]
+        Ui.none
+
+
 messageView :
     SeqDict Int (NonemptySet Int)
     -> HighlightMessage
@@ -1391,50 +1403,63 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 localUser.userId
                 message2.reactions
                 isHovered
-                (Ui.column
-                    []
-                    [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
-                    , userToName message2.createdBy allUsers
-                        ++ " "
-                        |> Ui.text
-                        |> Ui.el [ Ui.Font.bold ]
-                    , Html.div
-                        [ Html.Attributes.style "white-space" "pre-wrap" ]
-                        (RichText.view
-                            (PressedSpoiler messageIndex)
-                            (case SeqDict.get messageIndex revealedSpoilers of
-                                Just nonempty ->
-                                    NonemptySet.toSeqSet nonempty
+                (Ui.row
+                    [ Ui.spacing 8 ]
+                    [ Ui.el
+                        [ case maybeRepliedTo of
+                            Just _ ->
+                                Ui.move { x = 0, y = 10, z = 0 }
 
-                                Nothing ->
-                                    SeqSet.empty
-                            )
-                            allUsers
-                            message2.content
-                            ++ (if isBeingEdited then
-                                    [ Html.span
-                                        [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                        , Html.Attributes.style "font-size" "12px"
-                                        ]
-                                        [ Html.text " (editing...)" ]
-                                    ]
+                            Nothing ->
+                                Ui.noAttr
+                        , Ui.width Ui.shrink
+                        ]
+                        userProfileImage
+                    , Ui.column
+                        []
+                        [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
+                        , userToName message2.createdBy allUsers
+                            ++ " "
+                            |> Ui.text
+                            |> Ui.el [ Ui.Font.bold ]
+                        , Html.div
+                            [ Html.Attributes.style "white-space" "pre-wrap" ]
+                            (RichText.view
+                                (PressedSpoiler messageIndex)
+                                (case SeqDict.get messageIndex revealedSpoilers of
+                                    Just nonempty ->
+                                        NonemptySet.toSeqSet nonempty
 
-                                else
-                                    case message2.editedAt of
-                                        Just editedAt ->
-                                            [ Html.span
-                                                [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                                , Html.Attributes.style "font-size" "12px"
-                                                , MyUi.datestamp editedAt |> Html.Attributes.title
-                                                ]
-                                                [ Html.text " (edited)" ]
+                                    Nothing ->
+                                        SeqSet.empty
+                                )
+                                allUsers
+                                message2.content
+                                ++ (if isBeingEdited then
+                                        [ Html.span
+                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                            , Html.Attributes.style "font-size" "12px"
                                             ]
+                                            [ Html.text " (editing...)" ]
+                                        ]
 
-                                        Nothing ->
-                                            []
-                               )
-                        )
-                        |> Ui.html
+                                    else
+                                        case message2.editedAt of
+                                            Just editedAt ->
+                                                [ Html.span
+                                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                                    , Html.Attributes.style "font-size" "12px"
+                                                    , MyUi.datestamp editedAt |> Html.Attributes.title
+                                                    ]
+                                                    [ Html.text " (edited)" ]
+                                                ]
+
+                                            Nothing ->
+                                                []
+                                   )
+                            )
+                            |> Ui.html
+                        ]
                     ]
                 )
 
