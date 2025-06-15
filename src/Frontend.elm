@@ -1308,6 +1308,30 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
+        AltPressedMessage messageIndex clickedAt ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId _) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | messageHover =
+                                    MessageHoverShowExtraOptions
+                                        { messageId =
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
+                                        , position = clickedAt
+                                        }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                _ ->
+                    ( model, Command.none )
+
         PressedShowReactionEmojiSelector messageIndex clickedAt ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
@@ -2106,7 +2130,6 @@ startClosingChannelSidebar loggedIn =
                         ChannelSidebarDragging { offset } ->
                             offset
                 }
-                |> Debug.log "closing"
     }
 
 

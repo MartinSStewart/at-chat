@@ -709,26 +709,6 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
         replyToIndex =
             SeqDict.get ( guildId, channelId ) loggedIn.replyTo
 
-        messageHoverIndex : Maybe Int
-        messageHoverIndex =
-            case loggedIn.messageHover of
-                MessageHoverShowExtraOptions { messageId } ->
-                    if messageId.guildId == guildId && messageId.channelId == channelId then
-                        Just messageId.messageIndex
-
-                    else
-                        Nothing
-
-                MessageHover messageHover ->
-                    if messageHover.guildId == guildId && messageHover.channelId == channelId then
-                        Just messageHover.messageIndex
-
-                    else
-                        Nothing
-
-                _ ->
-                    Nothing
-
         revealedSpoilers : SeqDict Int (NonemptySet Int)
         revealedSpoilers =
             case loggedIn.revealedSpoilers of
@@ -749,6 +729,34 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
     Array.foldr
         (\message ( index, list ) ->
             let
+                messageHover : IsHovered
+                messageHover =
+                    case loggedIn.messageHover of
+                        MessageHoverShowExtraOptions { messageId } ->
+                            if messageId.guildId == guildId && messageId.channelId == channelId then
+                                if messageId.messageIndex == index then
+                                    IsHoveredButNoMenu
+
+                                else
+                                    IsNotHovered
+
+                            else
+                                IsNotHovered
+
+                        MessageHover a ->
+                            if a.guildId == guildId && a.channelId == channelId then
+                                if a.messageIndex == index then
+                                    IsHovered
+
+                                else
+                                    IsNotHovered
+
+                            else
+                                IsNotHovered
+
+                        _ ->
+                            IsNotHovered
+
                 otherUserIsEditing : Bool
                 otherUserIsEditing =
                     SeqSet.member index othersEditing
@@ -842,75 +850,52 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
                                 local
 
                         Nothing ->
-                            if messageHoverIndex == Just index then
-                                case highlight of
-                                    NoHighlight ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    revealedSpoilers
-                                                    highlight
-                                                    True
-                                                    otherUserIsEditing
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    index
-                                                    message
+                            case messageHover of
+                                IsNotHovered ->
+                                    case highlight of
+                                        NoHighlight ->
+                                            case maybeRepliedTo of
+                                                Just _ ->
+                                                    messageView
+                                                        revealedSpoilers
+                                                        highlight
+                                                        messageHover
+                                                        otherUserIsEditing
+                                                        local.localUser
+                                                        maybeRepliedTo
+                                                        index
+                                                        message
 
-                                            Nothing ->
-                                                Ui.Lazy.lazy5
-                                                    messageViewHovered
-                                                    otherUserIsEditing
-                                                    revealedSpoilers
-                                                    local.localUser
-                                                    index
-                                                    message
+                                                Nothing ->
+                                                    Ui.Lazy.lazy5
+                                                        messageViewNotHovered
+                                                        otherUserIsEditing
+                                                        revealedSpoilers
+                                                        local.localUser
+                                                        index
+                                                        message
 
-                                    _ ->
-                                        messageView
-                                            revealedSpoilers
-                                            highlight
-                                            True
-                                            otherUserIsEditing
-                                            local.localUser
-                                            maybeRepliedTo
-                                            index
-                                            message
+                                        _ ->
+                                            messageView
+                                                revealedSpoilers
+                                                highlight
+                                                messageHover
+                                                otherUserIsEditing
+                                                local.localUser
+                                                maybeRepliedTo
+                                                index
+                                                message
 
-                            else
-                                case highlight of
-                                    NoHighlight ->
-                                        case maybeRepliedTo of
-                                            Just _ ->
-                                                messageView
-                                                    revealedSpoilers
-                                                    highlight
-                                                    False
-                                                    otherUserIsEditing
-                                                    local.localUser
-                                                    maybeRepliedTo
-                                                    index
-                                                    message
-
-                                            Nothing ->
-                                                Ui.Lazy.lazy5
-                                                    messageViewNotHovered
-                                                    otherUserIsEditing
-                                                    revealedSpoilers
-                                                    local.localUser
-                                                    index
-                                                    message
-
-                                    _ ->
-                                        messageView
-                                            revealedSpoilers
-                                            highlight
-                                            False
-                                            otherUserIsEditing
-                                            local.localUser
-                                            maybeRepliedTo
-                                            index
-                                            message
+                                _ ->
+                                    messageView
+                                        revealedSpoilers
+                                        highlight
+                                        messageHover
+                                        otherUserIsEditing
+                                        local.localUser
+                                        maybeRepliedTo
+                                        index
+                                        message
                    )
                 :: list
             )
@@ -1338,23 +1323,10 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-messageViewHovered :
-    Bool
-    -> SeqDict Int (NonemptySet Int)
-    -> LocalUser
-    -> Int
-    -> Message
-    -> Element FrontendMsg
-messageViewHovered isEditing revealedSpoilers localUser messageIndex message =
-    messageView
-        revealedSpoilers
-        NoHighlight
-        True
-        isEditing
-        localUser
-        Nothing
-        messageIndex
-        message
+type IsHovered
+    = IsNotHovered
+    | IsHovered
+    | IsHoveredButNoMenu
 
 
 messageViewNotHovered :
@@ -1368,7 +1340,7 @@ messageViewNotHovered isEditing revealedSpoilers localUser messageIndex message 
     messageView
         revealedSpoilers
         NoHighlight
-        False
+        IsNotHovered
         isEditing
         localUser
         Nothing
@@ -1386,7 +1358,7 @@ type HighlightMessage
 messageView :
     SeqDict Int (NonemptySet Int)
     -> HighlightMessage
-    -> Bool
+    -> IsHovered
     -> Bool
     -> LocalUser
     -> Maybe ( Int, Message )
@@ -1601,7 +1573,7 @@ messageContainer :
     -> Bool
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
-    -> Bool
+    -> IsHovered
     -> Element FrontendMsg
     -> Element FrontendMsg
 messageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
@@ -1613,6 +1585,12 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
         ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
          , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
+         , Ui.Events.preventDefaultOn "contextmenu"
+            (Json.Decode.map2
+                (\x y -> ( AltPressedMessage messageIndex (Coord.xy (round x) (round y)), True ))
+                (Json.Decode.field "clientX" Json.Decode.float)
+                (Json.Decode.field "clientY" Json.Decode.float)
+            )
          , Ui.paddingWith
             { left = 8
             , right = 8
@@ -1627,36 +1605,51 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
          , Ui.spacing 4
          , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
          ]
-            ++ (if isHovered then
-                    [ case highlight of
-                        NoHighlight ->
-                            Ui.background MyUi.hoverHighlight
+            ++ (case isHovered of
+                    IsNotHovered ->
+                        case highlight of
+                            NoHighlight ->
+                                []
 
-                        ReplyToHighlight ->
-                            Ui.background MyUi.hoverAndReplyToColor
+                            ReplyToHighlight ->
+                                [ Ui.background MyUi.replyToColor ]
 
-                        MentionHighlight ->
-                            Ui.background MyUi.hoverAndMentionColor
+                            MentionHighlight ->
+                                [ Ui.background MyUi.mentionColor ]
 
-                        UrlHighlight ->
-                            Ui.background MyUi.hoverAndReplyToColor
-                    , messageHoverMenu canEdit messageIndex
-                        |> Ui.inFront
-                    ]
+                            UrlHighlight ->
+                                [ Ui.background MyUi.replyToColor ]
 
-                else
-                    case highlight of
-                        NoHighlight ->
-                            []
+                    IsHovered ->
+                        [ case highlight of
+                            NoHighlight ->
+                                Ui.background MyUi.hoverHighlight
 
-                        ReplyToHighlight ->
-                            [ Ui.background MyUi.replyToColor ]
+                            ReplyToHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
 
-                        MentionHighlight ->
-                            [ Ui.background MyUi.mentionColor ]
+                            MentionHighlight ->
+                                Ui.background MyUi.hoverAndMentionColor
 
-                        UrlHighlight ->
-                            [ Ui.background MyUi.replyToColor ]
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        , messageHoverMenu canEdit messageIndex
+                            |> Ui.inFront
+                        ]
+
+                    IsHoveredButNoMenu ->
+                        case highlight of
+                            NoHighlight ->
+                                [ Ui.background MyUi.hoverHighlight ]
+
+                            ReplyToHighlight ->
+                                [ Ui.background MyUi.hoverAndReplyToColor ]
+
+                            MentionHighlight ->
+                                [ Ui.background MyUi.hoverAndMentionColor ]
+
+                            UrlHighlight ->
+                                [ Ui.background MyUi.hoverAndReplyToColor ]
                )
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)

@@ -270,6 +270,7 @@ type FrontendMsg
     | KeyDown String
     | MouseEnteredMessage Int
     | MouseExitedMessage Int
+    | AltPressedMessage Int (Coord CssPixels)
     | PressedShowReactionEmojiSelector Int (Coord CssPixels)
     | PressedEditMessage Int
     | PressedEmojiSelectorEmoji Emoji
