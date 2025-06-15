@@ -112,7 +112,7 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            if loggedIn.sidebarOffset <= 0 && loggedIn.sidebarOffset >= -1 && loaded.drag == NoDrag then
+                            if loggedIn.sidebarOffset > 0 && loggedIn.sidebarOffset < 1 && loaded.drag == NoDrag then
                                 Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
 
                             else
