@@ -1404,15 +1404,22 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 message2.reactions
                 isHovered
                 (Ui.row
-                    [ Ui.spacing 8 ]
+                    []
                     [ Ui.el
-                        [ case maybeRepliedTo of
-                            Just _ ->
-                                Ui.move { x = 0, y = 10, z = 0 }
+                        [ Ui.paddingWith
+                            { left = 0
+                            , right = 8
+                            , top =
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        22
 
-                            Nothing ->
-                                Ui.noAttr
+                                    Nothing ->
+                                        2
+                            , bottom = 0
+                            }
                         , Ui.width Ui.shrink
+                        , Ui.alignTop
                         ]
                         userProfileImage
                     , Ui.column
