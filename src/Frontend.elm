@@ -1332,7 +1332,7 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        PressedShowReactionEmojiSelector messageIndex clickedAt ->
+        PressedShowReactionEmojiSelector messageIndex _ ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
@@ -3127,7 +3127,7 @@ pendingChangesText localChange =
         Local_SetLastViewed _ _ _ ->
             "Viewed channel"
 
-        Local_DeleteMessage messageId ->
+        Local_DeleteMessage _ ->
             "Delete message"
 
 

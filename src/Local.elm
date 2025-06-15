@@ -2,8 +2,6 @@ module Local exposing (ChangeId, Local, init, model, networkError, update, updat
 
 import Dict exposing (Dict)
 import Duration
-import Env
-import MyUi
 import Quantity
 import Time
 import Ui exposing (Element)

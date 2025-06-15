@@ -17,7 +17,6 @@ module MyUi exposing
     , deleteButtonBackground
     , deleteButtonFont
     , emailAddress
-    , emailAddressLink
     , errorBox
     , errorColor
     , font1
@@ -352,16 +351,6 @@ textLinkColor =
 emailAddress : EmailAddress -> Element msg
 emailAddress emailAddress2 =
     Ui.el [ Ui.Font.bold ] (Ui.text (EmailAddress.toString emailAddress2))
-
-
-emailAddressLink : EmailAddress -> Element msg
-emailAddressLink emailAddress2 =
-    Ui.el
-        [ Ui.link ("mailto:" ++ EmailAddress.toString emailAddress2)
-        , Ui.Font.color textLinkColor
-        , Ui.Font.underline
-        ]
-        (Ui.text (EmailAddress.toString emailAddress2))
 
 
 radioRowWithSeparators : List (Ui.Attribute msg) -> a -> (a -> msg) -> Element msg -> List (List ( a, String )) -> Element msg

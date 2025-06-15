@@ -6,7 +6,6 @@ module Pages.Guild exposing
     , editMessageTextInputId
     , guildView
     , homePageLoggedInView
-    , insetBottom
     , isMobile
     , messageHtmlId
     , messageInputConfig

@@ -9,11 +9,9 @@ module User exposing
     , sectionToString
     )
 
-import Array exposing (Array)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Id exposing (ChannelId, GuildId, Id)
-import NonemptyDict exposing (NonemptyDict)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
