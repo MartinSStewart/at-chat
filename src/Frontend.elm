@@ -6,7 +6,8 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Duration exposing (Seconds)
+import Duration exposing (Duration, Seconds)
+import Ease
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
@@ -47,7 +48,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -112,11 +113,21 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            if loggedIn.sidebarOffset > 0 && loggedIn.sidebarOffset < 1 && loaded.drag == NoDrag then
-                                Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+                            case loggedIn.sidebarMode of
+                                ChannelSidebarOpened ->
+                                    Subscription.none
 
-                            else
-                                Subscription.none
+                                ChannelSidebarClosed ->
+                                    Subscription.none
+
+                                ChannelSidebarDragging _ ->
+                                    Subscription.none
+
+                                ChannelSidebarClosing _ ->
+                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+
+                                ChannelSidebarOpening _ ->
+                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
 
                         NotLoggedIn _ ->
                             Subscription.none
@@ -293,8 +304,7 @@ loadedInitHelper time loginData loading =
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
-            , sidebarOffset = 1
-            , sidebarPreviousOffset = 0
+            , sidebarMode = ChannelSidebarOpened
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -460,7 +470,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
-                                startClosingChannelSidebar loggedIn
+                                startOpeningChannelSidebar loggedIn
 
                               else
                                 loggedIn
@@ -488,7 +498,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
-                                startClosingChannelSidebar loggedIn
+                                startOpeningChannelSidebar loggedIn
 
                               else
                                 loggedIn
@@ -501,7 +511,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
-                                startClosingChannelSidebar loggedIn
+                                startOpeningChannelSidebar loggedIn
 
                               else
                                 loggedIn
@@ -514,7 +524,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
-                                startClosingChannelSidebar loggedIn
+                                startOpeningChannelSidebar loggedIn
 
                               else
                                 loggedIn
@@ -1738,10 +1748,10 @@ updateLoaded msg model =
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
 
-        TouchStart touches ->
+        TouchStart _ touches ->
             ( { model | drag = DragStart touches }, Command.none )
 
-        TouchMoved newTouches ->
+        TouchMoved time newTouches ->
             case model.drag of
                 Dragging dragging ->
                     updateLoggedIn
@@ -1757,14 +1767,13 @@ updateLoaded msg model =
                                         averageMove.x / toFloat (Coord.xRaw model.windowSize)
                                 in
                                 { loggedIn
-                                    | sidebarOffset =
+                                    | sidebarMode =
                                         case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
                                             ( Just _, True ) ->
-                                                loggedIn.sidebarOffset
+                                                loggedIn.sidebarMode
 
                                             _ ->
-                                                loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
-                                    , sidebarPreviousOffset = loggedIn.sidebarOffset
+                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
                                 }
 
                               else
@@ -1796,14 +1805,13 @@ updateLoaded msg model =
                                         averageMove.x / toFloat (Coord.xRaw model.windowSize)
                                 in
                                 { loggedIn
-                                    | sidebarOffset =
+                                    | sidebarMode =
                                         case ( model.textInputFocus, isTouchingTextInput startTouches ) of
                                             ( Just _, True ) ->
-                                                loggedIn.sidebarOffset
+                                                loggedIn.sidebarMode
 
                                             _ ->
-                                                loggedIn.sidebarOffset + tHorizontal |> clamp 0 1
-                                    , sidebarPreviousOffset = loggedIn.sidebarOffset
+                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
                                 }
 
                               else
@@ -1813,40 +1821,56 @@ updateLoaded msg model =
                         )
                         { model | drag = Dragging { horizontalStart = horizontalStart, touches = startTouches } }
 
-        TouchEnd ->
-            ( { model | drag = NoDrag }, Command.none )
+        TouchEnd time ->
+            handleTouchEnd time model
 
-        TouchCancel ->
-            ( { model | drag = NoDrag }, Command.none )
+        TouchCancel time ->
+            handleTouchEnd time model
 
         OnAnimationFrameDelta delta ->
+            let
+                _ =
+                    Debug.log "Animation frame" ()
+            in
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
-                        sidebarDelta =
-                            loggedIn.sidebarOffset
-                                - loggedIn.sidebarPreviousOffset
-                                |> (*) (toFloat (Coord.xRaw model.windowSize))
-                                |> CssPixels.cssPixels
-                                |> Quantity.per (Duration.seconds (1 / 60))
-                    in
-                    ( { loggedIn
-                        | sidebarOffset =
-                            (if
-                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
-                                    || ((loggedIn.sidebarOffset < 0.5)
-                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
-                                       )
-                             then
-                                loggedIn.sidebarOffset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                    ( case loggedIn.sidebarMode of
+                        ChannelSidebarClosed ->
+                            loggedIn
 
-                             else
-                                loggedIn.sidebarOffset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
-                            )
-                                |> clamp 0 1
-                        , sidebarPreviousOffset = loggedIn.sidebarOffset
-                      }
+                        ChannelSidebarOpened ->
+                            loggedIn
+
+                        ChannelSidebarOpening { offset } ->
+                            let
+                                offset2 =
+                                    offset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                            in
+                            { loggedIn
+                                | sidebarMode =
+                                    if offset2 <= 0 then
+                                        ChannelSidebarOpened
+
+                                    else
+                                        ChannelSidebarOpening { offset = offset2 }
+                            }
+
+                        ChannelSidebarClosing { offset } ->
+                            let
+                                offset2 =
+                                    offset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                            in
+                            { loggedIn
+                                | sidebarMode =
+                                    if offset2 >= 1 then
+                                        ChannelSidebarClosed
+
+                                    else
+                                        ChannelSidebarClosing { offset = offset2 }
+                            }
+
+                        ChannelSidebarDragging _ ->
+                            loggedIn
                     , Command.none
                     )
                 )
@@ -1856,7 +1880,7 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedChannelHeaderBackButton ->
-            updateLoggedIn (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none )) model
+            updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
         UserScrolled { scrolledToBottomOfChannel } ->
             ( { model | scrolledToBottomOfChannel = scrolledToBottomOfChannel }, Command.none )
@@ -1943,6 +1967,67 @@ updateLoaded msg model =
             ( model, Command.none )
 
 
+handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleTouchEnd time model =
+    updateLoggedIn
+        (\loggedIn ->
+            ( case loggedIn.sidebarMode of
+                ChannelSidebarDragging a ->
+                    let
+                        delta : Duration
+                        delta =
+                            Duration.from a.time time
+
+                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
+                        sidebarDelta =
+                            a.offset
+                                - a.previousOffset
+                                |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                |> CssPixels.cssPixels
+                                |> Quantity.per delta
+                    in
+                    { loggedIn
+                        | sidebarMode =
+                            if
+                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
+                                    || ((a.offset < 0.5)
+                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
+                                       )
+                            then
+                                ChannelSidebarOpening { offset = clamp 0 1 a.offset }
+
+                            else
+                                ChannelSidebarClosing { offset = clamp 0 1 a.offset }
+                    }
+
+                _ ->
+                    loggedIn
+            , Command.none
+            )
+        )
+        { model | drag = NoDrag }
+
+
+dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode
+dragChannelSidebar time delta sidebar =
+    case sidebar of
+        ChannelSidebarClosed ->
+            ChannelSidebarDragging { offset = 1, previousOffset = 1, time = time }
+
+        ChannelSidebarOpened ->
+            ChannelSidebarDragging { offset = 0, previousOffset = 0, time = time }
+
+        ChannelSidebarClosing { offset } ->
+            ChannelSidebarDragging { offset = clamp 0 1 (offset + delta), previousOffset = offset, time = time }
+
+        ChannelSidebarOpening { offset } ->
+            ChannelSidebarDragging { offset = clamp 0 1 (offset + delta), previousOffset = offset, time = time }
+
+        ChannelSidebarDragging record ->
+            ChannelSidebarDragging
+                { record | offset = clamp 0 1 (record.offset + delta), time = time }
+
+
 smoothScroll : HtmlId -> Task FrontendOnly Dom.Error ()
 smoothScroll targetId =
     Task.map2
@@ -1960,6 +2045,7 @@ smoothScroll targetId =
                 else
                     smoothScrollY
                         0
+                        viewport.x
                         viewport.y
                         (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
             )
@@ -1967,22 +2053,25 @@ smoothScroll targetId =
 
 smoothScrollSteps : number
 smoothScrollSteps =
-    10
+    20
 
 
-smoothScrollY : Int -> Float -> Float -> Task FrontendOnly Dom.Error ()
-smoothScrollY stepsLeft startY endY =
+smoothScrollY : Int -> Float -> Float -> Float -> Task FrontendOnly Dom.Error ()
+smoothScrollY stepsLeft x startY endY =
     let
+        t =
+            toFloat stepsLeft / smoothScrollSteps |> Ease.inOutQuart
+
         y : Float
         y =
-            startY + (endY - startY) * (toFloat stepsLeft / smoothScrollSteps)
+            startY + (endY - startY) * t
     in
     if stepsLeft > smoothScrollSteps then
         Task.succeed ()
 
     else
-        Dom.setViewportOf Pages.Guild.conversationContainerId 0 y
-            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) startY endY)
+        Dom.setViewportOf Pages.Guild.conversationContainerId x y
+            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) x startY endY)
 
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
@@ -1998,18 +2087,51 @@ isTouchingTextInput touches =
 startClosingChannelSidebar : LoggedIn2 -> LoggedIn2
 startClosingChannelSidebar loggedIn =
     { loggedIn
-        | sidebarOffset =
-            loggedIn.sidebarOffset
-                - Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+        | sidebarMode =
+            ChannelSidebarClosing
+                { offset =
+                    case loggedIn.sidebarMode of
+                        ChannelSidebarClosing { offset } ->
+                            offset
+
+                        ChannelSidebarClosed ->
+                            1
+
+                        ChannelSidebarOpened ->
+                            0
+
+                        ChannelSidebarOpening { offset } ->
+                            offset
+
+                        ChannelSidebarDragging { offset } ->
+                            offset
+                }
+                |> Debug.log "closing"
     }
 
 
 startOpeningChannelSidebar : LoggedIn2 -> LoggedIn2
 startOpeningChannelSidebar loggedIn =
     { loggedIn
-        | sidebarOffset =
-            loggedIn.sidebarOffset
-                + Quantity.unwrap (Quantity.for (Duration.seconds (1 / 60)) sidebarSpeed)
+        | sidebarMode =
+            ChannelSidebarOpening
+                { offset =
+                    case loggedIn.sidebarMode of
+                        ChannelSidebarClosing { offset } ->
+                            offset
+
+                        ChannelSidebarClosed ->
+                            1
+
+                        ChannelSidebarOpened ->
+                            0
+
+                        ChannelSidebarOpening { offset } ->
+                            offset
+
+                        ChannelSidebarDragging { offset } ->
+                            offset
+                }
     }
 
 
@@ -2037,7 +2159,7 @@ averageTouchMove oldTouches newTouches =
 
 sidebarSpeed : Quantity Float (Rate Unitless Seconds)
 sidebarSpeed =
-    Quantity.float 8 |> Quantity.per Duration.second
+    Quantity.float 7 |> Quantity.per Duration.second
 
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
@@ -3030,16 +3152,20 @@ layout model attributes child =
             :: Ui.Font.color MyUi.font1
             :: attributes
             ++ (if Pages.Guild.isMobile model then
-                    [ Html.Events.preventDefaultOn
-                        "touchstart"
-                        (touchEventDecoder TouchStart |> Json.Decode.map (\a -> ( a, False )))
+                    [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
+                    , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
+                    , Html.Events.on
+                        "touchend"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchEnd)
+                        )
                         |> Ui.htmlAttribute
-                    , Html.Events.preventDefaultOn
-                        "touchmove"
-                        (touchEventDecoder TouchMoved |> Json.Decode.map (\a -> ( a, False )))
+                    , Html.Events.on
+                        "touchcancel"
+                        (Json.Decode.field "timeStamp" Json.Decode.float
+                            |> Json.Decode.map (\time -> round time |> Time.millisToPosix |> TouchCancel)
+                        )
                         |> Ui.htmlAttribute
-                    , Html.Events.on "touchend" (Json.Decode.succeed TouchEnd) |> Ui.htmlAttribute
-                    , Html.Events.on "touchcancel" (Json.Decode.succeed TouchCancel) |> Ui.htmlAttribute
                     , Ui.clip
                     ]
 
@@ -3137,14 +3263,17 @@ routeReplace model route =
     BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
 
 
-touchEventDecoder : (NonemptyDict Int Touch -> msg) -> Decoder msg
+touchEventDecoder : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
 touchEventDecoder msg =
-    Json.Decode.field "touches" (dynamicListOf touchDecoder)
+    Json.Decode.map2
+        Tuple.pair
+        (Json.Decode.field "touches" (dynamicListOf touchDecoder))
+        (Json.Decode.field "timeStamp" Json.Decode.float)
         |> Json.Decode.andThen
-            (\list ->
+            (\( list, time ) ->
                 case NonemptyDict.fromList list of
                     Just nonempty ->
-                        msg nonempty |> Json.Decode.succeed
+                        msg (round time |> Time.millisToPosix) nonempty |> Json.Decode.succeed
 
                     Nothing ->
                         Json.Decode.fail ""

@@ -2,6 +2,7 @@ module Types exposing
     ( AdminStatusLoginData(..)
     , BackendModel
     , BackendMsg(..)
+    , ChannelSidebarMode(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -136,9 +137,16 @@ type alias LoggedIn2 =
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
-    , sidebarOffset : Float
-    , sidebarPreviousOffset : Float
+    , sidebarMode : ChannelSidebarMode
     }
+
+
+type ChannelSidebarMode
+    = ChannelSidebarClosed
+    | ChannelSidebarOpened
+    | ChannelSidebarClosing { offset : Float }
+    | ChannelSidebarOpening { offset : Float }
+    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
 
 
 type MessageHover
@@ -278,10 +286,10 @@ type FrontendMsg
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
-    | TouchStart (NonemptyDict Int Touch)
-    | TouchMoved (NonemptyDict Int Touch)
-    | TouchEnd
-    | TouchCancel
+    | TouchStart Time.Posix (NonemptyDict Int Touch)
+    | TouchMoved Time.Posix (NonemptyDict Int Touch)
+    | TouchEnd Time.Posix
+    | TouchCancel Time.Posix
     | OnAnimationFrameDelta Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton

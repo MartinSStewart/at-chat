@@ -461,7 +461,23 @@ sidebarOffsetAttr loggedIn model =
 
         offset : Float
         offset =
-            loggedIn.sidebarOffset * toFloat width
+            (case loggedIn.sidebarMode of
+                Types.ChannelSidebarClosed ->
+                    1
+
+                Types.ChannelSidebarOpened ->
+                    0
+
+                Types.ChannelSidebarClosing a ->
+                    a.offset
+
+                Types.ChannelSidebarOpening a ->
+                    a.offset
+
+                Types.ChannelSidebarDragging a ->
+                    a.offset
+            )
+                * toFloat width
     in
     Ui.move
         { x =
