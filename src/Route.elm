@@ -22,7 +22,7 @@ type Route
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId)
+    = ChannelRoute (Id ChannelId) (Maybe Int)
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
@@ -67,10 +67,20 @@ decode url =
             case Id.fromString guildId of
                 Just guildId2 ->
                     case rest of
+                        [ "c", channelId, "m", messageIndex ] ->
+                            case Id.fromString channelId of
+                                Just channelId2 ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute channelId2 (String.toInt messageIndex))
+
+                                Nothing ->
+                                    HomePageRoute
+
                         [ "c", channelId ] ->
                             case Id.fromString channelId of
                                 Just channelId2 ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2)
+                                    GuildRoute guildId2 (ChannelRoute channelId2 Nothing)
 
                                 Nothing ->
                                     HomePageRoute
@@ -135,8 +145,15 @@ encode route =
                 GuildRoute guildId maybeChannelId ->
                     ( [ "g", Id.toString guildId ]
                         ++ (case maybeChannelId of
-                                ChannelRoute channelId ->
+                                ChannelRoute channelId maybeMessageIndex ->
                                     [ "c", Id.toString channelId ]
+                                        ++ (case maybeMessageIndex of
+                                                Just messageIndex ->
+                                                    [ "m", String.fromInt messageIndex ]
+
+                                                Nothing ->
+                                                    []
+                                           )
 
                                 EditChannelRoute channelId ->
                                     [ "c", Id.toString channelId, "edit" ]

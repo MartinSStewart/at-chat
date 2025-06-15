@@ -18,6 +18,7 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
+    , MessageHover(..)
     , MessageHoverExtraOptions
     , MessageId
     , NewChannelForm
@@ -130,8 +131,7 @@ type alias LoggedIn2 =
     , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
-    , messageHover : Maybe MessageId
-    , showMessageHoverExtraOptions : Maybe MessageHoverExtraOptions
+    , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
@@ -139,6 +139,12 @@ type alias LoggedIn2 =
     , sidebarOffset : Float
     , sidebarPreviousOffset : Float
     }
+
+
+type MessageHover
+    = NoMessageHover
+    | MessageHover MessageId
+    | MessageHoverShowExtraOptions MessageHoverExtraOptions
 
 
 type alias MessageHoverExtraOptions =
@@ -284,6 +290,8 @@ type FrontendMsg
     | PressedReactionEmojiContainer
     | PressedShowMessageHoverExtraOptions Int (Coord CssPixels)
     | PressedDeleteMessage MessageId
+    | PressedReplyLink Int
+    | ScrolledToMessage
 
 
 type ScreenCoordinate

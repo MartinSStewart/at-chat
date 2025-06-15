@@ -14,7 +14,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task
+import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import EmailAddress
 import Env
@@ -47,7 +47,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -105,7 +105,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _) ->
+                        GuildRoute _ (ChannelRoute _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -288,14 +288,13 @@ loadedInitHelper time loginData loading =
             , channelNameHover = Nothing
             , typingDebouncer = True
             , pingUser = Nothing
-            , messageHover = Nothing
+            , messageHover = NoMessageHover
             , showEmojiSelector = EmojiSelectorHidden
             , editMessage = SeqDict.empty
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
             , sidebarOffset = 1
             , sidebarPreviousOffset = 0
-            , showMessageHoverExtraOptions = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -457,7 +456,7 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute _ ->
+                ChannelRoute _ maybeMessageIndex ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
@@ -467,13 +466,19 @@ routeRequest previousRoute newRoute model =
                                 loggedIn
                             , Command.batch
                                 [ setFocus model3 Pages.Guild.channelTextInputId
-                                , if sameChannel then
-                                    Command.none
+                                , case maybeMessageIndex of
+                                    Just messageIndex ->
+                                        smoothScroll (Pages.Guild.messageHtmlId messageIndex)
+                                            |> Task.attempt (\_ -> ScrolledToMessage)
 
-                                  else
-                                    Process.sleep Duration.millisecond
-                                        |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                        |> Task.attempt (\_ -> ScrolledToBottom)
+                                    Nothing ->
+                                        if sameChannel then
+                                            Command.none
+
+                                        else
+                                            Process.sleep Duration.millisecond
+                                                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                                |> Task.attempt (\_ -> ScrolledToBottom)
                                 ]
                             )
                         )
@@ -541,7 +546,7 @@ routeRequest previousRoute newRoute model =
                                     Just guild ->
                                         routeReplace
                                             model3
-                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel Nothing))
 
                                     Nothing ->
                                         Command.none
@@ -600,6 +605,10 @@ updateLoaded msg model =
                     ( model, BrowserNavigation.load url )
 
         UrlChanged url ->
+            let
+                _ =
+                    Debug.log "" url
+            in
             routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
@@ -711,7 +720,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (case model.route of
-                                    GuildRoute guildId (ChannelRoute channelId) ->
+                                    GuildRoute guildId (ChannelRoute channelId _) ->
                                         case getGuildAndChannel guildId channelId local of
                                             Just ( _, channel ) ->
                                                 Local_SetLastViewed
@@ -889,7 +898,7 @@ updateLoaded msg model =
                                 ( model2, routeCmd ) =
                                     routePush
                                         { model | loginStatus = LoggedIn loggedIn2 }
-                                        (GuildRoute guildId (ChannelRoute nextChannelId))
+                                        (GuildRoute guildId (ChannelRoute nextChannelId Nothing))
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
 
@@ -961,7 +970,7 @@ updateLoaded msg model =
                                             SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                     }
                         }
-                        (GuildRoute guildId (ChannelRoute channelId))
+                        (GuildRoute guildId (ChannelRoute channelId Nothing))
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1006,7 +1015,10 @@ updateLoaded msg model =
                                 Just guild ->
                                     routePush
                                         model
-                                        (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute guild.announcementChannel Nothing)
+                                        )
 
                                 Nothing ->
                                     ( model, Command.none )
@@ -1174,7 +1186,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             let
                                 loggedIn2 =
-                                    { loggedIn | showMessageHoverExtraOptions = Nothing }
+                                    { loggedIn | messageHover = NoMessageHover }
                             in
                             case loggedIn2.pingUser of
                                 Just _ ->
@@ -1186,7 +1198,7 @@ updateLoaded msg model =
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
                                             case model.route of
-                                                GuildRoute guildId (ChannelRoute channelId) ->
+                                                GuildRoute guildId (ChannelRoute channelId _) ->
                                                     let
                                                         local =
                                                             Local.model loggedIn2.localState
@@ -1235,34 +1247,45 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         MouseEnteredMessage messageIndex ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
-                    updateLoggedIn
-                        (\loggedIn ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case ( model.route, loggedIn.messageHover ) of
+                        ( _, MessageHoverShowExtraOptions _ ) ->
+                            ( loggedIn, Command.none )
+
+                        ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
                             ( { loggedIn
                                 | messageHover =
-                                    Just { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                    MessageHover
+                                        { guildId = guildId
+                                        , channelId = channelId
+                                        , messageIndex = messageIndex
+                                        }
                               }
                             , Command.none
                             )
-                        )
-                        model
 
-                _ ->
-                    ( model, Command.none )
+                        _ ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         MouseExitedMessage messageIndex ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
                                 | messageHover =
                                     if
-                                        Just { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                        MessageHover
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
                                             == loggedIn.messageHover
                                     then
-                                        Nothing
+                                        NoMessageHover
 
                                     else
                                         loggedIn.messageHover
@@ -1277,7 +1300,7 @@ updateLoaded msg model =
 
         PressedShowReactionEmojiSelector messageIndex clickedAt ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -1295,7 +1318,7 @@ updateLoaded msg model =
 
         PressedEditMessage messageIndex ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             let
@@ -1354,7 +1377,7 @@ updateLoaded msg model =
 
         PressedReactionEmoji_Add messageIndex emoji ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
@@ -1374,7 +1397,7 @@ updateLoaded msg model =
 
         PressedReactionEmoji_Remove messageIndex emoji ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
@@ -1621,7 +1644,7 @@ updateLoaded msg model =
 
         PressedReply messageIndex ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
@@ -1648,7 +1671,7 @@ updateLoaded msg model =
 
         PressedSpoiler messageIndex spoilerIndex ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             let
@@ -1843,7 +1866,16 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | showEmojiSelector = EmojiSelectorHidden
-                        , showMessageHoverExtraOptions = Nothing
+                        , messageHover =
+                            case loggedIn.messageHover of
+                                MessageHoverShowExtraOptions _ ->
+                                    NoMessageHover
+
+                                MessageHover _ ->
+                                    loggedIn.messageHover
+
+                                NoMessageHover ->
+                                    loggedIn.messageHover
                       }
                     , Command.none
                     )
@@ -1855,12 +1887,12 @@ updateLoaded msg model =
 
         PressedShowMessageHoverExtraOptions messageIndex clickedAt ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId) ->
+                GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | showMessageHoverExtraOptions =
-                                    Just
+                                | messageHover =
+                                    MessageHoverShowExtraOptions
                                         { position =
                                             Coord.plus
                                                 (Coord.xy (-messageHoverExtraOptionsWidth - 8) -8)
@@ -1886,10 +1918,71 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (Just (Local_DeleteMessage messageId))
-                        { loggedIn | showMessageHoverExtraOptions = Nothing }
+                        { loggedIn | messageHover = NoMessageHover }
                         Command.none
                 )
                 model
+
+        PressedReplyLink messageIndex ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId _) ->
+                    routePush model (GuildRoute guildId (ChannelRoute channelId (Just messageIndex)))
+
+                --updateLoggedIn
+                --    (\loggedIn ->
+                --        ( loggedIn
+                --        , smoothScroll (Pages.Guild.messageHtmlId messageIndex)
+                --            |> Task.attempt (\_ -> ScrolledToMessage)
+                --        )
+                --    )
+                --    model
+                _ ->
+                    ( model, Command.none )
+
+        ScrolledToMessage ->
+            ( model, Command.none )
+
+
+smoothScroll : HtmlId -> Task FrontendOnly Dom.Error ()
+smoothScroll targetId =
+    Task.map2
+        Tuple.pair
+        (Dom.getElement targetId)
+        (Dom.getViewportOf Pages.Guild.conversationContainerId)
+        |> Task.andThen
+            (\( { element }, { viewport } ) ->
+                if element.y > 0 then
+                    Dom.setViewportOf
+                        Pages.Guild.conversationContainerId
+                        0
+                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
+
+                else
+                    smoothScrollY
+                        0
+                        viewport.y
+                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
+            )
+
+
+smoothScrollSteps : number
+smoothScrollSteps =
+    10
+
+
+smoothScrollY : Int -> Float -> Float -> Task FrontendOnly Dom.Error ()
+smoothScrollY stepsLeft startY endY =
+    let
+        y : Float
+        y =
+            startY + (endY - startY) * (toFloat stepsLeft / smoothScrollSteps)
+    in
+    if stepsLeft > smoothScrollSteps then
+        Task.succeed ()
+
+    else
+        Dom.setViewportOf Pages.Guild.conversationContainerId 0 y
+            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) startY endY)
 
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
@@ -2665,7 +2758,12 @@ updateLoadedFromBackend msg model =
                         Local_NewGuild _ _ (FilledInByBackend guildId) ->
                             case SeqDict.get guildId (Local.model localState).guilds of
                                 Just guild ->
-                                    routeReplace model (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+                                    routeReplace
+                                        model
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute guild.announcementChannel Nothing)
+                                        )
 
                                 Nothing ->
                                     Command.none
@@ -2694,7 +2792,12 @@ updateLoadedFromBackend msg model =
                             case model.route of
                                 GuildRoute inviteGuildId _ ->
                                     if inviteGuildId == guildId then
-                                        routeReplace model (GuildRoute guildId (ChannelRoute guild.announcementChannel))
+                                        routeReplace
+                                            model
+                                            (GuildRoute
+                                                guildId
+                                                (ChannelRoute guild.announcementChannel Nothing)
+                                            )
 
                                     else
                                         Command.none
@@ -2905,11 +3008,15 @@ layout model attributes child =
                     model.time
                     loggedIn.localState
                     |> Ui.inFront
-                , case loggedIn.showMessageHoverExtraOptions of
-                    Just extraOptions ->
-                        messageHoverExtraOptionsView extraOptions |> Ui.inFront
+                , case loggedIn.messageHover of
+                    MessageHoverShowExtraOptions extraOptions ->
+                        messageHoverExtraOptionsView extraOptions (Local.model loggedIn.localState)
+                            |> Ui.inFront
 
-                    Nothing ->
+                    MessageHover _ ->
+                        Ui.noAttr
+
+                    NoMessageHover ->
                         Ui.noAttr
                 ]
 
@@ -2949,8 +3056,28 @@ messageHoverExtraOptionsWidth =
     200
 
 
-messageHoverExtraOptionsView : MessageHoverExtraOptions -> Element FrontendMsg
-messageHoverExtraOptionsView extraOptions =
+messageHoverExtraOptionsView : MessageHoverExtraOptions -> LocalState -> Element FrontendMsg
+messageHoverExtraOptionsView extraOptions local =
+    let
+        messageId =
+            extraOptions.messageId
+
+        canDelete : Bool
+        canDelete =
+            case SeqDict.get messageId.guildId local.guilds of
+                Just guild ->
+                    LocalState.deleteMessage
+                        local.localUser.userId
+                        messageId.channelId
+                        messageId.messageIndex
+                        guild
+                        /= Err ()
+
+                Nothing ->
+                    False
+
+        --case Array.get messageId.messageIndex channel.messages of
+    in
     Ui.column
         [ Ui.move
             { x = Coord.xRaw extraOptions.position
@@ -2967,20 +3094,21 @@ messageHoverExtraOptionsView extraOptions =
             Icons.smile
             "Add reaction emoji"
             (PressedShowReactionEmojiSelector
-                extraOptions.messageId.messageIndex
+                messageId.messageIndex
                 extraOptions.position
             )
-        , messageHoverExtraOptionsButton
-            Icons.reply
-            "Reply to"
-            (PressedReply extraOptions.messageId.messageIndex)
-        , Ui.el
-            [ Ui.Font.color MyUi.errorColor ]
-            (messageHoverExtraOptionsButton
-                Icons.delete
-                "Delete message"
-                (PressedDeleteMessage extraOptions.messageId)
-            )
+        , messageHoverExtraOptionsButton Icons.reply "Reply to" (PressedReply messageId.messageIndex)
+        , if canDelete then
+            Ui.el
+                [ Ui.Font.color MyUi.errorColor ]
+                (messageHoverExtraOptionsButton
+                    Icons.delete
+                    "Delete message"
+                    (PressedDeleteMessage messageId)
+                )
+
+          else
+            Ui.none
         ]
 
 
@@ -2990,7 +3118,7 @@ messageHoverExtraOptionsButton icon text msg =
         [ Ui.Input.button msg
         , Ui.spacing 8
         , Ui.contentCenterY
-        , Ui.paddingXY 8 8
+        , Ui.paddingXY 8 6
         ]
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
 
@@ -3115,7 +3243,7 @@ view model =
                                 layout
                                     loaded
                                     [ case loaded.route of
-                                        GuildRoute guildId (ChannelRoute channelId) ->
+                                        GuildRoute guildId (ChannelRoute channelId _) ->
                                             case
                                                 MessageInput.pingDropdownView
                                                     (Pages.Guild.messageInputConfig guildId channelId)

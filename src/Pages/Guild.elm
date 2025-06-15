@@ -1,5 +1,6 @@
 module Pages.Guild exposing
-    ( channelTextInputId
+    ( channelHeaderHeight
+    , channelTextInputId
     , conversationContainerId
     , dropdownButtonId
     , editMessageTextInputId
@@ -7,6 +8,7 @@ module Pages.Guild exposing
     , homePageLoggedInView
     , insetBottom
     , isMobile
+    , messageHtmlId
     , messageInputConfig
     , newGuildFormInit
     , repliedToUserId
@@ -42,7 +44,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageId, NewChannelForm, NewGuildForm)
+import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -189,7 +191,13 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
                 :: List.map
                     (\( guildId, guild ) ->
                         Ui.el
-                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute guild.announcementChannel)))
+                            [ Ui.Input.button
+                                (PressedLink
+                                    (GuildRoute
+                                        guildId
+                                        (ChannelRoute guild.announcementChannel Nothing)
+                                    )
+                                )
                             ]
                             (GuildIcon.view
                                 (case route of
@@ -473,10 +481,10 @@ sidebarOffsetAttr loggedIn model =
 channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
-        ChannelRoute channelId ->
+        ChannelRoute channelId maybeMessageHighlight ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    conversationView guildId channelId loggedIn model local channel
+                    conversationView guildId channelId maybeMessageHighlight loggedIn model local channel
 
                 Nothing ->
                     Ui.el
@@ -655,12 +663,13 @@ emojiSelector =
 conversationViewHelper :
     Id GuildId
     -> Id ChannelId
+    -> Maybe Int
     -> FrontendChannel
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper guildId channelId channel loggedIn local model =
+conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn local model =
     let
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -686,8 +695,15 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
         messageHoverIndex : Maybe Int
         messageHoverIndex =
-            case ( loggedIn.messageHover, loggedIn.showMessageHoverExtraOptions ) of
-                ( Just messageHover, Nothing ) ->
+            case loggedIn.messageHover of
+                MessageHoverShowExtraOptions { messageId } ->
+                    if messageId.guildId == guildId && messageId.channelId == channelId then
+                        Just messageId.messageIndex
+
+                    else
+                        Nothing
+
+                MessageHover messageHover ->
                     if messageHover.guildId == guildId && messageHover.channelId == channelId then
                         Just messageHover.messageIndex
 
@@ -736,7 +752,10 @@ conversationViewHelper guildId channelId channel loggedIn local model =
 
                 highlight : HighlightMessage
                 highlight =
-                    if replyToIndex == Just index then
+                    if maybeMessageHighlight == Just index then
+                        UrlHighlight
+
+                    else if replyToIndex == Just index then
                         ReplyToHighlight
 
                     else
@@ -892,6 +911,8 @@ channelHeader isMobile2 content =
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
         , Ui.borderColor MyUi.border2
         , Ui.background MyUi.background3
+        , Ui.height (Ui.px channelHeaderHeight)
+        , MyUi.noShrinking
         ]
         (if isMobile2 then
             [ Ui.el
@@ -904,12 +925,17 @@ channelHeader isMobile2 content =
                 , Ui.padding 8
                 ]
                 (Ui.html Icons.arrowLeft)
-            , Ui.el [ Ui.paddingXY 0 8 ] content
+            , Ui.el [] content
             ]
 
          else
-            [ Ui.el [ Ui.paddingXY 16 8 ] content ]
+            [ Ui.el [ Ui.paddingXY 16 0 ] content ]
         )
+
+
+channelHeaderHeight : number
+channelHeaderHeight =
+    40
 
 
 scrollable : Bool -> Ui.Attribute msg
@@ -961,12 +987,13 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
 conversationView :
     Id GuildId
     -> Id ChannelId
+    -> Maybe Int
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
     -> FrontendChannel
     -> Element FrontendMsg
-conversationView guildId channelId loggedIn model local channel =
+conversationView guildId channelId maybeMessageHighlight loggedIn model local channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -1009,7 +1036,14 @@ conversationView guildId channelId loggedIn model local channel =
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
                     (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
-                    :: conversationViewHelper guildId channelId channel loggedIn local model
+                    :: conversationViewHelper
+                        guildId
+                        channelId
+                        maybeMessageHighlight
+                        channel
+                        loggedIn
+                        local
+                        model
                 )
             )
         , Ui.column
@@ -1237,6 +1271,7 @@ messageEditingView isMobile2 messageId message maybeRepliedTo revealedSpoilers e
                             4
                     }
                 , Ui.spacing 4
+                , messageHtmlId messageId.messageIndex |> Dom.idToString |> Ui.id
                 ]
                 [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
@@ -1329,6 +1364,7 @@ type HighlightMessage
     = NoHighlight
     | ReplyToHighlight
     | MentionHighlight
+    | UrlHighlight
 
 
 messageView :
@@ -1426,7 +1462,26 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 (userJoinedContent userId allUsers)
 
         DeletedMessage ->
-            Ui.el [ Ui.Font.color MyUi.font3, Ui.Font.italic ] (Ui.text "Message deleted")
+            Ui.el
+                [ Ui.Font.color MyUi.font3
+                , Ui.Font.italic
+                , Ui.Font.size 14
+                , Ui.paddingXY 8 4
+                , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
+                , case highlight of
+                    NoHighlight ->
+                        Ui.noAttr
+
+                    ReplyToHighlight ->
+                        Ui.noAttr
+
+                    MentionHighlight ->
+                        Ui.noAttr
+
+                    UrlHighlight ->
+                        Ui.background MyUi.hoverAndReplyToColor
+                ]
+                (Ui.text "Message deleted")
 
 
 repliedToMessage :
@@ -1438,6 +1493,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
     case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             repliedToHeaderHelper
+                repliedToIndex
                 (Html.div
                     [ Html.Attributes.style "white-space" "nowrap"
                     , Html.Attributes.style "overflow" "hidden"
@@ -1463,22 +1519,33 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                     |> Ui.html
                 )
 
-        Just ( _, UserJoinedMessage _ userId _ ) ->
-            repliedToHeaderHelper (userJoinedContent userId allUsers)
+        Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
+            repliedToHeaderHelper repliedToIndex (userJoinedContent userId allUsers)
 
-        Just ( _, DeletedMessage ) ->
-            Ui.none
+        Just ( repliedToIndex, DeletedMessage ) ->
+            repliedToHeaderHelper
+                repliedToIndex
+                (Ui.el
+                    [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
+                    (Ui.text "Message deleted")
+                )
 
         Nothing ->
             Ui.none
 
 
-repliedToHeaderHelper : Element msg -> Element msg
-repliedToHeaderHelper content =
+messageHtmlId : Int -> HtmlId
+messageHtmlId messageIndex =
+    "guild_message_" ++ String.fromInt messageIndex |> Dom.id
+
+
+repliedToHeaderHelper : Int -> Element FrontendMsg -> Element FrontendMsg
+repliedToHeaderHelper messageIndex content =
     Ui.row
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
+        , Ui.Input.button (PressedReplyLink messageIndex)
         ]
         [ Ui.el
             [ Ui.width (Ui.px 18)
@@ -1542,6 +1609,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                     4
             }
          , Ui.spacing 4
+         , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
          ]
             ++ (if isHovered then
                     [ case highlight of
@@ -1553,6 +1621,9 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
                         MentionHighlight ->
                             Ui.background MyUi.hoverAndMentionColor
+
+                        UrlHighlight ->
+                            Ui.background MyUi.hoverAndReplyToColor
                     , messageHoverMenu canEdit messageIndex
                         |> Ui.inFront
                     ]
@@ -1567,6 +1638,9 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
                         MentionHighlight ->
                             [ Ui.background MyUi.mentionColor ]
+
+                        UrlHighlight ->
+                            [ Ui.background MyUi.replyToColor ]
                )
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
@@ -1674,7 +1748,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                         isSelected : Bool
                         isSelected =
                             case channelRoute of
-                                ChannelRoute a ->
+                                ChannelRoute a _ ->
                                     a == channelId
 
                                 _ ->
@@ -1695,7 +1769,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                         , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
                         ]
                         [ Ui.row
-                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId)))
+                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId Nothing)))
                             , Ui.paddingWith
                                 { left = 8
                                 , right =
@@ -1704,11 +1778,14 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
 
                                     else
                                         8
-                                , top = 8
-                                , bottom = 8
+                                , top = 0
+                                , bottom = 0
                                 }
+                            , MyUi.noShrinking
+                            , Ui.height (Ui.px channelHeaderHeight)
                             , Ui.clipWithEllipsis
                             , MyUi.hoverText (ChannelName.toString channel.name)
+                            , Ui.contentCenterY
                             ]
                             [ Ui.el
                                 [ channelHasNotifications currentUserId currentUser guildId channelId channel
