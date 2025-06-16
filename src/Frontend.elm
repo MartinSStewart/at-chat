@@ -1341,7 +1341,7 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        PressedShowReactionEmojiSelector messageIndex _ ->
+        MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
@@ -1369,7 +1369,7 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        PressedEditMessage messageIndex ->
+        MessageMenu_PressedEditMessage messageIndex ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
@@ -1708,7 +1708,7 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedReply messageIndex ->
+        MessageMenu_PressedReply messageIndex ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
@@ -1963,7 +1963,7 @@ updateLoaded msg model =
         PressedReactionEmojiContainer ->
             ( model, Command.none )
 
-        PressedShowMessageHoverExtraOptions messageIndex clickedAt ->
+        MessageMenu_PressedShowFullMenu messageIndex clickedAt ->
             case model.route of
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
@@ -1990,7 +1990,7 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        PressedDeleteMessage messageId ->
+        MessageMenu_PressedDeleteMessage messageId ->
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
@@ -2012,11 +2012,20 @@ updateLoaded msg model =
         ScrolledToMessage ->
             ( model, Command.none )
 
-        PressedCloseMessageHoverExtraOptions ->
+        MessageMenu_PressedClose ->
             updateLoggedIn (\loggedIn -> ( MessageMenu.close model loggedIn, Command.none )) model
 
-        PressedMessageHoverExtraOptionsContainer ->
+        MessageMenu_PressedContainer ->
             ( model, Command.none )
+
+        PressedCancelMessageEdit guildId channelId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | editMessage = SeqDict.remove ( guildId, channelId ) loggedIn.editMessage }
+                    , Command.none
+                    )
+                )
+                model
 
 
 handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3065,7 +3074,7 @@ playNotificationSound senderId maybeRepliedTo channel local content model =
             , case model.notificationPermission of
                 Ports.Granted ->
                     Ports.showNotification
-                        (User.userToName senderId (LocalState.allUsers local))
+                        (User.toString senderId (LocalState.allUsers local))
                         (RichText.toString (LocalState.allUsers local) content)
 
                 _ ->

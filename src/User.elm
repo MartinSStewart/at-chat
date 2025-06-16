@@ -7,7 +7,7 @@ module User exposing
     , backendToFrontend
     , backendToFrontendForUser
     , sectionToString
-    , userToName
+    , toString
     )
 
 import Effect.Time as Time
@@ -92,8 +92,8 @@ backendToFrontendForUser user =
     }
 
 
-userToName : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
-userToName userId allUsers =
+toString : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
+toString userId allUsers =
     case SeqDict.get userId allUsers of
         Just user ->
             PersonName.toString user.name

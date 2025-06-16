@@ -67,10 +67,10 @@ view model extraOptions local =
             , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
             , Ui.background MyUi.background1
             , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
-            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
+            , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
             (Ui.el
-                [ Ui.paddingXY 0 4, Ui.Input.button PressedCloseMessageHoverExtraOptions ]
+                [ Ui.paddingXY 0 4, Ui.Input.button MessageMenu_PressedClose ]
                 (Ui.el
                     [ Ui.background (Ui.rgb 40 50 60)
                     , Ui.rounded 99
@@ -102,7 +102,7 @@ view model extraOptions local =
             , Ui.borderColor MyUi.border1
             , Ui.width (Ui.px width)
             , Ui.rounded 8
-            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
+            , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
             (items extraOptions messageId local model)
 
@@ -118,19 +118,19 @@ miniView canEdit messageIndex =
         , Ui.move { x = -8, y = -16, z = 0 }
         , Ui.height (Ui.px 32)
         ]
-        [ messageHoverButton (PressedShowReactionEmojiSelector messageIndex) Icons.smile
+        [ miniButton (MessageMenu_PressedShowReactionEmojiSelector messageIndex) Icons.smile
         , if canEdit then
-            messageHoverButton (\_ -> PressedEditMessage messageIndex) Icons.pencil
+            miniButton (\_ -> MessageMenu_PressedEditMessage messageIndex) Icons.pencil
 
           else
             Ui.none
-        , messageHoverButton (\_ -> PressedReply messageIndex) Icons.reply
-        , messageHoverButton (PressedShowMessageHoverExtraOptions messageIndex) Icons.dotDotDot
+        , miniButton (\_ -> MessageMenu_PressedReply messageIndex) Icons.reply
+        , miniButton (MessageMenu_PressedShowFullMenu messageIndex) Icons.dotDotDot
         ]
 
 
-messageHoverButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
-messageHoverButton onPress svg =
+miniButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
+miniButton onPress svg =
     Ui.el
         [ Ui.width (Ui.px 32)
         , Ui.paddingXY 4 3
@@ -181,7 +181,7 @@ items extraOptions messageId local model =
                                     RichText.toString (LocalState.allUsers local) a.content
 
                                 UserJoinedMessage _ userId _ ->
-                                    User.userToName userId (LocalState.allUsers local)
+                                    User.toString userId (LocalState.allUsers local)
                                         ++ " joined!"
 
                                 DeletedMessage ->
@@ -190,16 +190,16 @@ items extraOptions messageId local model =
                     [ button
                         Icons.smile
                         "Add reaction emoji"
-                        (PressedShowReactionEmojiSelector
+                        (MessageMenu_PressedShowReactionEmojiSelector
                             messageId.messageIndex
                             extraOptions.position
                         )
                     , if canEditAndDelete then
-                        button Icons.pencil "Edit message" (PressedEditMessage messageId.messageIndex)
+                        button Icons.pencil "Edit message" (MessageMenu_PressedEditMessage messageId.messageIndex)
 
                       else
                         Ui.none
-                    , button Icons.reply "Reply to" (PressedReply messageId.messageIndex)
+                    , button Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex)
                     , button
                         Icons.copyIcon
                         (case model.lastCopied of
@@ -220,7 +220,7 @@ items extraOptions messageId local model =
                             (button
                                 Icons.delete
                                 "Delete message"
-                                (PressedDeleteMessage messageId)
+                                (MessageMenu_PressedDeleteMessage messageId)
                             )
 
                       else

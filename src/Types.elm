@@ -274,8 +274,8 @@ type FrontendMsg
     | MouseEnteredMessage Int
     | MouseExitedMessage Int
     | AltPressedMessage Int (Coord CssPixels)
-    | PressedShowReactionEmojiSelector Int (Coord CssPixels)
-    | PressedEditMessage Int
+    | MessageMenu_PressedShowReactionEmojiSelector Int (Coord CssPixels)
+    | MessageMenu_PressedEditMessage Int
     | PressedEmojiSelectorEmoji Emoji
     | PressedReactionEmoji_Add Int Emoji
     | PressedReactionEmoji_Remove Int Emoji
@@ -285,7 +285,7 @@ type FrontendMsg
     | PressedArrowInDropdownForEditMessage (Id GuildId) Int
     | PressedPingUserForEditMessage (Id GuildId) (Id ChannelId) Int
     | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
-    | PressedReply Int
+    | MessageMenu_PressedReply Int
     | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility
@@ -301,12 +301,13 @@ type FrontendMsg
     | UserScrolled { scrolledToBottomOfChannel : Bool }
     | PressedBody
     | PressedReactionEmojiContainer
-    | PressedShowMessageHoverExtraOptions Int (Coord CssPixels)
-    | PressedDeleteMessage MessageId
+    | MessageMenu_PressedShowFullMenu Int (Coord CssPixels)
+    | MessageMenu_PressedDeleteMessage MessageId
     | PressedReplyLink Int
     | ScrolledToMessage
-    | PressedCloseMessageHoverExtraOptions
-    | PressedMessageHoverExtraOptionsContainer
+    | MessageMenu_PressedClose
+    | MessageMenu_PressedContainer
+    | PressedCancelMessageEdit (Id GuildId) (Id ChannelId)
 
 
 type ScreenCoordinate

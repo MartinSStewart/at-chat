@@ -1098,17 +1098,17 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                     " "
 
                 [ single ] ->
-                    User.userToName single allUsers ++ " is typing..."
+                    User.toString single allUsers ++ " is typing..."
 
                 [ one, two ] ->
-                    User.userToName one allUsers ++ " and " ++ User.userToName two allUsers ++ " are typing..."
+                    User.toString one allUsers ++ " and " ++ User.toString two allUsers ++ " are typing..."
 
                 [ one, two, three ] ->
-                    User.userToName one allUsers
+                    User.toString one allUsers
                         ++ ", "
-                        ++ User.userToName two allUsers
+                        ++ User.toString two allUsers
                         ++ ", and "
-                        ++ User.userToName three allUsers
+                        ++ User.toString three allUsers
                         ++ " are typing..."
 
                 _ :: _ :: _ :: _ ->
@@ -1161,7 +1161,7 @@ replyToHeader guildId channelId userId local =
             (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
         ]
         [ Ui.text "Reply to "
-        , Ui.el [ Ui.Font.bold ] (Ui.text (User.userToName userId (LocalState.allUsers local)))
+        , Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId (LocalState.allUsers local)))
         ]
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 0, z = 0 } ]
 
@@ -1259,20 +1259,38 @@ messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pin
                 ]
                 [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
-                , User.userToName data.createdBy (LocalState.allUsers local)
+                , User.toString data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
-                , MessageInput.view
-                    True
-                    False
-                    (editMessageTextInputConfig messageId.guildId messageId.channelId)
-                    editMessageTextInputId
-                    ""
-                    editing.text
-                    pingUser
-                    local
-                    |> Ui.el [ Ui.paddingXY 5 0 ]
+                , Ui.column
+                    []
+                    [ MessageInput.view
+                        True
+                        False
+                        (editMessageTextInputConfig messageId.guildId messageId.channelId)
+                        editMessageTextInputId
+                        ""
+                        editing.text
+                        pingUser
+                        local
+                        |> Ui.el [ Ui.paddingXY 5 0 ]
+                    , Ui.row
+                        [ Ui.Font.size 14
+                        , Ui.Font.color MyUi.font3
+                        , Ui.paddingXY 12 0
+                        , Html.Attributes.style "white-space" "pre-wrap" |> Ui.htmlAttribute
+                        ]
+                        [ Ui.text "Press "
+                        , Ui.el
+                            [ Ui.Input.button (PressedCancelMessageEdit messageId.guildId messageId.channelId)
+                            , Ui.Font.color MyUi.font1
+                            , Ui.width Ui.shrink
+                            ]
+                            (Ui.text "escape")
+                        , Ui.text " to cancel edit"
+                        ]
+                    ]
                 , case maybeReactions of
                     Just reactionView ->
                         Ui.el [ Ui.paddingXY 8 0 ] reactionView
@@ -1408,7 +1426,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                     , Ui.column
                         []
                         [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
-                        , User.userToName message2.createdBy allUsers
+                        , User.toString message2.createdBy allUsers
                             ++ " "
                             |> Ui.text
                             |> Ui.el [ Ui.Font.bold ]
@@ -1505,7 +1523,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                         [ Html.Attributes.style "color" "rgb(200,200,200)"
                         , Html.Attributes.style "padding" "0 6px 0 2px"
                         ]
-                        [ Html.text (User.userToName repliedToData.createdBy allUsers) ]
+                        [ Html.text (User.toString repliedToData.createdBy allUsers) ]
                         :: RichText.view
                             (\_ -> FrontendNoOp)
                             (case SeqDict.get repliedToIndex revealedSpoilers of
@@ -1562,7 +1580,7 @@ userJoinedContent : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg
 userJoinedContent userId allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
-        [ User.userToName userId allUsers
+        [ User.toString userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
         , Ui.el
