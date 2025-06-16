@@ -58,6 +58,15 @@ exports.init = async function init(app)
         }
     });
 
+    app.ports.check_pwa_status_to_js.subscribe((a) => {
+        // Check if the app is running as an installed PWA
+        const isPwa = window.matchMedia('(display-mode: standalone)').matches || 
+                     window.navigator.standalone === true || 
+                     document.referrer.includes('android-app://');
+        
+        app.ports.check_pwa_status_from_js.send(isPwa);
+    });
+
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
 
     app.ports.text_input_select_all_to_js.subscribe(htmlId =>

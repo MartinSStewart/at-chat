@@ -99,6 +99,7 @@ subscriptions model =
         , Time.every Duration.second GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
+        , Ports.checkPwaStatusResponse CheckedPwaStatus
         , case model of
             Loading _ ->
                 Subscription.none
@@ -159,6 +160,7 @@ init url key =
         , time = Nothing
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
+        , pwaStatus = Ports.BrowserView
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -167,6 +169,7 @@ init url key =
         , Lamdera.sendToBackend CheckLoginRequest
         , Ports.loadSounds
         , Ports.checkNotificationPermission
+        , Ports.checkPwaStatus
         ]
     )
 
@@ -202,6 +205,7 @@ initLoadedFrontend loading time loginResult =
             , lastCopied = Nothing
             , textInputFocus = Nothing
             , notificationPermission = loading.notificationPermission
+            , pwaStatus = loading.pwaStatus
             , drag = NoDrag
             , scrolledToBottomOfChannel = True
             }
@@ -375,6 +379,9 @@ update msg model =
 
                 CheckedNotificationPermission permission ->
                     ( Loading { loading | notificationPermission = permission }, Command.none )
+
+                CheckedPwaStatus pwaStatus ->
+                    ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
 
                 _ ->
                     ( model, Command.none )
@@ -1800,6 +1807,9 @@ updateLoaded msg model =
 
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
+
+        CheckedPwaStatus pwaStatus ->
+            ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart _ touches ->
             ( { model | drag = DragStart touches }, Command.none )
@@ -3553,6 +3563,8 @@ view model =
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
                                     (Maybe.withDefault LoginForm.init loginForm)
+                                    (Pages.Guild.isMobile loaded)
+                                    loaded.pwaStatus
                                     |> Ui.map LoginFormMsg
                                     |> layout loaded
                                         [ Ui.background MyUi.background3
@@ -3575,7 +3587,7 @@ view model =
                                         ]
                                         (case loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loginForm2 |> Ui.map LoginFormMsg
+                                                LoginForm.view loginForm2 (Pages.Guild.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth
