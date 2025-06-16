@@ -120,7 +120,7 @@ view model extraOptions local loggedIn =
                                     ]
                                     Ui.none
                                 )
-                                (items extraOptions messageId local model)
+                                (items True extraOptions messageId local model)
                    )
             )
 
@@ -138,7 +138,7 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (items extraOptions messageId local model)
+            (items False extraOptions messageId local model)
 
 
 editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -204,12 +204,13 @@ miniButton onPress svg =
 
 
 items :
-    MessageHoverExtraOptions
+    Bool
+    -> MessageHoverExtraOptions
     -> MessageId
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-items extraOptions messageId local model =
+items isMobile extraOptions messageId local model =
     case LocalState.getGuildAndChannel messageId.guildId messageId.channelId local of
         Just ( _, channel ) ->
             case Array.get messageId.messageIndex channel.messages of
@@ -242,6 +243,7 @@ items extraOptions messageId local model =
                                     "Message deleted"
                     in
                     [ button
+                        isMobile
                         Icons.smile
                         "Add reaction emoji"
                         (MessageMenu_PressedShowReactionEmojiSelector
@@ -249,12 +251,17 @@ items extraOptions messageId local model =
                             extraOptions.position
                         )
                     , if canEditAndDelete then
-                        button Icons.pencil "Edit message" (MessageMenu_PressedEditMessage messageId.messageIndex)
+                        button
+                            isMobile
+                            Icons.pencil
+                            "Edit message"
+                            (MessageMenu_PressedEditMessage messageId.messageIndex)
 
                       else
                         Ui.none
-                    , button Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex)
+                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex)
                     , button
+                        isMobile
                         Icons.copyIcon
                         (case model.lastCopied of
                             Just lastCopied ->
@@ -272,6 +279,7 @@ items extraOptions messageId local model =
                         Ui.el
                             [ Ui.Font.color MyUi.errorColor ]
                             (button
+                                isMobile
                                 Icons.delete
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage messageId)
@@ -288,12 +296,18 @@ items extraOptions messageId local model =
             []
 
 
-button : Html msg -> String -> msg -> Element msg
-button icon text msg =
+button : Bool -> Html msg -> String -> msg -> Element msg
+button isMobile icon text msg =
     Ui.row
         [ Ui.Input.button msg
         , Ui.spacing 8
         , Ui.contentCenterY
-        , Ui.paddingXY 8 6
+        , Ui.paddingXY 8
+            (if isMobile then
+                10
+
+             else
+                6
+            )
         ]
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
