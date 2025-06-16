@@ -837,15 +837,27 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
             , newLine
                 ++ (case isEditing of
                         Just editing ->
-                            messageEditingView
-                                (isMobile model)
-                                { guildId = guildId, channelId = channelId, messageIndex = index }
-                                message
-                                maybeRepliedTo
-                                revealedSpoilers
-                                editing
-                                loggedIn.pingUser
-                                local
+                            if isMobile model then
+                                -- On mobile, we show the editor at the bottom instead
+                                messageView
+                                    revealedSpoilers
+                                    highlight
+                                    messageHover
+                                    otherUserIsEditing
+                                    local.localUser
+                                    maybeRepliedTo
+                                    index
+                                    message
+
+                            else
+                                messageEditingView
+                                    { guildId = guildId, channelId = channelId, messageIndex = index }
+                                    message
+                                    maybeRepliedTo
+                                    revealedSpoilers
+                                    editing
+                                    loggedIn.pingUser
+                                    local
 
                         Nothing ->
                             case messageHover of
@@ -1239,8 +1251,7 @@ reactionEmojiView messageIndex currentUserId reactions =
 
 
 messageEditingView :
-    Bool
-    -> MessageId
+    MessageId
     -> Message
     -> Maybe ( Int, Message )
     -> SeqDict Int (NonemptySet Int)
@@ -1248,7 +1259,7 @@ messageEditingView :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile2 messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
+messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1280,7 +1291,7 @@ messageEditingView isMobile2 messageId message maybeRepliedTo revealedSpoilers e
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , MessageInput.view
                     True
-                    isMobile2
+                    False
                     (editMessageTextInputConfig messageId.guildId messageId.channelId)
                     editMessageTextInputId
                     ""
