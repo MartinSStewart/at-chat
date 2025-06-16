@@ -48,7 +48,33 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, MessageId, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Touch exposing (Touch)
+import Types
+    exposing
+        ( AdminStatusLoginData(..)
+        , ChannelSidebarMode(..)
+        , Drag(..)
+        , EmojiSelector(..)
+        , FrontendModel(..)
+        , FrontendMsg(..)
+        , LoadStatus(..)
+        , LoadedFrontend
+        , LoadingFrontend
+        , LocalChange(..)
+        , LocalMsg(..)
+        , LoggedIn2
+        , LoginData
+        , LoginResult(..)
+        , LoginStatus(..)
+        , MessageHover(..)
+        , MessageHoverExtraOptions
+        , MessageId
+        , RevealedSpoilers
+        , ServerChange(..)
+        , ToBackend(..)
+        , ToBeFilledInByBackend(..)
+        , ToFrontend(..)
+        )
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -1318,28 +1344,9 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         AltPressedMessage messageIndex clickedAt ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId _) ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | messageHover =
-                                    MessageHoverShowExtraOptions
-                                        { messageId =
-                                            { guildId = guildId
-                                            , channelId = channelId
-                                            , messageIndex = messageIndex
-                                            }
-                                        , position = clickedAt
-                                        }
-                              }
-                            , Command.none
-                            )
-                        )
-                        model
-
-                _ ->
-                    ( model, Command.none )
+            updateLoggedIn
+                (\loggedIn -> ( handleAltPressedMessage messageIndex clickedAt loggedIn model, Command.none ))
+                model
 
         MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
             case model.route of
@@ -1811,8 +1818,18 @@ updateLoaded msg model =
         CheckedPwaStatus pwaStatus ->
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
-        TouchStart _ touches ->
-            ( { model | drag = DragStart touches }, Command.none )
+        TouchStart time touches ->
+            ( case model.drag of
+                NoDrag ->
+                    { model | drag = DragStart time touches }
+
+                DragStart posix nonemptyDict ->
+                    model
+
+                Dragging record ->
+                    model
+            , Command.none
+            )
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -1823,7 +1840,7 @@ updateLoaded msg model =
                                 let
                                     averageMove : { x : Float, y : Float }
                                     averageMove =
-                                        averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
+                                        Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
 
                                     tHorizontal : Float
                                     tHorizontal =
@@ -1849,11 +1866,11 @@ updateLoaded msg model =
                 NoDrag ->
                     ( model, Command.none )
 
-                DragStart startTouches ->
+                DragStart _ startTouches ->
                     let
                         averageMove : { x : Float, y : Float }
                         averageMove =
-                            averageTouchMove startTouches newTouches |> Vector2d.unwrap
+                            Touch.averageTouchMove startTouches newTouches |> Vector2d.unwrap
 
                         horizontalStart : Bool
                         horizontalStart =
@@ -2035,6 +2052,26 @@ updateLoaded msg model =
             ( model, setFocus model MessageMenu.editMessageTextInputId )
 
 
+handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage messageIndex clickedAt loggedIn model =
+    case model.route of
+        GuildRoute guildId (ChannelRoute channelId _) ->
+            { loggedIn
+                | messageHover =
+                    MessageHoverShowExtraOptions
+                        { messageId =
+                            { guildId = guildId
+                            , channelId = channelId
+                            , messageIndex = messageIndex
+                            }
+                        , position = clickedAt
+                        }
+            }
+
+        _ ->
+            loggedIn
+
+
 handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 handleTouchEnd time model =
     updateLoggedIn
@@ -2069,7 +2106,31 @@ handleTouchEnd time model =
                     }
 
                 _ ->
-                    loggedIn
+                    case model.drag of
+                        DragStart startTime touches ->
+                            case ( NonemptyDict.toList touches, Duration.from startTime time |> Quantity.lessThan (Duration.seconds 0.5) ) of
+                                ( [ ( _, single ) ], False ) ->
+                                    let
+                                        htmlId : String
+                                        htmlId =
+                                            Dom.idToString single.target
+                                    in
+                                    if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
+                                        case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
+                                            Just messageIndex ->
+                                                handleAltPressedMessage messageIndex Coord.origin loggedIn model
+
+                                            Nothing ->
+                                                loggedIn
+
+                                    else
+                                        loggedIn
+
+                                _ ->
+                                    loggedIn
+
+                        _ ->
+                            loggedIn
             , Command.none
             )
         )
@@ -2200,28 +2261,6 @@ startOpeningChannelSidebar loggedIn =
                             offset
                 }
     }
-
-
-averageTouchMove : NonemptyDict Int Touch -> NonemptyDict Int Touch -> Vector2d CssPixels ScreenCoordinate
-averageTouchMove oldTouches newTouches =
-    NonemptyDict.merge
-        (\_ _ state -> state)
-        (\_ new old state ->
-            { total = Vector2d.plus state.total (Vector2d.from old.client new.client)
-            , count = state.count + 1
-            }
-        )
-        (\_ _ state -> state)
-        newTouches
-        oldTouches
-        { total = Vector2d.zero, count = 0 }
-        |> (\a ->
-                if a.count > 0 then
-                    a.total |> Vector2d.divideBy a.count
-
-                else
-                    Vector2d.zero
-           )
 
 
 sidebarSpeed : Quantity Float (Rate Unitless Seconds)
@@ -3232,8 +3271,8 @@ layout model attributes child =
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: attributes
             ++ (if MyUi.isMobile model then
-                    [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
-                    , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
+                    [ Html.Events.on "touchstart" (Touch.touchEventDecoder TouchStart) |> Ui.htmlAttribute
+                    , Html.Events.on "touchmove" (Touch.touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchend"
                         (Json.Decode.field "timeStamp" Json.Decode.float
@@ -3270,60 +3309,6 @@ routePush model route =
 routeReplace : LoadedFrontend -> Route -> Command FrontendOnly ToBackend FrontendMsg
 routeReplace model route =
     BrowserNavigation.replaceUrl model.navigationKey (Route.encode route)
-
-
-touchEventDecoder : (Time.Posix -> NonemptyDict Int Touch -> msg) -> Decoder msg
-touchEventDecoder msg =
-    Json.Decode.map2
-        Tuple.pair
-        (Json.Decode.field "touches" (dynamicListOf touchDecoder))
-        (Json.Decode.field "timeStamp" Json.Decode.float)
-        |> Json.Decode.andThen
-            (\( list, time ) ->
-                case NonemptyDict.fromList list of
-                    Just nonempty ->
-                        msg (round time |> Time.millisToPosix) nonempty |> Json.Decode.succeed
-
-                    Nothing ->
-                        Json.Decode.fail ""
-            )
-
-
-touchDecoder : Decoder ( Int, Touch )
-touchDecoder =
-    Json.Decode.map4
-        (\identifier clientX clientY target ->
-            ( identifier, { client = Point2d.xy clientX clientY, target = Dom.id target } )
-        )
-        (Json.Decode.field "identifier" Json.Decode.int)
-        (Json.Decode.field "clientX" quantityDecoder)
-        (Json.Decode.field "clientY" quantityDecoder)
-        (Json.Decode.at [ "target", "id" ] Json.Decode.string)
-
-
-quantityDecoder : Decoder (Quantity Float unit)
-quantityDecoder =
-    Json.Decode.map Quantity.unsafe Json.Decode.float
-
-
-dynamicListOf : Decoder a -> Decoder (List a)
-dynamicListOf itemDecoder =
-    let
-        decodeN n =
-            List.range 0 (n - 1)
-                |> List.map decodeOne
-                |> all
-
-        decodeOne n =
-            Json.Decode.field (String.fromInt n) itemDecoder
-    in
-    Json.Decode.field "length" Json.Decode.int
-        |> Json.Decode.andThen decodeN
-
-
-all : List (Decoder a) -> Decoder (List a)
-all =
-    List.foldr (Json.Decode.map2 (::)) (Json.Decode.succeed [])
 
 
 view : FrontendModel -> Browser.Document FrontendMsg

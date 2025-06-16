@@ -25,12 +25,10 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
-    , ScreenCoordinate(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
-    , Touch
     , WaitingForLoginTokenData
     )
 
@@ -60,7 +58,6 @@ import NonemptySet exposing (NonemptySet)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
-import Point2d exposing (Point2d)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import RichText exposing (RichText)
@@ -68,6 +65,7 @@ import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
+import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
 import Ui.Anim
 import Url exposing (Url)
@@ -114,7 +112,7 @@ type alias LoadedFrontend =
 
 type Drag
     = NoDrag
-    | DragStart (NonemptyDict Int Touch)
+    | DragStart Time.Posix (NonemptyDict Int Touch)
     | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch }
 
 
@@ -310,16 +308,6 @@ type FrontendMsg
     | PressedCancelMessageEdit (Id GuildId) (Id ChannelId)
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
-
-
-type ScreenCoordinate
-    = ScreenCoordinate Never
-
-
-type alias Touch =
-    { client : Point2d CssPixels ScreenCoordinate
-    , target : HtmlId
-    }
 
 
 type alias NewChannelForm =

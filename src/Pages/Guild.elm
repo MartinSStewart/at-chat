@@ -6,6 +6,7 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , messageHtmlId
+    , messageHtmlIdPrefix
     , messageInputConfig
     , newGuildFormInit
     , repliedToUserId
@@ -14,7 +15,6 @@ module Pages.Guild exposing
 import Array
 import ChannelName
 import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -32,6 +32,7 @@ import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MyUi
+import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
@@ -41,6 +42,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
+import Touch
 import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Events
@@ -1539,7 +1541,12 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
 
 messageHtmlId : Int -> HtmlId
 messageHtmlId messageIndex =
-    "guild_message_" ++ String.fromInt messageIndex |> Dom.id
+    messageHtmlIdPrefix ++ String.fromInt messageIndex |> Dom.id
+
+
+messageHtmlIdPrefix : String
+messageHtmlIdPrefix =
+    "guild_message_"
 
 
 repliedToHeaderHelper : Int -> Element FrontendMsg -> Element FrontendMsg
@@ -1590,6 +1597,15 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
         ([ Ui.Font.color MyUi.font1
          , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
          , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
+         , Ui.Events.on
+            "touchstart"
+            (Touch.touchEventDecoder
+                (\time touches ->
+                    TouchStart
+                        time
+                        (NonemptyDict.map (\_ touch -> { touch | target = messageHtmlId messageIndex }) touches)
+                )
+            )
          , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
                 (\x y -> ( AltPressedMessage messageIndex (Coord.xy (round x) (round y)), True ))

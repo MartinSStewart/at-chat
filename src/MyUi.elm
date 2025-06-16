@@ -66,9 +66,9 @@ import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
 import Id exposing (Id, UserId)
-import Json.Decode
+import Json.Decode exposing (Decoder)
 import PersonName exposing (PersonName)
-import Quantity
+import Quantity exposing (Quantity)
 import Round
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
