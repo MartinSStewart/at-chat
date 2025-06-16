@@ -34,6 +34,7 @@ module MyUi exposing
     , inputBorder
     , insetBottom
     , insetTop
+    , isMobile
     , label
     , mentionColor
     , montserrat
@@ -55,6 +56,8 @@ module MyUi exposing
     , widthAttr
     )
 
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
@@ -643,6 +646,11 @@ insetBottom : String
 insetBottom =
     --"40px"
     "env(safe-area-inset-bottom)"
+
+
+isMobile : { a | windowSize : Coord CssPixels } -> Bool
+isMobile model =
+    Coord.xRaw model.windowSize < 700
 
 
 noShrinking : Ui.Attribute msg

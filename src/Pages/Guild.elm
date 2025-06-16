@@ -6,12 +6,10 @@ module Pages.Guild exposing
     , editMessageTextInputId
     , guildView
     , homePageLoggedInView
-    , isMobile
     , messageHtmlId
     , messageInputConfig
     , newGuildFormInit
     , repliedToUserId
-    , userToName
     )
 
 import Array
@@ -33,6 +31,7 @@ import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
 import Maybe.Extra
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
+import MessageMenu
 import MyUi
 import NonemptySet exposing (NonemptySet)
 import PersonName
@@ -240,11 +239,6 @@ loggedInAsView local =
         ]
 
 
-isMobile : LoadedFrontend -> Bool
-isMobile model =
-    Coord.xRaw model.windowSize < 700
-
-
 homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
 homePageLoggedInView model loggedIn local =
     case loggedIn.newGuildForm of
@@ -252,7 +246,7 @@ homePageLoggedInView model loggedIn local =
             newGuildFormView form
 
         Nothing ->
-            if isMobile model then
+            if MyUi.isMobile model then
                 Ui.row
                     [ Ui.height Ui.fill
                     , Ui.background MyUi.background1
@@ -312,7 +306,7 @@ guildView model guildId channelRoute loggedIn local =
                         canScroll2 =
                             canScroll model
                     in
-                    if isMobile model then
+                    if MyUi.isMobile model then
                         Ui.column
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
@@ -514,7 +508,7 @@ channelView channelRoute guildId guild loggedIn local model =
         NewChannelRoute ->
             SeqDict.get guildId loggedIn.newChannelForm
                 |> Maybe.withDefault newChannelFormInit
-                |> newChannelFormView (isMobile model) guildId
+                |> newChannelFormView (MyUi.isMobile model) guildId
 
         EditChannelRoute channelId ->
             case SeqDict.get channelId guild.channels of
@@ -553,7 +547,7 @@ inviteLinkCreatorForm model guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model)
             ]
-            [ channelHeader (isMobile model) (Ui.text "Invite member to guild")
+            [ channelHeader (MyUi.isMobile model) (Ui.text "Invite member to guild")
             , Ui.el [ Ui.paddingXY 16 0 ] (submitButton (PressedCreateInviteLink guildId) "Create invite link")
             , if SeqDict.isEmpty guild.invites then
                 Ui.none
@@ -837,7 +831,7 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
             , newLine
                 ++ (case isEditing of
                         Just editing ->
-                            if isMobile model then
+                            if MyUi.isMobile model then
                                 -- On mobile, we show the editor at the bottom instead
                                 messageView
                                     revealedSpoilers
@@ -1018,7 +1012,7 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
         , Ui.heightMin 0
         ]
         [ channelHeader
-            (isMobile model)
+            (MyUi.isMobile model)
             (Ui.row
                 [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
                 [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channel.name) ]
@@ -1078,7 +1072,7 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                     Ui.none
             , MessageInput.view
                 (replyTo == Nothing)
-                (isMobile model)
+                (MyUi.isMobile model)
                 (messageInputConfig guildId channelId)
                 channelTextInputId
                 ("Write a message in #" ++ ChannelName.toString channel.name)
@@ -1104,17 +1098,17 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                     " "
 
                 [ single ] ->
-                    userToName single allUsers ++ " is typing..."
+                    User.userToName single allUsers ++ " is typing..."
 
                 [ one, two ] ->
-                    userToName one allUsers ++ " and " ++ userToName two allUsers ++ " are typing..."
+                    User.userToName one allUsers ++ " and " ++ User.userToName two allUsers ++ " are typing..."
 
                 [ one, two, three ] ->
-                    userToName one allUsers
+                    User.userToName one allUsers
                         ++ ", "
-                        ++ userToName two allUsers
+                        ++ User.userToName two allUsers
                         ++ ", and "
-                        ++ userToName three allUsers
+                        ++ User.userToName three allUsers
                         ++ " are typing..."
 
                 _ :: _ :: _ :: _ ->
@@ -1167,7 +1161,7 @@ replyToHeader guildId channelId userId local =
             (Ui.el [ Ui.width (Ui.px 18), Ui.move { x = 10, y = 8, z = 0 } ] (Ui.html Icons.reply))
         ]
         [ Ui.text "Reply to "
-        , Ui.el [ Ui.Font.bold ] (Ui.text (userToName userId (LocalState.allUsers local)))
+        , Ui.el [ Ui.Font.bold ] (Ui.text (User.userToName userId (LocalState.allUsers local)))
         ]
         |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 0, z = 0 } ]
 
@@ -1175,26 +1169,6 @@ replyToHeader guildId channelId userId local =
 dropdownButtonId : Int -> HtmlId
 dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
-
-
-messageHoverButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
-messageHoverButton onPress svg =
-    Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 3
-        , Ui.height Ui.fill
-        , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
-
-        --, Ui.Input.button onPress
-        , Ui.Events.stopPropagationOn "click"
-            (Json.Decode.map2
-                (\x y -> ( onPress (Coord.xy (round x) (round y)), True ))
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
-            )
-        , Ui.pointer
-        ]
-        (Ui.html svg)
 
 
 reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element FrontendMsg)
@@ -1285,7 +1259,7 @@ messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pin
                 ]
                 [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
-                , userToName data.createdBy (LocalState.allUsers local)
+                , User.userToName data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
@@ -1434,7 +1408,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                     , Ui.column
                         []
                         [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
-                        , userToName message2.createdBy allUsers
+                        , User.userToName message2.createdBy allUsers
                             ++ " "
                             |> Ui.text
                             |> Ui.el [ Ui.Font.bold ]
@@ -1531,7 +1505,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                         [ Html.Attributes.style "color" "rgb(200,200,200)"
                         , Html.Attributes.style "padding" "0 6px 0 2px"
                         ]
-                        [ Html.text (userToName repliedToData.createdBy allUsers) ]
+                        [ Html.text (User.userToName repliedToData.createdBy allUsers) ]
                         :: RichText.view
                             (\_ -> FrontendNoOp)
                             (case SeqDict.get repliedToIndex revealedSpoilers of
@@ -1588,23 +1562,13 @@ userJoinedContent : Id UserId -> SeqDict (Id UserId) FrontendUser -> Element msg
 userJoinedContent userId allUsers =
     Ui.Prose.paragraph
         [ Ui.paddingXY 0 4 ]
-        [ userToName userId allUsers
+        [ User.userToName userId allUsers
             |> Ui.text
             |> Ui.el [ Ui.Font.bold ]
         , Ui.el
             []
             (Ui.text " joined!")
         ]
-
-
-userToName : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
-userToName userId allUsers =
-    case SeqDict.get userId allUsers of
-        Just user ->
-            PersonName.toString user.name
-
-        Nothing ->
-            "<missing>"
 
 
 messageContainer :
@@ -1673,7 +1637,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , messageHoverMenu canEdit messageIndex
+                        , MessageMenu.miniView canEdit messageIndex
                             |> Ui.inFront
                         ]
 
@@ -1693,28 +1657,6 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                )
         )
         (messageContent :: Maybe.Extra.toList maybeReactions)
-
-
-messageHoverMenu : Bool -> Int -> Element FrontendMsg
-messageHoverMenu canEdit messageIndex =
-    Ui.row
-        [ Ui.alignRight
-        , Ui.background MyUi.background1
-        , Ui.rounded 4
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.move { x = -8, y = -16, z = 0 }
-        , Ui.height (Ui.px 32)
-        ]
-        [ messageHoverButton (PressedShowReactionEmojiSelector messageIndex) Icons.smile
-        , if canEdit then
-            messageHoverButton (\_ -> PressedEditMessage messageIndex) Icons.pencil
-
-          else
-            Ui.none
-        , messageHoverButton (\_ -> PressedReply messageIndex) Icons.reply
-        , messageHoverButton (PressedShowMessageHoverExtraOptions messageIndex) Icons.dotDotDot
-        ]
 
 
 channelColumnCanScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg

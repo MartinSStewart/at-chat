@@ -7,11 +7,12 @@ module User exposing
     , backendToFrontend
     , backendToFrontendForUser
     , sectionToString
+    , userToName
     )
 
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Id exposing (ChannelId, GuildId, Id)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -89,3 +90,13 @@ backendToFrontendForUser user =
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
     }
+
+
+userToName : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
+userToName userId allUsers =
+    case SeqDict.get userId allUsers of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<missing>"

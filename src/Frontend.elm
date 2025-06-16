@@ -23,7 +23,6 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Lamdera as LamderaCore
@@ -33,6 +32,7 @@ import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
 import LoginForm
 import MessageInput
+import MessageMenu
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
@@ -52,7 +52,6 @@ import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import Ui.Input
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
@@ -738,7 +737,7 @@ updateLoaded msg model =
                                 model.time
                                 (case model.route of
                                     GuildRoute guildId (ChannelRoute channelId _) ->
-                                        case getGuildAndChannel guildId channelId local of
+                                        case LocalState.getGuildAndChannel guildId channelId local of
                                             Just ( _, channel ) ->
                                                 Local_SetLastViewed
                                                     guildId
@@ -1206,7 +1205,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             let
                                 loggedIn2 =
-                                    messageHoverExtraOptionsClose model loggedIn
+                                    MessageMenu.close model loggedIn
                             in
                             case loggedIn2.pingUser of
                                 Just _ ->
@@ -1380,7 +1379,7 @@ updateLoaded msg model =
                                 local =
                                     Local.model loggedIn.localState
                             in
-                            ( case getGuildAndChannel guildId channelId local of
+                            ( case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( _, channel ) ->
                                     case Array.get messageIndex channel.messages of
                                         Just (UserTextMessage message) ->
@@ -1544,7 +1543,7 @@ updateLoaded msg model =
                                 model.time
                                 (case
                                     ( String.Nonempty.fromString edit.text
-                                    , getGuildAndChannel guildId channelId local
+                                    , LocalState.getGuildAndChannel guildId channelId local
                                     )
                                  of
                                     ( Just nonempty, Just ( _, channel ) ) ->
@@ -1648,7 +1647,7 @@ updateLoaded msg model =
                         local =
                             Local.model loggedIn.localState
                     in
-                    case getGuildAndChannel guildId channelId local of
+                    case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             let
                                 messageCount : Int
@@ -1714,7 +1713,7 @@ updateLoaded msg model =
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( messageHoverExtraOptionsClose
+                            ( MessageMenu.close
                                 model
                                 { loggedIn
                                     | replyTo =
@@ -1953,7 +1952,7 @@ updateLoaded msg model =
         PressedBody ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( messageHoverExtraOptionsClose
+                    ( MessageMenu.close
                         model
                         { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                     , Command.none
@@ -1974,7 +1973,7 @@ updateLoaded msg model =
                                     MessageHoverShowExtraOptions
                                         { position =
                                             Coord.plus
-                                                (Coord.xy (-messageHoverExtraOptionsWidth - 8) -8)
+                                                (Coord.xy (-MessageMenu.width - 8) -8)
                                                 clickedAt
                                         , messageId =
                                             { guildId = guildId
@@ -1997,7 +1996,7 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (Just (Local_DeleteMessage messageId))
-                        (messageHoverExtraOptionsClose model loggedIn)
+                        (MessageMenu.close model loggedIn)
                         Command.none
                 )
                 model
@@ -2007,14 +2006,6 @@ updateLoaded msg model =
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     routePush model (GuildRoute guildId (ChannelRoute channelId (Just messageIndex)))
 
-                --updateLoggedIn
-                --    (\loggedIn ->
-                --        ( loggedIn
-                --        , smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                --            |> Task.attempt (\_ -> ScrolledToMessage)
-                --        )
-                --    )
-                --    model
                 _ ->
                     ( model, Command.none )
 
@@ -2022,7 +2013,7 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedCloseMessageHoverExtraOptions ->
-            updateLoggedIn (\loggedIn -> ( messageHoverExtraOptionsClose model loggedIn, Command.none )) model
+            updateLoggedIn (\loggedIn -> ( MessageMenu.close model loggedIn, Command.none )) model
 
         PressedMessageHoverExtraOptionsContainer ->
             ( model, Command.none )
@@ -2224,7 +2215,7 @@ sidebarSpeed =
 
 setFocus : LoadedFrontend -> HtmlId -> Command FrontendOnly toMsg FrontendMsg
 setFocus model htmlId =
-    if Pages.Guild.isMobile model then
+    if MyUi.isMobile model then
         Command.none
 
     else
@@ -2272,7 +2263,7 @@ changeUpdate localMsg local =
                             local
 
                 Local_SendMessage createdAt guildId channelId text repliedTo ->
-                    case getGuildAndChannel guildId channelId local of
+                    case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( guild, channel ) ->
                             let
                                 user =
@@ -2493,7 +2484,7 @@ changeUpdate localMsg local =
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
-                    case getGuildAndChannel guildId channelId local of
+                    case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( guild, channel ) ->
                             let
                                 localUser : LocalUser
@@ -2988,7 +2979,7 @@ updateLoadedFromBackend msg model =
                                     Command.none
 
                         ServerChange (Server_SendMessage senderId _ guildId channelId content maybeRepliedTo) ->
-                            case getGuildAndChannel guildId channelId local of
+                            case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( _, channel ) ->
                                     Command.batch
                                         [ playNotificationSound
@@ -3074,7 +3065,7 @@ playNotificationSound senderId maybeRepliedTo channel local content model =
             , case model.notificationPermission of
                 Ports.Granted ->
                     Ports.showNotification
-                        (Pages.Guild.userToName senderId (LocalState.allUsers local))
+                        (User.userToName senderId (LocalState.allUsers local))
                         (RichText.toString (LocalState.allUsers local) content)
 
                 _ ->
@@ -3083,21 +3074,6 @@ playNotificationSound senderId maybeRepliedTo channel local content model =
 
     else
         Command.none
-
-
-getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
-getGuildAndChannel guildId channelId local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
-            case SeqDict.get channelId guild.channels of
-                Just channel ->
-                    Just ( guild, channel )
-
-                Nothing ->
-                    Nothing
-
-        Nothing ->
-            Nothing
 
 
 pendingChangesText : LocalChange -> String
@@ -3192,7 +3168,7 @@ layout model attributes child =
                     |> Ui.inFront
                 , case loggedIn.messageHover of
                     MessageHoverShowExtraOptions extraOptions ->
-                        messageHoverExtraOptionsView model extraOptions (Local.model loggedIn.localState)
+                        MessageMenu.view model extraOptions (Local.model loggedIn.localState)
                             |> Ui.inFront
 
                     MessageHover _ ->
@@ -3212,7 +3188,7 @@ layout model attributes child =
             :: Ui.Font.color MyUi.font1
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: attributes
-            ++ (if Pages.Guild.isMobile model then
+            ++ (if MyUi.isMobile model then
                     [ Html.Events.on "touchstart" (touchEventDecoder TouchStart) |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
@@ -3238,188 +3214,9 @@ layout model attributes child =
         child
 
 
-messageHoverExtraOptionsWidth : number
-messageHoverExtraOptionsWidth =
-    200
-
-
-messageHoverExtraOptionsClose : LoadedFrontend -> LoggedIn2 -> LoggedIn2
-messageHoverExtraOptionsClose model loggedIn =
-    case loggedIn.messageHover of
-        NoMessageHover ->
-            loggedIn
-
-        MessageHover _ ->
-            loggedIn
-
-        MessageHoverShowExtraOptions extraOptions ->
-            { loggedIn
-                | messageHover = NoMessageHover
-                , editMessage =
-                    if Pages.Guild.isMobile model then
-                        SeqDict.remove
-                            ( extraOptions.messageId.guildId
-                            , extraOptions.messageId.channelId
-                            )
-                            loggedIn.editMessage
-
-                    else
-                        loggedIn.editMessage
-            }
-
-
-messageHoverExtraOptionsView : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> Element FrontendMsg
-messageHoverExtraOptionsView model extraOptions local =
-    let
-        messageId : MessageId
-        messageId =
-            extraOptions.messageId
-    in
-    if Pages.Guild.isMobile model then
-        Ui.column
-            [ Ui.alignBottom
-            , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
-            , Ui.background MyUi.background1
-            , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
-            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
-            ]
-            (Ui.el
-                [ Ui.paddingXY 0 4, Ui.Input.button PressedCloseMessageHoverExtraOptions ]
-                (Ui.el
-                    [ Ui.background (Ui.rgb 40 50 60)
-                    , Ui.rounded 99
-                    , Ui.width (Ui.px 40)
-                    , Ui.height (Ui.px 4)
-                    , Ui.centerX
-                    ]
-                    Ui.none
-                )
-                :: List.intersperse
-                    (Ui.el
-                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                        , Ui.borderColor MyUi.border2
-                        ]
-                        Ui.none
-                    )
-                    (messageHoverExtraOptionsItems extraOptions messageId local model)
-            )
-
-    else
-        Ui.column
-            [ Ui.move
-                { x = Coord.xRaw extraOptions.position
-                , y = Coord.yRaw extraOptions.position
-                , z = 0
-                }
-            , Ui.background MyUi.background1
-            , Ui.border 1
-            , Ui.borderColor MyUi.border1
-            , Ui.width (Ui.px messageHoverExtraOptionsWidth)
-            , Ui.rounded 8
-            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
-            ]
-            (messageHoverExtraOptionsItems extraOptions messageId local model)
-
-
-messageHoverExtraOptionsItems :
-    MessageHoverExtraOptions
-    -> MessageId
-    -> LocalState
-    -> LoadedFrontend
-    -> List (Element FrontendMsg)
-messageHoverExtraOptionsItems extraOptions messageId local model =
-    case getGuildAndChannel messageId.guildId messageId.channelId local of
-        Just ( _, channel ) ->
-            case Array.get messageId.messageIndex channel.messages of
-                Just message ->
-                    let
-                        canEditAndDelete : Bool
-                        canEditAndDelete =
-                            case message of
-                                UserTextMessage data ->
-                                    if data.createdBy == local.localUser.userId then
-                                        True
-
-                                    else
-                                        False
-
-                                _ ->
-                                    False
-
-                        text : String
-                        text =
-                            case message of
-                                UserTextMessage a ->
-                                    RichText.toString (LocalState.allUsers local) a.content
-
-                                UserJoinedMessage _ userId _ ->
-                                    Pages.Guild.userToName userId (LocalState.allUsers local)
-                                        ++ " joined!"
-
-                                DeletedMessage ->
-                                    "Message deleted"
-                    in
-                    [ messageHoverExtraOptionsButton
-                        Icons.smile
-                        "Add reaction emoji"
-                        (PressedShowReactionEmojiSelector
-                            messageId.messageIndex
-                            extraOptions.position
-                        )
-                    , if canEditAndDelete then
-                        messageHoverExtraOptionsButton Icons.pencil "Edit message" (PressedEditMessage messageId.messageIndex)
-
-                      else
-                        Ui.none
-                    , messageHoverExtraOptionsButton Icons.reply "Reply to" (PressedReply messageId.messageIndex)
-                    , messageHoverExtraOptionsButton
-                        Icons.copyIcon
-                        (case model.lastCopied of
-                            Just lastCopied ->
-                                if lastCopied.copiedText == text then
-                                    "Copied!"
-
-                                else
-                                    "Copy message"
-
-                            Nothing ->
-                                "Copy message"
-                        )
-                        (PressedCopyText text)
-                    , if canEditAndDelete then
-                        Ui.el
-                            [ Ui.Font.color MyUi.errorColor ]
-                            (messageHoverExtraOptionsButton
-                                Icons.delete
-                                "Delete message"
-                                (PressedDeleteMessage messageId)
-                            )
-
-                      else
-                        Ui.none
-                    ]
-
-                Nothing ->
-                    []
-
-        Nothing ->
-            []
-
-
-messageHoverExtraOptionsButton : Html msg -> String -> msg -> Element msg
-messageHoverExtraOptionsButton icon text msg =
-    Ui.row
-        [ Ui.Input.button msg
-        , Ui.spacing 8
-        , Ui.contentCenterY
-        , Ui.paddingXY 8 6
-        ]
-        [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
-
-
 routePush : LoadedFrontend -> Route -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routePush model route =
-    if Pages.Guild.isMobile model then
+    if MyUi.isMobile model then
         routeRequest (Just model.route) route model
 
     else
@@ -3563,7 +3360,7 @@ view model =
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
                                     (Maybe.withDefault LoginForm.init loginForm)
-                                    (Pages.Guild.isMobile loaded)
+                                    (MyUi.isMobile loaded)
                                     loaded.pwaStatus
                                     |> Ui.map LoginFormMsg
                                     |> layout loaded
@@ -3587,7 +3384,7 @@ view model =
                                         ]
                                         (case loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loginForm2 (Pages.Guild.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
+                                                LoginForm.view loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth

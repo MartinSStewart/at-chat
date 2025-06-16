@@ -29,6 +29,7 @@ module LocalState exposing
     , deleteMessage
     , editChannel
     , editMessage
+    , getGuildAndChannel
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
@@ -796,3 +797,18 @@ deleteMessage userId channelId messageIndex guild =
 
         Nothing ->
             Err ()
+
+
+getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
+getGuildAndChannel guildId channelId local =
+    case SeqDict.get guildId local.guilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    Just ( guild, channel )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
