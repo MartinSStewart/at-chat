@@ -1292,28 +1292,32 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         MouseEnteredMessage messageIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case ( model.route, loggedIn.messageHover ) of
-                        ( _, MessageHoverShowExtraOptions _ ) ->
-                            ( loggedIn, Command.none )
+            if MyUi.isMobile model then
+                ( model, Command.none )
 
-                        ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
-                            ( { loggedIn
-                                | messageHover =
-                                    MessageHover
-                                        { guildId = guildId
-                                        , channelId = channelId
-                                        , messageIndex = messageIndex
-                                        }
-                              }
-                            , Command.none
-                            )
+            else
+                updateLoggedIn
+                    (\loggedIn ->
+                        case ( model.route, loggedIn.messageHover ) of
+                            ( _, MessageHoverShowExtraOptions _ ) ->
+                                ( loggedIn, Command.none )
 
-                        _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
+                                ( { loggedIn
+                                    | messageHover =
+                                        MessageHover
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
+                                  }
+                                , Command.none
+                                )
+
+                            _ ->
+                                ( loggedIn, Command.none )
+                    )
+                    model
 
         MouseExitedMessage messageIndex ->
             case model.route of
@@ -1819,17 +1823,37 @@ updateLoaded msg model =
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart time touches ->
-            ( case model.drag of
+            case model.drag of
                 NoDrag ->
-                    { model | drag = DragStart time touches }
+                    ( { model | drag = DragStart time touches }
+                    , case NonemptyDict.toList touches of
+                        [ ( _, single ) ] ->
+                            let
+                                htmlId : String
+                                htmlId =
+                                    Dom.idToString single.target
+                            in
+                            if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
+                                case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
+                                    Just messageIndex ->
+                                        Process.sleep (Duration.seconds 0.5)
+                                            |> Task.perform (\() -> CheckMessageAltPress time messageIndex)
+
+                                    Nothing ->
+                                        Command.none
+
+                            else
+                                Command.none
+
+                        _ ->
+                            Command.none
+                    )
 
                 DragStart posix nonemptyDict ->
-                    model
+                    ( model, Command.none )
 
                 Dragging record ->
-                    model
-            , Command.none
-            )
+                    ( model, Command.none )
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -2051,6 +2075,27 @@ updateLoaded msg model =
         PressedEditMessagePingDropdownContainer ->
             ( model, setFocus model MessageMenu.editMessageTextInputId )
 
+        CheckMessageAltPress startTime messageIndex ->
+            case model.drag of
+                DragStart dragStart _ ->
+                    if startTime == dragStart then
+                        updateLoggedIn
+                            (\loggedIn ->
+                                ( handleAltPressedMessage messageIndex Coord.origin loggedIn model
+                                , Command.none
+                                )
+                            )
+                            model
+
+                    else
+                        ( model, Command.none )
+
+                NoDrag ->
+                    ( model, Command.none )
+
+                Dragging record ->
+                    ( model, Command.none )
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn model =
@@ -2106,31 +2151,7 @@ handleTouchEnd time model =
                     }
 
                 _ ->
-                    case model.drag of
-                        DragStart startTime touches ->
-                            case ( NonemptyDict.toList touches, Duration.from startTime time |> Quantity.lessThan (Duration.seconds 0.5) ) of
-                                ( [ ( _, single ) ], False ) ->
-                                    let
-                                        htmlId : String
-                                        htmlId =
-                                            Dom.idToString single.target
-                                    in
-                                    if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
-                                        case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
-                                            Just messageIndex ->
-                                                handleAltPressedMessage messageIndex Coord.origin loggedIn model
-
-                                            Nothing ->
-                                                loggedIn
-
-                                    else
-                                        loggedIn
-
-                                _ ->
-                                    loggedIn
-
-                        _ ->
-                            loggedIn
+                    loggedIn
             , Command.none
             )
         )

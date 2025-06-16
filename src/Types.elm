@@ -308,6 +308,7 @@ type FrontendMsg
     | PressedCancelMessageEdit (Id GuildId) (Id ChannelId)
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
+    | CheckMessageAltPress Time.Posix Int
 
 
 type alias NewChannelForm =
