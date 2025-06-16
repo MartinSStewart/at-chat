@@ -1,4 +1,13 @@
-module MessageInput exposing (MentionUserDropdown, MsgConfig, multilineUpdate, pingDropdownView, pressedArrowInDropdown, pressedPingUser, view)
+module MessageInput exposing
+    ( MentionUserDropdown
+    , MentionUserTarget(..)
+    , MsgConfig
+    , multilineUpdate
+    , pingDropdownView
+    , pressedArrowInDropdown
+    , pressedPingUser
+    , view
+    )
 
 import Diff
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -29,7 +38,13 @@ type alias MentionUserDropdown =
     { charIndex : Int
     , dropdownIndex : Int
     , inputElement : { x : Float, y : Float, width : Float, height : Float }
+    , target : MentionUserTarget
     }
+
+
+type MentionUserTarget
+    = NewMessage
+    | EditMessage
 
 
 type alias MsgConfig msg =
@@ -41,6 +56,8 @@ type alias MsgConfig msg =
     , pressedArrowInDropdown : Int -> msg
     , pressedArrowUpInEmptyInput : msg
     , pressedPingUser : Int -> msg
+    , pressedPingDropdownContainer : msg
+    , target : MentionUserTarget
     }
 
 
@@ -246,6 +263,7 @@ multilineUpdate msgConfig multilineId text oldText pingUser =
                         { dropdownIndex = 0
                         , charIndex = index
                         , inputElement = element
+                        , target = msgConfig.target
                         }
                     )
                 |> Task.attempt msgConfig.gotPingUserPosition
@@ -400,68 +418,61 @@ pingDropdownView :
     -> Id GuildId
     -> LocalState
     -> (Int -> HtmlId)
-    -> Maybe MentionUserDropdown
-    -> Maybe (Element msg)
-pingDropdownView msgConfig guildId localState dropdownButtonId pingUser =
-    case pingUser of
-        Just { dropdownIndex, inputElement } ->
-            Ui.column
-                [ Ui.background MyUi.background2
-                , Ui.borderColor MyUi.border1
-                , Ui.border 1
-                , Ui.Font.color MyUi.font2
-                , Ui.move
-                    { x = round inputElement.x
-                    , y = round (inputElement.y - 400 + 1)
-                    , z = 0
-                    }
-                , Ui.width (Ui.px (round inputElement.width))
-                , Ui.height (Ui.px 400)
-                , Ui.clip
-                , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
+    -> MentionUserDropdown
+    -> Element msg
+pingDropdownView msgConfig guildId localState dropdownButtonId { dropdownIndex, inputElement } =
+    Ui.column
+        [ Ui.background MyUi.background2
+        , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
+        , Ui.borderColor MyUi.border1
+        , Ui.border 1
+        , Ui.Font.color MyUi.font2
+        , Ui.move
+            { x = round inputElement.x
+            , y = round (inputElement.y - 400 + 1)
+            , z = 0
+            }
+        , Ui.width (Ui.px (round inputElement.width))
+        , Ui.height (Ui.px 400)
+        , Ui.clip
+        , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
 
-                --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
-                ]
-                [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
-                , Ui.column
-                    []
-                    (List.indexedMap
-                        (\index ( _, user ) ->
-                            Ui.el
-                                [ Ui.Input.button (msgConfig.pressedPingUser index)
-                                , Ui.Events.onMouseDown (msgConfig.pressedPingUser index)
-                                , MyUi.touchPress (msgConfig.pressedPingUser index)
-                                , Ui.id (Dom.idToString (dropdownButtonId index))
-                                , Ui.paddingXY 8 4
-                                , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
-                                , if dropdownIndex == index then
-                                    Ui.background MyUi.background3
+        --, Ui.Shadow.shadows [ { x = 0, y = 1, size = 0, blur = 4, color = Ui.rgba 0 0 0 0.2 } ]
+        ]
+        [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
+        , Ui.column
+            []
+            (List.indexedMap
+                (\index ( _, user ) ->
+                    Ui.el
+                        [ Ui.Input.button (msgConfig.pressedPingUser index)
+                        , Ui.id (Dom.idToString (dropdownButtonId index))
+                        , Ui.paddingXY 8 4
+                        , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
+                        , if dropdownIndex == index then
+                            Ui.background MyUi.background3
 
-                                  else
-                                    Ui.noAttr
-                                , Html.Events.on
-                                    "keydown"
-                                    (Json.Decode.field "key" Json.Decode.string
-                                        |> Json.Decode.andThen
-                                            (\key ->
-                                                if key == "ArrowDown" then
-                                                    Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
+                          else
+                            Ui.noAttr
+                        , Html.Events.on
+                            "keydown"
+                            (Json.Decode.field "key" Json.Decode.string
+                                |> Json.Decode.andThen
+                                    (\key ->
+                                        if key == "ArrowDown" then
+                                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
 
-                                                else if key == "ArrowUp" then
-                                                    Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
+                                        else if key == "ArrowUp" then
+                                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
 
-                                                else
-                                                    Json.Decode.fail ""
-                                            )
+                                        else
+                                            Json.Decode.fail ""
                                     )
-                                    |> Ui.htmlAttribute
-                                ]
-                                (Ui.text (PersonName.toString user.name))
-                        )
-                        (userDropdownList guildId localState)
-                    )
-                ]
-                |> Just
-
-        Nothing ->
-            Nothing
+                            )
+                            |> Ui.htmlAttribute
+                        ]
+                        (Ui.text (PersonName.toString user.name))
+                )
+                (userDropdownList guildId localState)
+            )
+        ]

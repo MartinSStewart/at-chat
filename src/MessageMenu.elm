@@ -1,5 +1,7 @@
 module MessageMenu exposing
     ( close
+    , editMessageTextInputConfig
+    , editMessageTextInputId
     , miniView
     , view
     , width
@@ -8,11 +10,14 @@ module MessageMenu exposing
 import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
+import Id exposing (ChannelId, GuildId, Id)
 import Json.Decode
 import LocalState exposing (LocalState, Message(..))
+import MessageInput exposing (MsgConfig)
 import MyUi
 import RichText
 import SeqDict
@@ -54,14 +59,27 @@ close model loggedIn =
             }
 
 
-view : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> Element FrontendMsg
-view model extraOptions local =
+view : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
+view model extraOptions local loggedIn =
     let
         messageId : MessageId
         messageId =
             extraOptions.messageId
     in
     if MyUi.isMobile model then
+        let
+            showEdit =
+                case SeqDict.get ( messageId.guildId, messageId.channelId ) loggedIn.editMessage of
+                    Just edit ->
+                        if edit.messageIndex == messageId.messageIndex then
+                            Just edit.text
+
+                        else
+                            Nothing
+
+                    Nothing ->
+                        Nothing
+        in
         Ui.column
             [ Ui.alignBottom
             , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
@@ -80,14 +98,29 @@ view model extraOptions local =
                     ]
                     Ui.none
                 )
-                :: List.intersperse
-                    (Ui.el
-                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                        , Ui.borderColor MyUi.border2
-                        ]
-                        Ui.none
-                    )
-                    (items extraOptions messageId local model)
+                :: (case showEdit of
+                        Just edit ->
+                            [ MessageInput.view
+                                True
+                                True
+                                (editMessageTextInputConfig messageId.guildId messageId.channelId)
+                                editMessageTextInputId
+                                ""
+                                edit
+                                loggedIn.pingUser
+                                local
+                            ]
+
+                        Nothing ->
+                            List.intersperse
+                                (Ui.el
+                                    [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    , Ui.borderColor MyUi.border2
+                                    ]
+                                    Ui.none
+                                )
+                                (items extraOptions messageId local model)
+                   )
             )
 
     else
@@ -105,6 +138,26 @@ view model extraOptions local =
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
             (items extraOptions messageId local model)
+
+
+editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
+editMessageTextInputConfig guildId channelId =
+    { gotPingUserPosition = GotPingUserPositionForEditMessage
+    , textInputGotFocus = TextInputGotFocus
+    , textInputLostFocus = TextInputLostFocus
+    , typedMessage = TypedEditMessage guildId channelId
+    , pressedSendMessage = PressedSendEditMessage guildId channelId
+    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildId
+    , pressedArrowUpInEmptyInput = FrontendNoOp
+    , pressedPingUser = PressedPingUserForEditMessage guildId channelId
+    , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
+    , target = MessageInput.EditMessage
+    }
+
+
+editMessageTextInputId : HtmlId
+editMessageTextInputId =
+    Dom.id "editMessageTextInput"
 
 
 miniView : Bool -> Int -> Element FrontendMsg

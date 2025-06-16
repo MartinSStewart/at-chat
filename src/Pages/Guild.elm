@@ -3,7 +3,6 @@ module Pages.Guild exposing
     , channelTextInputId
     , conversationContainerId
     , dropdownButtonId
-    , editMessageTextInputId
     , guildView
     , homePageLoggedInView
     , messageHtmlId
@@ -967,6 +966,8 @@ messageInputConfig guildId channelId =
     , pressedArrowInDropdown = PressedArrowInDropdown guildId
     , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput guildId channelId
     , pressedPingUser = PressedPingUser guildId channelId
+    , pressedPingDropdownContainer = PressedPingDropdownContainer
+    , target = MessageInput.NewMessage
     }
 
 
@@ -1268,8 +1269,8 @@ messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pin
                     [ MessageInput.view
                         True
                         False
-                        (editMessageTextInputConfig messageId.guildId messageId.channelId)
-                        editMessageTextInputId
+                        (MessageMenu.editMessageTextInputConfig messageId.guildId messageId.channelId)
+                        MessageMenu.editMessageTextInputId
                         ""
                         editing.text
                         pingUser
@@ -1304,24 +1305,6 @@ messageEditingView messageId message maybeRepliedTo revealedSpoilers editing pin
 
         DeletedMessage ->
             Ui.none
-
-
-editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
-editMessageTextInputConfig guildId channelId =
-    { gotPingUserPosition = GotPingUserPositionForEditMessage
-    , textInputGotFocus = TextInputGotFocus
-    , textInputLostFocus = TextInputLostFocus
-    , typedMessage = TypedEditMessage guildId channelId
-    , pressedSendMessage = PressedSendEditMessage guildId channelId
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildId
-    , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage guildId channelId
-    }
-
-
-editMessageTextInputId : HtmlId
-editMessageTextInputId =
-    Dom.id "editMessageTextInput"
 
 
 type IsHovered

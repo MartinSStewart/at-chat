@@ -308,6 +308,8 @@ type FrontendMsg
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit (Id GuildId) (Id ChannelId)
+    | PressedPingDropdownContainer
+    | PressedEditMessagePingDropdownContainer
 
 
 type ScreenCoordinate

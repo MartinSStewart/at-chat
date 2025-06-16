@@ -1188,7 +1188,7 @@ updateLoaded msg model =
 
         TextInputLostFocus htmlId ->
             updateLoggedIn
-                (\loggedIn -> ( { loggedIn | pingUser = Nothing }, Command.none ))
+                (\loggedIn -> ( loggedIn, Command.none ))
                 { model
                     | textInputFocus =
                         if Just htmlId == model.textInputFocus then
@@ -1399,7 +1399,7 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     loggedIn
-                            , setFocus model Pages.Guild.editMessageTextInputId
+                            , setFocus model MessageMenu.editMessageTextInputId
                             )
                         )
                         model
@@ -1488,8 +1488,8 @@ updateLoaded msg model =
                             let
                                 ( pingUser, cmd ) =
                                     MessageInput.multilineUpdate
-                                        (Pages.Guild.messageInputConfig guildId channelId)
-                                        Pages.Guild.editMessageTextInputId
+                                        (MessageMenu.editMessageTextInputConfig guildId channelId)
+                                        MessageMenu.editMessageTextInputId
                                         text
                                         edit.text
                                         loggedIn.pingUser
@@ -1578,6 +1578,7 @@ updateLoaded msg model =
                                 { loggedIn
                                     | editMessage =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
+                                    , messageHover = NoMessageHover
                                 }
                                 Command.none
 
@@ -1614,7 +1615,7 @@ updateLoaded msg model =
                                             MessageInput.pressedPingUser
                                                 SetFocus
                                                 guildId
-                                                Pages.Guild.editMessageTextInputId
+                                                MessageMenu.editMessageTextInputId
                                                 dropdownIndex
                                                 loggedIn.pingUser
                                                 (Local.model loggedIn.localState)
@@ -1697,7 +1698,7 @@ updateLoaded msg model =
                                                 }
                                                 loggedIn.editMessage
                                       }
-                                    , setFocus model Pages.Guild.editMessageTextInputId
+                                    , setFocus model MessageMenu.editMessageTextInputId
                                     )
 
                                 Nothing ->
@@ -2027,6 +2028,12 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedPingDropdownContainer ->
+            ( model, setFocus model Pages.Guild.channelTextInputId )
+
+        PressedEditMessagePingDropdownContainer ->
+            ( model, setFocus model MessageMenu.editMessageTextInputId )
+
 
 handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 handleTouchEnd time model =
@@ -2139,7 +2146,7 @@ isTouchingTextInput : NonemptyDict Int Touch -> Bool
 isTouchingTextInput touches =
     NonemptyDict.any
         (\_ touch ->
-            (touch.target == Pages.Guild.editMessageTextInputId)
+            (touch.target == MessageMenu.editMessageTextInputId)
                 || (touch.target == Pages.Guild.channelTextInputId)
         )
         touches
@@ -3163,6 +3170,10 @@ layout model attributes child =
         model.elmUiState
         ((case model.loginStatus of
             LoggedIn loggedIn ->
+                let
+                    local =
+                        Local.model loggedIn.localState
+                in
                 [ Local.networkError
                     (\change ->
                         case change of
@@ -3175,9 +3186,32 @@ layout model attributes child =
                     model.time
                     loggedIn.localState
                     |> Ui.inFront
+                , case model.route of
+                    GuildRoute guildId (ChannelRoute channelId _) ->
+                        case loggedIn.pingUser of
+                            Just pingUser ->
+                                MessageInput.pingDropdownView
+                                    (case pingUser.target of
+                                        MessageInput.NewMessage ->
+                                            Pages.Guild.messageInputConfig guildId channelId
+
+                                        MessageInput.EditMessage ->
+                                            MessageMenu.editMessageTextInputConfig guildId channelId
+                                    )
+                                    guildId
+                                    local
+                                    Pages.Guild.dropdownButtonId
+                                    pingUser
+                                    |> Ui.inFront
+
+                            Nothing ->
+                                Ui.noAttr
+
+                    _ ->
+                        Ui.noAttr
                 , case loggedIn.messageHover of
                     MessageHoverShowExtraOptions extraOptions ->
-                        MessageMenu.view model extraOptions (Local.model loggedIn.localState)
+                        MessageMenu.view model extraOptions local loggedIn
                             |> Ui.inFront
 
                     MessageHover _ ->
@@ -3339,31 +3373,9 @@ view model =
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
-                                let
-                                    local =
-                                        Local.model loggedIn.localState
-                                in
                                 layout
                                     loaded
-                                    [ case loaded.route of
-                                        GuildRoute guildId (ChannelRoute channelId _) ->
-                                            case
-                                                MessageInput.pingDropdownView
-                                                    (Pages.Guild.messageInputConfig guildId channelId)
-                                                    guildId
-                                                    local
-                                                    Pages.Guild.dropdownButtonId
-                                                    loggedIn.pingUser
-                                            of
-                                                Just element ->
-                                                    Ui.inFront element
-
-                                                Nothing ->
-                                                    Ui.noAttr
-
-                                        _ ->
-                                            Ui.noAttr
-                                    ]
+                                    []
                                     (page loggedIn (Local.model loggedIn.localState))
 
                             NotLoggedIn { loginForm } ->
