@@ -84,7 +84,8 @@ view model extraOptions local loggedIn =
             [ Ui.alignBottom
             , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
             , Ui.background MyUi.background1
-            , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
+            , Html.Attributes.style "padding" ("4px 8px calc(" ++ MyUi.insetBottom ++ " * 0.5 + 8px) 8px")
+                |> Ui.htmlAttribute
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
             (Ui.el
