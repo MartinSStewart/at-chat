@@ -2022,7 +2022,7 @@ updateLoaded msg model =
             ( model, Command.none )
 
         PressedCloseMessageHoverExtraOptions ->
-            updateLoggedIn (\loggedIn -> ( messageHoverExtraOptionsClose loggedIn, Command.none )) model
+            updateLoggedIn (\loggedIn -> ( messageHoverExtraOptionsClose model loggedIn, Command.none )) model
 
         PressedMessageHoverExtraOptionsContainer ->
             ( model, Command.none )

@@ -29,7 +29,9 @@ module LoginForm exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
+import Html
 import Html.Attributes
+import Icons
 import MyUi
 import PersonName exposing (PersonName)
 import Ports exposing (PwaStatus(..))
@@ -314,27 +316,45 @@ view loginForm isMobile pwaStatus =
         [ -- PWA warning for mobile users not using installed PWA
           if isMobile && pwaStatus == BrowserView then
             Ui.el
-                [ Ui.background (Ui.rgba 255 242 204 26)  -- Light yellow/orange background (0.1 alpha = 26)
+                [ Ui.background (Ui.rgba 255 242 204 0.1) -- Light yellow/orange background (0.1 alpha = 26)
                 , Ui.border 1
-                , Ui.borderColor (Ui.rgba 255 242 204 204)  -- Light yellow/orange border (0.8 alpha = 204)
+                , Ui.borderColor (Ui.rgba 255 242 204 1) -- Light yellow/orange border (0.8 alpha = 204)
                 , Ui.rounded 8
                 , Ui.padding 16
                 , Ui.width Ui.fill
                 ]
                 (Ui.column
                     [ Ui.spacing 8 ]
-                    [ Ui.el
-                        [ Ui.Font.bold
-                        , Ui.Font.color (Ui.rgba 204 153 0 255)  -- Orange/brown text
+                    [ --Ui.Prose.paragraph
+                      --   [ Ui.Font.bold
+                      --   , Ui.Font.color (Ui.rgb 204 153 0) -- Orange/brown text
+                      --   ]
+                      --   [ Ui.el [ Ui.width (Ui.px 48) ] (Ui.html Icons.addApp)
+                      --   , Ui.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
+                      --   ]
+                      Html.div
+                        []
+                        [ Html.div
+                            [ Html.Attributes.style "float" "left"
+                            , Html.Attributes.style "width" "44px"
+                            , Html.Attributes.style "height" "40px"
+                            , Html.Attributes.style "margin-right" "8px"
+                            , Html.Attributes.style "color" "rgb(179,128,0)"
+                            ]
+                            [ Icons.addApp ]
+                        , Html.b
+                            [ Html.Attributes.style "color" "rgb(204,153,0)" ]
+                            [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
                         ]
-                        (Ui.text "⚠️ Install App for Better Experience")
+                        |> Ui.html
                     , Ui.Prose.paragraph
-                        [ Ui.Font.color (Ui.rgba 179 128 0 255)  -- Darker orange/brown text
-                        , Ui.Font.size 14
+                        [ Ui.Font.color (Ui.rgb 179 128 0) -- Darker orange/brown text
+                        , Ui.Font.size 16
                         ]
-                        [ Ui.text "For the best mobile experience, install this app from your browser's menu (Add to Home Screen)." ]
+                        [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
                     ]
                 )
+
           else
             Ui.none
         , case loginForm of
