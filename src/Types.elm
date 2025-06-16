@@ -302,6 +302,8 @@ type FrontendMsg
     | PressedDeleteMessage MessageId
     | PressedReplyLink Int
     | ScrolledToMessage
+    | PressedCloseMessageHoverExtraOptions
+    | PressedMessageHoverExtraOptionsContainer
 
 
 type ScreenCoordinate

@@ -651,9 +651,7 @@ emojiSelector =
         , Ui.border 1
         , Ui.borderColor MyUi.border1
         , Ui.Font.size 24
-        , Ui.Events.stopPropagationOn
-            "click"
-            (Json.Decode.succeed ( PressedReactionEmojiContainer, True ))
+        , MyUi.blockClickPropagation PressedReactionEmojiContainer
         ]
         (List.map
             (\emojiRow ->
@@ -1359,7 +1357,7 @@ userProfileImage : Element msg
 userProfileImage =
     Ui.el
         [ Ui.background (Ui.rgb 100 100 100)
-        , Ui.rounded 99
+        , Ui.rounded 8
         , Ui.width (Ui.px 40)
         , Ui.height (Ui.px 40)
         ]

@@ -48,7 +48,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverExtraOptions, MessageId, RevealedSpoilers, ScreenCoordinate, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), Touch)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -1373,9 +1373,7 @@ updateLoaded msg model =
                                                         ( guildId, channelId )
                                                         { messageIndex = messageIndex
                                                         , text =
-                                                            RichText.toString
-                                                                (LocalState.allUsers local)
-                                                                message.content
+                                                            RichText.toString (LocalState.allUsers local) message.content
                                                         }
                                                         loggedIn.editMessage
                                             }
@@ -1662,9 +1660,7 @@ updateLoaded msg model =
                                                 ( guildId, channelId )
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString
-                                                        (LocalState.allUsers local)
-                                                        message
+                                                    RichText.toString (LocalState.allUsers local) message
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -1993,6 +1989,18 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         ScrolledToMessage ->
+            ( model, Command.none )
+
+        PressedCloseMessageHoverExtraOptions ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | messageHover = NoMessageHover }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedMessageHoverExtraOptionsContainer ->
             ( model, Command.none )
 
 
@@ -3160,7 +3168,7 @@ layout model attributes child =
                     |> Ui.inFront
                 , case loggedIn.messageHover of
                     MessageHoverShowExtraOptions extraOptions ->
-                        messageHoverExtraOptionsView extraOptions (Local.model loggedIn.localState)
+                        messageHoverExtraOptionsView model extraOptions (Local.model loggedIn.localState)
                             |> Ui.inFront
 
                     MessageHover _ ->
@@ -3196,6 +3204,7 @@ layout model attributes child =
                         )
                         |> Ui.htmlAttribute
                     , Ui.clip
+                    , Ui.htmlAttribute (Html.Attributes.style "user-select" "none")
                     ]
 
                 else
@@ -3210,60 +3219,136 @@ messageHoverExtraOptionsWidth =
     200
 
 
-messageHoverExtraOptionsView : MessageHoverExtraOptions -> LocalState -> Element FrontendMsg
-messageHoverExtraOptionsView extraOptions local =
+messageHoverExtraOptionsView : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> Element FrontendMsg
+messageHoverExtraOptionsView model extraOptions local =
     let
+        messageId : MessageId
         messageId =
             extraOptions.messageId
 
-        canDelete : Bool
-        canDelete =
-            case SeqDict.get messageId.guildId local.guilds of
-                Just guild ->
-                    LocalState.deleteMessage
-                        local.localUser.userId
-                        messageId.channelId
-                        messageId.messageIndex
-                        guild
-                        /= Err ()
+        items : List (Element FrontendMsg)
+        items =
+            case getGuildAndChannel messageId.guildId messageId.channelId local of
+                Just ( _, channel ) ->
+                    case Array.get messageId.messageIndex channel.messages of
+                        Just message ->
+                            let
+                                canEditAndDelete : Bool
+                                canEditAndDelete =
+                                    case message of
+                                        UserTextMessage data ->
+                                            if data.createdBy == local.localUser.userId then
+                                                True
+
+                                            else
+                                                False
+
+                                        _ ->
+                                            False
+
+                                text : String
+                                text =
+                                    case message of
+                                        UserTextMessage a ->
+                                            RichText.toString (LocalState.allUsers local) a.content
+
+                                        UserJoinedMessage _ userId _ ->
+                                            Pages.Guild.userToName userId (LocalState.allUsers local)
+                                                ++ " joined!"
+
+                                        DeletedMessage ->
+                                            "Message deleted"
+                            in
+                            [ messageHoverExtraOptionsButton
+                                Icons.smile
+                                "Add reaction emoji"
+                                (PressedShowReactionEmojiSelector
+                                    messageId.messageIndex
+                                    extraOptions.position
+                                )
+                            , if canEditAndDelete then
+                                messageHoverExtraOptionsButton Icons.pencil "Edit message" (PressedEditMessage messageId.messageIndex)
+
+                              else
+                                Ui.none
+                            , messageHoverExtraOptionsButton Icons.reply "Reply to" (PressedReply messageId.messageIndex)
+                            , messageHoverExtraOptionsButton
+                                Icons.copyIcon
+                                (case model.lastCopied of
+                                    Just lastCopied ->
+                                        if lastCopied.copiedText == text then
+                                            "Copied!"
+
+                                        else
+                                            "Copy message"
+
+                                    Nothing ->
+                                        "Copy message"
+                                )
+                                (PressedCopyText text)
+                            , if canEditAndDelete then
+                                Ui.el
+                                    [ Ui.Font.color MyUi.errorColor ]
+                                    (messageHoverExtraOptionsButton
+                                        Icons.delete
+                                        "Delete message"
+                                        (PressedDeleteMessage messageId)
+                                    )
+
+                              else
+                                Ui.none
+                            ]
+
+                        Nothing ->
+                            []
 
                 Nothing ->
-                    False
-
-        --case Array.get messageId.messageIndex channel.messages of
+                    []
     in
-    Ui.column
-        [ Ui.move
-            { x = Coord.xRaw extraOptions.position
-            , y = Coord.yRaw extraOptions.position
-            , z = 0
-            }
-        , Ui.background MyUi.background1
-        , Ui.border 1
-        , Ui.borderColor MyUi.border1
-        , Ui.width (Ui.px messageHoverExtraOptionsWidth)
-        , Ui.rounded 8
-        ]
-        [ messageHoverExtraOptionsButton
-            Icons.smile
-            "Add reaction emoji"
-            (PressedShowReactionEmojiSelector
-                messageId.messageIndex
-                extraOptions.position
-            )
-        , messageHoverExtraOptionsButton Icons.reply "Reply to" (PressedReply messageId.messageIndex)
-        , if canDelete then
-            Ui.el
-                [ Ui.Font.color MyUi.errorColor ]
-                (messageHoverExtraOptionsButton
-                    Icons.delete
-                    "Delete message"
-                    (PressedDeleteMessage messageId)
+    if Pages.Guild.isMobile model then
+        Ui.column
+            [ Ui.alignBottom
+            , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
+            , Ui.background MyUi.background1
+            , Ui.paddingWith { left = 8, right = 8, top = 4, bottom = 8 }
+            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
+            ]
+            (Ui.el
+                [ Ui.paddingXY 0 4, Ui.Input.button PressedCloseMessageHoverExtraOptions ]
+                (Ui.el
+                    [ Ui.background (Ui.rgb 80 100 140)
+                    , Ui.rounded 99
+                    , Ui.width (Ui.px 40)
+                    , Ui.height (Ui.px 4)
+                    , Ui.centerX
+                    ]
+                    Ui.none
                 )
+                :: List.intersperse
+                    (Ui.el
+                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                        , Ui.borderColor MyUi.border2
+                        ]
+                        Ui.none
+                    )
+                    items
+            )
 
-          else
-            Ui.none
-        ]
+    else
+        Ui.column
+            [ Ui.move
+                { x = Coord.xRaw extraOptions.position
+                , y = Coord.yRaw extraOptions.position
+                , z = 0
+                }
+            , Ui.background MyUi.background1
+            , Ui.border 1
+            , Ui.borderColor MyUi.border1
+            , Ui.width (Ui.px messageHoverExtraOptionsWidth)
+            , Ui.rounded 8
+            , MyUi.blockClickPropagation PressedMessageHoverExtraOptionsContainer
+            ]
+            items
 
 
 messageHoverExtraOptionsButton : Html msg -> String -> msg -> Element msg

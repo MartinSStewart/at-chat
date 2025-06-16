@@ -3,6 +3,7 @@ module MyUi exposing
     , background1
     , background2
     , background3
+    , blockClickPropagation
     , border1
     , border2
     , buttonBackground
@@ -60,12 +61,14 @@ import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
 import Id exposing (Id, UserId)
+import Json.Decode
 import PersonName exposing (PersonName)
 import Quantity
 import Round
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
 import Ui exposing (Element)
+import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
@@ -621,6 +624,11 @@ userLabel2Html user =
         , Html.Attributes.style "white-space" "nowrap"
         ]
         [ Html.text ("@" ++ PersonName.toString user.name) ]
+
+
+blockClickPropagation : msg -> Ui.Attribute msg
+blockClickPropagation msg =
+    Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
 
 
 noShrinking : Ui.Attribute msg
