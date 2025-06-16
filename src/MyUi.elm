@@ -32,6 +32,8 @@ module MyUi exposing
     , hoverText
     , inputBackground
     , inputBorder
+    , insetBottom
+    , insetTop
     , label
     , mentionColor
     , montserrat
@@ -629,6 +631,18 @@ userLabel2Html user =
 blockClickPropagation : msg -> Ui.Attribute msg
 blockClickPropagation msg =
     Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
+
+
+insetTop : String
+insetTop =
+    --"40px"
+    "env(safe-area-inset-top)"
+
+
+insetBottom : String
+insetBottom =
+    --"40px"
+    "env(safe-area-inset-bottom)"
 
 
 noShrinking : Ui.Attribute msg

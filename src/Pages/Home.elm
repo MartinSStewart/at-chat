@@ -5,6 +5,7 @@ module Pages.Home exposing
     )
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Html.Attributes
 import MyUi
 import Route exposing (Route(..), UserOverviewRouteData(..))
 import Types exposing (FrontendMsg(..), LoginStatus(..))
@@ -22,7 +23,7 @@ header loginStatus =
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ Ui.paddingXY 16 0
+            [ Html.Attributes.style "padding" (MyUi.insetTop ++ " 16px 0 16px") |> Ui.htmlAttribute
             , Ui.contentCenterY
             , MyUi.montserrat
             , Ui.widthMax 1280
