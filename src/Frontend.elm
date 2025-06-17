@@ -2082,7 +2082,7 @@ updateLoaded msg model =
                         updateLoggedIn
                             (\loggedIn ->
                                 ( handleAltPressedMessage messageIndex Coord.origin loggedIn model
-                                , Command.none
+                                , Ports.hapticFeedback
                                 )
                             )
                             model

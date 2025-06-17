@@ -9,8 +9,7 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
-exports.init = async function init(app)
-{
+exports.init = async function init(app) {
     let context = null;
     let sounds = {};
     app.ports.load_sounds_to_js.subscribe((a) => {
@@ -27,16 +26,36 @@ exports.init = async function init(app)
         }
     });
 
+    app.ports.haptic_feedback.subscribe((a) => {
+        try {
+            const label = document.createElement("label");
+            label.ariaHidden = "true";
+            label.style.display = "none";
+
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.setAttribute("switch", "");
+            label.appendChild(input);
+
+            document.head.appendChild(label);
+            label.click();
+            document.head.removeChild(label);
+        } catch {
+            // do nothing
+        }
+
+    });
+
     app.ports.request_notification_permission.subscribe((a) => {
         console.log("request");
         if ("Notification" in window) {
             Notification.requestPermission().then((permission) => {
                 console.log(permission);
-              if (permission === "granted") {
-                console.log("granted");
-                const notification = new Notification("Notifications enabled");
-              }
-              app.ports.check_notification_permission_from_js.send(permission);
+                if (permission === "granted") {
+                    console.log("granted");
+                    const notification = new Notification("Notifications enabled");
+                }
+                app.ports.check_notification_permission_from_js.send(permission);
             });
         } else {
             app.ports.check_notification_permission_from_js.send("unsupported");
@@ -60,56 +79,55 @@ exports.init = async function init(app)
 
     app.ports.check_pwa_status_to_js.subscribe((a) => {
         // Check if the app is running as an installed PWA
-        const isPwa = window.matchMedia('(display-mode: standalone)').matches || 
-                     window.navigator.standalone === true || 
-                     document.referrer.includes('android-app://');
-        
+        const isPwa = window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            document.referrer.includes('android-app://');
+
         app.ports.check_pwa_status_from_js.send(isPwa);
     });
 
     app.ports.copy_to_clipboard_to_js.subscribe(text => copyTextToClipboard(text));
 
-    app.ports.text_input_select_all_to_js.subscribe(htmlId =>
-        {
-            var a = document.getElementById(htmlId);
-            if (a) {
-                a.select();
-            }
-        });
+    app.ports.text_input_select_all_to_js.subscribe(htmlId => {
+        var a = document.getElementById(htmlId);
+        if (a) {
+            a.select();
+        }
+    });
 
     function copyTextToClipboard(text) {
-      if (!navigator.clipboard) {
-        fallbackCopyTextToClipboard(text);
-        return;
-      }
-      navigator.clipboard.writeText(text).then(function() {
-      }, function(err) {
-        console.error('Error: Could not copy text: ', err);
-      });
+        if (!navigator.clipboard) {
+            fallbackCopyTextToClipboard(text);
+            return;
+        }
+        navigator.clipboard.writeText(text).then(function () {
+        }, function (err) {
+            console.error('Error: Could not copy text: ', err);
+        });
     }
 
     function fallbackCopyTextToClipboard(text) {
-      var textArea = document.createElement("textarea");
-      textArea.value = text;
+        var textArea = document.createElement("textarea");
+        textArea.value = text;
 
-      // Avoid scrolling to bottom
-      textArea.style.top = "0";
-      textArea.style.left = "0";
-      textArea.style.position = "fixed";
+        // Avoid scrolling to bottom
+        textArea.style.top = "0";
+        textArea.style.left = "0";
+        textArea.style.position = "fixed";
 
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
 
-      try {
-        var successful = document.execCommand('copy');
-        if (successful !== true) {
-          console.log('Error: Copying text command was unsuccessful');
+        try {
+            var successful = document.execCommand('copy');
+            if (successful !== true) {
+                console.log('Error: Copying text command was unsuccessful');
+            }
+        } catch (err) {
+            console.error('Error: Oops, unable to copy', err);
         }
-      } catch (err) {
-        console.error('Error: Oops, unable to copy', err);
-      }
 
-      document.body.removeChild(textArea);
+        document.body.removeChild(textArea);
     }
 }

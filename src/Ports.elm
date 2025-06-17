@@ -10,6 +10,7 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , hapticFeedback
     , loadSounds
     , playSound
     , requestNotificationPermission
@@ -62,12 +63,20 @@ port check_pwa_status_from_js : (Json.Encode.Value -> msg) -> Sub msg
 port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 
 
+port haptic_feedback : Json.Encode.Value -> Cmd msg
+
+
 setFavicon : String -> Command FrontendOnly toMsg msg
 setFavicon faviconPath =
     Command.sendToJs
         "martinsstewart_set_favicon_to_js"
         martinsstewart_set_favicon_to_js
         (Json.Encode.string faviconPath)
+
+
+hapticFeedback : Command FrontendOnly toMsg msg
+hapticFeedback =
+    Command.sendToJs "haptic_feedback" haptic_feedback Json.Encode.null
 
 
 requestNotificationPermission : Command FrontendOnly toMsg msg
