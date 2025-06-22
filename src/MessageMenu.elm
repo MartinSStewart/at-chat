@@ -59,6 +59,21 @@ close model loggedIn =
             }
 
 
+mobileViewHeight : MessageHoverExtraOptions -> MessageId -> LocalState -> LoadedFrontend -> Int
+mobileViewHeight extraOptions messageId local model =
+    let
+        itemCount : Int
+        itemCount =
+            menuItems True extraOptions messageId local model |> List.length
+    in
+    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton
+
+
+mobileCloseButton : number
+mobileCloseButton =
+    12
+
+
 view : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     let
@@ -80,48 +95,57 @@ view model extraOptions local loggedIn =
                     Nothing ->
                         Nothing
         in
-        Ui.column
-            [ Ui.alignBottom
-            , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
-            , Ui.background MyUi.background1
-            , Html.Attributes.style "padding" ("4px 8px calc(" ++ MyUi.insetBottom ++ " * 0.5 + 8px) 8px")
-                |> Ui.htmlAttribute
-            , MyUi.blockClickPropagation MessageMenu_PressedContainer
+        Ui.el
+            [ Ui.height Ui.fill
+            , Ui.background (Ui.rgba 0 0 0 0.3)
             ]
-            (Ui.el
-                [ Ui.paddingXY 0 4, Ui.Input.button MessageMenu_PressedClose ]
+            (Ui.column
+                [ Ui.alignBottom
+                , Ui.move { x = 0, y = 0, z = 0 }
+                , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
+                , Ui.background (Ui.rgb 0 0 0)
+                , Html.Attributes.style "padding" ("4px 8px calc(" ++ MyUi.insetBottom ++ " * 0.5 + 8px) 8px")
+                    |> Ui.htmlAttribute
+                , MyUi.blockClickPropagation MessageMenu_PressedContainer
+                ]
                 (Ui.el
-                    [ Ui.background (Ui.rgb 40 50 60)
-                    , Ui.rounded 99
-                    , Ui.width (Ui.px 40)
-                    , Ui.height (Ui.px 4)
-                    , Ui.centerX
+                    [ Ui.height (Ui.px mobileCloseButton)
+                    , Ui.Input.button MessageMenu_PressedClose
                     ]
-                    Ui.none
-                )
-                :: (case showEdit of
-                        Just edit ->
-                            [ MessageInput.view
-                                True
-                                True
-                                (editMessageTextInputConfig messageId.guildId messageId.channelId)
-                                editMessageTextInputId
-                                ""
-                                edit
-                                loggedIn.pingUser
-                                local
-                            ]
+                    (Ui.el
+                        [ Ui.background (Ui.rgb 40 50 60)
+                        , Ui.rounded 99
+                        , Ui.width (Ui.px 40)
+                        , Ui.height (Ui.px 4)
+                        , Ui.centerX
+                        , Ui.centerY
+                        ]
+                        Ui.none
+                    )
+                    :: (case showEdit of
+                            Just edit ->
+                                [ MessageInput.view
+                                    True
+                                    True
+                                    (editMessageTextInputConfig messageId.guildId messageId.channelId)
+                                    editMessageTextInputId
+                                    ""
+                                    edit
+                                    loggedIn.pingUser
+                                    local
+                                ]
 
-                        Nothing ->
-                            List.intersperse
-                                (Ui.el
-                                    [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                    , Ui.borderColor MyUi.border2
-                                    ]
-                                    Ui.none
-                                )
-                                (items True extraOptions messageId local model)
-                   )
+                            Nothing ->
+                                List.intersperse
+                                    (Ui.el
+                                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                        , Ui.borderColor MyUi.border2
+                                        ]
+                                        Ui.none
+                                    )
+                                    (menuItems True extraOptions messageId local model)
+                       )
+                )
             )
 
     else
@@ -138,7 +162,7 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (items False extraOptions messageId local model)
+            (menuItems False extraOptions messageId local model)
 
 
 editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -203,14 +227,14 @@ miniButton onPress svg =
         (Ui.html svg)
 
 
-items :
+menuItems :
     Bool
     -> MessageHoverExtraOptions
     -> MessageId
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-items isMobile extraOptions messageId local model =
+menuItems isMobile extraOptions messageId local model =
     case LocalState.getGuildAndChannel messageId.guildId messageId.channelId local of
         Just ( _, channel ) ->
             case Array.get messageId.messageIndex channel.messages of
@@ -302,12 +326,16 @@ button isMobile icon text msg =
         [ Ui.Input.button msg
         , Ui.spacing 8
         , Ui.contentCenterY
-        , Ui.paddingXY 8
-            (if isMobile then
-                10
-
-             else
-                6
-            )
+        , Ui.paddingXY 8 0
+        , buttonHeight isMobile |> Ui.px |> Ui.height
         ]
         [ Ui.el [ Ui.width (Ui.px 24) ] (Ui.html icon), Ui.text text ]
+
+
+buttonHeight : Bool -> number
+buttonHeight isMobile =
+    if isMobile then
+        10 + 34
+
+    else
+        6 + 30
