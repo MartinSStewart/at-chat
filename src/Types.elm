@@ -31,6 +31,7 @@ module Types exposing
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
     , WaitingForLoginTokenData
+    , messageMenuMobileOffset
     )
 
 import Array exposing (Array)
@@ -173,6 +174,22 @@ type MessageHoverMobileMode
         , time : Time.Posix
         }
     | MessageMenuFixed (Quantity Float CssPixels)
+
+
+messageMenuMobileOffset : MessageHoverMobileMode -> Quantity Float CssPixels
+messageMenuMobileOffset mobileMode =
+    case mobileMode of
+        MessageMenuClosing offset ->
+            offset
+
+        MessageMenuOpening offset ->
+            offset
+
+        MessageMenuDragging { offset } ->
+            offset
+
+        MessageMenuFixed offset ->
+            offset
 
 
 type alias RevealedSpoilers =

@@ -1857,28 +1857,65 @@ updateLoaded msg model =
                 Dragging dragging ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( if dragging.horizontalStart then
-                                let
-                                    averageMove : { x : Float, y : Float }
-                                    averageMove =
-                                        Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
+                            let
+                                averageMove : { x : Float, y : Float }
+                                averageMove =
+                                    Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
+                            in
+                            ( case loggedIn.messageHover of
+                                MessageMenu messageMenu ->
+                                    if dragging.horizontalStart then
+                                        loggedIn
 
-                                    tHorizontal : Float
-                                    tHorizontal =
-                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
-                                in
-                                { loggedIn
-                                    | sidebarMode =
-                                        case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
-                                            ( Just _, True ) ->
-                                                loggedIn.sidebarMode
+                                    else
+                                        let
+                                            previousOffset =
+                                                Types.messageMenuMobileOffset messageMenu.mobileMode
 
-                                            _ ->
-                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
-                                }
+                                            offset =
+                                                Quantity.min
+                                                    (MessageMenu.mobileViewHeight
+                                                        messageMenu
+                                                        (Local.model loggedIn.localState)
+                                                        model
+                                                    )
+                                                    (Quantity.plus
+                                                        (CssPixels.cssPixels -averageMove.y)
+                                                        previousOffset
+                                                    )
+                                        in
+                                        { loggedIn
+                                            | messageHover =
+                                                MessageMenu
+                                                    { messageMenu
+                                                        | mobileMode =
+                                                            { offset = offset
+                                                            , previousOffset = previousOffset
+                                                            , time = time
+                                                            }
+                                                                |> MessageMenuDragging
+                                                    }
+                                        }
 
-                              else
-                                loggedIn
+                                _ ->
+                                    if dragging.horizontalStart then
+                                        let
+                                            tHorizontal : Float
+                                            tHorizontal =
+                                                averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                        in
+                                        { loggedIn
+                                            | sidebarMode =
+                                                case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
+                                                    ( Just _, True ) ->
+                                                        loggedIn.sidebarMode
+
+                                                    _ ->
+                                                        dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                        }
+
+                                    else
+                                        loggedIn
                             , Command.none
                             )
                         )
@@ -2115,41 +2152,37 @@ updateLoaded msg model =
                                     case messageMenu.mobileMode of
                                         MessageMenuOpening offset ->
                                             let
-                                                offsetRaw : Float
-                                                offsetRaw =
-                                                    CssPixels.inCssPixels offset
-
-                                                targetOffset : Int
+                                                targetOffset : Quantity Float CssPixels
                                                 targetOffset =
-                                                    MessageMenu.mobileViewHeight messageMenu local model
+                                                    MessageMenu.mobileMenuOpeningOffset messageMenu local model
+
+                                                offsetNext : Quantity Float CssPixels
+                                                offsetNext =
+                                                    offset
+                                                        |> Quantity.plus (Quantity.for elapsedTime MessageMenu.messageMenuSpeed)
                                             in
                                             { messageMenu
                                                 | mobileMode =
-                                                    if offsetRaw < toFloat targetOffset then
-                                                        Quantity.plus (CssPixels.cssPixels 5) offset
-                                                            |> MessageMenuOpening
+                                                    if offsetNext |> Quantity.lessThan targetOffset then
+                                                        MessageMenuOpening offsetNext
 
                                                     else
-                                                        CssPixels.cssPixels (toFloat targetOffset)
-                                                            |> MessageMenuFixed
+                                                        MessageMenuFixed targetOffset
                                             }
                                                 |> MessageMenu
 
                                         MessageMenuClosing offset ->
                                             let
-                                                offsetRaw : Float
-                                                offsetRaw =
-                                                    CssPixels.inCssPixels offset
+                                                offsetNext : Quantity Float CssPixels
+                                                offsetNext =
+                                                    offset
+                                                        |> Quantity.minus (Quantity.for elapsedTime MessageMenu.messageMenuSpeed)
                                             in
-                                            if offsetRaw <= 0 then
+                                            if offsetNext |> Quantity.lessThanOrEqualToZero then
                                                 NoMessageHover
 
                                             else
-                                                { messageMenu
-                                                    | mobileMode =
-                                                        Quantity.plus (CssPixels.cssPixels -5) offset
-                                                            |> MessageMenuClosing
-                                                }
+                                                { messageMenu | mobileMode = MessageMenuClosing offsetNext }
                                                     |> MessageMenu
 
                                         MessageMenuDragging record ->
@@ -2189,37 +2222,93 @@ handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command Front
 handleTouchEnd time model =
     updateLoggedIn
         (\loggedIn ->
-            ( case loggedIn.sidebarMode of
-                ChannelSidebarDragging a ->
-                    let
-                        delta : Duration
-                        delta =
-                            Duration.from a.time time
+            let
+                loggedIn2 : LoggedIn2
+                loggedIn2 =
+                    case loggedIn.sidebarMode of
+                        ChannelSidebarDragging a ->
+                            let
+                                delta : Duration
+                                delta =
+                                    Duration.from a.time time
 
-                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
-                        sidebarDelta =
-                            a.offset
-                                - a.previousOffset
-                                |> (*) (toFloat (Coord.xRaw model.windowSize))
-                                |> CssPixels.cssPixels
-                                |> Quantity.per delta
-                    in
-                    { loggedIn
-                        | sidebarMode =
-                            if
-                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
-                                    || ((a.offset < 0.5)
-                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
-                                       )
-                            then
-                                ChannelSidebarOpening { offset = clamp 0 1 a.offset }
+                                sidebarDelta : Quantity Float (Rate CssPixels Seconds)
+                                sidebarDelta =
+                                    a.offset
+                                        - a.previousOffset
+                                        |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                        |> CssPixels.cssPixels
+                                        |> Quantity.per delta
+                            in
+                            { loggedIn
+                                | sidebarMode =
+                                    if
+                                        (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
+                                            || ((a.offset < 0.5)
+                                                    && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
+                                               )
+                                    then
+                                        ChannelSidebarOpening { offset = clamp 0 1 a.offset }
 
-                            else
-                                ChannelSidebarClosing { offset = clamp 0 1 a.offset }
-                    }
+                                    else
+                                        ChannelSidebarClosing { offset = clamp 0 1 a.offset }
+                            }
 
-                _ ->
-                    loggedIn
+                        _ ->
+                            loggedIn
+            in
+            ( case loggedIn2.messageHover of
+                MessageMenu messageMenu ->
+                    case messageMenu.mobileMode of
+                        MessageMenuDragging dragging ->
+                            let
+                                delta : Duration
+                                delta =
+                                    Duration.from dragging.time time
+
+                                menuDelta : Quantity Float (Rate CssPixels Seconds)
+                                menuDelta =
+                                    dragging.offset
+                                        |> Quantity.minus dragging.previousOffset
+                                        |> Quantity.per delta
+
+                                speedThreshold : Quantity Float (Rate CssPixels Seconds)
+                                speedThreshold =
+                                    Quantity.rate (CssPixels.cssPixels -100) Duration.second
+
+                                menuHeight : Quantity Float CssPixels
+                                menuHeight =
+                                    MessageMenu.mobileViewHeight messageMenu (Local.model loggedIn.localState) model
+
+                                halfwayPoint : Quantity Float CssPixels
+                                halfwayPoint =
+                                    menuHeight |> Quantity.divideBy 2
+                            in
+                            { loggedIn2
+                                | messageHover =
+                                    MessageMenu
+                                        { messageMenu
+                                            | mobileMode =
+                                                if
+                                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                                        || (menuDelta |> Quantity.lessThan speedThreshold)
+                                                then
+                                                    MessageMenuClosing dragging.offset
+
+                                                else
+                                                    MessageMenuFixed
+                                                        (Quantity.min menuHeight dragging.offset)
+                                        }
+                            }
+
+                        _ ->
+                            loggedIn2
+
+                NoMessageHover ->
+                    loggedIn2
+
+                MessageHover messageId ->
+                    loggedIn2
             , Command.none
             )
         )

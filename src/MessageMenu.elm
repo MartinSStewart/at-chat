@@ -2,7 +2,9 @@ module MessageMenu exposing
     ( close
     , editMessageTextInputConfig
     , editMessageTextInputId
+    , messageMenuSpeed
     , miniView
+    , mobileMenuOpeningOffset
     , mobileViewHeight
     , view
     , width
@@ -11,6 +13,7 @@ module MessageMenu exposing
 import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
@@ -20,6 +23,7 @@ import Json.Decode
 import LocalState exposing (LocalState, Message(..))
 import MessageInput exposing (MsgConfig)
 import MyUi
+import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions)
@@ -84,20 +88,37 @@ close model loggedIn =
             }
 
 
-mobileViewHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Int
+mobileViewHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileViewHeight extraOptions local model =
     let
-        itemCount : Int
+        itemCount : Float
         itemCount =
-            menuItems True extraOptions local model |> List.length
+            menuItems True extraOptions local model |> List.length |> toFloat
     in
-    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
+    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
 
+mobileMenuOpeningOffset : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuOpeningOffset extraOptions local model =
+    let
+        itemCount : Float
+        itemCount =
+            menuItems True extraOptions local model |> List.length |> toFloat |> min 3.5
+    in
+    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
+
+
+messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
+messageMenuSpeed =
+    Quantity.rate (CssPixels.cssPixels 800) Duration.second
+
+
+topPadding : number
 topPadding =
     4
 
 
+bottomPadding : number
 bottomPadding =
     8
 
@@ -135,19 +156,8 @@ view model extraOptions local loggedIn =
                 [ Ui.move
                     { x = 0
                     , y =
-                        (case extraOptions.mobileMode of
-                            MessageMenuClosing offset ->
-                                CssPixels.inCssPixels offset
-
-                            MessageMenuOpening offset ->
-                                CssPixels.inCssPixels offset
-
-                            MessageMenuDragging { offset } ->
-                                CssPixels.inCssPixels offset
-
-                            MessageMenuFixed offset ->
-                                CssPixels.inCssPixels offset
-                        )
+                        Types.messageMenuMobileOffset extraOptions.mobileMode
+                            |> CssPixels.inCssPixels
                             |> negate
                             |> round
                     , z = 0
@@ -200,7 +210,7 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions local model)
+                                    (menuItems True extraOptions local model |> Debug.log "a")
                        )
                 )
                 |> Ui.below
@@ -332,16 +342,18 @@ menuItems isMobile extraOptions local model =
                             messageId.messageIndex
                             extraOptions.position
                         )
+                        |> Just
                     , if canEditAndDelete then
                         button
                             isMobile
                             Icons.pencil
                             "Edit message"
                             (MessageMenu_PressedEditMessage messageId.messageIndex)
+                            |> Just
 
                       else
-                        Ui.none
-                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex)
+                        Nothing
+                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex) |> Just
                     , button
                         isMobile
                         Icons.copyIcon
@@ -357,6 +369,7 @@ menuItems isMobile extraOptions local model =
                                 "Copy message"
                         )
                         (PressedCopyText text)
+                        |> Just
                     , if canEditAndDelete then
                         Ui.el
                             [ Ui.Font.color MyUi.errorColor ]
@@ -366,10 +379,12 @@ menuItems isMobile extraOptions local model =
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage messageId)
                             )
+                            |> Just
 
                       else
-                        Ui.none
+                        Nothing
                     ]
+                        |> List.filterMap identity
 
                 Nothing ->
                     []
