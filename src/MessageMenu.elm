@@ -4,8 +4,8 @@ module MessageMenu exposing
     , editMessageTextInputId
     , messageMenuSpeed
     , miniView
+    , mobileMenuHeight
     , mobileMenuOpeningOffset
-    , mobileViewHeight
     , view
     , width
     )
@@ -88,14 +88,21 @@ close model loggedIn =
             }
 
 
-mobileViewHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
-mobileViewHeight extraOptions local model =
+mobileMenuHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuHeight extraOptions local loggedIn model =
     let
         itemCount : Float
         itemCount =
             menuItems True extraOptions local model |> List.length |> toFloat
     in
-    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
+    (case showEdit extraOptions.messageId loggedIn of
+        Just edit ->
+            toFloat (List.length (String.lines edit)) * 20.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
+
+        Nothing ->
+            itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
+    )
+        |> CssPixels.cssPixels
 
 
 mobileMenuOpeningOffset : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
@@ -128,6 +135,20 @@ mobileCloseButton =
     12
 
 
+showEdit : MessageId -> LoggedIn2 -> Maybe String
+showEdit messageId loggedIn =
+    case SeqDict.get ( messageId.guildId, messageId.channelId ) loggedIn.editMessage of
+        Just edit ->
+            if edit.messageIndex == messageId.messageIndex then
+                Just edit.text
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     let
@@ -136,19 +157,6 @@ view model extraOptions local loggedIn =
             extraOptions.messageId
     in
     if MyUi.isMobile model then
-        let
-            showEdit =
-                case SeqDict.get ( messageId.guildId, messageId.channelId ) loggedIn.editMessage of
-                    Just edit ->
-                        if edit.messageIndex == messageId.messageIndex then
-                            Just edit.text
-
-                        else
-                            Nothing
-
-                    Nothing ->
-                        Nothing
-        in
         Ui.el
             [ Ui.height Ui.fill
             , Ui.background (Ui.rgba 0 0 0 0.3)
@@ -189,7 +197,7 @@ view model extraOptions local loggedIn =
                         ]
                         Ui.none
                     )
-                    :: (case showEdit of
+                    :: (case showEdit messageId loggedIn of
                             Just edit ->
                                 [ MessageInput.view
                                     True

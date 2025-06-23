@@ -1874,9 +1874,10 @@ updateLoaded msg model =
 
                                             offset =
                                                 Quantity.min
-                                                    (MessageMenu.mobileViewHeight
+                                                    (MessageMenu.mobileMenuHeight
                                                         messageMenu
                                                         (Local.model loggedIn.localState)
+                                                        loggedIn
                                                         model
                                                     )
                                                     (Quantity.plus
@@ -2278,7 +2279,11 @@ handleTouchEnd time model =
 
                                 menuHeight : Quantity Float CssPixels
                                 menuHeight =
-                                    MessageMenu.mobileViewHeight messageMenu (Local.model loggedIn.localState) model
+                                    MessageMenu.mobileMenuHeight
+                                        messageMenu
+                                        (Local.model loggedIn.localState)
+                                        loggedIn
+                                        model
 
                                 halfwayPoint : Quantity Float CssPixels
                                 halfwayPoint =
