@@ -21,7 +21,7 @@ import MessageInput exposing (MsgConfig)
 import MyUi
 import RichText
 import SeqDict
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverExtraOptions, MessageId)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -43,7 +43,7 @@ close model loggedIn =
         MessageHover _ ->
             loggedIn
 
-        MessageHoverShowExtraOptions extraOptions ->
+        MessageMenu extraOptions ->
             { loggedIn
                 | messageHover = NoMessageHover
                 , editMessage =
@@ -59,7 +59,7 @@ close model loggedIn =
             }
 
 
-mobileViewHeight : MessageHoverExtraOptions -> MessageId -> LocalState -> LoadedFrontend -> Int
+mobileViewHeight : MessageMenuExtraOptions -> MessageId -> LocalState -> LoadedFrontend -> Int
 mobileViewHeight extraOptions messageId local model =
     let
         itemCount : Int
@@ -74,7 +74,7 @@ mobileCloseButton =
     12
 
 
-view : LoadedFrontend -> MessageHoverExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
+view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     let
         messageId : MessageId
@@ -229,7 +229,7 @@ miniButton onPress svg =
 
 menuItems :
     Bool
-    -> MessageHoverExtraOptions
+    -> MessageMenuExtraOptions
     -> MessageId
     -> LocalState
     -> LoadedFrontend

@@ -49,32 +49,7 @@ import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
-import Types
-    exposing
-        ( AdminStatusLoginData(..)
-        , ChannelSidebarMode(..)
-        , Drag(..)
-        , EmojiSelector(..)
-        , FrontendModel(..)
-        , FrontendMsg(..)
-        , LoadStatus(..)
-        , LoadedFrontend
-        , LoadingFrontend
-        , LocalChange(..)
-        , LocalMsg(..)
-        , LoggedIn2
-        , LoginData
-        , LoginResult(..)
-        , LoginStatus(..)
-        , MessageHover(..)
-        , MessageHoverExtraOptions
-        , MessageId
-        , RevealedSpoilers
-        , ServerChange(..)
-        , ToBackend(..)
-        , ToBeFilledInByBackend(..)
-        , ToFrontend(..)
-        )
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -139,21 +114,43 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            case loggedIn.sidebarMode of
-                                ChannelSidebarOpened ->
-                                    Subscription.none
+                            Subscription.batch
+                                [ case loggedIn.sidebarMode of
+                                    ChannelSidebarOpened ->
+                                        Subscription.none
 
-                                ChannelSidebarClosed ->
-                                    Subscription.none
+                                    ChannelSidebarClosed ->
+                                        Subscription.none
 
-                                ChannelSidebarDragging _ ->
-                                    Subscription.none
+                                    ChannelSidebarDragging _ ->
+                                        Subscription.none
 
-                                ChannelSidebarClosing _ ->
-                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+                                    ChannelSidebarClosing _ ->
+                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
 
-                                ChannelSidebarOpening _ ->
-                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+                                    ChannelSidebarOpening _ ->
+                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
+                                , case loggedIn.messageHover of
+                                    NoMessageHover ->
+                                        Subscription.none
+
+                                    MessageHover messageId ->
+                                        Subscription.none
+
+                                    MessageMenu messageMenuExtraOptions ->
+                                        case messageMenuExtraOptions.mobileMode of
+                                            MessageMenuClosing _ ->
+                                                Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
+
+                                            MessageMenuOpening record ->
+                                                Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
+
+                                            MessageMenuDragging record ->
+                                                Subscription.none
+
+                                            MessageMenuFixed record ->
+                                                Subscription.none
+                                ]
 
                         NotLoggedIn _ ->
                             Subscription.none
@@ -1299,7 +1296,7 @@ updateLoaded msg model =
                 updateLoggedIn
                     (\loggedIn ->
                         case ( model.route, loggedIn.messageHover ) of
-                            ( _, MessageHoverShowExtraOptions _ ) ->
+                            ( _, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
                             ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
@@ -1369,7 +1366,7 @@ updateLoaded msg model =
                                         MessageHover _ ->
                                             loggedIn.messageHover
 
-                                        MessageHoverShowExtraOptions a ->
+                                        MessageMenu a ->
                                             MessageHover a.messageId
                               }
                             , Command.none
@@ -1931,7 +1928,7 @@ updateLoaded msg model =
         TouchCancel time ->
             handleTouchEnd time model
 
-        OnAnimationFrameDelta delta ->
+        ChannelSidebarAnimated elapsedTime ->
             let
                 _ =
                     Debug.log "Animation frame" ()
@@ -1948,7 +1945,7 @@ updateLoaded msg model =
                         ChannelSidebarOpening { offset } ->
                             let
                                 offset2 =
-                                    offset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                                    offset - Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
                             ( { loggedIn
                                 | sidebarMode =
@@ -1964,7 +1961,7 @@ updateLoaded msg model =
                         ChannelSidebarClosing { offset } ->
                             let
                                 offset2 =
-                                    offset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                                    offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
                             ( { loggedIn
                                 | sidebarMode =
@@ -2012,7 +2009,7 @@ updateLoaded msg model =
                         (\loggedIn ->
                             ( { loggedIn
                                 | messageHover =
-                                    MessageHoverShowExtraOptions
+                                    MessageMenu
                                         { position =
                                             Coord.plus
                                                 (Coord.xy (-MessageMenu.width - 8) -8)
@@ -2022,6 +2019,7 @@ updateLoaded msg model =
                                             , channelId = channelId
                                             , messageIndex = messageIndex
                                             }
+                                        , mobileMode = MessageMenuOpening { offset = Quantity.zero }
                                         }
                               }
                             , Command.none
@@ -2096,6 +2094,35 @@ updateLoaded msg model =
                 Dragging record ->
                     ( model, Command.none )
 
+        MessageMenuAnimated elapsedTime ->
+            updateLoggedIn
+                (\loggedIn ->
+                    { loggedIn
+                        | messageHover =
+                            case loggedIn.messageHover of
+                                MessageMenu messageMenu ->
+                                    case messageMenu.mobileMode of
+                                        MessageMenuOpening { offset } ->
+                                            let
+                                                offsetRaw =
+                                                    CssPixels.inCssPixels offset
+
+                                                targetOffset =
+                                                    MessageMenu.mobileMenuHeight
+                                            in
+                                            { messageMenu
+                                                | mobileMode =
+                                                    if offsetRaw < targetOffset then
+                                                        Quantity.plus (CssPixels.cssPixels 5) offset
+
+                                                    else
+                                                        MessageMenuFixed
+                                                            { offset = CssPixels.cssPixels targetOffset }
+                                            }
+                    }
+                )
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn model =
@@ -2103,13 +2130,14 @@ handleAltPressedMessage messageIndex clickedAt loggedIn model =
         GuildRoute guildId (ChannelRoute channelId _) ->
             { loggedIn
                 | messageHover =
-                    MessageHoverShowExtraOptions
+                    MessageMenu
                         { messageId =
                             { guildId = guildId
                             , channelId = channelId
                             , messageIndex = messageIndex
                             }
                         , position = clickedAt
+                        , mobileMode = MessageMenuOpening { offset = Quantity.zero }
                         }
             }
 
@@ -3270,7 +3298,7 @@ layout model attributes child =
                     _ ->
                         Ui.noAttr
                 , case loggedIn.messageHover of
-                    MessageHoverShowExtraOptions extraOptions ->
+                    MessageMenu extraOptions ->
                         MessageMenu.view model extraOptions local loggedIn
                             |> Ui.inFront
 

@@ -725,7 +725,7 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
                 messageHover : IsHovered
                 messageHover =
                     case loggedIn.messageHover of
-                        MessageHoverShowExtraOptions { messageId } ->
+                        MessageMenu { messageId } ->
                             if messageId.guildId == guildId && messageId.channelId == channelId then
                                 if messageId.messageIndex == index then
                                     IsHoveredButNoMenu

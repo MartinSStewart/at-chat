@@ -20,8 +20,9 @@ module Types exposing
     , LoginStatus(..)
     , LoginTokenData(..)
     , MessageHover(..)
-    , MessageHoverExtraOptions
+    , MessageHoverMobileMode(..)
     , MessageId
+    , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
@@ -60,6 +61,7 @@ import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
+import Quantity exposing (Quantity)
 import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
@@ -152,13 +154,25 @@ type ChannelSidebarMode
 type MessageHover
     = NoMessageHover
     | MessageHover MessageId
-    | MessageHoverShowExtraOptions MessageHoverExtraOptions
+    | MessageMenu MessageMenuExtraOptions
 
 
-type alias MessageHoverExtraOptions =
+type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
     , messageId : MessageId
+    , mobileMode : MessageHoverMobileMode
     }
+
+
+type MessageHoverMobileMode
+    = MessageMenuClosing { offset : Quantity Float CssPixels }
+    | MessageMenuOpening { offset : Quantity Float CssPixels }
+    | MessageMenuDragging
+        { offset : Quantity Float CssPixels
+        , previousOffset : Quantity Float CssPixels
+        , time : Time.Posix
+        }
+    | MessageMenuFixed { offset : Quantity Float CssPixels }
 
 
 type alias RevealedSpoilers =
@@ -293,7 +307,8 @@ type FrontendMsg
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix
-    | OnAnimationFrameDelta Duration
+    | ChannelSidebarAnimated Duration
+    | MessageMenuAnimated Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
     | UserScrolled { scrolledToBottomOfChannel : Bool }
