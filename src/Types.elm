@@ -165,14 +165,14 @@ type alias MessageMenuExtraOptions =
 
 
 type MessageHoverMobileMode
-    = MessageMenuClosing { offset : Quantity Float CssPixels }
-    | MessageMenuOpening { offset : Quantity Float CssPixels }
+    = MessageMenuClosing (Quantity Float CssPixels)
+    | MessageMenuOpening (Quantity Float CssPixels)
     | MessageMenuDragging
         { offset : Quantity Float CssPixels
         , previousOffset : Quantity Float CssPixels
         , time : Time.Posix
         }
-    | MessageMenuFixed { offset : Quantity Float CssPixels }
+    | MessageMenuFixed (Quantity Float CssPixels)
 
 
 type alias RevealedSpoilers =

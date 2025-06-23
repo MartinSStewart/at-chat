@@ -3,6 +3,7 @@ module MessageMenu exposing
     , editMessageTextInputConfig
     , editMessageTextInputId
     , miniView
+    , mobileViewHeight
     , view
     , width
     )
@@ -21,7 +22,7 @@ import MessageInput exposing (MsgConfig)
 import MyUi
 import RichText
 import SeqDict
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, MessageMenuExtraOptions)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -44,10 +45,34 @@ close model loggedIn =
             loggedIn
 
         MessageMenu extraOptions ->
+            let
+                isMobile =
+                    MyUi.isMobile model
+            in
             { loggedIn
-                | messageHover = NoMessageHover
+                | messageHover =
+                    if isMobile then
+                        { extraOptions
+                            | mobileMode =
+                                case extraOptions.mobileMode of
+                                    MessageMenuClosing offset ->
+                                        MessageMenuClosing offset
+
+                                    MessageMenuOpening offset ->
+                                        MessageMenuClosing offset
+
+                                    MessageMenuDragging { offset } ->
+                                        MessageMenuClosing offset
+
+                                    MessageMenuFixed offset ->
+                                        MessageMenuClosing offset
+                        }
+                            |> MessageMenu
+
+                    else
+                        NoMessageHover
                 , editMessage =
-                    if MyUi.isMobile model then
+                    if isMobile then
                         SeqDict.remove
                             ( extraOptions.messageId.guildId
                             , extraOptions.messageId.channelId
@@ -59,14 +84,22 @@ close model loggedIn =
             }
 
 
-mobileViewHeight : MessageMenuExtraOptions -> MessageId -> LocalState -> LoadedFrontend -> Int
-mobileViewHeight extraOptions messageId local model =
+mobileViewHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Int
+mobileViewHeight extraOptions local model =
     let
         itemCount : Int
         itemCount =
-            menuItems True extraOptions messageId local model |> List.length
+            menuItems True extraOptions local model |> List.length
     in
-    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton
+    itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
+
+
+topPadding =
+    4
+
+
+bottomPadding =
+    8
 
 
 mobileCloseButton : number
@@ -98,13 +131,37 @@ view model extraOptions local loggedIn =
         Ui.el
             [ Ui.height Ui.fill
             , Ui.background (Ui.rgba 0 0 0 0.3)
-            ]
-            (Ui.column
-                [ Ui.alignBottom
-                , Ui.move { x = 0, y = 0, z = 0 }
+            , Ui.column
+                [ Ui.move
+                    { x = 0
+                    , y =
+                        (case extraOptions.mobileMode of
+                            MessageMenuClosing offset ->
+                                CssPixels.inCssPixels offset
+
+                            MessageMenuOpening offset ->
+                                CssPixels.inCssPixels offset
+
+                            MessageMenuDragging { offset } ->
+                                CssPixels.inCssPixels offset
+
+                            MessageMenuFixed offset ->
+                                CssPixels.inCssPixels offset
+                        )
+                            |> negate
+                            |> round
+                    , z = 0
+                    }
                 , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
                 , Ui.background (Ui.rgb 0 0 0)
-                , Html.Attributes.style "padding" ("4px 8px calc(" ++ MyUi.insetBottom ++ " * 0.5 + 8px) 8px")
+                , Html.Attributes.style "padding"
+                    (String.fromInt topPadding
+                        ++ "px 8px calc("
+                        ++ MyUi.insetBottom
+                        ++ " * 0.5 + "
+                        ++ String.fromInt bottomPadding
+                        ++ "px) 8px"
+                    )
                     |> Ui.htmlAttribute
                 , MyUi.blockClickPropagation MessageMenu_PressedContainer
                 ]
@@ -143,10 +200,12 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions messageId local model)
+                                    (menuItems True extraOptions local model)
                        )
                 )
-            )
+                |> Ui.below
+            ]
+            Ui.none
 
     else
         Ui.column
@@ -162,7 +221,7 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions messageId local model)
+            (menuItems False extraOptions local model)
 
 
 editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -227,14 +286,13 @@ miniButton onPress svg =
         (Ui.html svg)
 
 
-menuItems :
-    Bool
-    -> MessageMenuExtraOptions
-    -> MessageId
-    -> LocalState
-    -> LoadedFrontend
-    -> List (Element FrontendMsg)
-menuItems isMobile extraOptions messageId local model =
+menuItems : Bool -> MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile extraOptions local model =
+    let
+        messageId : MessageId
+        messageId =
+            extraOptions.messageId
+    in
     case LocalState.getGuildAndChannel messageId.guildId messageId.channelId local of
         Just ( _, channel ) ->
             case Array.get messageId.messageIndex channel.messages of

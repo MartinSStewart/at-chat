@@ -2019,7 +2019,7 @@ updateLoaded msg model =
                                             , channelId = channelId
                                             , messageIndex = messageIndex
                                             }
-                                        , mobileMode = MessageMenuOpening { offset = Quantity.zero }
+                                        , mobileMode = MessageMenuOpening Quantity.zero
                                         }
                               }
                             , Command.none
@@ -2097,29 +2097,69 @@ updateLoaded msg model =
         MessageMenuAnimated elapsedTime ->
             updateLoggedIn
                 (\loggedIn ->
-                    { loggedIn
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    ( { loggedIn
                         | messageHover =
                             case loggedIn.messageHover of
+                                NoMessageHover ->
+                                    loggedIn.messageHover
+
+                                MessageHover messageId ->
+                                    loggedIn.messageHover
+
                                 MessageMenu messageMenu ->
                                     case messageMenu.mobileMode of
-                                        MessageMenuOpening { offset } ->
+                                        MessageMenuOpening offset ->
                                             let
+                                                offsetRaw : Float
                                                 offsetRaw =
                                                     CssPixels.inCssPixels offset
 
+                                                targetOffset : Int
                                                 targetOffset =
-                                                    MessageMenu.mobileMenuHeight
+                                                    MessageMenu.mobileViewHeight messageMenu local model
                                             in
                                             { messageMenu
                                                 | mobileMode =
-                                                    if offsetRaw < targetOffset then
+                                                    if offsetRaw < toFloat targetOffset then
                                                         Quantity.plus (CssPixels.cssPixels 5) offset
+                                                            |> MessageMenuOpening
 
                                                     else
-                                                        MessageMenuFixed
-                                                            { offset = CssPixels.cssPixels targetOffset }
+                                                        CssPixels.cssPixels (toFloat targetOffset)
+                                                            |> MessageMenuFixed
                                             }
-                    }
+                                                |> MessageMenu
+
+                                        MessageMenuClosing offset ->
+                                            let
+                                                offsetRaw : Float
+                                                offsetRaw =
+                                                    CssPixels.inCssPixels offset
+                                            in
+                                            if offsetRaw <= 0 then
+                                                NoMessageHover
+
+                                            else
+                                                { messageMenu
+                                                    | mobileMode =
+                                                        Quantity.plus (CssPixels.cssPixels -5) offset
+                                                            |> MessageMenuClosing
+                                                }
+                                                    |> MessageMenu
+
+                                        MessageMenuDragging record ->
+                                            MessageMenu messageMenu
+
+                                        MessageMenuFixed quantity ->
+                                            MessageMenu messageMenu
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -2137,7 +2177,7 @@ handleAltPressedMessage messageIndex clickedAt loggedIn model =
                             , messageIndex = messageIndex
                             }
                         , position = clickedAt
-                        , mobileMode = MessageMenuOpening { offset = Quantity.zero }
+                        , mobileMode = MessageMenuOpening Quantity.zero
                         }
             }
 
