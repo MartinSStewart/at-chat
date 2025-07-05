@@ -167,7 +167,7 @@ type alias MessageMenuExtraOptions =
 
 type MessageHoverMobileMode
     = MessageMenuClosing (Quantity Float CssPixels)
-    | MessageMenuOpening (Quantity Float CssPixels)
+    | MessageMenuOpening { offset : Quantity Float CssPixels, targetOffset : Quantity Float CssPixels }
     | MessageMenuDragging
         { offset : Quantity Float CssPixels
         , previousOffset : Quantity Float CssPixels
@@ -182,7 +182,7 @@ messageMenuMobileOffset mobileMode =
         MessageMenuClosing offset ->
             offset
 
-        MessageMenuOpening offset ->
+        MessageMenuOpening { offset } ->
             offset
 
         MessageMenuDragging { offset } ->

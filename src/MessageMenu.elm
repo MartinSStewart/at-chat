@@ -4,7 +4,7 @@ module MessageMenu exposing
     , editMessageTextInputId
     , messageMenuSpeed
     , miniView
-    , mobileMenuHeight
+    , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
     , view
     , width
@@ -62,7 +62,7 @@ close model loggedIn =
                                     MessageMenuClosing offset ->
                                         MessageMenuClosing offset
 
-                                    MessageMenuOpening offset ->
+                                    MessageMenuOpening { offset } ->
                                         MessageMenuClosing offset
 
                                     MessageMenuDragging { offset } ->
@@ -88,29 +88,29 @@ close model loggedIn =
             }
 
 
-mobileMenuHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuHeight extraOptions local loggedIn model =
-    let
-        itemCount : Float
-        itemCount =
-            menuItems True extraOptions local model |> List.length |> toFloat
-    in
+mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuMaxHeight extraOptions local loggedIn model =
     (case showEdit extraOptions.messageId loggedIn of
         Just edit ->
-            toFloat (List.length (String.lines edit)) * 20.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
+            toFloat (List.length (String.lines edit)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
         Nothing ->
+            let
+                itemCount : Float
+                itemCount =
+                    menuItems True extraOptions.messageId Coord.origin local model |> List.length |> toFloat
+            in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
         |> CssPixels.cssPixels
 
 
-mobileMenuOpeningOffset : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuOpeningOffset extraOptions local model =
+mobileMenuOpeningOffset : MessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuOpeningOffset messageId local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True extraOptions local model |> List.length |> toFloat |> min 3.5
+            menuItems True messageId Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -218,7 +218,7 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions local model |> Debug.log "a")
+                                    (menuItems True extraOptions.messageId extraOptions.position local model)
                        )
                 )
                 |> Ui.below
@@ -239,7 +239,7 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions local model)
+            (menuItems False extraOptions.messageId extraOptions.position local model)
 
 
 editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
@@ -304,13 +304,8 @@ miniButton onPress svg =
         (Ui.html svg)
 
 
-menuItems : Bool -> MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile extraOptions local model =
-    let
-        messageId : MessageId
-        messageId =
-            extraOptions.messageId
-    in
+menuItems : Bool -> MessageId -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile messageId position local model =
     case LocalState.getGuildAndChannel messageId.guildId messageId.channelId local of
         Just ( _, channel ) ->
             case Array.get messageId.messageIndex channel.messages of
@@ -346,10 +341,7 @@ menuItems isMobile extraOptions local model =
                         isMobile
                         Icons.smile
                         "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector
-                            messageId.messageIndex
-                            extraOptions.position
-                        )
+                        (MessageMenu_PressedShowReactionEmojiSelector messageId.messageIndex position)
                         |> Just
                     , if canEditAndDelete then
                         button
