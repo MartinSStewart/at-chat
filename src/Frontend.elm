@@ -49,32 +49,7 @@ import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
 import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
-import Types
-    exposing
-        ( AdminStatusLoginData(..)
-        , ChannelSidebarMode(..)
-        , Drag(..)
-        , EmojiSelector(..)
-        , FrontendModel(..)
-        , FrontendMsg(..)
-        , LoadStatus(..)
-        , LoadedFrontend
-        , LoadingFrontend
-        , LocalChange(..)
-        , LocalMsg(..)
-        , LoggedIn2
-        , LoginData
-        , LoginResult(..)
-        , LoginStatus(..)
-        , MessageHover(..)
-        , MessageHoverExtraOptions
-        , MessageId
-        , RevealedSpoilers
-        , ServerChange(..)
-        , ToBackend(..)
-        , ToBeFilledInByBackend(..)
-        , ToFrontend(..)
-        )
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -139,21 +114,43 @@ subscriptions model =
                             Subscription.none
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
-                            case loggedIn.sidebarMode of
-                                ChannelSidebarOpened ->
-                                    Subscription.none
+                            Subscription.batch
+                                [ case loggedIn.sidebarMode of
+                                    ChannelSidebarOpened ->
+                                        Subscription.none
 
-                                ChannelSidebarClosed ->
-                                    Subscription.none
+                                    ChannelSidebarClosed ->
+                                        Subscription.none
 
-                                ChannelSidebarDragging _ ->
-                                    Subscription.none
+                                    ChannelSidebarDragging _ ->
+                                        Subscription.none
 
-                                ChannelSidebarClosing _ ->
-                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+                                    ChannelSidebarClosing _ ->
+                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
 
-                                ChannelSidebarOpening _ ->
-                                    Effect.Browser.Events.onAnimationFrameDelta OnAnimationFrameDelta
+                                    ChannelSidebarOpening _ ->
+                                        Effect.Browser.Events.onAnimationFrameDelta ChannelSidebarAnimated
+                                , case loggedIn.messageHover of
+                                    NoMessageHover ->
+                                        Subscription.none
+
+                                    MessageHover messageId ->
+                                        Subscription.none
+
+                                    MessageMenu messageMenuExtraOptions ->
+                                        case messageMenuExtraOptions.mobileMode of
+                                            MessageMenuClosing _ ->
+                                                Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
+
+                                            MessageMenuOpening record ->
+                                                Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
+
+                                            MessageMenuDragging record ->
+                                                Subscription.none
+
+                                            MessageMenuFixed record ->
+                                                Subscription.none
+                                ]
 
                         NotLoggedIn _ ->
                             Subscription.none
@@ -1299,7 +1296,7 @@ updateLoaded msg model =
                 updateLoggedIn
                     (\loggedIn ->
                         case ( model.route, loggedIn.messageHover ) of
-                            ( _, MessageHoverShowExtraOptions _ ) ->
+                            ( _, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
                             ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
@@ -1349,7 +1346,11 @@ updateLoaded msg model =
 
         AltPressedMessage messageIndex clickedAt ->
             updateLoggedIn
-                (\loggedIn -> ( handleAltPressedMessage messageIndex clickedAt loggedIn model, Command.none ))
+                (\loggedIn ->
+                    ( handleAltPressedMessage messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
+                    , Command.none
+                    )
+                )
                 model
 
         MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
@@ -1369,7 +1370,7 @@ updateLoaded msg model =
                                         MessageHover _ ->
                                             loggedIn.messageHover
 
-                                        MessageHoverShowExtraOptions a ->
+                                        MessageMenu a ->
                                             MessageHover a.messageId
                               }
                             , Command.none
@@ -1394,15 +1395,42 @@ updateLoaded msg model =
                                 Just ( _, channel ) ->
                                     case Array.get messageIndex channel.messages of
                                         Just (UserTextMessage message) ->
-                                            { loggedIn
-                                                | editMessage =
-                                                    SeqDict.insert
-                                                        ( guildId, channelId )
-                                                        { messageIndex = messageIndex
-                                                        , text =
-                                                            RichText.toString (LocalState.allUsers local) message.content
-                                                        }
-                                                        loggedIn.editMessage
+                                            let
+                                                loggedIn2 =
+                                                    { loggedIn
+                                                        | editMessage =
+                                                            SeqDict.insert
+                                                                ( guildId, channelId )
+                                                                { messageIndex = messageIndex
+                                                                , text =
+                                                                    RichText.toString (LocalState.allUsers local) message.content
+                                                                }
+                                                                loggedIn.editMessage
+                                                    }
+                                            in
+                                            { loggedIn2
+                                                | messageHover =
+                                                    case loggedIn2.messageHover of
+                                                        NoMessageHover ->
+                                                            loggedIn2.messageHover
+
+                                                        MessageHover messageId ->
+                                                            loggedIn2.messageHover
+
+                                                        MessageMenu extraOptions ->
+                                                            { extraOptions
+                                                                | mobileMode =
+                                                                    { offset = Types.messageMenuMobileOffset extraOptions.mobileMode
+                                                                    , targetOffset =
+                                                                        MessageMenu.mobileMenuMaxHeight
+                                                                            extraOptions
+                                                                            local
+                                                                            loggedIn2
+                                                                            model
+                                                                    }
+                                                                        |> MessageMenuOpening
+                                                            }
+                                                                |> MessageMenu
                                             }
 
                                         _ ->
@@ -1504,6 +1532,18 @@ updateLoaded msg model =
                                         text
                                         edit.text
                                         loggedIn.pingUser
+
+                                loggedIn2 : LoggedIn2
+                                loggedIn2 =
+                                    { loggedIn
+                                        | pingUser = pingUser
+                                        , editMessage =
+                                            SeqDict.insert
+                                                ( guildId, channelId )
+                                                { edit | text = text }
+                                                loggedIn.editMessage
+                                        , typingDebouncer = False
+                                    }
                             in
                             handleLocalChange
                                 model.time
@@ -1519,14 +1559,26 @@ updateLoaded msg model =
                                  else
                                     Nothing
                                 )
-                                { loggedIn
-                                    | pingUser = pingUser
-                                    , editMessage =
-                                        SeqDict.insert
-                                            ( guildId, channelId )
-                                            { edit | text = text }
-                                            loggedIn.editMessage
-                                    , typingDebouncer = False
+                                { loggedIn2
+                                    | messageHover =
+                                        case loggedIn2.messageHover of
+                                            NoMessageHover ->
+                                                loggedIn2.messageHover
+
+                                            MessageHover _ ->
+                                                loggedIn2.messageHover
+
+                                            MessageMenu extraOptions ->
+                                                { extraOptions
+                                                    | mobileMode =
+                                                        MessageMenu.mobileMenuMaxHeight
+                                                            extraOptions
+                                                            (Local.model loggedIn2.localState)
+                                                            loggedIn2
+                                                            model
+                                                            |> MessageMenuFixed
+                                                }
+                                                    |> MessageMenu
                                 }
                                 (Command.batch
                                     [ cmd
@@ -1860,28 +1912,66 @@ updateLoaded msg model =
                 Dragging dragging ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( if dragging.horizontalStart then
-                                let
-                                    averageMove : { x : Float, y : Float }
-                                    averageMove =
-                                        Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
+                            let
+                                averageMove : { x : Float, y : Float }
+                                averageMove =
+                                    Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
+                            in
+                            ( case loggedIn.messageHover of
+                                MessageMenu messageMenu ->
+                                    if dragging.horizontalStart then
+                                        loggedIn
 
-                                    tHorizontal : Float
-                                    tHorizontal =
-                                        averageMove.x / toFloat (Coord.xRaw model.windowSize)
-                                in
-                                { loggedIn
-                                    | sidebarMode =
-                                        case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
-                                            ( Just _, True ) ->
-                                                loggedIn.sidebarMode
+                                    else
+                                        let
+                                            previousOffset =
+                                                Types.messageMenuMobileOffset messageMenu.mobileMode
 
-                                            _ ->
-                                                dragChannelSidebar time tHorizontal loggedIn.sidebarMode
-                                }
+                                            offset =
+                                                Quantity.min
+                                                    (MessageMenu.mobileMenuMaxHeight
+                                                        messageMenu
+                                                        (Local.model loggedIn.localState)
+                                                        loggedIn
+                                                        model
+                                                    )
+                                                    (Quantity.plus
+                                                        (CssPixels.cssPixels -averageMove.y)
+                                                        previousOffset
+                                                    )
+                                        in
+                                        { loggedIn
+                                            | messageHover =
+                                                MessageMenu
+                                                    { messageMenu
+                                                        | mobileMode =
+                                                            { offset = offset
+                                                            , previousOffset = previousOffset
+                                                            , time = time
+                                                            }
+                                                                |> MessageMenuDragging
+                                                    }
+                                        }
 
-                              else
-                                loggedIn
+                                _ ->
+                                    if dragging.horizontalStart then
+                                        let
+                                            tHorizontal : Float
+                                            tHorizontal =
+                                                averageMove.x / toFloat (Coord.xRaw model.windowSize)
+                                        in
+                                        { loggedIn
+                                            | sidebarMode =
+                                                case ( model.textInputFocus, isTouchingTextInput dragging.touches ) of
+                                                    ( Just _, True ) ->
+                                                        loggedIn.sidebarMode
+
+                                                    _ ->
+                                                        dragChannelSidebar time tHorizontal loggedIn.sidebarMode
+                                        }
+
+                                    else
+                                        loggedIn
                             , Command.none
                             )
                         )
@@ -1931,7 +2021,7 @@ updateLoaded msg model =
         TouchCancel time ->
             handleTouchEnd time model
 
-        OnAnimationFrameDelta delta ->
+        ChannelSidebarAnimated elapsedTime ->
             let
                 _ =
                     Debug.log "Animation frame" ()
@@ -1948,7 +2038,7 @@ updateLoaded msg model =
                         ChannelSidebarOpening { offset } ->
                             let
                                 offset2 =
-                                    offset - Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                                    offset - Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
                             ( { loggedIn
                                 | sidebarMode =
@@ -1964,7 +2054,7 @@ updateLoaded msg model =
                         ChannelSidebarClosing { offset } ->
                             let
                                 offset2 =
-                                    offset + Quantity.unwrap (Quantity.for delta sidebarSpeed)
+                                    offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
                             ( { loggedIn
                                 | sidebarMode =
@@ -2010,18 +2100,30 @@ updateLoaded msg model =
                 GuildRoute guildId (ChannelRoute channelId _) ->
                     updateLoggedIn
                         (\loggedIn ->
+                            let
+                                messageId =
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , messageIndex = messageIndex
+                                    }
+                            in
                             ( { loggedIn
                                 | messageHover =
-                                    MessageHoverShowExtraOptions
+                                    MessageMenu
                                         { position =
                                             Coord.plus
                                                 (Coord.xy (-MessageMenu.width - 8) -8)
                                                 clickedAt
-                                        , messageId =
-                                            { guildId = guildId
-                                            , channelId = channelId
-                                            , messageIndex = messageIndex
-                                            }
+                                        , messageId = messageId
+                                        , mobileMode =
+                                            MessageMenuOpening
+                                                { offset = Quantity.zero
+                                                , targetOffset =
+                                                    MessageMenu.mobileMenuOpeningOffset
+                                                        messageId
+                                                        (Local.model loggedIn.localState)
+                                                        model
+                                                }
                                         }
                               }
                             , Command.none
@@ -2081,7 +2183,12 @@ updateLoaded msg model =
                     if startTime == dragStart then
                         updateLoggedIn
                             (\loggedIn ->
-                                ( handleAltPressedMessage messageIndex Coord.origin loggedIn model
+                                ( handleAltPressedMessage
+                                    messageIndex
+                                    Coord.origin
+                                    loggedIn
+                                    (Local.model loggedIn.localState)
+                                    model
                                 , Ports.hapticFeedback
                                 )
                             )
@@ -2096,20 +2203,99 @@ updateLoaded msg model =
                 Dragging record ->
                     ( model, Command.none )
 
+        MessageMenuAnimated elapsedTime ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    ( { loggedIn
+                        | messageHover =
+                            case loggedIn.messageHover of
+                                NoMessageHover ->
+                                    loggedIn.messageHover
 
-handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage messageIndex clickedAt loggedIn model =
+                                MessageHover messageId ->
+                                    loggedIn.messageHover
+
+                                MessageMenu messageMenu ->
+                                    case messageMenu.mobileMode of
+                                        MessageMenuOpening { offset, targetOffset } ->
+                                            let
+                                                delta =
+                                                    Quantity.for elapsedTime MessageMenu.messageMenuSpeed
+
+                                                offsetNext : Quantity Float CssPixels
+                                                offsetNext =
+                                                    if offset |> Quantity.lessThan targetOffset then
+                                                        offset |> Quantity.plus delta
+
+                                                    else
+                                                        offset |> Quantity.minus delta
+                                            in
+                                            { messageMenu
+                                                | mobileMode =
+                                                    if
+                                                        (offsetNext |> Quantity.lessThan targetOffset)
+                                                            == (offset |> Quantity.lessThan targetOffset)
+                                                    then
+                                                        MessageMenuOpening { offset = offsetNext, targetOffset = targetOffset }
+
+                                                    else
+                                                        MessageMenuFixed targetOffset
+                                            }
+                                                |> MessageMenu
+
+                                        MessageMenuClosing offset ->
+                                            let
+                                                offsetNext : Quantity Float CssPixels
+                                                offsetNext =
+                                                    offset
+                                                        |> Quantity.minus (Quantity.for elapsedTime MessageMenu.messageMenuSpeed)
+                                            in
+                                            if offsetNext |> Quantity.lessThanOrEqualToZero then
+                                                NoMessageHover
+
+                                            else
+                                                { messageMenu | mobileMode = MessageMenuClosing offsetNext }
+                                                    |> MessageMenu
+
+                                        MessageMenuDragging record ->
+                                            MessageMenu messageMenu
+
+                                        MessageMenuFixed quantity ->
+                                            MessageMenu messageMenu
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+
+handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage messageIndex clickedAt loggedIn local model =
     case model.route of
         GuildRoute guildId (ChannelRoute channelId _) ->
+            let
+                messageId : MessageId
+                messageId =
+                    { guildId = guildId
+                    , channelId = channelId
+                    , messageIndex = messageIndex
+                    }
+            in
             { loggedIn
                 | messageHover =
-                    MessageHoverShowExtraOptions
-                        { messageId =
-                            { guildId = guildId
-                            , channelId = channelId
-                            , messageIndex = messageIndex
-                            }
+                    MessageMenu
+                        { messageId = messageId
                         , position = clickedAt
+                        , mobileMode =
+                            MessageMenuOpening
+                                { offset = Quantity.zero
+                                , targetOffset = MessageMenu.mobileMenuOpeningOffset messageId local model
+                                }
                         }
             }
 
@@ -2121,37 +2307,97 @@ handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command Front
 handleTouchEnd time model =
     updateLoggedIn
         (\loggedIn ->
-            ( case loggedIn.sidebarMode of
-                ChannelSidebarDragging a ->
-                    let
-                        delta : Duration
-                        delta =
-                            Duration.from a.time time
+            let
+                loggedIn2 : LoggedIn2
+                loggedIn2 =
+                    case loggedIn.sidebarMode of
+                        ChannelSidebarDragging a ->
+                            let
+                                delta : Duration
+                                delta =
+                                    Duration.from a.time time
 
-                        sidebarDelta : Quantity Float (Rate CssPixels Seconds)
-                        sidebarDelta =
-                            a.offset
-                                - a.previousOffset
-                                |> (*) (toFloat (Coord.xRaw model.windowSize))
-                                |> CssPixels.cssPixels
-                                |> Quantity.per delta
-                    in
-                    { loggedIn
-                        | sidebarMode =
-                            if
-                                (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
-                                    || ((a.offset < 0.5)
-                                            && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
-                                       )
-                            then
-                                ChannelSidebarOpening { offset = clamp 0 1 a.offset }
+                                sidebarDelta : Quantity Float (Rate CssPixels Seconds)
+                                sidebarDelta =
+                                    a.offset
+                                        - a.previousOffset
+                                        |> (*) (toFloat (Coord.xRaw model.windowSize))
+                                        |> CssPixels.cssPixels
+                                        |> Quantity.per delta
+                            in
+                            { loggedIn
+                                | sidebarMode =
+                                    if
+                                        (sidebarDelta |> Quantity.lessThan (Quantity.unsafe -100))
+                                            || ((a.offset < 0.5)
+                                                    && (sidebarDelta |> Quantity.lessThan (Quantity.unsafe 100))
+                                               )
+                                    then
+                                        ChannelSidebarOpening { offset = clamp 0 1 a.offset }
 
-                            else
-                                ChannelSidebarClosing { offset = clamp 0 1 a.offset }
-                    }
+                                    else
+                                        ChannelSidebarClosing { offset = clamp 0 1 a.offset }
+                            }
 
-                _ ->
-                    loggedIn
+                        _ ->
+                            loggedIn
+            in
+            ( case loggedIn2.messageHover of
+                MessageMenu messageMenu ->
+                    case messageMenu.mobileMode of
+                        MessageMenuDragging dragging ->
+                            let
+                                delta : Duration
+                                delta =
+                                    Duration.from dragging.time time
+
+                                menuDelta : Quantity Float (Rate CssPixels Seconds)
+                                menuDelta =
+                                    dragging.offset
+                                        |> Quantity.minus dragging.previousOffset
+                                        |> Quantity.per delta
+
+                                speedThreshold : Quantity Float (Rate CssPixels Seconds)
+                                speedThreshold =
+                                    Quantity.rate (CssPixels.cssPixels -100) Duration.second
+
+                                menuHeight : Quantity Float CssPixels
+                                menuHeight =
+                                    MessageMenu.mobileMenuMaxHeight
+                                        messageMenu
+                                        (Local.model loggedIn.localState)
+                                        loggedIn
+                                        model
+
+                                halfwayPoint : Quantity Float CssPixels
+                                halfwayPoint =
+                                    menuHeight |> Quantity.divideBy 2
+                            in
+                            { loggedIn2
+                                | messageHover =
+                                    MessageMenu
+                                        { messageMenu
+                                            | mobileMode =
+                                                if
+                                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                                        || (menuDelta |> Quantity.lessThan speedThreshold)
+                                                then
+                                                    MessageMenuClosing dragging.offset
+
+                                                else
+                                                    MessageMenuFixed
+                                                        (Quantity.min menuHeight dragging.offset)
+                                        }
+                            }
+
+                        _ ->
+                            loggedIn2
+
+                NoMessageHover ->
+                    loggedIn2
+
+                MessageHover messageId ->
+                    loggedIn2
             , Command.none
             )
         )
@@ -3270,7 +3516,7 @@ layout model attributes child =
                     _ ->
                         Ui.noAttr
                 , case loggedIn.messageHover of
-                    MessageHoverShowExtraOptions extraOptions ->
+                    MessageMenu extraOptions ->
                         MessageMenu.view model extraOptions local loggedIn
                             |> Ui.inFront
 

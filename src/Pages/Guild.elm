@@ -725,7 +725,7 @@ conversationViewHelper guildId channelId maybeMessageHighlight channel loggedIn 
                 messageHover : IsHovered
                 messageHover =
                     case loggedIn.messageHover of
-                        MessageHoverShowExtraOptions { messageId } ->
+                        MessageMenu { messageId } ->
                             if messageId.guildId == guildId && messageId.channelId == channelId then
                                 if messageId.messageIndex == index then
                                     IsHoveredButNoMenu
@@ -1166,7 +1166,7 @@ replyToHeader guildId channelId userId local =
         [ Ui.text "Reply to "
         , Ui.el [ Ui.Font.bold ] (Ui.text (User.toString userId (LocalState.allUsers local)))
         ]
-        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 0, z = 0 } ]
+        |> Ui.el [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }, Ui.move { x = 0, y = 1, z = 0 } ]
 
 
 dropdownButtonId : Int -> HtmlId
