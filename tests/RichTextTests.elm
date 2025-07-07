@@ -80,6 +80,35 @@ test =
                                 )
                             ]
                         )
+        , Test.test "strikethrough" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' "~abc~~")
+                    |> Expect.equal
+                        (Nonempty
+                            (Strikethrough (Nonempty (NormalText 'a' "bc") []))
+                            []
+                        )
+        , Test.test "not strikethrough" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' " abc ~")
+                    |> Expect.equal (Nonempty (NormalText '~' " abc ~") [])
+        , Test.test "~~a~~b" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' "~a~~b")
+                    |> Expect.equal (Nonempty (Strikethrough (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
+        , Test.test "_~~abc~~_" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '_' "~~abc~~_")
+                    |> Expect.equal
+                        (Nonempty
+                            (Italic
+                                (Nonempty
+                                    (Strikethrough (Nonempty (NormalText 'a' "bc") []))
+                                    []
+                                )
+                            )
+                            []
+                        )
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromNonemptyString users text
@@ -98,6 +127,7 @@ markdownStringFuzzer =
             , "@"
             , "_"
             , "__"
+            , "~~"
             , "👨\u{200D}👩\u{200D}👧\u{200D}👦"
             ]
         )

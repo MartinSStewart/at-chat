@@ -30,6 +30,7 @@ type RichText
     | Bold (Nonempty RichText)
     | Italic (Nonempty RichText)
     | Underline (Nonempty RichText)
+    | Strikethrough (Nonempty RichText)
     | Spoiler (Nonempty RichText)
     | Hyperlink Protocol String
     | InlineCode Char String
@@ -74,6 +75,9 @@ toString users nonempty =
 
                 Underline a ->
                     "__" ++ toString users a ++ "__"
+
+                Strikethrough a ->
+                    "~~" ++ toString users a ++ "~~"
 
                 Spoiler a ->
                     "||" ++ toString users a ++ "||"
@@ -136,6 +140,9 @@ normalize nonempty =
                 UserMention _ ->
                     List.Nonempty.cons richText nonempty2
 
+                Strikethrough a ->
+                    List.Nonempty.cons (Strikethrough (normalize a)) nonempty2
+
                 Spoiler a ->
                     List.Nonempty.cons (Spoiler (normalize a)) nonempty2
 
@@ -162,6 +169,9 @@ normalize nonempty =
                 Underline a ->
                     Underline (normalize a)
 
+                Strikethrough a ->
+                    Strikethrough (normalize a)
+
                 Spoiler a ->
                     Spoiler (normalize a)
 
@@ -181,6 +191,7 @@ type Modifiers
     = IsBold
     | IsItalic
     | IsUnderlined
+    | IsStrikethrough
     | IsSpoilered
 
 
@@ -195,6 +206,9 @@ modifierToSymbol modifier =
 
         IsUnderlined ->
             "__"
+
+        IsStrikethrough ->
+            "~~"
 
         IsSpoilered ->
             "||"
@@ -238,6 +252,7 @@ parser users modifiers =
                 , modifierHelper users True IsBold Bold state modifiers
                 , modifierHelper users False IsUnderlined Underline state modifiers
                 , modifierHelper users False IsItalic Italic state modifiers
+                , modifierHelper users False IsStrikethrough Strikethrough state modifiers
                 , modifierHelper users False IsSpoilered Spoiler state modifiers
                 , Parser.succeed
                     (\text ->
@@ -316,6 +331,9 @@ bailOut state modifiers =
 
             IsUnderlined :: _ ->
                 Array.fromList [ NormalText '_' "_" ]
+
+            IsStrikethrough :: _ ->
+                Array.fromList [ NormalText '~' "~" ]
 
             IsSpoilered :: _ ->
                 Array.fromList [ NormalText '|' "|" ]
@@ -444,6 +462,9 @@ mentionsUser userId nonempty =
                 Underline nonempty2 ->
                     mentionsUser userId nonempty2
 
+                Strikethrough nonempty2 ->
+                    mentionsUser userId nonempty2
+
                 Spoiler nonempty2 ->
                     mentionsUser userId nonempty2
 
@@ -466,7 +487,7 @@ view pressedSpoiler revealedSpoilers users nonempty =
     viewHelper
         pressedSpoiler
         0
-        { spoiler = False, underline = False, italic = False, bold = False }
+        { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
         nonempty
@@ -495,6 +516,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
                                 ]
                                 [ Html.text (String.cons char text) ]
@@ -534,6 +556,19 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | bold = True }
+                                revealedSpoilers
+                                allUsers
+                                nonempty2
+                    in
+                    ( spoilerIndex3, currentList ++ list )
+
+                Strikethrough nonempty2 ->
+                    let
+                        ( spoilerIndex3, list ) =
+                            viewHelper
+                                pressedSpoiler
+                                spoilerIndex2
+                                { state | strikethrough = True }
                                 revealedSpoilers
                                 allUsers
                                 nonempty2
@@ -593,6 +628,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                     [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                     , Html.Attributes.style "opacity" "0"
                                     ]
                                     [ Html.text text ]
@@ -602,6 +638,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                     [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                     , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                     , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+                                    , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                     , Html.Attributes.href text
                                     , Html.Attributes.target "_blank"
                                     , Html.Attributes.rel "noreferrer"
@@ -617,6 +654,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                                 , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                                 , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                                 , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
                                 , Html.Attributes.style "background-color" "rgb(90,100,120)"
                                 , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
@@ -634,7 +672,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
 
 textInputView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
 textInputView users nonempty =
-    textInputViewHelper { underline = False, italic = False, bold = False, spoiler = False } users nonempty
+    textInputViewHelper { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False } users nonempty
 
 
 htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
@@ -647,7 +685,7 @@ htmlAttrIf condition attribute =
 
 
 type alias RichTextState =
-    { italic : Bool, underline : Bool, bold : Bool, spoiler : Bool }
+    { italic : Bool, underline : Bool, bold : Bool, strikethrough : Bool, spoiler : Bool }
 
 
 textInputViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
@@ -674,6 +712,7 @@ textInputViewHelper state allUsers nonempty =
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                         , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
                         ]
                         [ Html.text (String.cons char text) ]
@@ -694,6 +733,11 @@ textInputViewHelper state allUsers nonempty =
                         :: textInputViewHelper { state | bold = True } allUsers nonempty2
                         ++ [ formatText "*" ]
 
+                Strikethrough nonempty2 ->
+                    formatText "~~"
+                        :: textInputViewHelper { state | strikethrough = True } allUsers nonempty2
+                        ++ [ formatText "~~" ]
+
                 Spoiler nonempty2 ->
                     formatText "||"
                         :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
@@ -704,6 +748,7 @@ textInputViewHelper state allUsers nonempty =
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                         , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
                         , Html.Attributes.style "color" "rgb(66,93,203)"
                         ]
@@ -716,6 +761,7 @@ textInputViewHelper state allUsers nonempty =
                         [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                         , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
+                        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                         , if state.spoiler then
                             Html.Attributes.style "background-color" "rgb(0,0,0)"
 

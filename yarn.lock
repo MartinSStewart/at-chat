@@ -2,6 +2,18 @@
 # yarn lockfile v1
 
 
+"@anthropic-ai/claude-code@^1.0.43":
+  version "1.0.43"
+  resolved "https://registry.npmjs.org/@anthropic-ai/claude-code/-/claude-code-1.0.43.tgz"
+  integrity sha512-VnuRK4s/R9ZRTkwH4gUjsp4SiBQXq7Y0B47OtgeXIZYVQYkhTW8m+E0IisFzXXFIyTQrE0SodGCpvgLhAYzGCg==
+  optionalDependencies:
+    "@img/sharp-darwin-arm64" "^0.33.5"
+    "@img/sharp-darwin-x64" "^0.33.5"
+    "@img/sharp-linux-arm" "^0.33.5"
+    "@img/sharp-linux-arm64" "^0.33.5"
+    "@img/sharp-linux-x64" "^0.33.5"
+    "@img/sharp-win32-x64" "^0.33.5"
+
 "@avh4/elm-format-linux-x64@0.8.7-2":
   version "0.8.7-2"
   resolved "https://registry.npmjs.org/@avh4/elm-format-linux-x64/-/elm-format-linux-x64-0.8.7-2.tgz"
@@ -11,6 +23,18 @@
   version "0.19.12"
   resolved "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.19.12.tgz"
   integrity sha512-B71g1QpxfwBvNrfyJdVDexenDIt1CiDN1TIXLbhOw0KhJzE78KIFGX6OJ9MrtC0oOqMWf+0xop4qEU8JrJTwCg==
+
+"@img/sharp-libvips-linux-x64@1.0.4":
+  version "1.0.4"
+  resolved "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.0.4.tgz"
+  integrity sha512-MmWmQ3iPFZr0Iev+BAgVMb3ZyC4KeFc3jFxnNbEPas60e1cIfevbtuyf9nDGIzOaW9PdnDciJm+wFFaTlj5xYw==
+
+"@img/sharp-linux-x64@^0.33.5":
+  version "0.33.5"
+  resolved "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.33.5.tgz"
+  integrity sha512-opC+Ok5pRNAzuvq1AG0ar+1owsu842/Ab+4qvU879ippJBHvyY5n2mxF1izXqkPYlGuP/M556uh53jRLJmzTWA==
+  optionalDependencies:
+    "@img/sharp-libvips-linux-x64" "1.0.4"
 
 "@isaacs/cliui@^8.0.2":
   version "8.0.2"

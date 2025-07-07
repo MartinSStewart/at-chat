@@ -147,6 +147,7 @@ checkPwaStatusResponse msg =
                     (\isPwa ->
                         if isPwa then
                             InstalledPwa
+
                         else
                             BrowserView
                     )
