@@ -66,7 +66,7 @@ botToken =
 
 botId_ : String
 botId_ =
-    "842829883185037333"
+    ""
 
 
 botId : Discord.Id.Id DiscordUserId
