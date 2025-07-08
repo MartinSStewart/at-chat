@@ -7,7 +7,8 @@
         "vendored/mdgriffith/elm-animator/2.0.0/src",
         "vendored/MartinSStewart/elm-email/1.0.0/src",
         "vendored/ianmackenzie/elm-float-extra/1.1.0/src",
-        "vendored/ianmackenzie/elm-geometry/3.11.0/src"
+        "vendored/ianmackenzie/elm-geometry/3.11.0/src",
+        "vendored/MartinSStewart/elm-discord/1.0.0/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -39,6 +40,7 @@
             "lamdera/containers": "1.0.0",
             "lamdera/core": "1.0.0",
             "lamdera/program-test": "3.0.0",
+            "lamdera/websocket": "1.0.0",
             "lydell/elm-app-url": "1.0.4",
             "mdgriffith/elm-bezier": "1.0.0",
             "mgold/elm-nonempty-list": "4.2.0",

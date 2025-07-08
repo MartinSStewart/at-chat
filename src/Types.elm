@@ -39,6 +39,7 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
@@ -73,6 +74,7 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
+import Websocket
 
 
 type FrontendModel
@@ -226,6 +228,8 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , gatewayState : Maybe ( Discord.SessionId, Discord.SequenceCounter )
+    , websocketHandle : Maybe Websocket.Connection
     }
 
 
@@ -374,6 +378,10 @@ type BackendMsg
     | Disconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    | WebsocketData String
+    | WebsocketCreatedHandle Websocket.Connection
+    | WebsocketClosed { code : Websocket.CloseEventCode, reason : String }
+    | WebsocketSentData (Result Websocket.SendError ())
 
 
 type LoginResult
