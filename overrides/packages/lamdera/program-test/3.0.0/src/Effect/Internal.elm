@@ -17,7 +17,9 @@ module Effect.Internal exposing
     , Subscription(..)
     , Task(..)
     , Visibility(..)
+    , WebsocketCloseEventCode(..)
     , WebsocketConnection(..)
+    , WebsocketSendError(..)
     , Wrap(..)
     , XrButton
     , XrEyeType(..)
@@ -31,7 +33,6 @@ module Effect.Internal exposing
     , andThen
     , taskMap
     , taskMapError
-    , toSub
     )
 
 import Browser.Dom
@@ -87,6 +88,26 @@ type Subscription restriction msg
     | OnConnect (SessionId -> ClientId -> msg)
     | OnDisconnect (SessionId -> ClientId -> msg)
     | HttpTrack String (Http.Progress -> msg)
+    | WebsocketListen WebsocketConnection (String -> msg) ({ code : WebsocketCloseEventCode, reason : String } -> msg)
+
+
+type WebsocketCloseEventCode
+    = NormalClosure
+    | GoingAway
+    | ProtocolError
+    | UnsupportedData
+    | NoStatusReceived
+    | AbnormalClosure
+    | InvalidFramePayloadData
+    | PolicyViolation
+    | MessageTooBig
+    | MissingExtension
+    | InternalError
+    | ServiceRestart
+    | TryAgainLater
+    | BadGateway
+    | TlsHandshake
+    | UnknownCode Int
 
 
 type Visibility
@@ -144,7 +165,7 @@ type Task restriction x a
     | EndXrSession (() -> Task restriction x a)
     | WebsocketCreateHandle String (WebsocketConnection -> Task restriction x a)
     | WebsocketSendString WebsocketConnection String (Result WebsocketSendError () -> Task restriction x a)
-    | WebsocketClose
+    | WebsocketClose WebsocketConnection (() -> Task restriction x a)
 
 
 type WebsocketConnection
@@ -152,7 +173,7 @@ type WebsocketConnection
 
 
 type WebsocketSendError
-    = ConnectionError
+    = ConnectionClosed
 
 
 type alias XrPose =

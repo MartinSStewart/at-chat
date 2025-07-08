@@ -25,7 +25,7 @@ import Bytes.Encode
 import Duration
 import Effect.Browser.Navigation
 import Effect.Command exposing (BackendOnly, Command, FrontendOnly)
-import Effect.Internal exposing (File(..), NavigationKey(..))
+import Effect.Internal exposing (File(..), NavigationKey(..), Subscription(..), Visibility(..))
 import Effect.Subscription exposing (Subscription)
 import File
 import File.Download
@@ -38,6 +38,8 @@ import Time
 import Url
 import WebGLFix
 import WebGLFix.Texture
+import Websocket
+import WebsocketFix
 
 
 {-| Create a Lamdera frontend application
@@ -76,7 +78,7 @@ frontend toBackend userApp =
         \msg model ->
             userApp.updateFromBackend msg model
                 |> Tuple.mapSecond (toCmd (\_ -> Cmd.none) (\_ _ -> Cmd.none) toBackend)
-    , subscriptions = userApp.subscriptions >> Effect.Internal.toSub
+    , subscriptions = userApp.subscriptions >> toSub
     , onUrlRequest = userApp.onUrlRequest
     , onUrlChange = userApp.onUrlChange
     }
@@ -110,7 +112,7 @@ backend broadcastCmd toFrontend userApp =
                 msg
                 model
                 |> Tuple.mapSecond (toCmd broadcastCmd toFrontend (\_ -> Cmd.none))
-    , subscriptions = userApp.subscriptions >> Effect.Internal.toSub
+    , subscriptions = userApp.subscriptions >> toSub
     }
 
 
@@ -532,3 +534,13 @@ toTask simulatedTask =
 
         Effect.Internal.EndXrSession function ->
             WebGLFix.endXrSession |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.WebsocketCreateHandle url function ->
+            WebsocketFix.createHandle url
+                |> Task.andThen (\result -> toTask (function result))
+
+        Effect.Internal.WebsocketSendString connection data function ->
+            WebsocketFix.sendString connection data
+
+        Effect.Internal.WebsocketClose connection function ->
+            WebsocketFix.close connection

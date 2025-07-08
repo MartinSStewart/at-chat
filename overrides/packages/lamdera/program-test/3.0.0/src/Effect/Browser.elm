@@ -117,7 +117,7 @@ element { init, view, update, subscriptions } =
             \msg model ->
                 update msg model
                     |> Tuple.mapSecond (Effect.Lamdera.toCmd (\_ -> Cmd.none) (\_ _ -> Cmd.none) (\_ -> Cmd.none))
-        , subscriptions = \model -> subscriptions model |> Effect.Internal.toSub
+        , subscriptions = \model -> subscriptions model |> Lamdera.toSub
         }
 
 
