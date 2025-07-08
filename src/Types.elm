@@ -383,6 +383,7 @@ type BackendMsg
     | WebsocketCreatedHandle Websocket.Connection
     | WebsocketClosed { code : Websocket.CloseEventCode, reason : String }
     | WebsocketSentData (Result Websocket.SendError ())
+    | RestoreDiscordConnection
 
 
 type LoginResult

@@ -193,10 +193,16 @@ adminData model lastLogPageViewed =
 
 
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
-subscriptions _ =
+subscriptions model =
     Subscription.batch
         [ Lamdera.onConnect UserConnected
         , Lamdera.onDisconnect UserDisconnected
+        , case model.websocketHandle of
+            Just _ ->
+                Subscription.none
+
+            Nothing ->
+                Time.every (Duration.seconds 3) (\_ -> RestoreDiscordConnection)
         ]
 
 
@@ -380,6 +386,9 @@ update msg model =
                             Debug.log "WebsocketSentData" "ConnectionClosed"
                     in
                     ( model, Command.none )
+
+        RestoreDiscordConnection ->
+            ( model, getHandle Nothing )
 
 
 updateFromFrontend :
