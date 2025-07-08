@@ -175,7 +175,9 @@ init =
                     }
                   )
                 ]
+      , gatewayState = Nothing
       , websocketHandle = Nothing
+      , heartbeatInterval = Nothing
       }
     , getHandle Nothing
     )
@@ -193,15 +195,15 @@ adminData model lastLogPageViewed =
 subscriptions : BackendModel -> Subscription BackendOnly BackendMsg
 subscriptions _ =
     Subscription.batch
-        [ Lamdera.onConnect Connected
-        , Lamdera.onDisconnect Disconnected
+        [ Lamdera.onConnect UserConnected
+        , Lamdera.onDisconnect UserDisconnected
         ]
 
 
 update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 update msg model =
     case msg of
-        Connected sessionId clientId ->
+        UserConnected sessionId clientId ->
             ( { model
                 | connections =
                     SeqDict.update
@@ -219,7 +221,7 @@ update msg model =
             , Command.none
             )
 
-        Disconnected sessionId clientId ->
+        UserDisconnected sessionId clientId ->
             ( { model
                 | connections =
                     SeqDict.update
@@ -274,12 +276,14 @@ update msg model =
                                         |> Json.Encode.encode 0
                             in
                             ( { model | heartbeatInterval = Just heartbeatInterval }
-                            , Cmd.batch
+                            , Command.batch
                                 [ Process.sleep (Duration.inMilliseconds heartbeatInterval)
-                                    |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
-                                    |> Task.attempt WebsocketSentData
+                                    |> RegularTask.andThen (\() -> Websocket.sendString connection heartbeat)
+                                    |> RegularTask.attempt WebsocketSentData
+                                    |> Command.fromCmd "WebsocketSentData"
                                 , Websocket.sendString connection command
-                                    |> Task.attempt WebsocketSentData
+                                    |> RegularTask.attempt WebsocketSentData
+                                    |> Command.fromCmd "WebsocketSentData"
                                 ]
                             )
 
@@ -287,157 +291,57 @@ update msg model =
                             ( model
                             , Process.sleep
                                 (Duration.inMilliseconds (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval))
-                                |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
-                                |> Task.attempt WebsocketSentData
+                                |> RegularTask.andThen (\() -> Websocket.sendString connection heartbeat)
+                                |> RegularTask.attempt WebsocketSentData
+                                |> Command.fromCmd "WebsocketSentData"
                             )
 
                         Discord.OpDispatch sequenceCounter opDispatchEvent ->
                             case opDispatchEvent of
                                 Discord.ReadyEvent discordSessionId ->
-                                    ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Cmd.none )
+                                    ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
 
                                 Discord.ResumedEvent ->
-                                    ( model, Cmd.none )
+                                    ( model, Command.none )
 
                                 Discord.MessageCreateEvent message ->
-                                    if Helper.ignoreChannel message.channelId then
-                                        ( model, Cmd.none )
+                                    case message.guildId of
+                                        Discord.Included guildId ->
+                                            ( model, Command.none )
 
-                                    else
-                                        case message.guildId of
-                                            Discord.Included guildId ->
-                                                let
-                                                    guildAndChannelId =
-                                                        ( guildId, message.channelId )
-                                                in
-                                                updateGuildState
-                                                    guildAndChannelId
-                                                    (\serverState ->
-                                                        handleGuildMessage
-                                                            guildAndChannelId
-                                                            message
-                                                            model
-                                                            { serverState
-                                                                | users =
-                                                                    AssocList.update
-                                                                        message.author.id
-                                                                        (Maybe.withDefault defaultPerson >> Just)
-                                                                        serverState.users
-                                                            }
-                                                    )
-                                                    model
-
-                                            Discord.Missing ->
-                                                let
-                                                    userAndChannelId =
-                                                        ( message.author.id, message.channelId )
-                                                in
-                                                updateDmState
-                                                    userAndChannelId
-                                                    (\dmState ->
-                                                        handleDmMessage userAndChannelId message model dmState
-                                                    )
-                                                    model
+                                        Discord.Missing ->
+                                            ( model, Command.none )
 
                                 Discord.MessageUpdateEvent _ ->
-                                    ( model, Cmd.none )
+                                    ( model, Command.none )
 
                                 Discord.MessageDeleteEvent messageId channelId maybeGuildId ->
                                     case maybeGuildId of
                                         Discord.Included guildId ->
-                                            ( { model
-                                                | serverState =
-                                                    AssocList.update guildId
-                                                        (Maybe.map
-                                                            (\serverState ->
-                                                                { serverState
-                                                                    | messageHistory =
-                                                                        Array.filter
-                                                                            (\message -> message.id /= messageId)
-                                                                            serverState.messageHistory
-                                                                }
-                                                            )
-                                                        )
-                                                        model.serverState
-                                              }
-                                            , Cmd.none
+                                            ( model
+                                            , Command.none
                                             )
 
                                         Discord.Missing ->
-                                            ( Helper.addError
-                                                "Websocket"
-                                                model.time
-                                                ("Got MessageDeleteEvent for messageId: "
-                                                    ++ Discord.Id.toString messageId
-                                                    ++ ", channelId: "
-                                                    ++ Discord.Id.toString channelId
-                                                    ++ " but guildId was missing"
-                                                )
-                                                model
-                                            , Cmd.none
+                                            ( model
+                                            , Command.none
                                             )
 
                                 Discord.MessageDeleteBulkEvent _ _ _ ->
-                                    ( model, Cmd.none )
+                                    ( model, Command.none )
 
                                 Discord.GuildMemberAddEvent guildId guildMember ->
                                     ( model
-                                    , case
-                                        ( Env.generalChannelIds |> List.find (Tuple.first >> (==) guildId)
-                                        , guildMember.user
-                                        )
-                                      of
-                                        ( Just ( _, generalChannelId ), Discord.Included user ) ->
-                                            Helper.createSequentialMessages
-                                                False
-                                                generalChannelId
-                                                model
-                                                (CreatedGuildMessage ( guildId, generalChannelId ))
-                                                [ ( Duration.seconds 2
-                                                  , [ Markdown.text "Hello ", Markdown.ping user.id ]
-                                                  )
-                                                , ( Duration.seconds 2
-                                                  , [ Markdown.text "I can list birthdays if you write "
-                                                    , Markdown.code "AT2 list birthdays"
-                                                    , Markdown.text "."
-                                                    ]
-                                                  )
-                                                , ( Duration.seconds 2
-                                                  , [ Markdown.text "If you want to be on the birthday list, tell me when your birthday is and "
-                                                    , Markdown.ping Helper.atUserId
-                                                    , Markdown.text " will add it."
-                                                    ]
-                                                  )
-                                                ]
-
-                                        _ ->
-                                            Cmd.none
+                                    , Command.none
                                     )
 
                                 Discord.GuildMemberRemoveEvent guildId user ->
                                     ( model
-                                    , Task.map2 Tuple.pair
-                                        (Discord.createDmChannel Env.botToken Helper.atUserId)
-                                        (Discord.getGuild Env.botToken guildId)
-                                        |> Task.andThen
-                                            (\( dmChannel, guild ) ->
-                                                Helper.createMessageTask
-                                                    False
-                                                    model
-                                                    Nothing
-                                                    dmChannel.id
-                                                    (Discord.usernameToString user.username
-                                                        ++ " has left "
-                                                        ++ guild.name
-                                                        |> Markdown.text
-                                                        |> List.singleton
-                                                    )
-                                            )
-                                        |> Task.attempt (UserHasLeftResult guildId user)
+                                    , Command.none
                                     )
 
                                 Discord.GuildMemberUpdateEvent _ ->
-                                    ( model, Cmd.none )
+                                    ( model, Command.none )
 
                         Discord.OpReconnect ->
                             ( model, getHandle model.websocketHandle )
@@ -1869,7 +1773,7 @@ addLog time log model =
             ( model2, Command.none )
 
 
-getHandle : Maybe Websocket.Connection -> Command BackendOnly toMsg BackendMsg
+getHandle : Maybe Websocket.Connection -> Command BackendOnly ToFrontend BackendMsg
 getHandle maybeOldHandle =
     Process.sleep 500
         |> RegularTask.andThen
@@ -1881,7 +1785,7 @@ getHandle maybeOldHandle =
                     Nothing ->
                         RegularTask.succeed ()
             )
-        |> RegularTask.andThen (\() -> Websocket.createHandle websocketGatewayUrl)
+        |> RegularTask.andThen (\() -> Websocket.createHandle (Debug.log "a" websocketGatewayUrl))
         |> RegularTask.perform WebsocketCreatedHandle
         |> Command.fromCmd "WebsocketCreatedHandle"
 

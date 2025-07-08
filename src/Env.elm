@@ -1,7 +1,11 @@
 module Env exposing (..)
 
+import Discord exposing (Authentication)
+import Discord.Id
 import EmailAddress exposing (EmailAddress)
+import Id exposing (DiscordUserId)
 import Postmark
+import UInt64
 import Unsafe
 
 
@@ -48,3 +52,23 @@ noReplyEmailAddress =
 adminEmail : String
 adminEmail =
     "a@a.se"
+
+
+botToken_ : String
+botToken_ =
+    ""
+
+
+botToken : Authentication
+botToken =
+    Discord.botToken botToken_
+
+
+botId_ : String
+botId_ =
+    "842829883185037333"
+
+
+botId : Discord.Id.Id DiscordUserId
+botId =
+    UInt64.fromString botId_ |> Maybe.withDefault UInt64.zero |> Discord.Id.fromUInt64

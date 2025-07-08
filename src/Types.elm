@@ -230,6 +230,7 @@ type alias BackendModel =
     , guilds : SeqDict (Id GuildId) BackendGuild
     , gatewayState : Maybe ( Discord.SessionId, Discord.SequenceCounter )
     , websocketHandle : Maybe Websocket.Connection
+    , heartbeatInterval : Maybe Duration
     }
 
 
@@ -374,8 +375,8 @@ type ToBackend
 
 type BackendMsg
     = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | Connected SessionId ClientId
-    | Disconnected SessionId ClientId
+    | UserConnected SessionId ClientId
+    | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | WebsocketData String
