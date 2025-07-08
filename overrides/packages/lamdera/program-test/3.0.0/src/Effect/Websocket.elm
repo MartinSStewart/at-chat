@@ -19,7 +19,7 @@ type Connection
 
 {-| Create a websocket handle that you can then open by calling listen or sendString.
 -}
-createHandle : String -> Task restriction Never Connection
+createHandle : String -> Task restriction x Connection
 createHandle url =
     Effect.Internal.WebsocketCreateHandle
         url
@@ -74,7 +74,7 @@ sendString (Connection id url) data =
 
 {-| Close the websocket connection
 -}
-close : Connection -> Task restriction Never ()
+close : Connection -> Task restriction x ()
 close (Connection id url) =
     Effect.Internal.WebsocketClose (Effect.Internal.WebsocketConnection id url) Effect.Internal.Succeed
 

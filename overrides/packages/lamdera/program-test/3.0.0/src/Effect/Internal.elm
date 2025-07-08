@@ -306,78 +306,6 @@ type HttpPart
     | BytesPart String String Bytes
 
 
-toSub : Subscription restriction msg -> Sub msg
-toSub sub =
-    case sub of
-        SubBatch subs ->
-            List.map toSub subs |> Sub.batch
-
-        SubNone ->
-            Sub.none
-
-        TimeEvery duration msg ->
-            Time.every (Duration.inMilliseconds duration) msg
-
-        OnAnimationFrame msg ->
-            Browser.Events.onAnimationFrame msg
-
-        OnAnimationFrameDelta msg ->
-            Browser.Events.onAnimationFrameDelta (Duration.milliseconds >> msg)
-
-        OnKeyPress decoder ->
-            Browser.Events.onKeyPress decoder
-
-        OnKeyDown decoder ->
-            Browser.Events.onKeyDown decoder
-
-        OnKeyUp decoder ->
-            Browser.Events.onKeyUp decoder
-
-        OnClick decoder ->
-            Browser.Events.onClick decoder
-
-        OnMouseMove decoder ->
-            Browser.Events.onMouseMove decoder
-
-        OnMouseDown decoder ->
-            Browser.Events.onMouseDown decoder
-
-        OnMouseUp decoder ->
-            Browser.Events.onMouseUp decoder
-
-        OnVisibilityChange msg ->
-            Browser.Events.onVisibilityChange
-                (\visibility ->
-                    case visibility of
-                        Browser.Events.Visible ->
-                            msg Visible
-
-                        Browser.Events.Hidden ->
-                            msg Hidden
-                )
-
-        OnResize msg ->
-            Browser.Events.onResize msg
-
-        SubPort _ portFunction _ ->
-            portFunction
-
-        OnConnect msg ->
-            Lamdera.onConnect
-                (\sessionId clientId ->
-                    msg (SessionId sessionId) (ClientId clientId)
-                )
-
-        OnDisconnect msg ->
-            Lamdera.onDisconnect
-                (\sessionId clientId ->
-                    msg (SessionId sessionId) (ClientId clientId)
-                )
-
-        HttpTrack string function ->
-            Http.track string function
-
-
 taskMap : (a -> b) -> Task restriction x a -> Task restriction x b
 taskMap f =
     andThen (f >> Succeed)
@@ -468,6 +396,15 @@ andThen f task =
         EndXrSession function ->
             EndXrSession (function >> andThen f)
 
+        WebsocketCreateHandle url function ->
+            WebsocketCreateHandle url (function >> andThen f)
+
+        WebsocketSendString connection data function ->
+            WebsocketSendString connection data (function >> andThen f)
+
+        WebsocketClose connection function ->
+            WebsocketClose connection (function >> andThen f)
+
 
 taskMapError : (x -> y) -> Task restriction x a -> Task restriction y a
 taskMapError f task =
@@ -553,3 +490,12 @@ taskMapError f task =
 
         EndXrSession function ->
             EndXrSession (function >> taskMapError f)
+
+        WebsocketCreateHandle url function ->
+            WebsocketCreateHandle url (function >> taskMapError f)
+
+        WebsocketSendString connection data function ->
+            WebsocketSendString connection data (function >> taskMapError f)
+
+        WebsocketClose connection function ->
+            WebsocketClose connection (function >> taskMapError f)

@@ -1,4 +1,4 @@
-effect module WebsocketFix where { command = MyCmd, subscription = MySub } exposing (CloseEventCode, Connection, SendError, close, createHandle, listen, sendString)
+effect module WebsocketFix where { command = MyCmd, subscription = MySub } exposing (CloseEventCode, SendError, close, createHandle, listen, sendString)
 
 {-| We need this copy of the original lamdera/websocket package in order to alias the Connection type defined in Effect.Websocket
 
@@ -8,21 +8,14 @@ We can't just have Effect.Websocket alias Connection here like we normally do be
 
 import Dict exposing (Dict)
 import Effect.Internal exposing (WebsocketCloseEventCode(..))
-import Effect.Websocket
 import Elm.Kernel.LamderaWebsocketFix
 import Process
 import Task exposing (Task)
 
 
-{-| A websocket connection.
--}
-type alias Connection =
-    Effect.Internal.WebsocketConnection
-
-
 {-| Create a websocket handle that you can then open by calling listen or sendString.
 -}
-createHandle : String -> Task Never Connection
+createHandle : String -> Task x Effect.Internal.WebsocketConnection
 createHandle url =
     Elm.Kernel.LamderaWebsocket.createHandle () url
 
@@ -98,7 +91,7 @@ connectionClosed =
 
 {-| Send a string
 -}
-sendString : Connection -> String -> Task SendError ()
+sendString : Effect.Internal.WebsocketConnection -> String -> Task SendError ()
 sendString connection_ data =
     Elm.Kernel.LamderaWebsocket.sendString () connection_ data
         |> Task.map (\_ -> ())
@@ -106,7 +99,7 @@ sendString connection_ data =
 
 {-| Close the websocket connection
 -}
-close : Connection -> Task Never ()
+close : Effect.Internal.WebsocketConnection -> Task x ()
 close connection_ =
     Elm.Kernel.LamderaWebsocket.close () connection_
         |> Task.map (\_ -> ())
@@ -114,7 +107,7 @@ close connection_ =
 
 {-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
 -}
-listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Sub msg
+listen : Effect.Internal.WebsocketConnection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Sub msg
 listen connection_ onData onClose =
     subscription (Listen connection_ onData onClose)
 
@@ -138,7 +131,7 @@ type alias State msg =
 
 
 type alias SelfMsg =
-    ( Connection, MyEvent )
+    ( Effect.Internal.WebsocketConnection, MyEvent )
 
 
 type MyEvent
@@ -156,13 +149,13 @@ closedEvent code reason =
     ClosedEvent { code = decodeCloseEventCode code, reason = reason }
 
 
-connection : String -> String -> Connection
+connection : String -> String -> Effect.Internal.WebsocketConnection
 connection =
-    Connection
+    Effect.Internal.WebsocketConnection
 
 
 onSelfMsg : Platform.Router msg SelfMsg -> SelfMsg -> State msg -> Task Never (State msg)
-onSelfMsg router ( Connection connectionId _, event ) state =
+onSelfMsg router ( Effect.Internal.WebsocketConnection connectionId _, event ) state =
     case Dict.get connectionId state.connections of
         Just ( _, msgs ) ->
             case event of
@@ -181,13 +174,13 @@ onSelfMsg router ( Connection connectionId _, event ) state =
 
 
 type MySub msg
-    = Listen Connection (String -> msg) ({ code : CloseEventCode, reason : String } -> msg)
+    = Listen Effect.Internal.WebsocketConnection (String -> msg) ({ code : CloseEventCode, reason : String } -> msg)
 
 
 type MyCmd msg
-    = SentData Connection String
-    | OpenConnection String (Connection -> msg)
-    | CloseConnection Connection
+    = SentData Effect.Internal.WebsocketConnection String
+    | OpenConnection String (Effect.Internal.WebsocketConnection -> msg)
+    | CloseConnection Effect.Internal.WebsocketConnection
 
 
 onEffects :
@@ -203,7 +196,7 @@ onEffects router _ subs state =
                 [] ->
                     Task.succeed newDict
 
-                (Listen ((Connection connectionId _) as connection_) onData onClose) :: rest ->
+                (Listen ((Effect.Internal.WebsocketConnection connectionId _) as connection_) onData onClose) :: rest ->
                     case Dict.get connectionId newDict of
                         Just ( pid, msgs ) ->
                             handleSubs

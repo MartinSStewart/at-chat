@@ -3776,6 +3776,15 @@ runTask maybeClientId state task =
         EndXrSession function ->
             function () |> runTask maybeClientId state
 
+        WebsocketCreateHandle url function ->
+            function (Effect.Internal.WebsocketConnection "" url) |> runTask maybeClientId state
+
+        WebsocketSendString _ _ function ->
+            function (Ok ()) |> runTask maybeClientId state
+
+        WebsocketClose _ function ->
+            function () |> runTask maybeClientId state
+
 
 handleHttpResponseWithTestError :
     Maybe ClientId
