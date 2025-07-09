@@ -46,6 +46,7 @@ import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
@@ -74,7 +75,6 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
-import Websocket
 
 
 type FrontendModel

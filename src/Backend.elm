@@ -13,9 +13,11 @@ import Discord.Id
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
@@ -36,7 +38,6 @@ import Pages.Admin exposing (InitAdminData)
 import Pages.UserOverview
 import Pagination
 import Postmark
-import Process
 import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
@@ -44,7 +45,6 @@ import SeqDict
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
-import Task as RegularTask
 import TwoFactorAuthentication
 import Types
     exposing
@@ -64,7 +64,6 @@ import Types
         )
 import Unsafe
 import User exposing (BackendUser)
-import Websocket
 
 
 app :
@@ -283,23 +282,20 @@ update msg model =
                             in
                             ( { model | heartbeatInterval = Just heartbeatInterval }
                             , Command.batch
-                                [ Process.sleep (Duration.inMilliseconds heartbeatInterval)
-                                    |> RegularTask.andThen (\() -> Websocket.sendString connection heartbeat)
-                                    |> RegularTask.attempt WebsocketSentData
-                                    |> Command.fromCmd "WebsocketSentData"
+                                [ Process.sleep heartbeatInterval
+                                    |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
+                                    |> Task.attempt WebsocketSentData
                                 , Websocket.sendString connection command
-                                    |> RegularTask.attempt WebsocketSentData
-                                    |> Command.fromCmd "WebsocketSentData"
+                                    |> Task.attempt WebsocketSentData
                                 ]
                             )
 
                         Discord.OpAck ->
                             ( model
                             , Process.sleep
-                                (Duration.inMilliseconds (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval))
-                                |> RegularTask.andThen (\() -> Websocket.sendString connection heartbeat)
-                                |> RegularTask.attempt WebsocketSentData
-                                |> Command.fromCmd "WebsocketSentData"
+                                (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
+                                |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
+                                |> Task.attempt WebsocketSentData
                             )
 
                         Discord.OpDispatch sequenceCounter opDispatchEvent ->
@@ -1784,19 +1780,18 @@ addLog time log model =
 
 getHandle : Maybe Websocket.Connection -> Command BackendOnly ToFrontend BackendMsg
 getHandle maybeOldHandle =
-    Process.sleep 500
-        |> RegularTask.andThen
+    Process.sleep (Duration.milliseconds 500)
+        |> Task.andThen
             (\() ->
                 case maybeOldHandle of
                     Just oldHandle ->
                         Websocket.close oldHandle
 
                     Nothing ->
-                        RegularTask.succeed ()
+                        Task.succeed ()
             )
-        |> RegularTask.andThen (\() -> Websocket.createHandle (Debug.log "a" websocketGatewayUrl))
-        |> RegularTask.perform WebsocketCreatedHandle
-        |> Command.fromCmd "WebsocketCreatedHandle"
+        |> Task.andThen (\() -> Websocket.createHandle (Debug.log "a" websocketGatewayUrl))
+        |> Task.perform WebsocketCreatedHandle
 
 
 websocketGatewayUrl : String

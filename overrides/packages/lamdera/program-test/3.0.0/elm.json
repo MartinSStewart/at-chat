@@ -16,7 +16,6 @@
         "Effect.File.Select",
         "Effect.File",
         "Effect.Lamdera",
-        "Effect.LocalDev",
         "Effect.Task",
         "Effect.Time",
         "Effect.Process",
@@ -52,12 +51,9 @@
         "folkertdev/elm-sha2": "1.0.0 <= v < 2.0.0",
         "ianmackenzie/elm-units": "2.9.0 <= v < 3.0.0",
         "lamdera/codecs": "1.0.0 <= v < 2.0.0",
-        "lamdera/containers": "1.0.0 <= v < 2.0.0",
         "lamdera/core": "1.0.0 <= v < 2.0.0",
         "mgold/elm-nonempty-list": "4.2.0 <= v < 5.0.0",
-        "stil4m/elm-syntax": "7.3.8 <= v < 8.0.0",
-        "the-sett/elm-pretty-printer": "3.1.1 <= v < 4.0.0",
-        "the-sett/elm-syntax-dsl": "6.0.3 <= v < 7.0.0"
+        "lamdera/containers": "1.0.0 <= v < 2.0.0"
     },
     "test-dependencies": {}
 }
