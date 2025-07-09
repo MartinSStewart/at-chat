@@ -197,12 +197,21 @@ subscriptions model =
         [ Lamdera.onConnect UserConnected
         , Lamdera.onDisconnect UserDisconnected
         , case model.websocketHandle of
-            Just _ ->
-                Subscription.none
+            Just handle ->
+                Websocket.listen handle WebsocketData WebsocketClosed
 
             Nothing ->
                 Time.every (Duration.seconds 3) (\_ -> RestoreDiscordConnection)
         ]
+
+
+websocketSend : Websocket.Connection -> String -> Task.Task restriction Websocket.SendError ()
+websocketSend connection data =
+    let
+        _ =
+            Debug.log "WebsocketSend" ( connection, data )
+    in
+    Websocket.sendString connection data
 
 
 update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -258,7 +267,7 @@ update msg model =
                     addLog time (Log.SendLogErrorEmailFailed error email) model
 
         WebsocketData response ->
-            case ( model.websocketHandle, Json.Decode.decodeString Discord.decodeGatewayEvent response ) of
+            case ( model.websocketHandle, Json.Decode.decodeString Discord.decodeGatewayEvent response |> Debug.log "data" ) of
                 ( Just connection, Ok data ) ->
                     let
                         heartbeat : String
@@ -283,9 +292,9 @@ update msg model =
                             ( { model | heartbeatInterval = Just heartbeatInterval }
                             , Command.batch
                                 [ Process.sleep heartbeatInterval
-                                    |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
+                                    |> Task.andThen (\() -> websocketSend connection heartbeat)
                                     |> Task.attempt WebsocketSentData
-                                , Websocket.sendString connection command
+                                , websocketSend connection command
                                     |> Task.attempt WebsocketSentData
                                 ]
                             )
@@ -294,7 +303,7 @@ update msg model =
                             ( model
                             , Process.sleep
                                 (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
-                                |> Task.andThen (\() -> Websocket.sendString connection heartbeat)
+                                |> Task.andThen (\() -> websocketSend connection heartbeat)
                                 |> Task.attempt WebsocketSentData
                             )
 
@@ -372,7 +381,7 @@ update msg model =
             ( model, getHandle Nothing )
 
         WebsocketSentData result ->
-            case result of
+            case Debug.log "SentData" result of
                 Ok () ->
                     ( model, Command.none )
 

@@ -2217,7 +2217,7 @@ updateLoaded msg model =
                                 NoMessageHover ->
                                     loggedIn.messageHover
 
-                                MessageHover messageId ->
+                                MessageHover _ ->
                                     loggedIn.messageHover
 
                                 MessageMenu messageMenu ->
