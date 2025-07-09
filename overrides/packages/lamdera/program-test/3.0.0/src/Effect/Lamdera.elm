@@ -38,7 +38,7 @@ import Time
 import Url
 import WebGLFix
 import WebGLFix.Texture
-import WebsocketFix
+import Websocket
 
 
 {-| Create a Lamdera frontend application
@@ -535,17 +535,17 @@ toTask simulatedTask =
             WebGLFix.endXrSession |> Task.andThen (\result -> toTask (function result))
 
         Effect.Internal.WebsocketCreateHandle url function ->
-            WebsocketFix.createHandle url
+            Websocket.createHandle url
                 |> Task.andThen (\result -> toTask (function result))
 
         Effect.Internal.WebsocketSendString connection data function ->
-            WebsocketFix.sendString connection data
+            Websocket.sendString connection data
                 |> Task.map Ok
                 |> Task.onError (Err >> Task.succeed)
                 |> Task.andThen (\result -> toTask (function result))
 
         Effect.Internal.WebsocketClose connection function ->
-            WebsocketFix.close connection
+            Websocket.close connection
                 |> Task.andThen (\result -> toTask (function result))
 
 
@@ -621,4 +621,4 @@ toSub sub =
             Http.track string function
 
         WebsocketListen connection onData onClose ->
-            WebsocketFix.listen connection onData onClose
+            Websocket.listen connection onData onClose

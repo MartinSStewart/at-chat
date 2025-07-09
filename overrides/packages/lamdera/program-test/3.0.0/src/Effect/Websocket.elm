@@ -9,6 +9,7 @@ module Effect.Websocket exposing (Connection, SendError(..), close, createHandle
 import Effect.Internal
 import Effect.Subscription exposing (Subscription)
 import Effect.Task exposing (Task)
+import Websocket
 
 
 {-| A websocket connection
@@ -23,7 +24,7 @@ createHandle : String -> Task restriction x Connection
 createHandle url =
     Effect.Internal.WebsocketCreateHandle
         url
-        (\(Effect.Internal.WebsocketConnection id url2) ->
+        (\(Websocket.Connection id url2) ->
             Connection id url2 |> Effect.Internal.Succeed
         )
 
@@ -60,14 +61,14 @@ type CloseEventCode
 sendString : Connection -> String -> Task restriction SendError ()
 sendString (Connection id url) data =
     Effect.Internal.WebsocketSendString
-        (Effect.Internal.WebsocketConnection id url)
+        (Websocket.Connection id url)
         data
         (\result ->
             case result of
                 Ok () ->
                     Effect.Internal.Succeed ()
 
-                Err Effect.Internal.ConnectionClosed ->
+                Err Websocket.ConnectionClosed ->
                     Effect.Internal.Fail ConnectionClosed
         )
 
@@ -76,7 +77,7 @@ sendString (Connection id url) data =
 -}
 close : Connection -> Task restriction x ()
 close (Connection id url) =
-    Effect.Internal.WebsocketClose (Effect.Internal.WebsocketConnection id url) Effect.Internal.Succeed
+    Effect.Internal.WebsocketClose (Websocket.Connection id url) Effect.Internal.Succeed
 
 
 {-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
@@ -84,58 +85,58 @@ close (Connection id url) =
 listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Subscription restriction msg
 listen (Connection id url) onData onClose =
     Effect.Internal.WebsocketListen
-        (Effect.Internal.WebsocketConnection id url)
+        (Websocket.Connection id url)
         onData
         (\closeData ->
             onClose
                 { code =
                     case closeData.code of
-                        Effect.Internal.NormalClosure ->
+                        Websocket.NormalClosure ->
                             NormalClosure
 
-                        Effect.Internal.GoingAway ->
+                        Websocket.GoingAway ->
                             GoingAway
 
-                        Effect.Internal.ProtocolError ->
+                        Websocket.ProtocolError ->
                             ProtocolError
 
-                        Effect.Internal.UnsupportedData ->
+                        Websocket.UnsupportedData ->
                             UnsupportedData
 
-                        Effect.Internal.NoStatusReceived ->
+                        Websocket.NoStatusReceived ->
                             NoStatusReceived
 
-                        Effect.Internal.AbnormalClosure ->
+                        Websocket.AbnormalClosure ->
                             AbnormalClosure
 
-                        Effect.Internal.InvalidFramePayloadData ->
+                        Websocket.InvalidFramePayloadData ->
                             InvalidFramePayloadData
 
-                        Effect.Internal.PolicyViolation ->
+                        Websocket.PolicyViolation ->
                             PolicyViolation
 
-                        Effect.Internal.MessageTooBig ->
+                        Websocket.MessageTooBig ->
                             MessageTooBig
 
-                        Effect.Internal.MissingExtension ->
+                        Websocket.MissingExtension ->
                             MissingExtension
 
-                        Effect.Internal.InternalError ->
+                        Websocket.InternalError ->
                             InternalError
 
-                        Effect.Internal.ServiceRestart ->
+                        Websocket.ServiceRestart ->
                             ServiceRestart
 
-                        Effect.Internal.TryAgainLater ->
+                        Websocket.TryAgainLater ->
                             TryAgainLater
 
-                        Effect.Internal.BadGateway ->
+                        Websocket.BadGateway ->
                             BadGateway
 
-                        Effect.Internal.TlsHandshake ->
+                        Websocket.TlsHandshake ->
                             TlsHandshake
 
-                        Effect.Internal.UnknownCode code ->
+                        Websocket.UnknownCode code ->
                             UnknownCode code
                 , reason = closeData.reason
                 }

@@ -17,9 +17,6 @@ module Effect.Internal exposing
     , Subscription(..)
     , Task(..)
     , Visibility(..)
-    , WebsocketCloseEventCode(..)
-    , WebsocketConnection(..)
-    , WebsocketSendError(..)
     , Wrap(..)
     , XrButton
     , XrEyeType(..)
@@ -51,6 +48,7 @@ import Time
 import WebGL
 import WebGLFix.Internal
 import WebGLFix.Texture
+import Websocket
 
 
 type SessionId
@@ -88,26 +86,7 @@ type Subscription restriction msg
     | OnConnect (SessionId -> ClientId -> msg)
     | OnDisconnect (SessionId -> ClientId -> msg)
     | HttpTrack String (Http.Progress -> msg)
-    | WebsocketListen WebsocketConnection (String -> msg) ({ code : WebsocketCloseEventCode, reason : String } -> msg)
-
-
-type WebsocketCloseEventCode
-    = NormalClosure
-    | GoingAway
-    | ProtocolError
-    | UnsupportedData
-    | NoStatusReceived
-    | AbnormalClosure
-    | InvalidFramePayloadData
-    | PolicyViolation
-    | MessageTooBig
-    | MissingExtension
-    | InternalError
-    | ServiceRestart
-    | TryAgainLater
-    | BadGateway
-    | TlsHandshake
-    | UnknownCode Int
+    | WebsocketListen Websocket.Connection (String -> msg) ({ code : Websocket.CloseEventCode, reason : String } -> msg)
 
 
 type Visibility
@@ -163,17 +142,9 @@ type Task restriction x a
     | RequestXrStart (List WebGLFix.Internal.Option) (Result XrStartError XrStartData -> Task restriction x a)
     | RenderXrFrame ({ time : Float, xrView : XrView, inputs : List XrInput } -> List WebGL.Entity) (Result XrRenderError XrPose -> Task restriction x a)
     | EndXrSession (() -> Task restriction x a)
-    | WebsocketCreateHandle String (WebsocketConnection -> Task restriction x a)
-    | WebsocketSendString WebsocketConnection String (Result WebsocketSendError () -> Task restriction x a)
-    | WebsocketClose WebsocketConnection (() -> Task restriction x a)
-
-
-type WebsocketConnection
-    = WebsocketConnection String String
-
-
-type WebsocketSendError
-    = ConnectionClosed
+    | WebsocketCreateHandle String (Websocket.Connection -> Task restriction x a)
+    | WebsocketSendString Websocket.Connection String (Result Websocket.SendError () -> Task restriction x a)
+    | WebsocketClose Websocket.Connection (() -> Task restriction x a)
 
 
 type alias XrPose =

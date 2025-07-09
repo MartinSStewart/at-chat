@@ -43,7 +43,7 @@ import Html exposing (Html)
 import Http
 import Time
 import Url
-import WebsocketFix
+import Websocket
 
 
 
@@ -390,4 +390,4 @@ toSub sub =
             Http.track string function
 
         WebsocketListen connection onData onClose ->
-            WebsocketFix.listen connection onData onClose
+            Websocket.listen connection onData onClose

@@ -1,35 +1,55 @@
-effect module WebsocketFix where { command = MyCmd, subscription = MySub } exposing (CloseEventCode, SendError, close, createHandle, listen, sendString)
+effect module Websocket where { command = MyCmd, subscription = MySub } exposing (Connection(..), SendError(..), close, createHandle, listen, sendString, CloseEventCode(..))
 
-{-| We need this copy of the original lamdera/websocket package in order to alias the Connection type defined in Effect.Websocket
+{-|
 
-We can't just have Effect.Websocket alias Connection here like we normally do because that prevents that type from being usable in a migration.
+@docs Connection, SendError, close, createHandle, listen, sendString, CloseEventCode
 
 -}
 
 import Dict exposing (Dict)
-import Effect.Internal exposing (WebsocketCloseEventCode(..))
-import Elm.Kernel.LamderaWebsocketFix
+import Elm.Kernel.LamderaWebsocket
 import Process
 import Task exposing (Task)
 
 
+{-| A websocket connection
+-}
+type Connection
+    = Connection String String
+
+
 {-| Create a websocket handle that you can then open by calling listen or sendString.
 -}
-createHandle : String -> Task x Effect.Internal.WebsocketConnection
+createHandle : String -> Task x Connection
 createHandle url =
     Elm.Kernel.LamderaWebsocket.createHandle () url
 
 
 {-| Errors that might happen when sending data.
 -}
-type alias SendError =
-    Effect.Internal.WebsocketSendError
+type SendError
+    = ConnectionClosed
 
 
 {-| Here are some possible reasons that your websocket connection closed.
 -}
-type alias CloseEventCode =
-    Effect.Internal.WebsocketCloseEventCode
+type CloseEventCode
+    = NormalClosure
+    | GoingAway
+    | ProtocolError
+    | UnsupportedData
+    | NoStatusReceived
+    | AbnormalClosure
+    | InvalidFramePayloadData
+    | PolicyViolation
+    | MessageTooBig
+    | MissingExtension
+    | InternalError
+    | ServiceRestart
+    | TryAgainLater
+    | BadGateway
+    | TlsHandshake
+    | UnknownCode Int
 
 
 decodeCloseEventCode : Int -> CloseEventCode
@@ -86,12 +106,12 @@ decodeCloseEventCode code =
 
 connectionClosed : SendError
 connectionClosed =
-    Effect.Internal.ConnectionClosed
+    ConnectionClosed
 
 
 {-| Send a string
 -}
-sendString : Effect.Internal.WebsocketConnection -> String -> Task SendError ()
+sendString : Connection -> String -> Task SendError ()
 sendString connection_ data =
     Elm.Kernel.LamderaWebsocket.sendString () connection_ data
         |> Task.map (\_ -> ())
@@ -99,7 +119,7 @@ sendString connection_ data =
 
 {-| Close the websocket connection
 -}
-close : Effect.Internal.WebsocketConnection -> Task x ()
+close : Connection -> Task x ()
 close connection_ =
     Elm.Kernel.LamderaWebsocket.close () connection_
         |> Task.map (\_ -> ())
@@ -107,7 +127,7 @@ close connection_ =
 
 {-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
 -}
-listen : Effect.Internal.WebsocketConnection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Sub msg
+listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Sub msg
 listen connection_ onData onClose =
     subscription (Listen connection_ onData onClose)
 
@@ -131,7 +151,7 @@ type alias State msg =
 
 
 type alias SelfMsg =
-    ( Effect.Internal.WebsocketConnection, MyEvent )
+    ( Connection, MyEvent )
 
 
 type MyEvent
@@ -149,13 +169,13 @@ closedEvent code reason =
     ClosedEvent { code = decodeCloseEventCode code, reason = reason }
 
 
-connection : String -> String -> Effect.Internal.WebsocketConnection
+connection : String -> String -> Connection
 connection =
-    Effect.Internal.WebsocketConnection
+    Connection
 
 
 onSelfMsg : Platform.Router msg SelfMsg -> SelfMsg -> State msg -> Task Never (State msg)
-onSelfMsg router ( Effect.Internal.WebsocketConnection connectionId _, event ) state =
+onSelfMsg router ( Connection connectionId _, event ) state =
     case Dict.get connectionId state.connections of
         Just ( _, msgs ) ->
             case event of
@@ -174,13 +194,13 @@ onSelfMsg router ( Effect.Internal.WebsocketConnection connectionId _, event ) s
 
 
 type MySub msg
-    = Listen Effect.Internal.WebsocketConnection (String -> msg) ({ code : CloseEventCode, reason : String } -> msg)
+    = Listen Connection (String -> msg) ({ code : CloseEventCode, reason : String } -> msg)
 
 
 type MyCmd msg
-    = SentData Effect.Internal.WebsocketConnection String
-    | OpenConnection String (Effect.Internal.WebsocketConnection -> msg)
-    | CloseConnection Effect.Internal.WebsocketConnection
+    = SentData Connection String
+    | OpenConnection String (Connection -> msg)
+    | CloseConnection Connection
 
 
 onEffects :
@@ -196,7 +216,7 @@ onEffects router _ subs state =
                 [] ->
                     Task.succeed newDict
 
-                (Listen ((Effect.Internal.WebsocketConnection connectionId _) as connection_) onData onClose) :: rest ->
+                (Listen ((Connection connectionId _) as connection_) onData onClose) :: rest ->
                     case Dict.get connectionId newDict of
                         Just ( pid, msgs ) ->
                             handleSubs

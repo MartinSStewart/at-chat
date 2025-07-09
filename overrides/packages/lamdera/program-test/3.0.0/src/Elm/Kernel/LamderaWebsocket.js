@@ -6,28 +6,28 @@ import Elm.Kernel.Utils exposing (Tuple2)
 import Maybe exposing (Just, Nothing, isJust)
 import Platform exposing (sendToApp, sendToSelf)
 import Result exposing (map, isOk)
-import WebsocketFix exposing (EmMsg, Connection, Event, dataEvent, closedEvent, connection, connectionClosed)
+import Websocket exposing (EmMsg, Connection, Event, dataEvent, closedEvent, connection, connectionClosed)
 
 */
 
-var _LamderaWebsocketFix_websockets = {};
+var _LamderaWebsocket_websockets = {};
 
-var _LamderaWebsocketFix_uuid4 = function() {
+var _LamderaWebsocket_uuid4 = function() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 }
 
-var _LamderaWebsocketFix_createHandle = F2(function(router, url)
+var _LamderaWebsocket_createHandle = F2(function(router, url)
 {
 	return __Scheduler_binding(function(callback)
 	{
 	    try {
 
-	    var id = _LamderaWebsocketFix_uuid4();
+	    var id = _LamderaWebsocket_uuid4();
 
-	    _LamderaWebsocketFix_websockets[id] =
+	    _LamderaWebsocket_websockets[id] =
             { websocket : null
             , hasListener : false
             , isClosed : false
@@ -36,7 +36,7 @@ var _LamderaWebsocketFix_createHandle = F2(function(router, url)
         console.log("Websocket: created handle");
 
         callback(__Scheduler_succeed(
-            A2(__WebsocketFix_connection, id, url)
+            A2(__Websocket_connection, id, url)
         ));
 
         }
@@ -48,28 +48,26 @@ var _LamderaWebsocketFix_createHandle = F2(function(router, url)
 
 
 
-var _LamderaWebsocketFix_sendString = F3(function(router, connection, data)
+var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 {
 	return __Scheduler_binding(function(callback)
 	{
 	    try {
 
-	    var websocketData = _LamderaWebsocketFix_websockets[connection.a];
+	    var websocketData = _LamderaWebsocket_websockets[connection.a];
 	    if (websocketData || websocketData.isClosed) {
 	        if (websocketData.websocket) {
                 websocketData.websocket.send(data);
-                callback(__Scheduler_succeed(0));
             }
-            else
-            {
+            else {
                 websocketData.websocket = new WebSocket(connection.b);
 
                 websocketData.websocket.addEventListener('close', function (event) {
                     try {
 
-                        websocketData.websocket.isClosed = true;
-                        console.log("Websocket: close happened in _LamderaWebsocket_sendString");
-                        console.log(event);
+                    websocketData.websocket.isClosed = true;
+                    console.log("Websocket: close happened in _LamderaWebsocket_sendString");
+                    console.log(event);
 
                     }
                     catch (error) {
@@ -80,9 +78,9 @@ var _LamderaWebsocketFix_sendString = F3(function(router, connection, data)
                 websocketData.websocket.addEventListener('error', function (event) {
                     try {
 
-                        websocketData.websocket.isClosed = true;
-                        console.log("Websocket: error happened in _LamderaWebsocket_sendString");
-                        console.log(event);
+                    websocketData.websocket.isClosed = true;
+                    console.log("Websocket: error happened in _LamderaWebsocket_sendString");
+                    console.log(event);
 
                     }
                     catch (error) {
@@ -93,10 +91,10 @@ var _LamderaWebsocketFix_sendString = F3(function(router, connection, data)
                 websocketData.websocket.addEventListener('open', function (event) {
                     try {
 
-                        console.log("open");
-                        console.log(event);
+                    console.log("open");
+                    console.log(event);
 
-                        websocketData.websocket.send(data);
+                    websocketData.websocket.send(data);
 
                     }
                     catch (error) {
@@ -108,7 +106,7 @@ var _LamderaWebsocketFix_sendString = F3(function(router, connection, data)
             }
 	    }
 	    else {
-	        callback(__Scheduler_fail(__WebsocketFix_connectionClosed));
+	        callback(__Scheduler_fail(__Websocket_connectionClosed));
 	    }
 
 
@@ -119,12 +117,12 @@ var _LamderaWebsocketFix_sendString = F3(function(router, connection, data)
 	});
 });
 
-var _LamderaWebsocketFix_listen = F2(function(router, connection)
+var _LamderaWebsocket_listen = F2(function(router, connection)
 {
 	return __Scheduler_binding(function(callback)
 	{
 	    try {
-        var websocketData = _LamderaWebsocketFix_websockets[connection.a];
+        var websocketData = _LamderaWebsocket_websockets[connection.a];
 
         function addListener() {
             websocketData.hasListener = true;
@@ -137,7 +135,7 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
                 console.log(event);
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    A2(__WebsocketFix_closedEvent, event.code, event.reason)
+                    A2(__Websocket_closedEvent, event.code, event.reason)
                 )));
 
                 }
@@ -154,7 +152,7 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
                 console.log(event);
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    A2(__WebsocketFix_closedEvent, event.code, event.reason)
+                    A2(__Websocket_closedEvent, event.code, event.reason)
                 )));
 
                 }
@@ -168,7 +166,7 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
 
                 __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                     connection,
-                    __WebsocketFix_dataEvent(event.data)
+                    __Websocket_dataEvent(event.data)
                 )));
 
                 }
@@ -192,7 +190,7 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
             }
         }
         else {
-            _LamderaWebsocketFix_websockets[connection.a] =
+            _LamderaWebsocket_websockets[connection.a] =
                 { websocket : null
                 , hasListener : false
                 , isClosed : true
@@ -200,7 +198,7 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
             console.log("Websocket: close happened due to reset");
             __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
                 connection,
-                A2(__WebsocketFix_closedEvent, 1005, "")
+                A2(__Websocket_closedEvent, 1005, "")
             )));
         }
 
@@ -212,12 +210,12 @@ var _LamderaWebsocketFix_listen = F2(function(router, connection)
 	});
 });
 
-var _LamderaWebsocketFix_close = F2(function(router, connection) {
+var _LamderaWebsocket_close = F2(function(router, connection) {
     return __Scheduler_binding(function(callback)
     {
         try {
 
-        var websocketData = _LamderaWebsocketFix_websockets[connection.a];
+        var websocketData = _LamderaWebsocket_websockets[connection.a];
 
         console.log("Websocket: connection closed by user");
 
