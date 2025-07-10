@@ -62,6 +62,7 @@ import Types
         , ToBeFilledInByBackend(..)
         , ToFrontend(..)
         )
+import UInt64
 import Unsafe
 import User exposing (BackendUser)
 
@@ -99,9 +100,13 @@ adminUser : BackendUser
 adminUser =
     LocalState.createNewUser
         (Time.millisToPosix 0)
-        (Unsafe.personName "Martin")
+        (Unsafe.personName "Admin person")
         (Unsafe.emailAddress Env.adminEmail)
         True
+
+
+botTestId =
+    Unsafe.uint64FromString "705745250815311942"
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -111,7 +116,7 @@ init =
         guild =
             { createdAt = Time.millisToPosix 0
             , createdBy = adminUserId
-            , name = Unsafe.guildName "First Guild"
+            , name = Unsafe.guildName "Bot Test"
             , icon = Nothing
             , channels =
                 SeqDict.fromList
@@ -130,6 +135,7 @@ init =
             , owner = adminUserId
             , invites = SeqDict.empty
             , announcementChannel = Id.fromInt 0
+            , linkedId = Just (Discord.Id.fromUInt64 botTestId)
             }
     in
     ( { users =
@@ -171,6 +177,7 @@ init =
                     , owner = adminUserId
                     , invites = SeqDict.empty
                     , announcementChannel = Id.fromInt 0
+                    , linkedId = Nothing
                     }
                   )
                 ]
@@ -178,7 +185,7 @@ init =
       , websocketHandle = Nothing
       , heartbeatInterval = Nothing
       }
-    , getHandle Nothing
+    , Command.none
     )
 
 
@@ -201,7 +208,7 @@ subscriptions model =
                 Websocket.listen handle WebsocketData WebsocketClosed
 
             Nothing ->
-                Time.every (Duration.seconds 3) (\_ -> RestoreDiscordConnection)
+                Time.every (Duration.seconds 30) (\_ -> RestoreDiscordConnection)
         ]
 
 
@@ -355,12 +362,10 @@ update msg model =
                                     ( model, Command.none )
 
                         Discord.OpReconnect ->
-                            ( model, getHandle model.websocketHandle )
+                            getHandle model
 
                         Discord.OpInvalidSession ->
-                            ( { model | gatewayState = Nothing }
-                            , getHandle model.websocketHandle
-                            )
+                            getHandle { model | gatewayState = Nothing }
 
                 ( _, Err _ ) ->
                     ( model, Command.none )
@@ -369,16 +374,14 @@ update msg model =
                     ( model, Command.none )
 
         WebsocketCreatedHandle connection ->
-            ( { model | websocketHandle = Just connection }
-            , Command.none
-            )
+            ( { model | websocketHandle = Just connection }, Command.none )
 
         WebsocketClosed data ->
             let
                 _ =
                     Debug.log "WebsocketClosed" data
             in
-            ( model, getHandle Nothing )
+            ( { model | websocketHandle = Nothing }, Command.none )
 
         WebsocketSentData result ->
             case Debug.log "SentData" result of
@@ -393,7 +396,27 @@ update msg model =
                     ( model, Command.none )
 
         RestoreDiscordConnection ->
-            ( model, getHandle Nothing )
+            case model.websocketHandle of
+                Just _ ->
+                    ( model, Command.none )
+
+                Nothing ->
+                    ( model, Websocket.createHandle WebsocketCreatedHandle websocketGatewayUrl )
+
+        WebsocketClosedByBackend ->
+            ( model, Command.none )
+
+
+getHandle : BackendModel -> ( BackendModel, Command restriction toMsg BackendMsg )
+getHandle model =
+    ( { model | websocketHandle = Nothing }
+    , case model.websocketHandle of
+        Just handle ->
+            Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend)
+
+        Nothing ->
+            Command.none
+    )
 
 
 updateFromFrontend :
@@ -1785,22 +1808,6 @@ addLog time log model =
 
         _ ->
             ( model2, Command.none )
-
-
-getHandle : Maybe Websocket.Connection -> Command BackendOnly ToFrontend BackendMsg
-getHandle maybeOldHandle =
-    Process.sleep (Duration.milliseconds 500)
-        |> Task.andThen
-            (\() ->
-                case maybeOldHandle of
-                    Just oldHandle ->
-                        Websocket.close oldHandle
-
-                    Nothing ->
-                        Task.succeed ()
-            )
-        |> Task.andThen (\() -> Websocket.createHandle (Debug.log "a" websocketGatewayUrl))
-        |> Task.perform WebsocketCreatedHandle
 
 
 websocketGatewayUrl : String

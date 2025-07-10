@@ -3250,3 +3250,112 @@ encodeGatewayCommand gatewayCommand =
 
         OpUpdatePresence ->
             JE.object []
+
+
+
+--- Gateway code
+
+
+type OutMsg
+    = CloseHandle
+
+
+handleGateway =
+    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) of
+        ( Just connection, Ok data ) ->
+            let
+                heartbeat : String
+                heartbeat =
+                    encodeGatewayCommand OpHeatbeat
+                        |> JE.encode 0
+            in
+            case data of
+                OpHello { heartbeatInterval } ->
+                    let
+                        command =
+                            (case model.gatewayState of
+                                Just ( discordSessionId, sequenceCounter ) ->
+                                    OpResume Env.botToken discordSessionId sequenceCounter
+
+                                Nothing ->
+                                    OpIdentify Env.botToken
+                            )
+                                |> Discord.encodeGatewayCommand
+                                |> JE.encode 0
+                    in
+                    ( { model | heartbeatInterval = Just heartbeatInterval }
+                    , Command.batch
+                        [ Process.sleep heartbeatInterval
+                            |> Task.andThen (\() -> websocketSend connection heartbeat)
+                            |> Task.attempt WebsocketSentData
+                        , websocketSend connection command
+                            |> Task.attempt WebsocketSentData
+                        ]
+                    )
+
+                OpAck ->
+                    ( model
+                    , Process.sleep
+                        (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
+                        |> Task.andThen (\() -> websocketSend connection heartbeat)
+                        |> Task.attempt WebsocketSentData
+                    )
+
+                OpDispatch sequenceCounter opDispatchEvent ->
+                    case opDispatchEvent of
+                        ReadyEvent discordSessionId ->
+                            ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
+
+                        ResumedEvent ->
+                            ( model, Command.none )
+
+                        MessageCreateEvent message ->
+                            case message.guildId of
+                                Discord.Included guildId ->
+                                    ( model, Command.none )
+
+                                Discord.Missing ->
+                                    ( model, Command.none )
+
+                        MessageUpdateEvent _ ->
+                            ( model, Command.none )
+
+                        MessageDeleteEvent messageId channelId maybeGuildId ->
+                            case maybeGuildId of
+                                Discord.Included guildId ->
+                                    ( model
+                                    , Command.none
+                                    )
+
+                                Discord.Missing ->
+                                    ( model
+                                    , Command.none
+                                    )
+
+                        MessageDeleteBulkEvent _ _ _ ->
+                            ( model, Command.none )
+
+                        GuildMemberAddEvent guildId guildMember ->
+                            ( model
+                            , Command.none
+                            )
+
+                        GuildMemberRemoveEvent guildId user ->
+                            ( model
+                            , Command.none
+                            )
+
+                        GuildMemberUpdateEvent _ ->
+                            ( model, Command.none )
+
+                OpReconnect ->
+                    ( model, CloseHandle )
+
+                OpInvalidSession ->
+                    ( { model | gatewayState = Nothing }, CloseHandle )
+
+        ( _, Err _ ) ->
+            ( model, Command.none )
+
+        ( Nothing, Ok _ ) ->
+            ( model, Command.none )

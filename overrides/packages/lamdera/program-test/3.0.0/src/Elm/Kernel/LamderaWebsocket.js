@@ -54,60 +54,55 @@ var _LamderaWebsocket_sendString = F3(function(router, connection, data)
 	{
 	    try {
 
-	    var websocketData = _LamderaWebsocket_websockets[connection.a];
-	    if (websocketData || websocketData.isClosed) {
-	        if (websocketData.websocket) {
-                websocketData.websocket.send(data);
-            }
-            else {
-                websocketData.websocket = new WebSocket(connection.b);
+            var websocketData = _LamderaWebsocket_websockets[connection.a];
+            if (websocketData || websocketData.isClosed) {
+                if (websocketData.websocket) {
+                    websocketData.websocket.send(data);
+                    callback(__Scheduler_succeed(0));
+                }
+                else {
+                    websocketData.websocket = new WebSocket(connection.b);
 
-                websocketData.websocket.addEventListener('close', function (event) {
-                    try {
+                    websocketData.websocket.addEventListener('close', function (event) {
+                        try {
+                            websocketData.websocket.isClosed = true;
+                            console.log("Websocket: close happened in _LamderaWebsocket_sendString");
+                            console.log(event);
+                        }
+                        catch (error) {
+                            console.log("Websocket: Exception in _LamderaWebsocket_sendString close listener. " + error);
+                        }
+                    });
 
-                    websocketData.websocket.isClosed = true;
-                    console.log("Websocket: close happened in _LamderaWebsocket_sendString");
-                    console.log(event);
+                    websocketData.websocket.addEventListener('error', function (event) {
+                        try {
+                            websocketData.websocket.isClosed = true;
+                            console.log("Websocket: error happened in _LamderaWebsocket_sendString");
+                            console.log(event);
+                        }
+                        catch (error) {
+                            console.log("Websocket: Exception in _LamderaWebsocket_sendString error listener. " + error);
+                        }
+                    });
 
-                    }
-                    catch (error) {
-                        console.log("Websocket: Exception in _LamderaWebsocket_sendString close listener. " + error);
-                    }
-                });
-
-                websocketData.websocket.addEventListener('error', function (event) {
-                    try {
-
-                    websocketData.websocket.isClosed = true;
-                    console.log("Websocket: error happened in _LamderaWebsocket_sendString");
-                    console.log(event);
-
-                    }
-                    catch (error) {
-                        console.log("Websocket: Exception in _LamderaWebsocket_sendString error listener. " + error);
-                    }
-                });
-
-                websocketData.websocket.addEventListener('open', function (event) {
-                    try {
-
-                    console.log("open");
-                    console.log(event);
+                    websocketData.websocket.addEventListener('open', function (event) {
+                        try {
+                            console.log("open");
+                            console.log(event);
+                            websocketData.websocket.send(data);
+                        }
+                        catch (error) {
+                            console.log("Websocket: Exception in _LamderaWebsocket_sendString open listener. " + error);
+                        }
+                    });
 
                     websocketData.websocket.send(data);
-
-                    }
-                    catch (error) {
-                        console.log("Websocket: Exception in _LamderaWebsocket_sendString open listener. " + error);
-                    }
-                });
-
-                callback(__Scheduler_succeed(0));
+                    callback(__Scheduler_succeed(0));
+                }
             }
-	    }
-	    else {
-	        callback(__Scheduler_fail(__Websocket_connectionClosed));
-	    }
+            else {
+                callback(__Scheduler_fail(__Websocket_connectionClosed));
+            }
 
 
         }

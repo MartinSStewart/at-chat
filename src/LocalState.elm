@@ -42,6 +42,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import Discord.Id
 import Duration
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
@@ -93,6 +94,7 @@ type alias BackendGuild =
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     , announcementChannel : Id ChannelId
+    , linkedId : Maybe (Discord.Id.Id Discord.Id.GuildId)
     }
 
 
@@ -236,6 +238,7 @@ createNewUser createdAt name email userIsAdmin =
     , emailNotifications = CheckEvery5Minutes
     , lastEmailNotification = createdAt
     , lastViewed = SeqDict.empty
+    , linkedId = Nothing
     }
 
 
@@ -333,6 +336,7 @@ createGuild time userId guildName =
     , owner = userId
     , invites = SeqDict.empty
     , announcementChannel = announcementChannelId
+    , linkedId = Nothing
     }
 
 

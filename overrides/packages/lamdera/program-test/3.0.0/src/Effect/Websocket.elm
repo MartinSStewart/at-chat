@@ -6,6 +6,7 @@ module Effect.Websocket exposing (Connection, SendError(..), close, createHandle
 
 -}
 
+import Effect.Command exposing (Command)
 import Effect.Internal
 import Effect.Subscription exposing (Subscription)
 import Effect.Task exposing (Task)
@@ -20,13 +21,14 @@ type Connection
 
 {-| Create a websocket handle that you can then open by calling listen or sendString.
 -}
-createHandle : String -> Task restriction x Connection
-createHandle url =
+createHandle : (Connection -> msg) -> String -> Command restriction toMsg msg
+createHandle gotConnection url =
     Effect.Internal.WebsocketCreateHandle
         url
         (\(Websocket.Connection id url2) ->
             Connection id url2 |> Effect.Internal.Succeed
         )
+        |> Effect.Task.perform gotConnection
 
 
 {-| Errors that might happen when sending data.

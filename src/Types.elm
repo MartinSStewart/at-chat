@@ -384,6 +384,7 @@ type BackendMsg
     | WebsocketClosed { code : Websocket.CloseEventCode, reason : String }
     | WebsocketSentData (Result Websocket.SendError ())
     | RestoreDiscordConnection
+    | WebsocketClosedByBackend
 
 
 type LoginResult
