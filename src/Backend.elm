@@ -274,105 +274,136 @@ update msg model =
                     addLog time (Log.SendLogErrorEmailFailed error email) model
 
         WebsocketData response ->
-            case ( model.websocketHandle, Json.Decode.decodeString Discord.decodeGatewayEvent response |> Debug.log "data" ) of
-                ( Just connection, Ok data ) ->
-                    let
-                        heartbeat : String
-                        heartbeat =
-                            Discord.encodeGatewayCommand Discord.OpHeatbeat
-                                |> Json.Encode.encode 0
-                    in
-                    case data of
-                        Discord.OpHello { heartbeatInterval } ->
-                            let
-                                command =
-                                    (case model.gatewayState of
-                                        Just ( discordSessionId, sequenceCounter ) ->
-                                            Discord.OpResume Env.botToken discordSessionId sequenceCounter
+            let
+                ( model2, outMsgs ) =
+                    Discord.handleGateway Env.botToken response model
+            in
+            ( model2
+            , List.map
+                (\outMsg ->
+                    case outMsg of
+                        Discord.CloseHandle connection ->
+                            Websocket.close connection |> Task.perform (\() -> WebsocketClosedByBackend)
 
-                                        Nothing ->
-                                            Discord.OpIdentify Env.botToken
-                                    )
-                                        |> Discord.encodeGatewayCommand
-                                        |> Json.Encode.encode 0
-                            in
-                            ( { model | heartbeatInterval = Just heartbeatInterval }
-                            , Command.batch
-                                [ Process.sleep heartbeatInterval
-                                    |> Task.andThen (\() -> websocketSend connection heartbeat)
-                                    |> Task.attempt WebsocketSentData
-                                , websocketSend connection command
-                                    |> Task.attempt WebsocketSentData
-                                ]
-                            )
+                        Discord.SendWebsocketData connection data ->
+                            Websocket.sendString connection data |> Task.attempt WebsocketSentData
 
-                        Discord.OpAck ->
-                            ( model
-                            , Process.sleep
-                                (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
-                                |> Task.andThen (\() -> websocketSend connection heartbeat)
+                        Discord.SendWebsocketDataWithDelay connection duration data ->
+                            Process.sleep duration
+                                |> Task.andThen (\() -> Websocket.sendString connection data)
                                 |> Task.attempt WebsocketSentData
-                            )
 
-                        Discord.OpDispatch sequenceCounter opDispatchEvent ->
-                            case opDispatchEvent of
-                                Discord.ReadyEvent discordSessionId ->
-                                    ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
+                        Discord.UserCreatedMessage guildId message ->
+                            0
 
-                                Discord.ResumedEvent ->
-                                    ( model, Command.none )
+                        Discord.UserDeletedMessage guildId channelId id ->
+                            0
 
-                                Discord.MessageCreateEvent message ->
-                                    case message.guildId of
-                                        Discord.Included guildId ->
-                                            ( model, Command.none )
+                        Discord.UserEditedMessage guildId channelId id ->
+                            0
+                )
+                outMsgs
+                |> Command.batch
+            )
 
-                                        Discord.Missing ->
-                                            ( model, Command.none )
-
-                                Discord.MessageUpdateEvent _ ->
-                                    ( model, Command.none )
-
-                                Discord.MessageDeleteEvent messageId channelId maybeGuildId ->
-                                    case maybeGuildId of
-                                        Discord.Included guildId ->
-                                            ( model
-                                            , Command.none
-                                            )
-
-                                        Discord.Missing ->
-                                            ( model
-                                            , Command.none
-                                            )
-
-                                Discord.MessageDeleteBulkEvent _ _ _ ->
-                                    ( model, Command.none )
-
-                                Discord.GuildMemberAddEvent guildId guildMember ->
-                                    ( model
-                                    , Command.none
-                                    )
-
-                                Discord.GuildMemberRemoveEvent guildId user ->
-                                    ( model
-                                    , Command.none
-                                    )
-
-                                Discord.GuildMemberUpdateEvent _ ->
-                                    ( model, Command.none )
-
-                        Discord.OpReconnect ->
-                            getHandle model
-
-                        Discord.OpInvalidSession ->
-                            getHandle { model | gatewayState = Nothing }
-
-                ( _, Err _ ) ->
-                    ( model, Command.none )
-
-                ( Nothing, Ok _ ) ->
-                    ( model, Command.none )
-
+        --case ( model.websocketHandle, Json.Decode.decodeString Discord.decodeGatewayEvent response |> Debug.log "data" ) of
+        --    ( Just connection, Ok data ) ->
+        --        let
+        --            heartbeat : String
+        --            heartbeat =
+        --                Discord.encodeGatewayCommand Discord.OpHeatbeat
+        --                    |> Json.Encode.encode 0
+        --        in
+        --        case data of
+        --            Discord.OpHello { heartbeatInterval } ->
+        --                let
+        --                    command =
+        --                        (case model.gatewayState of
+        --                            Just ( discordSessionId, sequenceCounter ) ->
+        --                                Discord.OpResume Env.botToken discordSessionId sequenceCounter
+        --
+        --                            Nothing ->
+        --                                Discord.OpIdentify Env.botToken
+        --                        )
+        --                            |> Discord.encodeGatewayCommand
+        --                            |> Json.Encode.encode 0
+        --                in
+        --                ( { model | heartbeatInterval = Just heartbeatInterval }
+        --                , Command.batch
+        --                    [ Process.sleep heartbeatInterval
+        --                        |> Task.andThen (\() -> websocketSend connection heartbeat)
+        --                        |> Task.attempt WebsocketSentData
+        --                    , websocketSend connection command
+        --                        |> Task.attempt WebsocketSentData
+        --                    ]
+        --                )
+        --
+        --            Discord.OpAck ->
+        --                ( model
+        --                , Process.sleep
+        --                    (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
+        --                    |> Task.andThen (\() -> websocketSend connection heartbeat)
+        --                    |> Task.attempt WebsocketSentData
+        --                )
+        --
+        --            Discord.OpDispatch sequenceCounter opDispatchEvent ->
+        --                case opDispatchEvent of
+        --                    Discord.ReadyEvent discordSessionId ->
+        --                        ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
+        --
+        --                    Discord.ResumedEvent ->
+        --                        ( model, Command.none )
+        --
+        --                    Discord.MessageCreateEvent message ->
+        --                        case message.guildId of
+        --                            Discord.Included guildId ->
+        --                                ( model, Command.none )
+        --
+        --                            Discord.Missing ->
+        --                                ( model, Command.none )
+        --
+        --                    Discord.MessageUpdateEvent _ ->
+        --                        ( model, Command.none )
+        --
+        --                    Discord.MessageDeleteEvent messageId channelId maybeGuildId ->
+        --                        case maybeGuildId of
+        --                            Discord.Included guildId ->
+        --                                ( model
+        --                                , Command.none
+        --                                )
+        --
+        --                            Discord.Missing ->
+        --                                ( model
+        --                                , Command.none
+        --                                )
+        --
+        --                    Discord.MessageDeleteBulkEvent _ _ _ ->
+        --                        ( model, Command.none )
+        --
+        --                    Discord.GuildMemberAddEvent guildId guildMember ->
+        --                        ( model
+        --                        , Command.none
+        --                        )
+        --
+        --                    Discord.GuildMemberRemoveEvent guildId user ->
+        --                        ( model
+        --                        , Command.none
+        --                        )
+        --
+        --                    Discord.GuildMemberUpdateEvent _ ->
+        --                        ( model, Command.none )
+        --
+        --            Discord.OpReconnect ->
+        --                getHandle model
+        --
+        --            Discord.OpInvalidSession ->
+        --                getHandle { model | gatewayState = Nothing }
+        --
+        --    ( _, Err _ ) ->
+        --        ( model, Command.none )
+        --
+        --    ( Nothing, Ok _ ) ->
+        --        ( model, Command.none )
         WebsocketCreatedHandle connection ->
             ( { model | websocketHandle = Just connection }, Command.none )
 
