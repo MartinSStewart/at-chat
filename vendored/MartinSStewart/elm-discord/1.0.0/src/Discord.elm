@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , username, nickname, Username(..), Nickname, NameError(..), getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, ChannelInviteConfig, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Modify(..), OpDispatchEvent(..), OptionalData(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, teamIconUrl, triggerTypingIndicator, userAvatarUrl, usernameErrorToString, usernameToString
+    , Bits, ChannelInviteConfig, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Modify(..), OpDispatchEvent(..), OptionalData(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleGateway, imageIsAnimated, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, teamIconUrl, triggerTypingIndicator, userAvatarUrl, usernameErrorToString, usernameToString
     )
 
 {-| Useful Discord links:
@@ -3256,11 +3256,24 @@ encodeGatewayCommand gatewayCommand =
 --- Gateway code
 
 
-type OutMsg
-    = CloseHandle
+type OutMsg connection
+    = CloseHandle connection
+    | SendWebsocketData connection String
+    | SendWebsocketDataWithDelay connection Duration String
+    | UserCreatedMessage (Id GuildId) Message
+    | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
+    | UserEditedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
 
 
-handleGateway =
+type alias Model connection =
+    { websocketHandle : Maybe connection
+    , gatewayState : Maybe ( SessionId, SequenceCounter )
+    , heartbeatInterval : Maybe Duration
+    }
+
+
+handleGateway : Authentication -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
+handleGateway authToken response model =
     case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) of
         ( Just connection, Ok data ) ->
             let
@@ -3275,87 +3288,93 @@ handleGateway =
                         command =
                             (case model.gatewayState of
                                 Just ( discordSessionId, sequenceCounter ) ->
-                                    OpResume Env.botToken discordSessionId sequenceCounter
+                                    OpResume authToken discordSessionId sequenceCounter
 
                                 Nothing ->
-                                    OpIdentify Env.botToken
+                                    OpIdentify authToken
                             )
-                                |> Discord.encodeGatewayCommand
+                                |> encodeGatewayCommand
                                 |> JE.encode 0
                     in
                     ( { model | heartbeatInterval = Just heartbeatInterval }
-                    , Command.batch
-                        [ Process.sleep heartbeatInterval
-                            |> Task.andThen (\() -> websocketSend connection heartbeat)
-                            |> Task.attempt WebsocketSentData
-                        , websocketSend connection command
-                            |> Task.attempt WebsocketSentData
-                        ]
+                    , [ SendWebsocketDataWithDelay connection heartbeatInterval heartbeat
+                      , SendWebsocketData connection command
+                      ]
                     )
 
                 OpAck ->
                     ( model
-                    , Process.sleep
-                        (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
-                        |> Task.andThen (\() -> websocketSend connection heartbeat)
-                        |> Task.attempt WebsocketSentData
+                    , [ SendWebsocketDataWithDelay
+                            connection
+                            (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
+                            heartbeat
+                      ]
                     )
 
                 OpDispatch sequenceCounter opDispatchEvent ->
                     case opDispatchEvent of
                         ReadyEvent discordSessionId ->
-                            ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
+                            ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, [] )
 
                         ResumedEvent ->
-                            ( model, Command.none )
+                            ( model, [] )
 
                         MessageCreateEvent message ->
                             case message.guildId of
-                                Discord.Included guildId ->
-                                    ( model, Command.none )
+                                Included guildId ->
+                                    ( model, [ UserCreatedMessage guildId message ] )
 
-                                Discord.Missing ->
-                                    ( model, Command.none )
+                                Missing ->
+                                    ( model, [] )
 
-                        MessageUpdateEvent _ ->
-                            ( model, Command.none )
+                        MessageUpdateEvent messageUpdate ->
+                            ( model, [] )
 
                         MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
-                                Discord.Included guildId ->
+                                Included guildId ->
                                     ( model
-                                    , Command.none
+                                    , [ UserDeletedMessage guildId channelId messageId ]
                                     )
 
-                                Discord.Missing ->
+                                Missing ->
                                     ( model
-                                    , Command.none
+                                    , []
                                     )
 
-                        MessageDeleteBulkEvent _ _ _ ->
-                            ( model, Command.none )
+                        MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
+                            case maybeGuildId of
+                                Included guildId ->
+                                    ( model
+                                    , List.map
+                                        (UserDeletedMessage guildId channelId)
+                                        messageIds
+                                    )
+
+                                Missing ->
+                                    ( model, [] )
 
                         GuildMemberAddEvent guildId guildMember ->
                             ( model
-                            , Command.none
+                            , []
                             )
 
                         GuildMemberRemoveEvent guildId user ->
                             ( model
-                            , Command.none
+                            , []
                             )
 
                         GuildMemberUpdateEvent _ ->
-                            ( model, Command.none )
+                            ( model, [] )
 
                 OpReconnect ->
-                    ( model, CloseHandle )
+                    ( model, [ CloseHandle connection ] )
 
                 OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, CloseHandle )
+                    ( { model | gatewayState = Nothing }, [ CloseHandle connection ] )
 
         ( _, Err _ ) ->
-            ( model, Command.none )
+            ( model, [] )
 
         ( Nothing, Ok _ ) ->
-            ( model, Command.none )
+            ( model, [] )
