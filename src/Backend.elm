@@ -181,9 +181,7 @@ init =
                     }
                   )
                 ]
-      , gatewayState = Nothing
-      , websocketHandle = Nothing
-      , heartbeatInterval = Nothing
+      , discordModel = Discord.init
       }
     , Command.none
     )
@@ -203,12 +201,11 @@ subscriptions model =
     Subscription.batch
         [ Lamdera.onConnect UserConnected
         , Lamdera.onDisconnect UserDisconnected
-        , case model.websocketHandle of
-            Just handle ->
-                Websocket.listen handle WebsocketData WebsocketClosed
-
-            Nothing ->
-                Time.every (Duration.seconds 30) (\_ -> RestoreDiscordConnection)
+        , Discord.subscription
+            (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
+            model.discordModel
+            |> Maybe.withDefault Subscription.none
+            |> Subscription.map DiscordWebsocketMsg
         ]
 
 
@@ -273,146 +270,10 @@ update msg model =
                 Err error ->
                     addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        WebsocketData response ->
-            let
-                ( model2, outMsgs ) =
-                    Discord.handleGateway Env.botToken response model
-            in
-            ( model2
-            , List.map
-                (\outMsg ->
-                    case outMsg of
-                        Discord.CloseHandle connection ->
-                            Websocket.close connection |> Task.perform (\() -> WebsocketClosedByBackend)
-
-                        Discord.SendWebsocketData connection data ->
-                            Websocket.sendString connection data |> Task.attempt WebsocketSentData
-
-                        Discord.SendWebsocketDataWithDelay connection duration data ->
-                            Process.sleep duration
-                                |> Task.andThen (\() -> Websocket.sendString connection data)
-                                |> Task.attempt WebsocketSentData
-
-                        Discord.UserCreatedMessage guildId message ->
-                            0
-
-                        Discord.UserDeletedMessage guildId channelId id ->
-                            0
-
-                        Discord.UserEditedMessage guildId channelId id ->
-                            0
-                )
-                outMsgs
-                |> Command.batch
-            )
-
-        --case ( model.websocketHandle, Json.Decode.decodeString Discord.decodeGatewayEvent response |> Debug.log "data" ) of
-        --    ( Just connection, Ok data ) ->
-        --        let
-        --            heartbeat : String
-        --            heartbeat =
-        --                Discord.encodeGatewayCommand Discord.OpHeatbeat
-        --                    |> Json.Encode.encode 0
-        --        in
-        --        case data of
-        --            Discord.OpHello { heartbeatInterval } ->
-        --                let
-        --                    command =
-        --                        (case model.gatewayState of
-        --                            Just ( discordSessionId, sequenceCounter ) ->
-        --                                Discord.OpResume Env.botToken discordSessionId sequenceCounter
-        --
-        --                            Nothing ->
-        --                                Discord.OpIdentify Env.botToken
-        --                        )
-        --                            |> Discord.encodeGatewayCommand
-        --                            |> Json.Encode.encode 0
-        --                in
-        --                ( { model | heartbeatInterval = Just heartbeatInterval }
-        --                , Command.batch
-        --                    [ Process.sleep heartbeatInterval
-        --                        |> Task.andThen (\() -> websocketSend connection heartbeat)
-        --                        |> Task.attempt WebsocketSentData
-        --                    , websocketSend connection command
-        --                        |> Task.attempt WebsocketSentData
-        --                    ]
-        --                )
-        --
-        --            Discord.OpAck ->
-        --                ( model
-        --                , Process.sleep
-        --                    (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
-        --                    |> Task.andThen (\() -> websocketSend connection heartbeat)
-        --                    |> Task.attempt WebsocketSentData
-        --                )
-        --
-        --            Discord.OpDispatch sequenceCounter opDispatchEvent ->
-        --                case opDispatchEvent of
-        --                    Discord.ReadyEvent discordSessionId ->
-        --                        ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, Command.none )
-        --
-        --                    Discord.ResumedEvent ->
-        --                        ( model, Command.none )
-        --
-        --                    Discord.MessageCreateEvent message ->
-        --                        case message.guildId of
-        --                            Discord.Included guildId ->
-        --                                ( model, Command.none )
-        --
-        --                            Discord.Missing ->
-        --                                ( model, Command.none )
-        --
-        --                    Discord.MessageUpdateEvent _ ->
-        --                        ( model, Command.none )
-        --
-        --                    Discord.MessageDeleteEvent messageId channelId maybeGuildId ->
-        --                        case maybeGuildId of
-        --                            Discord.Included guildId ->
-        --                                ( model
-        --                                , Command.none
-        --                                )
-        --
-        --                            Discord.Missing ->
-        --                                ( model
-        --                                , Command.none
-        --                                )
-        --
-        --                    Discord.MessageDeleteBulkEvent _ _ _ ->
-        --                        ( model, Command.none )
-        --
-        --                    Discord.GuildMemberAddEvent guildId guildMember ->
-        --                        ( model
-        --                        , Command.none
-        --                        )
-        --
-        --                    Discord.GuildMemberRemoveEvent guildId user ->
-        --                        ( model
-        --                        , Command.none
-        --                        )
-        --
-        --                    Discord.GuildMemberUpdateEvent _ ->
-        --                        ( model, Command.none )
-        --
-        --            Discord.OpReconnect ->
-        --                getHandle model
-        --
-        --            Discord.OpInvalidSession ->
-        --                getHandle { model | gatewayState = Nothing }
-        --
-        --    ( _, Err _ ) ->
-        --        ( model, Command.none )
-        --
-        --    ( Nothing, Ok _ ) ->
-        --        ( model, Command.none )
         WebsocketCreatedHandle connection ->
-            ( { model | websocketHandle = Just connection }, Command.none )
-
-        WebsocketClosed data ->
-            let
-                _ =
-                    Debug.log "WebsocketClosed" data
-            in
-            ( { model | websocketHandle = Nothing }, Command.none )
+            ( { model | discordModel = Discord.createdHandle connection model.discordModel }
+            , Command.none
+            )
 
         WebsocketSentData result ->
             case Debug.log "SentData" result of
@@ -426,28 +287,44 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        RestoreDiscordConnection ->
-            case model.websocketHandle of
-                Just _ ->
-                    ( model, Command.none )
-
-                Nothing ->
-                    ( model, Websocket.createHandle WebsocketCreatedHandle websocketGatewayUrl )
-
         WebsocketClosedByBackend ->
-            ( model, Command.none )
+            ( model, Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl )
 
+        DiscordWebsocketMsg discordMsg ->
+            let
+                ( model2, outMsgs ) =
+                    Discord.update Env.botToken discordMsg model.discordModel
+            in
+            ( { model | discordModel = model2 }
+            , List.map
+                (\outMsg ->
+                    case outMsg of
+                        Discord.CloseAndReopenHandle connection ->
+                            Websocket.close connection |> Task.perform (\() -> WebsocketClosedByBackend)
 
-getHandle : BackendModel -> ( BackendModel, Command restriction toMsg BackendMsg )
-getHandle model =
-    ( { model | websocketHandle = Nothing }
-    , case model.websocketHandle of
-        Just handle ->
-            Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend)
+                        Discord.OpenHandle ->
+                            Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
 
-        Nothing ->
-            Command.none
-    )
+                        Discord.SendWebsocketData connection data ->
+                            Websocket.sendString connection data |> Task.attempt WebsocketSentData
+
+                        Discord.SendWebsocketDataWithDelay connection duration data ->
+                            Process.sleep duration
+                                |> Task.andThen (\() -> Websocket.sendString connection data)
+                                |> Task.attempt WebsocketSentData
+
+                        Discord.UserCreatedMessage guildId message ->
+                            Debug.todo ""
+
+                        Discord.UserDeletedMessage guildId channelId id ->
+                            Debug.todo ""
+
+                        Discord.UserEditedMessage guildId channelId id ->
+                            Debug.todo ""
+                )
+                outMsgs
+                |> Command.batch
+            )
 
 
 updateFromFrontend :
@@ -1839,8 +1716,3 @@ addLog time log model =
 
         _ ->
             ( model2, Command.none )
-
-
-websocketGatewayUrl : String
-websocketGatewayUrl =
-    "wss://gateway.discord.gg/?v=8&encoding=json"

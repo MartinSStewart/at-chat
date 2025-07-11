@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , username, nickname, Username(..), Nickname, NameError(..), getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, ChannelInviteConfig, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Modify(..), OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleGateway, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, teamIconUrl, triggerTypingIndicator, userAvatarUrl, usernameErrorToString, usernameToString
+    , Bits, ChannelInviteConfig, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, usernameErrorToString, usernameToString, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3257,7 +3257,8 @@ encodeGatewayCommand gatewayCommand =
 
 
 type OutMsg connection
-    = CloseHandle connection
+    = CloseAndReopenHandle connection
+    | OpenHandle
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
     | UserCreatedMessage (Id GuildId) Message
@@ -3278,6 +3279,41 @@ init =
     , gatewayState = Nothing
     , heartbeatInterval = Nothing
     }
+
+
+type Msg
+    = GotWebsocketData String
+    | WebsocketClosed
+
+
+websocketGatewayUrl : String
+websocketGatewayUrl =
+    "wss://gateway.discord.gg/?v=8&encoding=json"
+
+
+createdHandle : connection -> Model connection -> Model connection
+createdHandle connection model =
+    { model | websocketHandle = Just connection }
+
+
+subscription : (connection -> (String -> Msg) -> Msg -> sub) -> Model connection -> Maybe sub
+subscription listen model =
+    case model.websocketHandle of
+        Just handle ->
+            listen handle GotWebsocketData WebsocketClosed |> Just
+
+        Nothing ->
+            Nothing
+
+
+update : Authentication -> Msg -> Model connection -> ( Model connection, List (OutMsg connection) )
+update authToken msg model =
+    case msg of
+        GotWebsocketData data ->
+            handleGateway authToken data model
+
+        WebsocketClosed ->
+            ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
 
 handleGateway : Authentication -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
@@ -3376,10 +3412,10 @@ handleGateway authToken response model =
                             ( model, [] )
 
                 OpReconnect ->
-                    ( model, [ CloseHandle connection ] )
+                    ( model, [ CloseAndReopenHandle connection ] )
 
                 OpInvalidSession ->
-                    ( { model | gatewayState = Nothing }, [ CloseHandle connection ] )
+                    ( { model | gatewayState = Nothing }, [ CloseAndReopenHandle connection ] )
 
         ( _, Err _ ) ->
             ( model, [] )

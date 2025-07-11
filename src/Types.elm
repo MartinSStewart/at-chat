@@ -228,9 +228,7 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
-    , gatewayState : Maybe ( Discord.SessionId, Discord.SequenceCounter )
-    , websocketHandle : Maybe Websocket.Connection
-    , heartbeatInterval : Maybe Duration
+    , discordModel : Discord.Model Websocket.Connection
     }
 
 
@@ -379,12 +377,10 @@ type BackendMsg
     | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | WebsocketData String
     | WebsocketCreatedHandle Websocket.Connection
-    | WebsocketClosed { code : Websocket.CloseEventCode, reason : String }
     | WebsocketSentData (Result Websocket.SendError ())
-    | RestoreDiscordConnection
     | WebsocketClosedByBackend
+    | DiscordWebsocketMsg Discord.Msg
 
 
 type LoginResult
