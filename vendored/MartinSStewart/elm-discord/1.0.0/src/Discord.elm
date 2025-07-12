@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , username, nickname, Username(..), Nickname, NameError(..), getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, ChannelInviteConfig, CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, usernameErrorToString, usernameToString, websocketGatewayUrl
+    , Bits, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannel, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, usernameErrorToString, usernameToString, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -81,7 +81,8 @@ import Dict exposing (Dict)
 import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, RoleId, TeamId, UserId, WebhookId)
 import Discord.Markdown exposing (Markdown)
 import Duration exposing (Duration, Seconds)
-import Http
+import Effect.Http as Http
+import Effect.Task as Task exposing (Task)
 import Iso8601
 import Json.Decode as JD
 import Json.Decode.Extra as JD
@@ -89,7 +90,6 @@ import Json.Encode as JE
 import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
 import Set exposing (Set)
-import Task exposing (Task)
 import Time exposing (Posix(..))
 import Url exposing (Url)
 import Url.Builder exposing (QueryParameter)
@@ -101,7 +101,7 @@ import Url.Builder exposing (QueryParameter)
 
 {-| Get a channel by ID.
 -}
-getChannel : Authentication -> Id ChannelId -> Task HttpError Channel
+getChannel : Authentication -> Id ChannelId -> Task r HttpError Channel
 getChannel authentication channelId =
     httpGet authentication decodeChannel [ "channels", Discord.Id.toString channelId ] []
 
@@ -123,7 +123,7 @@ In contrast, when used with a private message, it is possible to undo the action
 For Public servers, the set Rules or Guidelines channel and the Moderators-only (Public Server Updates) channel cannot be deleted.
 
 -}
-deleteChannel : Authentication -> Id ChannelId -> Task HttpError Channel
+deleteChannel : Authentication -> Id ChannelId -> Task r HttpError Channel
 deleteChannel authentication channelId =
     httpDelete authentication decodeChannel [ "channels", Discord.Id.toString channelId ] [] (JE.string "")
 
@@ -138,7 +138,7 @@ If the current user is missing the `READ_MESSAGE_HISTORY` permission in the chan
     Or should we get the most recent messages?
 
 -}
-getMessages : Authentication -> { channelId : Id ChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> Task HttpError (List Message)
+getMessages : Authentication -> { channelId : Id ChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> Task r HttpError (List Message)
 getMessages authentication { channelId, limit, relativeTo } =
     httpGet
         authentication
@@ -164,7 +164,7 @@ getMessages authentication { channelId, limit, relativeTo } =
 {-| Returns a specific message in the channel.
 If operating on a guild channel, this endpoint requires the `READ_MESSAGE_HISTORY` permission to be present on the current user.
 -}
-getMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError Message
+getMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError Message
 getMessage authentication { channelId, messageId } =
     httpGet
         authentication
@@ -187,7 +187,7 @@ See message formatting for more information on how to properly format messages.
 The maximum request size when sending a message is 8MB.
 
 -}
-createMessage : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> Task HttpError Message
+createMessage : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> Task r HttpError Message
 createMessage authentication { channelId, content, replyTo } =
     httpPost
         authentication
@@ -212,7 +212,7 @@ createMessage authentication { channelId, content, replyTo } =
 
 {-| Same as `createMessage` but instead of taking a String, it takes a list of Markdown values.
 -}
-createMarkdownMessage : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> Task HttpError Message
+createMarkdownMessage : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> Task r HttpError Message
 createMarkdownMessage authentication { channelId, content, replyTo } =
     createMessage
         authentication
@@ -223,7 +223,7 @@ createMarkdownMessage authentication { channelId, content, replyTo } =
 This endpoint requires the `READ_MESSAGE_HISTORY` permission to be present on the current user.
 Additionally, if nobody else has reacted to the message using this emoji, this endpoint requires the `ADD_REACTIONS` permission to be present on the current user.
 -}
-createReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
+createReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
 createReaction authentication { channelId, messageId, emoji } =
     httpPut
         authentication
@@ -242,7 +242,7 @@ createReaction authentication { channelId, messageId, emoji } =
 
 {-| Delete a reaction the current user has made for the message.
 -}
-deleteOwnReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
+deleteOwnReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
 deleteOwnReaction authentication { channelId, messageId, emoji } =
     httpDelete
         authentication
@@ -265,7 +265,7 @@ This endpoint requires the `MANAGE_MESSAGES` permission to be present on the cur
 deleteUserReaction :
     Authentication
     -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji, userId : Id UserId }
-    -> Task HttpError ()
+    -> Task r HttpError ()
 deleteUserReaction authentication { channelId, messageId, emoji, userId } =
     httpDelete
         authentication
@@ -284,7 +284,7 @@ deleteUserReaction authentication { channelId, messageId, emoji, userId } =
 
 {-| Get a list of users that reacted with this emoji.
 -}
-getReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
+getReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
 getReactions authentication { channelId, messageId, emoji } =
     httpGet
         authentication
@@ -302,7 +302,7 @@ getReactions authentication { channelId, messageId, emoji } =
 {-| Deletes all reactions on a message.
 This endpoint requires the `MANAGE_MESSAGES` permission to be present on the current user.
 -}
-deleteAllReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
+deleteAllReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
 deleteAllReactions authentication { channelId, messageId } =
     httpDelete
         authentication
@@ -318,7 +318,7 @@ This endpoint requires the `MANAGE_MESSAGES` permission to be present on the cur
 deleteAllReactionsForEmoji :
     Authentication
     -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji }
-    -> Task HttpError ()
+    -> Task r HttpError ()
 deleteAllReactionsForEmoji authentication { channelId, messageId, emoji } =
     httpDelete
         authentication
@@ -337,7 +337,7 @@ deleteAllReactionsForEmoji authentication { channelId, messageId, emoji } =
 {-| Edit a previously sent message. The fields content can only be edited by the original message author.
 The content field can have a maximum of 2000 characters.
 -}
-editMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, content : String } -> Task HttpError ()
+editMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, content : String } -> Task r HttpError ()
 editMessage authentication { channelId, messageId, content } =
     httpPatch
         authentication
@@ -350,7 +350,7 @@ editMessage authentication { channelId, messageId, content } =
 {-| Delete a message.
 If operating on a guild channel and trying to delete a message that was not sent by the current user, this endpoint requires the `MANAGE_MESSAGES` permission.
 -}
-deleteMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
+deleteMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
 deleteMessage authentication { channelId, messageId } =
     httpDelete
         authentication
@@ -375,7 +375,7 @@ bulkDeleteMessage :
         , secondMessage : Id MessageId
         , restOfMessages : List (Id MessageId)
         }
-    -> Task HttpError ()
+    -> Task r HttpError ()
 bulkDeleteMessage authentication { channelId, firstMessage, secondMessage, restOfMessages } =
     httpDelete
         authentication
@@ -392,7 +392,7 @@ bulkDeleteMessage authentication { channelId, firstMessage, secondMessage, restO
 {-| Returns a list of invites for the channel.
 Only usable for guild channels. Requires the `MANAGE_CHANNELS` permission.
 -}
-getChannelInvites : Authentication -> Id ChannelId -> Task HttpError (List InviteWithMetadata)
+getChannelInvites : Authentication -> Id ChannelId -> Task r HttpError (List InviteWithMetadata)
 getChannelInvites authentication channelId =
     httpGet
         authentication
@@ -420,7 +420,7 @@ createChannelInvite :
     Authentication
     -> Id ChannelId
     -> ChannelInviteConfig
-    -> Task HttpError Invite
+    -> Task r HttpError Invite
 createChannelInvite authentication channelId { maxAge, maxUses, temporaryMembership, unique, targetUser } =
     httpPost
         authentication
@@ -464,7 +464,7 @@ Requires the `MANAGE_ROLES` permission. For more information about permissions, 
 deleteChannelPermission :
     Authentication
     -> { channelId : Id ChannelId, overwriteId : Id OverwriteId }
-    -> Task HttpError (List InviteWithMetadata)
+    -> Task r HttpError (List InviteWithMetadata)
 deleteChannelPermission authentication { channelId, overwriteId } =
     httpDelete
         authentication
@@ -478,7 +478,7 @@ deleteChannelPermission authentication { channelId, overwriteId } =
 Generally bots should not implement this route.
 However, if a bot is responding to a command and expects the computation to take a few seconds, this endpoint may be called to let the user know that the bot is processing their message.
 -}
-triggerTypingIndicator : Authentication -> Id ChannelId -> Task HttpError ()
+triggerTypingIndicator : Authentication -> Id ChannelId -> Task r HttpError ()
 triggerTypingIndicator authentication channelId =
     httpPost
         authentication
@@ -490,7 +490,7 @@ triggerTypingIndicator authentication channelId =
 
 {-| Returns all pinned messages in the channel.
 -}
-getPinnedMessages : Authentication -> Id ChannelId -> Task HttpError (List Message)
+getPinnedMessages : Authentication -> Id ChannelId -> Task r HttpError (List Message)
 getPinnedMessages authentication channelId =
     httpGet
         authentication
@@ -504,7 +504,7 @@ getPinnedMessages authentication channelId =
 The max pinned messages is 50.
 
 -}
-addPinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
+addPinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
 addPinnedChannelMessage authentication { channelId, messageId } =
     httpPut
         authentication
@@ -516,7 +516,7 @@ addPinnedChannelMessage authentication { channelId, messageId } =
 
 {-| Delete a pinned message in a channel. Requires the `MANAGE_MESSAGES` permission.
 -}
-deletePinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
+deletePinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
 deletePinnedChannelMessage authentication { channelId, messageId } =
     httpDelete
         authentication
@@ -535,7 +535,7 @@ deletePinnedChannelMessage authentication { channelId, messageId } =
 
 {-| Returns a list of emojis for the given guild.
 -}
-listGuildEmojis : Authentication -> Id GuildId -> Task HttpError (List EmojiData)
+listGuildEmojis : Authentication -> Id GuildId -> Task r HttpError (List EmojiData)
 listGuildEmojis authentication guildId =
     httpGet
         authentication
@@ -546,7 +546,7 @@ listGuildEmojis authentication guildId =
 
 {-| Returns an emoji for the given guild and emoji IDs.
 -}
-getGuildEmojis : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task HttpError EmojiData
+getGuildEmojis : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task r HttpError EmojiData
 getGuildEmojis authentication { guildId, emojiId } =
     httpGet
         authentication
@@ -567,7 +567,7 @@ Emojis and animated emojis have a maximum file size of 256kb.
 createGuildEmoji :
     Authentication
     -> { guildId : Id GuildId, emojiName : String, image : DataUri, roles : Roles }
-    -> Task HttpError EmojiData
+    -> Task r HttpError EmojiData
 createGuildEmoji authentication { guildId, emojiName, image, roles } =
     httpPost
         authentication
@@ -592,7 +592,7 @@ modifyGuildEmoji :
         , emojiName : Modify String
         , roles : Modify Roles
         }
-    -> Task HttpError EmojiData
+    -> Task r HttpError EmojiData
 modifyGuildEmoji authentication { guildId, emojiId, emojiName, roles } =
     httpPost
         authentication
@@ -620,7 +620,7 @@ modifyGuildEmoji authentication { guildId, emojiId, emojiName, roles } =
 
 {-| Delete the given emoji. Requires the `MANAGE_EMOJIS` permission.
 -}
-deleteGuildEmoji : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task HttpError ()
+deleteGuildEmoji : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task r HttpError ()
 deleteGuildEmoji authentication { guildId, emojiId } =
     httpDelete
         authentication
@@ -636,7 +636,7 @@ deleteGuildEmoji authentication { guildId, emojiId } =
 
 {-| Returns the guild for the given id.
 -}
-getGuild : Authentication -> Id GuildId -> Task HttpError Guild
+getGuild : Authentication -> Id GuildId -> Task r HttpError Guild
 getGuild authentication guildId =
     httpGet
         authentication
@@ -650,7 +650,7 @@ getGuild authentication guildId =
 This endpoint is only for Public guilds
 
 -}
-getGuildPreview : Authentication -> Id GuildId -> Task HttpError GuildPreview
+getGuildPreview : Authentication -> Id GuildId -> Task r HttpError GuildPreview
 getGuildPreview authentication guildId =
     httpGet
         authentication
@@ -699,7 +699,7 @@ modifyGuild :
     Authentication
     -> Id GuildId
     -> GuildModifications
-    -> Task HttpError Guild
+    -> Task r HttpError Guild
 modifyGuild authentication guildId modifications =
     httpPatch
         authentication
@@ -728,21 +728,21 @@ modifyGuild authentication guildId modifications =
 
 {-| Delete a guild permanently. User must be owner.
 -}
-deleteGuild : Authentication -> Id GuildId -> Task HttpError ()
+deleteGuild : Authentication -> Id GuildId -> Task r HttpError ()
 deleteGuild authentication guildId =
     httpDelete authentication (JD.succeed ()) [ "guilds", Discord.Id.toString guildId ] [] (JE.object [])
 
 
 {-| Returns a list of guild channels.
 -}
-getGuildChannel : Authentication -> Id GuildId -> Task HttpError (List Channel)
+getGuildChannel : Authentication -> Id GuildId -> Task r HttpError (List Channel)
 getGuildChannel authentication guildId =
     httpGet authentication (JD.list decodeChannel) [ "guilds", Discord.Id.toString guildId, "channels" ] []
 
 
 {-| Create a new text channel for the guild. Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildTextChannel : Authentication -> CreateGuildTextChannel -> Task HttpError Channel
+createGuildTextChannel : Authentication -> CreateGuildTextChannel -> Task r HttpError Channel
 createGuildTextChannel authentication config =
     httpPost
         authentication
@@ -763,7 +763,7 @@ createGuildTextChannel authentication config =
 
 {-| Create a new voice channel for the guild. Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildVoiceChannel : Authentication -> CreateGuildVoiceChannel -> Task HttpError Channel
+createGuildVoiceChannel : Authentication -> CreateGuildVoiceChannel -> Task r HttpError Channel
 createGuildVoiceChannel authentication config =
     httpPost
         authentication
@@ -786,7 +786,7 @@ createGuildVoiceChannel authentication config =
 {-| Create a new category for the guild that you can place other channels in.
 Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildCategoryChannel : Authentication -> CreateGuildCategoryChannel -> Task HttpError Channel
+createGuildCategoryChannel : Authentication -> CreateGuildCategoryChannel -> Task r HttpError Channel
 createGuildCategoryChannel authentication config =
     httpPost
         authentication
@@ -807,7 +807,7 @@ createGuildCategoryChannel authentication config =
 
 {-| Returns a guild member for the specified user.
 -}
-getGuildMember : Authentication -> Id GuildId -> Id UserId -> Task HttpError GuildMember
+getGuildMember : Authentication -> Id GuildId -> Id UserId -> Task r HttpError GuildMember
 getGuildMember authentication guildId userId =
     httpGet
         authentication
@@ -825,7 +825,7 @@ getGuildMember authentication guildId userId =
 listGuildMembers :
     Authentication
     -> { guildId : Id GuildId, limit : Int, after : OptionalData (Id UserId) }
-    -> Task HttpError (List GuildMember)
+    -> Task r HttpError (List GuildMember)
 listGuildMembers authentication { guildId, limit, after } =
     httpGet
         authentication
@@ -848,7 +848,7 @@ listGuildMembers authentication { guildId, limit, after } =
 
 {-| Returns an invite for the given code.
 -}
-getInvite : Authentication -> InviteCode -> Task HttpError Invite
+getInvite : Authentication -> InviteCode -> Task r HttpError Invite
 getInvite authentication (InviteCode inviteCode) =
     httpGet
         authentication
@@ -860,7 +860,7 @@ getInvite authentication (InviteCode inviteCode) =
 {-| Delete an invite.
 Requires the `MANAGE_CHANNELS` permission on the channel this invite belongs to, or `MANAGE_GUILD` to remove any invite across the guild.
 -}
-deleteInvite : Authentication -> InviteCode -> Task HttpError Invite
+deleteInvite : Authentication -> InviteCode -> Task r HttpError Invite
 deleteInvite authentication (InviteCode inviteCode) =
     httpDelete
         authentication
@@ -949,7 +949,7 @@ nicknameErrorToString nicknameError =
 {-| Returns the user object of the requester's account.
 For OAuth2, this requires the identify scope, which will return the object without an email, and optionally the email scope, which returns the object with an email.
 -}
-getCurrentUser : Authentication -> Task HttpError User
+getCurrentUser : Authentication -> Task r HttpError User
 getCurrentUser authentication =
     httpGet
         authentication
@@ -960,12 +960,12 @@ getCurrentUser authentication =
 
 {-| Returns a user object for a given user ID.
 -}
-getUser : Authentication -> Id UserId -> Task HttpError User
+getUser : Authentication -> Id UserId -> Task r HttpError User
 getUser authentication userId =
     httpGet authentication decodeUser [ "users", Discord.Id.toString userId ] []
 
 
-createDmChannel : Authentication -> Id UserId -> Task HttpError Channel
+createDmChannel : Authentication -> Id UserId -> Task r HttpError Channel
 createDmChannel authentication userId =
     httpPost authentication
         decodeChannel
@@ -983,7 +983,7 @@ createDmChannel authentication userId =
 modifyCurrentUser :
     Authentication
     -> { username : Modify Username, avatar : Modify (Maybe DataUri) }
-    -> Task HttpError User
+    -> Task r HttpError User
 modifyCurrentUser authentication modifications =
     httpPatch
         authentication
@@ -999,7 +999,7 @@ modifyCurrentUser authentication modifications =
 
 {-| Returns a list of partial guilds the current user is a member of. Requires the guilds OAuth2 scope.
 -}
-getCurrentUserGuilds : Authentication -> Task HttpError (List PartialGuild)
+getCurrentUserGuilds : Authentication -> Task r HttpError (List PartialGuild)
 getCurrentUserGuilds authentication =
     httpGet
         authentication
@@ -1010,7 +1010,7 @@ getCurrentUserGuilds authentication =
 
 {-| Leave a guild.
 -}
-leaveGuild : Authentication -> Id GuildId -> Task HttpError ()
+leaveGuild : Authentication -> Id GuildId -> Task r HttpError ()
 leaveGuild authentication guildId =
     httpDelete
         authentication
@@ -1164,32 +1164,32 @@ rawHash (ImageHash hash) =
     hash
 
 
-httpPost : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task HttpError a
+httpPost : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task r HttpError a
 httpPost authentication decoder path queryParameters body =
     http authentication "POST" decoder path queryParameters (Http.jsonBody body)
 
 
-httpPut : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task HttpError a
+httpPut : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task r HttpError a
 httpPut authentication decoder path queryParameters body =
     http authentication "PUT" decoder path queryParameters (Http.jsonBody body)
 
 
-httpPatch : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task HttpError a
+httpPatch : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task r HttpError a
 httpPatch authentication decoder path queryParameters body =
     http authentication "PATCH" decoder path queryParameters (Http.jsonBody body)
 
 
-httpDelete : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task HttpError a
+httpDelete : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> Task r HttpError a
 httpDelete authentication decoder path queryParameters body =
     http authentication "DELETE" decoder path queryParameters (Http.jsonBody body)
 
 
-httpGet : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> Task HttpError a
+httpGet : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> Task r HttpError a
 httpGet authentication decoder path queryParameters =
     http authentication "GET" decoder path queryParameters Http.emptyBody
 
 
-http : Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Http.Body -> Task HttpError a
+http : Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Http.Body -> Task r HttpError a
 http authentication requestType decoder path queryParameters body =
     Http.task
         { method = requestType
@@ -1806,8 +1806,18 @@ type Nickname
 
 
 type alias GuildMember =
-    { user : OptionalData User
+    { user : User
     , nickname : Maybe Nickname
+    , roles : List (Id RoleId)
+    , joinedAt : Time.Posix
+    , premiumSince : OptionalData (Maybe Time.Posix)
+    , deaf : Bool
+    , mute : Bool
+    }
+
+
+type alias GuildMemberNoUser =
+    { nickname : Maybe Nickname
     , roles : List (Id RoleId)
     , joinedAt : Time.Posix
     , premiumSince : OptionalData (Maybe Time.Posix)
@@ -2388,7 +2398,18 @@ errorCodeDict =
 decodeGuildMember : JD.Decoder GuildMember
 decodeGuildMember =
     JD.succeed GuildMember
-        |> JD.andMap (decodeOptionalData "user" decodeUser)
+        |> JD.andMap (JD.field "user" decodeUser)
+        |> JD.andMap (JD.field "nick" (JD.nullable decodeNickname))
+        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
+        |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
+        |> JD.andMap (JD.field "deaf" JD.bool)
+        |> JD.andMap (JD.field "mute" JD.bool)
+
+
+decodeGuildMemberNoUser : JD.Decoder GuildMemberNoUser
+decodeGuildMemberNoUser =
+    JD.succeed GuildMemberNoUser
         |> JD.andMap (JD.field "nick" (JD.nullable decodeNickname))
         |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)

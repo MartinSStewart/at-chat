@@ -40,6 +40,7 @@ import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
+import Discord.Id
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
@@ -59,6 +60,7 @@ import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import Pages.UserOverview
 import PersonName exposing (PersonName)
@@ -230,6 +232,8 @@ type alias BackendModel =
     , guilds : SeqDict (Id GuildId) BackendGuild
     , discordModel : Discord.Model Websocket.Connection
     , discordNotConnected : Bool
+    , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
+    , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     }
 
 
@@ -382,6 +386,14 @@ type BackendMsg
     | WebsocketSentData (Result Websocket.SendError ())
     | WebsocketClosedByBackend
     | DiscordWebsocketMsg Discord.Msg
+    | GotDiscordGuilds
+        Time.Posix
+        (Result
+            Discord.HttpError
+            { users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
+            , guilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
+            }
+        )
 
 
 type LoginResult

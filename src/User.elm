@@ -11,7 +11,6 @@ module User exposing
     , toString
     )
 
-import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import Id exposing (ChannelId, GuildId, Id, UserId)
@@ -33,7 +32,6 @@ type alias BackendUser =
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict ( Id GuildId, Id ChannelId ) Int
-    , linkedId : Maybe (Discord.Id.Id Discord.Id.UserId)
     }
 
 
