@@ -37,6 +37,7 @@ import NonemptyDict
 import Pages.Admin exposing (InitAdminData)
 import Pages.UserOverview
 import Pagination
+import PersonName
 import Postmark
 import Quantity
 import RichText exposing (RichText)
@@ -62,9 +63,9 @@ import Types
         , ToBeFilledInByBackend(..)
         , ToFrontend(..)
         )
-import UInt64
+import UInt64 exposing (UInt64)
 import Unsafe
-import User exposing (BackendUser)
+import User exposing (BackendUser, EmailStatus(..))
 
 
 app :
@@ -101,12 +102,23 @@ adminUser =
     LocalState.createNewUser
         (Time.millisToPosix 0)
         (Unsafe.personName "Admin person")
-        (Unsafe.emailAddress Env.adminEmail)
+        (Unsafe.emailAddress Env.adminEmail |> RegisteredDirectly)
         True
 
 
+botTestId : UInt64
 botTestId =
     Unsafe.uint64FromString "705745250815311942"
+
+
+channelA : UInt64
+channelA =
+    Unsafe.uint64FromString "1072828564317159465"
+
+
+channelB : UInt64
+channelB =
+    Unsafe.uint64FromString "1072828591382999151"
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -123,11 +135,21 @@ init =
                     [ ( Id.fromInt 0
                       , { createdAt = Time.millisToPosix 0
                         , createdBy = adminUserId
-                        , name = Unsafe.channelName "First Channel"
-                        , messages =
-                            Array.empty
+                        , name = Unsafe.channelName "channel-a"
+                        , messages = Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
+                        , linkedId = Just (Discord.Id.fromUInt64 channelA)
+                        }
+                      )
+                    , ( Id.fromInt 1
+                      , { createdAt = Time.millisToPosix 0
+                        , createdBy = adminUserId
+                        , name = Unsafe.channelName "channel-b"
+                        , messages = Array.empty
+                        , status = ChannelActive
+                        , lastTypedAt = SeqDict.empty
+                        , linkedId = Just (Discord.Id.fromUInt64 channelB)
                         }
                       )
                     ]
@@ -170,6 +192,7 @@ init =
                                     Array.empty
                                 , status = ChannelActive
                                 , lastTypedAt = SeqDict.empty
+                                , linkedId = Nothing
                                 }
                               )
                             ]
@@ -182,6 +205,7 @@ init =
                   )
                 ]
       , discordModel = Discord.init
+      , discordNotConnected = True
       }
     , Command.none
     )
@@ -292,39 +316,187 @@ update msg model =
 
         DiscordWebsocketMsg discordMsg ->
             let
-                ( model2, outMsgs ) =
+                ( discordModel2, outMsgs ) =
                     Discord.update Env.botToken discordMsg model.discordModel
             in
-            ( { model | discordModel = model2 }
-            , List.map
-                (\outMsg ->
+            List.foldl
+                (\outMsg ( model2, cmds ) ->
                     case outMsg of
                         Discord.CloseAndReopenHandle connection ->
-                            Websocket.close connection |> Task.perform (\() -> WebsocketClosedByBackend)
+                            ( model2
+                            , Task.perform (\() -> WebsocketClosedByBackend) (Websocket.close connection)
+                                :: cmds
+                            )
 
                         Discord.OpenHandle ->
-                            Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                            ( model2
+                            , Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                                :: cmds
+                            )
 
                         Discord.SendWebsocketData connection data ->
-                            Websocket.sendString connection data |> Task.attempt WebsocketSentData
+                            ( model2
+                            , Task.attempt WebsocketSentData (Websocket.sendString connection data)
+                                :: cmds
+                            )
 
                         Discord.SendWebsocketDataWithDelay connection duration data ->
-                            Process.sleep duration
+                            ( model2
+                            , (Process.sleep duration
                                 |> Task.andThen (\() -> Websocket.sendString connection data)
                                 |> Task.attempt WebsocketSentData
+                              )
+                                :: cmds
+                            )
 
-                        Discord.UserCreatedMessage guildId message ->
-                            Debug.todo ""
+                        Discord.UserCreatedMessage discordGuildId message ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordCreateMessage discordGuildId message model
+                            in
+                            ( model3, cmd2 :: cmds )
 
                         Discord.UserDeletedMessage guildId channelId id ->
-                            Debug.todo ""
+                            ( model2, cmds )
 
                         Discord.UserEditedMessage guildId channelId id ->
-                            Debug.todo ""
+                            ( model2, cmds )
                 )
+                ( { model | discordModel = discordModel2 }, [] )
                 outMsgs
-                |> Command.batch
-            )
+                |> Tuple.mapSecond Command.batch
+
+
+handleDiscordCreateMessage :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Message
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+handleDiscordCreateMessage discordGuildId message model =
+    case String.Nonempty.fromString message.content |> Debug.log "message" of
+        Just nonempty ->
+            let
+                maybeData =
+                    List.Extra.findMap
+                        (\( guildId, guild ) ->
+                            if guild.linkedId == Just discordGuildId then
+                                List.Extra.findMap
+                                    (\( channelId, channel ) ->
+                                        if channel.linkedId == Just message.channelId then
+                                            Just
+                                                { guildId = guildId
+                                                , guild = guild
+                                                , channelId = channelId
+                                                , channel = channel
+                                                }
+
+                                        else
+                                            Nothing
+                                    )
+                                    (SeqDict.toList guild.channels)
+
+                            else
+                                Nothing
+                        )
+                        (SeqDict.toList model.guilds)
+
+                maybeUserId : Maybe ( Id UserId, BackendUser )
+                maybeUserId =
+                    List.Extra.find
+                        (\( _, user2 ) ->
+                            user2.linkedId == Just message.author.id
+                        )
+                        (NonemptyDict.toList model.users)
+
+                ( userId, user, model2 ) =
+                    case maybeUserId of
+                        Just ( userId2, user2 ) ->
+                            ( userId2, user2, model )
+
+                        Nothing ->
+                            let
+                                userId2 : Id UserId
+                                userId2 =
+                                    Id.nextId (NonemptyDict.toSeqDict model.users)
+
+                                user2 : BackendUser
+                                user2 =
+                                    LocalState.createNewUser
+                                        message.timestamp
+                                        (Discord.usernameToString message.author.username |> PersonName.fromStringLossy)
+                                        RegisteredFromDiscord
+                                        False
+                            in
+                            ( userId2
+                            , user2
+                            , { model | users = NonemptyDict.insert userId2 user2 model.users }
+                            )
+            in
+            case maybeData |> Debug.log "data" of
+                Just { guildId, guild, channelId, channel } ->
+                    let
+                        richText : Nonempty RichText
+                        richText =
+                            RichText.fromNonemptyString (NonemptyDict.toSeqDict model2.users) nonempty
+                    in
+                    ( { model2
+                        | guilds =
+                            SeqDict.insert
+                                guildId
+                                { guild
+                                    | channels =
+                                        SeqDict.insert
+                                            channelId
+                                            (LocalState.createMessage
+                                                (UserTextMessage
+                                                    { createdAt = message.timestamp
+                                                    , createdBy = userId
+                                                    , content = richText
+                                                    , reactions = SeqDict.empty
+                                                    , editedAt = Nothing
+                                                    , repliedTo = Nothing
+                                                    }
+                                                )
+                                                channel
+                                            )
+                                            guild.channels
+                                }
+                                model2.guilds
+                      }
+                    , Command.batch
+                        [ case maybeUserId of
+                            Just _ ->
+                                Command.none
+
+                            Nothing ->
+                                broadcastToGuild
+                                    (Server_MemberJoined
+                                        message.timestamp
+                                        userId
+                                        guildId
+                                        (User.backendToFrontend user)
+                                        |> ServerChange
+                                    )
+                                    model2
+                        , broadcastToGuild
+                            (Server_SendMessage
+                                userId
+                                message.timestamp
+                                guildId
+                                channelId
+                                richText
+                                Nothing
+                                |> ServerChange
+                            )
+                            model2
+                        ]
+                    )
+
+                _ ->
+                    ( model2, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 updateFromFrontend :
@@ -385,17 +557,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
     in
     case msg of
         CheckLoginRequest ->
-            ( model2
-            , case getUserFromSessionId sessionId model2 of
-                Just ( userId, user ) ->
-                    getLoginData userId user model2
-                        |> Ok
-                        |> CheckLoginResponse
-                        |> Lamdera.sendToFrontend clientId
+            let
+                cmd : Command BackendOnly ToFrontend backendMsg
+                cmd =
+                    case getUserFromSessionId sessionId model2 of
+                        Just ( userId, user ) ->
+                            getLoginData userId user model2
+                                |> Ok
+                                |> CheckLoginResponse
+                                |> Lamdera.sendToFrontend clientId
 
-                Nothing ->
-                    CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
-            )
+                        Nothing ->
+                            CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
+            in
+            if model2.discordNotConnected then
+                ( { model2 | discordNotConnected = False }
+                , Command.batch
+                    [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                    , cmd
+                    ]
+                )
+
+            else
+                ( model2, cmd )
 
         LoginWithTokenRequest loginCode ->
             loginWithToken time sessionId clientId loginCode model2
@@ -403,7 +587,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         FinishUserCreationRequest personName ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForUserDataForSignup pendingLogin) ->
-                    if NonemptyDict.values model2.users |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress) then
+                    if
+                        NonemptyDict.values model2.users
+                            |> List.Nonempty.any (\a -> a.email == RegisteredDirectly pendingLogin.emailAddress)
+                    then
                         -- It's maybe possible to end up here if a user initiates two account creations for the same email address and then completes both. We'll just silently fail in that case, not worth the effort to give a good error message.
                         ( model2, Command.none )
 
@@ -418,7 +605,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 LocalState.createNewUser
                                     time
                                     personName
-                                    pendingLogin.emailAddress
+                                    (RegisteredDirectly pendingLogin.emailAddress)
                                     False
 
                             model3 : BackendModel
@@ -503,7 +690,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     getLoginCode time model2
             in
             case
-                ( NonemptyDict.toList model3.users |> List.Extra.find (\( _, user ) -> user.email == email)
+                ( NonemptyDict.toList model3.users
+                    |> List.Extra.find (\( _, user ) -> user.email == RegisteredDirectly email)
                 , result
                 )
             of
@@ -605,7 +793,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ Local_NewChannel time guildId channelName
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_NewChannel time guildId channelName |> ServerChange)
                                     model2
@@ -629,7 +817,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_EditChannel guildId channelId channelName |> ServerChange)
                                     model2
@@ -653,7 +841,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_DeleteChannel guildId channelId |> ServerChange)
                                     model2
@@ -682,7 +870,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ Local_NewInviteLink time guildId (FilledInByBackend id)
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_NewInviteLink time userId guildId id |> ServerChange)
                                     model3
@@ -737,7 +925,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ Local_MemberTyping time guildId channelId
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_MemberTyping time userId guildId channelId |> ServerChange)
                                     model2
@@ -768,7 +956,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ Local_AddReactionEmoji messageId emoji
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_AddReactionEmoji userId messageId emoji |> ServerChange)
                                     model2
@@ -799,7 +987,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 [ Local_RemoveReactionEmoji messageId emoji
                                     |> LocalChangeResponse changeId
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuild
+                                , broadcastToGuildExcludingOne
                                     clientId
                                     (Server_RemoveReactionEmoji userId messageId emoji |> ServerChange)
                                     model2
@@ -828,7 +1016,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         [ Local_SendEditMessage time messageId newContent
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
-                                        , broadcastToGuild
+                                        , broadcastToGuildExcludingOne
                                             clientId
                                             (Server_SendEditMessage time userId messageId newContent
                                                 |> ServerChange
@@ -863,7 +1051,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         [ Local_MemberEditTyping time messageId
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
-                                        , broadcastToGuild
+                                        , broadcastToGuildExcludingOne
                                             clientId
                                             (Server_MemberEditTyping time userId messageId
                                                 |> ServerChange
@@ -919,7 +1107,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         [ Lamdera.sendToFrontend
                                             clientId
                                             (LocalChangeResponse changeId localMsg)
-                                        , broadcastToGuild
+                                        , broadcastToGuildExcludingOne
                                             clientId
                                             (Server_DeleteMessage userId messageId |> ServerChange)
                                             model2
@@ -982,7 +1170,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                     in
                     ( model2
                     , Command.batch
-                        [ broadcastToGuild
+                        [ broadcastToGuildExcludingOne
                             clientId
                             (Server_MemberJoined
                                 time
@@ -1057,26 +1245,31 @@ userOverviewUpdateFromFrontend clientId time userId user toBackend model =
                 ( model2, secret ) =
                     SecretId.getUniqueId time model
             in
-            case TwoFactorAuthentication.getConfig (EmailAddress.toString user.email) secret of
-                Ok key ->
-                    ( { model2
-                        | twoFactorAuthenticationSetup =
-                            SeqDict.insert
-                                userId
-                                { startedAt = time, secret = secret }
-                                model2.twoFactorAuthenticationSetup
-                      }
-                    , Pages.UserOverview.EnableTwoFactorAuthenticationResponse
-                        { qrCodeUrl =
-                            TOTP.Key.toString key
-                                -- https://github.com/choonkeat/elm-totp/issues/3
-                                |> String.replace "%3D" ""
-                        }
-                        |> UserOverviewToFrontend
-                        |> Lamdera.sendToFrontend clientId
-                    )
+            case user.email of
+                RegisteredDirectly email ->
+                    case TwoFactorAuthentication.getConfig (EmailAddress.toString email) secret of
+                        Ok key ->
+                            ( { model2
+                                | twoFactorAuthenticationSetup =
+                                    SeqDict.insert
+                                        userId
+                                        { startedAt = time, secret = secret }
+                                        model2.twoFactorAuthenticationSetup
+                              }
+                            , Pages.UserOverview.EnableTwoFactorAuthenticationResponse
+                                { qrCodeUrl =
+                                    TOTP.Key.toString key
+                                        -- https://github.com/choonkeat/elm-totp/issues/3
+                                        |> String.replace "%3D" ""
+                                }
+                                |> UserOverviewToFrontend
+                                |> Lamdera.sendToFrontend clientId
+                            )
 
-                Err _ ->
+                        Err _ ->
+                            ( model2, Command.none )
+
+                RegisteredFromDiscord ->
                     ( model2, Command.none )
 
         Pages.UserOverview.ConfirmTwoFactorAuthenticationRequest code ->
@@ -1250,7 +1443,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
             , Command.batch
                 [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text repliedTo)
                     |> Lamdera.sendToFrontend clientId
-                , broadcastToGuild
+                , broadcastToGuildExcludingOne
                     clientId
                     (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
                     model
@@ -1263,8 +1456,8 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
             )
 
 
-broadcastToGuild : ClientId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-broadcastToGuild clientToSkip msg model =
+broadcastToGuildExcludingOne : ClientId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToGuildExcludingOne clientToSkip msg model =
     List.concatMap
         (\( _, otherClientIds ) ->
             NonemptyDict.keys otherClientIds
@@ -1278,6 +1471,23 @@ broadcastToGuild clientToSkip msg model =
                             ChangeBroadcast msg
                                 |> Lamdera.sendToFrontend otherClientId
                                 |> Just
+                    )
+        )
+        (SeqDict.toList model.connections)
+        |> Command.batch
+
+
+broadcastToGuild : LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToGuild msg model =
+    List.concatMap
+        (\( _, otherClientIds ) ->
+            NonemptyDict.keys otherClientIds
+                |> List.Nonempty.toList
+                |> List.filterMap
+                    (\otherClientId ->
+                        ChangeBroadcast msg
+                            |> Lamdera.sendToFrontend otherClientId
+                            |> Just
                     )
         )
         (SeqDict.toList model.connections)

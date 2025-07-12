@@ -61,7 +61,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
+import User exposing (BackendUser, EmailNotifications(..), EmailStatus(..), FrontendUser)
 
 
 type alias LocalState =
@@ -151,6 +151,7 @@ type alias BackendChannel =
     , messages : Array Message
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
     }
 
 
@@ -226,7 +227,7 @@ type alias AdminData =
     }
 
 
-createNewUser : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
+createNewUser : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
 createNewUser createdAt name email userIsAdmin =
     { name = name
     , isAdmin = userIsAdmin
@@ -329,6 +330,7 @@ createGuild time userId guildName =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
+                , linkedId = Nothing
                 }
               )
             ]
@@ -362,6 +364,7 @@ createChannel time userId channelName guild =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
+                , linkedId = Nothing
                 }
                 guild.channels
     }

@@ -223,17 +223,17 @@ parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
-            let
-                _ =
-                    Debug.log "state" ( modifiers, state )
-            in
+            --let
+            --    _ =
+            --        Debug.log "state" ( modifiers, state )
+            --in
             getRemainingText
                 |> Parser.andThen
                     (\remainingText ->
-                        let
-                            _ =
-                                Debug.log "remaining" remainingText
-                        in
+                        --let
+                        --    _ =
+                        --        Debug.log "remaining" remainingText
+                        --in
                         Parser.oneOf
                             [ Parser.succeed identity
                                 |. Parser.symbol "@"
@@ -333,10 +333,10 @@ parser users modifiers =
 
 bailOut : LoopState -> List Modifiers -> Step state (Array RichText)
 bailOut state modifiers =
-    let
-        _ =
-            Debug.log "bailOut" ( modifiers, state )
-    in
+    --let
+    --    _ =
+    --        Debug.log "bailOut" ( modifiers, state )
+    --in
     Array.append
         (case modifiers of
             IsBold :: _ ->

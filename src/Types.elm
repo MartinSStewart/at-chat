@@ -229,6 +229,7 @@ type alias BackendModel =
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
     , discordModel : Discord.Model Websocket.Connection
+    , discordNotConnected : Bool
     }
 
 
