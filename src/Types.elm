@@ -386,6 +386,7 @@ type BackendMsg
     | WebsocketSentData (Result Websocket.SendError ())
     | WebsocketClosedByBackend
     | DiscordWebsocketMsg Discord.Msg
+    | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError (List Discord.PartialGuild))
     | GotDiscordGuilds
         Time.Posix
         (Result

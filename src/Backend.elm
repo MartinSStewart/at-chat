@@ -357,6 +357,56 @@ update msg model =
                     in
                     ( model, Command.none )
 
+        GotCurrentUserGuilds time result ->
+            case result of
+                Ok guilds ->
+                    ( model
+                    , List.map
+                        (\guild ->
+                            Task.map2
+                                Tuple.pair
+                                (Discord.listGuildMembers
+                                    Env.botToken
+                                    { guildId = guild.id
+                                    , limit = 100
+                                    , after = Discord.Missing
+                                    }
+                                )
+                                (Discord.getGuild Env.botToken guild.id)
+                        )
+                        guilds
+                        |> Task.sequence
+                        |> Task.map
+                            (\guilds2 ->
+                                let
+                                    users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
+                                    users =
+                                        List.concatMap
+                                            (\( members, _ ) ->
+                                                List.map (\member -> ( member.user.id, member )) members
+                                            )
+                                            guilds2
+                                            |> SeqDict.fromList
+
+                                    guilds3 : SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
+                                    guilds3 =
+                                        List.map
+                                            (\( _, guild ) ->
+                                                ( guild.id, guild )
+                                            )
+                                            guilds2
+                                            |> SeqDict.fromList
+                                in
+                                { users = users
+                                , guilds = guilds3
+                                }
+                            )
+                        |> Task.attempt (GotDiscordGuilds time)
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
 
 addDiscordUsers :
     Time.Posix
@@ -641,52 +691,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             if model2.discordNotConnected then
                 ( { model2 | discordNotConnected = False }
                 , Command.batch
-                    [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                    , Discord.getCurrentUserGuilds Env.botToken
-                        |> Task.andThen
-                            (\guilds ->
-                                List.map
-                                    (\guild ->
-                                        Task.map2
-                                            Tuple.pair
-                                            (Discord.listGuildMembers
-                                                Env.botToken
-                                                { guildId = guild.id
-                                                , limit = 100
-                                                , after = Discord.Missing
-                                                }
-                                            )
-                                            (Discord.getGuild Env.botToken guild.id)
-                                    )
-                                    guilds
-                                    |> Task.sequence
-                            )
-                        |> Task.map
-                            (\guilds2 ->
-                                let
-                                    users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-                                    users =
-                                        List.concatMap
-                                            (\( members, _ ) ->
-                                                List.map (\member -> ( member.user.id, member )) members
-                                            )
-                                            guilds2
-                                            |> SeqDict.fromList
-
-                                    guilds3 : SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
-                                    guilds3 =
-                                        List.map
-                                            (\( _, guild ) ->
-                                                ( guild.id, guild )
-                                            )
-                                            guilds2
-                                            |> SeqDict.fromList
-                                in
-                                { users = users
-                                , guilds = guilds3
-                                }
-                            )
-                        |> Task.attempt (GotDiscordGuilds time)
+                    [ --Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                      Discord.getCurrentUserGuilds Env.botToken
+                        |> Task.attempt (GotCurrentUserGuilds time)
                     , cmd
                     ]
                 )
