@@ -1643,7 +1643,7 @@ updateLoaded msg model =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
                                     , messageHover = NoMessageHover
                                 }
-                                Command.none
+                                (setFocus model Pages.Guild.channelTextInputId)
 
                         Nothing ->
                             ( loggedIn, Command.none )

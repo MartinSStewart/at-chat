@@ -34,6 +34,12 @@ type RichText
     | Spoiler (Nonempty RichText)
     | Hyperlink Protocol String
     | InlineCode Char String
+    | CodeBlock Language String
+
+
+type Language
+    = Language NonemptyString
+    | None
 
 
 normalTextFromString : String -> Maybe RichText
@@ -87,6 +93,18 @@ toString users nonempty =
 
                 InlineCode char rest ->
                     "`" ++ String.cons char rest ++ "`"
+
+                CodeBlock language string ->
+                    "```"
+                        ++ (case language of
+                                Language unknown ->
+                                    String.Nonempty.toString unknown ++ "\n"
+
+                                None ->
+                                    ""
+                           )
+                        ++ string
+                        ++ "```"
         )
         nonempty
         |> List.Nonempty.toList
@@ -151,6 +169,9 @@ normalize nonempty =
 
                 InlineCode char string ->
                     List.Nonempty.cons (InlineCode char string) nonempty2
+
+                CodeBlock language string ->
+                    List.Nonempty.cons (CodeBlock language string) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -180,6 +201,9 @@ normalize nonempty =
 
                 InlineCode char string ->
                     InlineCode char string
+
+                CodeBlock language string ->
+                    CodeBlock language string
             )
             []
         )
@@ -266,6 +290,29 @@ parser users modifiers =
                             , modifierHelper users False IsStrikethrough Strikethrough state modifiers
                             , modifierHelper users False IsSpoilered Spoiler state modifiers
                             , Parser.succeed
+                                (\( language, text ) ->
+                                    case String.Nonempty.fromString text of
+                                        Just a ->
+                                            Loop
+                                                { current = Array.empty
+                                                , rest =
+                                                    Array.append
+                                                        state.rest
+                                                        (Array.push
+                                                            (CodeBlock language text)
+                                                            (parserHelper state)
+                                                        )
+                                                }
+
+                                        Nothing ->
+                                            Loop
+                                                { current = Array.push "``````" state.current
+                                                , rest = state.rest
+                                                }
+                                )
+                                |= codeBlockParser
+                                |> Parser.backtrackable
+                            , Parser.succeed
                                 (\text ->
                                     case String.Nonempty.fromString text of
                                         Just a ->
@@ -329,6 +376,42 @@ parser users modifiers =
                             ]
                     )
         )
+
+
+codeBlockParser : Parser ( Language, String )
+codeBlockParser =
+    Parser.succeed
+        (\text ->
+            case String.split "\n" text of
+                [ single ] ->
+                    ( None, single )
+
+                head :: rest ->
+                    if String.contains " " head then
+                        ( None, text )
+
+                    else
+                        case String.Nonempty.fromString head of
+                            Just nonempty ->
+                                ( Language nonempty, String.join "\n" rest )
+
+                            Nothing ->
+                                ( None, text )
+
+                [] ->
+                    ( None, "" )
+        )
+        |. Parser.symbol "```"
+        |= Parser.loop
+            []
+            (\list ->
+                Parser.oneOf
+                    [ Parser.succeed (Done (List.reverse list |> String.concat))
+                        |. Parser.symbol "```"
+                    , Parser.succeed (\char -> Loop (char :: list))
+                        |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
+                    ]
+            )
 
 
 bailOut : LoopState -> List Modifiers -> Step state (Array RichText)
@@ -506,6 +589,9 @@ mentionsUser userId nonempty =
                     False
 
                 InlineCode _ _ ->
+                    False
+
+                CodeBlock language string ->
                     False
         )
         nonempty
@@ -699,6 +785,20 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 [ Html.text (String.cons char rest) ]
                            ]
                     )
+
+                CodeBlock language text ->
+                    ( spoilerIndex2
+                    , currentList
+                        ++ [ Html.div
+                                [ Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
+                                , Html.Attributes.style "padding" "0 4px 0 4px"
+                                , Html.Attributes.style "border-radius" "4px"
+                                , Html.Attributes.style "font-family" "monospace"
+                                ]
+                                [ Html.text text ]
+                           ]
+                    )
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
@@ -804,6 +904,21 @@ textInputViewHelper state allUsers nonempty =
                         ]
                         [ Html.text (String.cons char rest) ]
                     , formatText "`"
+                    ]
+
+                CodeBlock language string ->
+                    [ formatText
+                        ("```"
+                            ++ (case language of
+                                    Language language2 ->
+                                        String.Nonempty.toString language2 ++ "\n"
+
+                                    None ->
+                                        ""
+                               )
+                        )
+                    , Html.text string
+                    , formatText "```"
                     ]
         )
         (List.Nonempty.toList nonempty)
