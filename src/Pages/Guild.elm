@@ -1193,8 +1193,9 @@ reactionEmojiView messageIndex currentUserId reactions =
                     in
                     Ui.row
                         [ Ui.rounded 8
+                        , Ui.spacing 2
                         , Ui.background MyUi.background1
-                        , Ui.paddingWith { left = 1, right = 4, top = 0, bottom = 0 }
+                        , Ui.paddingXY 4 0
                         , Ui.borderColor
                             (if hasReactedTo then
                                 MyUi.highlightedBorder
