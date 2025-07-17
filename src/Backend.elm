@@ -1911,7 +1911,7 @@ sendLoginEmail :
 sendLoginEmail msg emailAddress loginCode =
     let
         _ =
-            Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
+            Debug.log "a login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
     in
     { from = { name = "", email = Env.noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }
