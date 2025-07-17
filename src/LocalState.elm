@@ -54,6 +54,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText(..))
@@ -151,6 +152,7 @@ type alias BackendChannel =
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
 
 
@@ -329,6 +331,7 @@ createGuild time userId guildName =
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
                 , linkedId = Nothing
+                , linkedMessageIds = OneToOne.empty
                 }
               )
             ]
@@ -362,6 +365,7 @@ createChannel time userId channelName guild =
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
                 , linkedId = Nothing
+                , linkedMessageIds = OneToOne.empty
                 }
                 guild.channels
     }

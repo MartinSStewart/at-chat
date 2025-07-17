@@ -101,7 +101,7 @@ adminUser : BackendUser
 adminUser =
     LocalState.createNewUser
         (Time.millisToPosix 0)
-        (Unsafe.personName "Admin person")
+        (Unsafe.personName "AT")
         (Unsafe.emailAddress Env.adminEmail |> RegisteredDirectly)
         True
 
@@ -125,6 +125,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , linkedId = Nothing
+                        , linkedMessageIds = OneToOne.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -135,6 +136,7 @@ init =
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
                         , linkedId = Nothing
+                        , linkedMessageIds = OneToOne.empty
                         }
                       )
                     ]
@@ -177,6 +179,7 @@ init =
                                 , status = ChannelActive
                                 , lastTypedAt = SeqDict.empty
                                 , linkedId = Nothing
+                                , linkedMessageIds = OneToOne.empty
                                 }
                               )
                             ]
@@ -191,6 +194,7 @@ init =
       , discordNotConnected = True
       , discordGuilds = OneToOne.empty
       , discordUsers = OneToOne.empty
+      , discordBotId = Nothing
       }
     , Command.none
     )
@@ -364,7 +368,11 @@ update msg model =
                     , List.map
                         (\guild ->
                             Task.map2
-                                Tuple.pair
+                                (\members channels ->
+                                    ( members
+                                    , ( guild.id, channels )
+                                    )
+                                )
                                 (Discord.listGuildMembers
                                     Env.botToken
                                     { guildId = guild.id
@@ -372,7 +380,7 @@ update msg model =
                                     , after = Discord.Missing
                                     }
                                 )
-                                (Discord.getGuild Env.botToken guild.id)
+                                (Discord.getGuildChannels Env.botToken guild.id)
                         )
                         guilds
                         |> Task.sequence
@@ -387,22 +395,58 @@ update msg model =
                                             )
                                             guilds2
                                             |> SeqDict.fromList
-
-                                    guilds3 : SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
-                                    guilds3 =
-                                        List.map
-                                            (\( _, guild ) ->
-                                                ( guild.id, guild )
-                                            )
-                                            guilds2
-                                            |> SeqDict.fromList
                                 in
                                 { users = users
-                                , guilds = guilds3
+                                , guilds = List.map Tuple.second guilds2 |> SeqDict.fromList
                                 }
                             )
                         |> Task.attempt (GotDiscordGuilds time)
                     )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        SentMessageToDiscord messageId result ->
+            case result of
+                Ok message ->
+                    ( { model
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (\guild ->
+                                    let
+                                        guild2 : BackendGuild
+                                        guild2 =
+                                            { guild
+                                                | channels =
+                                                    SeqDict.updateIfExists
+                                                        messageId.channelId
+                                                        (\channel ->
+                                                            { channel
+                                                                | linkedMessageIds =
+                                                                    OneToOne.insert
+                                                                        message.id
+                                                                        messageId.messageIndex
+                                                                        channel.linkedMessageIds
+                                                            }
+                                                        )
+                                                        guild.channels
+                                            }
+                                    in
+                                    guild2
+                                )
+                                model.guilds
+                      }
+                    , Command.none
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        GotCurrentUser result ->
+            case result of
+                Ok user ->
+                    ( { model | discordBotId = Just user.id }, Command.none )
 
                 Err _ ->
                     ( model, Command.none )
@@ -445,87 +489,82 @@ addDiscordUsers time newUsers model =
 
 addDiscordGuilds :
     Time.Posix
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) (List Discord.Channel)
     -> BackendModel
     -> BackendModel
 addDiscordGuilds time guilds model =
     SeqDict.foldl
-        (\discordGuildId discordGuild model2 ->
+        (\discordGuildId discordChannels model2 ->
             case OneToOne.second discordGuildId model2.discordGuilds of
                 Just _ ->
                     model2
 
                 Nothing ->
-                    case OneToOne.second discordGuild.ownerId model.discordUsers of
-                        Just ownerId ->
-                            let
-                                channels : SeqDict (Id ChannelId) BackendChannel
-                                channels =
-                                    case discordGuild.channels of
-                                        Included channels2 ->
-                                            List.indexedMap
-                                                (\index channel ->
-                                                    case channel.type_ of
-                                                        Discord.GuildText ->
-                                                            ( Id.fromInt index
-                                                            , { createdAt = time
-                                                              , createdBy = ownerId
-                                                              , name =
-                                                                    (case channel.name of
-                                                                        Included name ->
-                                                                            name
+                    let
+                        ownerId : Id UserId
+                        ownerId =
+                            adminUserId
 
-                                                                        Missing ->
-                                                                            "Channel " ++ String.fromInt index
-                                                                    )
-                                                                        |> ChannelName.fromStringLossy
-                                                              , messages = Array.empty
-                                                              , status = ChannelActive
-                                                              , lastTypedAt = SeqDict.empty
-                                                              , linkedId = Just channel.id
-                                                              }
-                                                            )
-                                                                |> Just
+                        channels : SeqDict (Id ChannelId) BackendChannel
+                        channels =
+                            List.indexedMap
+                                (\index channel ->
+                                    case channel.type_ of
+                                        Discord.GuildText ->
+                                            ( Id.fromInt index
+                                            , { createdAt = time
+                                              , createdBy = ownerId
+                                              , name =
+                                                    (case channel.name of
+                                                        Included name ->
+                                                            name
 
-                                                        _ ->
-                                                            Nothing
-                                                )
-                                                channels2
-                                                |> List.filterMap identity
-                                                |> SeqDict.fromList
+                                                        Missing ->
+                                                            "Channel " ++ String.fromInt index
+                                                    )
+                                                        |> ChannelName.fromStringLossy
+                                              , messages = Array.empty
+                                              , status = ChannelActive
+                                              , lastTypedAt = SeqDict.empty
+                                              , linkedId = Just channel.id
+                                              , linkedMessageIds = OneToOne.empty
+                                              }
+                                            )
+                                                |> Just
 
-                                        Missing ->
-                                            Debug.todo ""
+                                        _ ->
+                                            Nothing
+                                )
+                                discordChannels
+                                |> List.filterMap identity
+                                |> SeqDict.fromList
 
-                                newGuild : BackendGuild
-                                newGuild =
-                                    { createdAt = time
-                                    , createdBy = ownerId
-                                    , name = GuildName.fromStringLossy discordGuild.name
-                                    , icon = Nothing
-                                    , channels = channels
-                                    , members = SeqDict.empty
-                                    , owner = ownerId
-                                    , invites = SeqDict.empty
-                                    , announcementChannel = Id.fromInt 0
-                                    }
-
-                                newGuild2 : BackendGuild
-                                newGuild2 =
-                                    LocalState.addMember time adminUserId newGuild
-                                        |> Result.withDefault newGuild
-
-                                guildId =
-                                    Id.nextId model.guilds
-                            in
-                            { model2
-                                | discordGuilds =
-                                    OneToOne.insert discordGuildId guildId model2.discordGuilds
-                                , guilds = SeqDict.insert guildId newGuild2 model2.guilds
+                        newGuild : BackendGuild
+                        newGuild =
+                            { createdAt = time
+                            , createdBy = ownerId
+                            , name = GuildName.fromStringLossy "Imported"
+                            , icon = Nothing
+                            , channels = channels
+                            , members = SeqDict.empty
+                            , owner = ownerId
+                            , invites = SeqDict.empty
+                            , announcementChannel = Id.fromInt 0
                             }
 
-                        Nothing ->
-                            model2
+                        newGuild2 : BackendGuild
+                        newGuild2 =
+                            LocalState.addMember time adminUserId newGuild
+                                |> Result.withDefault newGuild
+
+                        guildId =
+                            Id.nextId model.guilds
+                    in
+                    { model2
+                        | discordGuilds =
+                            OneToOne.insert discordGuildId guildId model2.discordGuilds
+                        , guilds = SeqDict.insert guildId newGuild2 model2.guilds
+                    }
         )
         model
         guilds
@@ -537,84 +576,88 @@ handleDiscordCreateMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
 handleDiscordCreateMessage discordGuildId message model =
-    case String.Nonempty.fromString message.content |> Debug.log "message" of
-        Just nonempty ->
-            let
-                maybeData =
-                    case OneToOne.second discordGuildId model.discordGuilds of
-                        Just guildId ->
-                            case SeqDict.get guildId model.guilds of
-                                Just guild ->
-                                    List.Extra.findMap
-                                        (\( channelId, channel ) ->
-                                            if channel.linkedId == Just message.channelId then
-                                                Just
-                                                    { guildId = guildId
-                                                    , guild = guild
-                                                    , channelId = channelId
-                                                    , channel = channel
-                                                    }
+    if Just message.author.id == model.discordBotId && String.contains botMessageSeparator message.content then
+        ( model, Command.none )
 
-                                            else
-                                                Nothing
-                                        )
-                                        (SeqDict.toList guild.channels)
+    else
+        case String.Nonempty.fromString message.content |> Debug.log "message" of
+            Just nonempty ->
+                let
+                    maybeData =
+                        case OneToOne.second discordGuildId model.discordGuilds of
+                            Just guildId ->
+                                case SeqDict.get guildId model.guilds of
+                                    Just guild ->
+                                        List.Extra.findMap
+                                            (\( channelId, channel ) ->
+                                                if channel.linkedId == Just message.channelId then
+                                                    Just
+                                                        { guildId = guildId
+                                                        , guild = guild
+                                                        , channelId = channelId
+                                                        , channel = channel
+                                                        }
 
-                                Nothing ->
-                                    Nothing
-
-                        Nothing ->
-                            Nothing
-            in
-            case ( OneToOne.second message.author.id model.discordUsers, maybeData |> Debug.log "data" ) of
-                ( Just userId, Just { guildId, guild, channelId, channel } ) ->
-                    let
-                        richText : Nonempty RichText
-                        richText =
-                            RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) nonempty
-                    in
-                    ( { model
-                        | guilds =
-                            SeqDict.insert
-                                guildId
-                                { guild
-                                    | channels =
-                                        SeqDict.insert
-                                            channelId
-                                            (LocalState.createMessage
-                                                (UserTextMessage
-                                                    { createdAt = message.timestamp
-                                                    , createdBy = userId
-                                                    , content = richText
-                                                    , reactions = SeqDict.empty
-                                                    , editedAt = Nothing
-                                                    , repliedTo = Nothing
-                                                    }
-                                                )
-                                                channel
+                                                else
+                                                    Nothing
                                             )
-                                            guild.channels
-                                }
-                                model.guilds
-                      }
-                    , broadcastToGuild
-                        (Server_SendMessage
-                            userId
-                            message.timestamp
-                            guildId
-                            channelId
-                            richText
-                            Nothing
-                            |> ServerChange
+                                            (SeqDict.toList guild.channels)
+
+                                    Nothing ->
+                                        Nothing
+
+                            Nothing ->
+                                Nothing
+                in
+                case ( OneToOne.second message.author.id model.discordUsers, maybeData |> Debug.log "data" ) of
+                    ( Just userId, Just { guildId, guild, channelId, channel } ) ->
+                        let
+                            richText : Nonempty RichText
+                            richText =
+                                RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) nonempty
+                        in
+                        ( { model
+                            | guilds =
+                                SeqDict.insert
+                                    guildId
+                                    { guild
+                                        | channels =
+                                            SeqDict.insert
+                                                channelId
+                                                (LocalState.createMessage
+                                                    (UserTextMessage
+                                                        { createdAt = message.timestamp
+                                                        , createdBy = userId
+                                                        , content = richText
+                                                        , reactions = SeqDict.empty
+                                                        , editedAt = Nothing
+                                                        , repliedTo = Nothing
+                                                        }
+                                                    )
+                                                    channel
+                                                )
+                                                guild.channels
+                                    }
+                                    model.guilds
+                          }
+                        , broadcastToGuild
+                            (Server_SendMessage
+                                userId
+                                message.timestamp
+                                guildId
+                                channelId
+                                richText
+                                Nothing
+                                |> ServerChange
+                            )
+                            model
                         )
-                        model
-                    )
 
-                _ ->
-                    ( model, Command.none )
+                    _ ->
+                        ( model, Command.none )
 
-        Nothing ->
-            ( model, Command.none )
+            Nothing ->
+                ( model, Command.none )
 
 
 updateFromFrontend :
@@ -691,8 +734,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             if model2.discordNotConnected then
                 ( { model2 | discordNotConnected = False }
                 , Command.batch
-                    [ --Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                      Discord.getCurrentUserGuilds Env.botToken
+                    [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                    , Discord.getCurrentUser Env.botToken |> Task.attempt GotCurrentUser
+                    , Discord.getCurrentUserGuilds Env.botToken
                         |> Task.attempt (GotCurrentUserGuilds time)
                     , cmd
                     ]
@@ -1509,6 +1553,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
 
+botMessageSeparator : String
+botMessageSeparator =
+    "꞉"
+
+
 sendMessage :
     BackendModel
     -> Time.Posix
@@ -1521,42 +1570,40 @@ sendMessage :
     -> Id UserId
     -> BackendUser
     -> BackendGuild
-    -> ( BackendModel, Command BackendOnly ToFrontend backendMsg )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendMessage model time clientId changeId guildId channelId text repliedTo userId user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
+            let
+                channel2 : BackendChannel
+                channel2 =
+                    LocalState.createMessage
+                        (UserTextMessage
+                            { createdAt = time
+                            , createdBy = userId
+                            , content = text
+                            , reactions = SeqDict.empty
+                            , editedAt = Nothing
+                            , repliedTo = repliedTo
+                            }
+                        )
+                        channel
+
+                messageIndex : Int
+                messageIndex =
+                    Array.length channel2.messages - 1
+            in
             ( { model
                 | guilds =
                     SeqDict.insert
                         guildId
-                        { guild
-                            | channels =
-                                SeqDict.insert
-                                    channelId
-                                    (LocalState.createMessage
-                                        (UserTextMessage
-                                            { createdAt = time
-                                            , createdBy = userId
-                                            , content = text
-                                            , reactions = SeqDict.empty
-                                            , editedAt = Nothing
-                                            , repliedTo = repliedTo
-                                            }
-                                        )
-                                        channel
-                                    )
-                                    guild.channels
-                        }
+                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
                         model.guilds
                 , users =
                     NonemptyDict.insert
                         userId
                         { user
-                            | lastViewed =
-                                SeqDict.insert
-                                    ( guildId, channelId )
-                                    (Array.length channel.messages)
-                                    user.lastViewed
+                            | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
                         }
                         model.users
               }
@@ -1567,6 +1614,28 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                     clientId
                     (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
                     model
+                , case channel.linkedId of
+                    Just discordChannelId ->
+                        Discord.createMessage
+                            Env.botToken
+                            { channelId = discordChannelId
+                            , content =
+                                PersonName.toString user.name
+                                    ++ botMessageSeparator
+                                    ++ " "
+                                    ++ RichText.toString (NonemptyDict.toSeqDict model.users) text
+                            , replyTo = Nothing
+                            }
+                            |> Task.attempt
+                                (SentMessageToDiscord
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , messageIndex = messageIndex
+                                    }
+                                )
+
+                    Nothing ->
+                        Command.none
                 ]
             )
 

@@ -234,6 +234,7 @@ type alias BackendModel =
     , discordNotConnected : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     }
 
 
@@ -387,14 +388,16 @@ type BackendMsg
     | WebsocketClosedByBackend
     | DiscordWebsocketMsg Discord.Msg
     | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError (List Discord.PartialGuild))
+    | GotCurrentUser (Result Discord.HttpError Discord.User)
     | GotDiscordGuilds
         Time.Posix
         (Result
             Discord.HttpError
             { users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-            , guilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) Discord.Guild
+            , guilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) (List Discord.Channel)
             }
         )
+    | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
 
 
 type LoginResult
