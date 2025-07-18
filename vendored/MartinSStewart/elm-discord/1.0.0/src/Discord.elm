@@ -3385,6 +3385,10 @@ update authToken msg model =
             handleGateway authToken data model
 
         WebsocketClosed ->
+            let
+                _ =
+                    Debug.log "WebsocketClosed" "abc"
+            in
             ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
 

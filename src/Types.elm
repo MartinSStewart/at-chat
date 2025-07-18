@@ -54,7 +54,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -236,6 +236,7 @@ type alias BackendModel =
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
+    , websocketEnabled : IsEnabled
     }
 
 
@@ -353,7 +354,7 @@ type FrontendMsg
     | CheckMessageAltPress Time.Posix Int
     | PressedShowUserOption
     | PressedCloseUserOptions
-    | PressedToggleDiscordWebsocket
+    | PressedSetDiscordWebsocket IsEnabled
 
 
 type alias NewChannelForm =
@@ -389,7 +390,7 @@ type BackendMsg
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | WebsocketCreatedHandle Websocket.Connection
     | WebsocketSentData (Result Websocket.SendError ())
-    | WebsocketClosedByBackend
+    | WebsocketClosedByBackend Bool
     | DiscordWebsocketMsg Discord.Msg
     | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError (List Discord.PartialGuild))
     | GotCurrentUser (Result Discord.HttpError Discord.User)
@@ -429,7 +430,6 @@ type alias LoginData =
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , discordWebsocketEnabled : Bool
     }
 
 
@@ -466,7 +466,7 @@ type ServerChange
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
     | Server_DeleteMessage (Id UserId) MessageId
     | Server_DiscordDeleteMessage MessageId
-    | Server_DiscordWebsocketToggled Bool
+    | Server_SetWebsocketToggled IsEnabled
 
 
 type LocalChange
@@ -485,7 +485,7 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix MessageId
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
     | Local_DeleteMessage MessageId
-    | Local_ToggleDiscordWebsocket
+    | Local_SetDiscordWebsocket IsEnabled
 
 
 type ToBeFilledInByBackend a

@@ -31,7 +31,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), JoinGuildError(..), Message(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), IsEnabled(..), JoinGuildError(..), Message(..))
 import Log exposing (Log)
 import LoginForm
 import NonemptyDict
@@ -49,22 +49,7 @@ import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types
-    exposing
-        ( AdminStatusLoginData(..)
-        , BackendModel
-        , BackendMsg(..)
-        , LastRequest(..)
-        , LocalChange(..)
-        , LocalMsg(..)
-        , LoginData
-        , LoginResult(..)
-        , LoginTokenData(..)
-        , ServerChange(..)
-        , ToBackend(..)
-        , ToBeFilledInByBackend(..)
-        , ToFrontend(..)
-        )
+import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, EmailStatus(..))
 
@@ -170,6 +155,7 @@ init =
       , discordGuilds = OneToOne.empty
       , discordUsers = OneToOne.empty
       , discordBotId = Nothing
+      , websocketEnabled = IsEnabled
       }
     , Command.none
     )
@@ -181,6 +167,7 @@ adminData model lastLogPageViewed =
     , users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
+    , websocketEnabled = model.websocketEnabled
     }
 
 
@@ -266,8 +253,14 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        WebsocketClosedByBackend ->
-            ( model, Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl )
+        WebsocketClosedByBackend reopen ->
+            ( model
+            , if reopen then
+                Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+
+              else
+                Command.none
+            )
 
         DiscordWebsocketMsg discordMsg ->
             let
@@ -279,7 +272,7 @@ update msg model =
                     case outMsg of
                         Discord.CloseAndReopenHandle connection ->
                             ( model2
-                            , Task.perform (\() -> WebsocketClosedByBackend) (Websocket.close connection)
+                            , Task.perform (\() -> WebsocketClosedByBackend True) (Websocket.close connection)
                                 :: cmds
                             )
 
@@ -837,7 +830,6 @@ getLoginData userId user model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
-    , discordWebsocketEnabled = not model.discordNotConnected
     }
 
 
@@ -1473,6 +1465,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         (LocalChangeResponse changeId Local_Invalid)
                                     )
                         )
+
+                Local_SetDiscordWebsocket isEnabled ->
+                    ( { model2 | websocketEnabled = isEnabled, discordModel = Discord.init }
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                        , broadcastToOtherAdmins clientId model2 (Server_SetWebsocketToggled isEnabled |> ServerChange)
+                        , case ( isEnabled, model2.discordModel.websocketHandle ) of
+                            ( IsDisabled, Just handle ) ->
+                                Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend False)
+
+                            ( IsDisabled, Nothing ) ->
+                                Command.none
+
+                            ( IsEnabled, _ ) ->
+                                Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                        ]
+                    )
 
         UserOverviewToBackend toBackend2 ->
             asUser

@@ -264,6 +264,7 @@ loadedInitHelper time loginData loading =
                             { users = adminData.users
                             , emailNotificationsEnabled = adminData.emailNotificationsEnabled
                             , twoFactorAuthentication = adminData.twoFactorAuthentication
+                            , websocketEnabled = adminData.websocketEnabled
                             }
 
                     IsNotAdminLoginData ->
@@ -2287,6 +2288,17 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | showUserOptions = False }, Command.none ))
                 model
 
+        PressedSetDiscordWebsocket isEnabled ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_SetDiscordWebsocket isEnabled))
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -2817,6 +2829,17 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
+                Local_SetDiscordWebsocket isEnabled ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin { adminData | websocketEnabled = isEnabled }
+
+                                IsNotAdmin ->
+                                    IsNotAdmin
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -3065,6 +3088,17 @@ changeUpdate localMsg local =
                                     }
                                 )
                                 local.guilds
+                    }
+
+                Server_SetWebsocketToggled isEnabled ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin { adminData | websocketEnabled = isEnabled }
+
+                                IsNotAdmin ->
+                                    IsNotAdmin
                     }
 
 
@@ -3504,6 +3538,9 @@ pendingChangesText localChange =
         Local_DeleteMessage _ ->
             "Delete message"
 
+        Local_SetDiscordWebsocket isEnabled ->
+            "Set discord websocket"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -3665,16 +3702,19 @@ view model =
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
+                                let
+                                    local =
+                                        Local.model loggedIn.localState
+                                in
                                 layout
                                     loaded
                                     [ if loggedIn.showUserOptions then
-                                        UserOptions.view loggedIn
-                                            |> Ui.inFront
+                                        UserOptions.view local loggedIn |> Ui.inFront
 
                                       else
                                         Ui.noAttr
                                     ]
-                                    (page loggedIn (Local.model loggedIn.localState))
+                                    (page loggedIn local)
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view

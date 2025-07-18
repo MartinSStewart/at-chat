@@ -7,6 +7,7 @@ module LocalState exposing
     , ChannelStatus(..)
     , FrontendChannel
     , FrontendGuild
+    , IsEnabled(..)
     , JoinGuildError(..)
     , LastTypedAt
     , LocalState
@@ -45,7 +46,6 @@ import ChannelName exposing (ChannelName)
 import Discord.Id
 import Duration
 import Effect.Time as Time
-import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -225,7 +225,13 @@ type alias AdminData =
     { users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
+    , websocketEnabled : IsEnabled
     }
+
+
+type IsEnabled
+    = IsEnabled
+    | IsDisabled
 
 
 createNewUser : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
