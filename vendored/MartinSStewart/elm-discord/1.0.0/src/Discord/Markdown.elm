@@ -2,20 +2,21 @@ module Discord.Markdown exposing
     ( Markdown
     , Quotable
     , bold
-    , boldItalic
-    , boldItalicStrikethrough
-    , boldStrikethrough
+    , boldMarkdown
     , code
     , codeBlock
     , customEmoji
     , italic
-    , italicStrikethrough
+    , italicMarkdown
     , ping
     , quote
     , spoiler
     , strikethrough
+    , strikethroughMarkdown
     , text
     , toString
+    , underline
+    , underlineMarkdown
     )
 
 import Discord.Id exposing (CustomEmojiId, Id, UserId)
@@ -30,13 +31,10 @@ type Markdown a
     | Quote (List (Markdown a))
     | Code String
     | Text String
-    | Bold String
-    | Italic String
-    | Strikethrough String
-    | BoldItalic String
-    | BoldStrikethrough String
-    | ItalicStrikethrough String
-    | BoldItalicStrikethrough String
+    | Bold (List (Markdown a))
+    | Italic (List (Markdown a))
+    | Underline (List (Markdown a))
+    | Strikethrough (List (Markdown a))
     | Ping (Id UserId)
     | CustomEmoji String (Id CustomEmojiId)
     | Spoiler (List (Markdown a))
@@ -58,25 +56,16 @@ map markdown =
             Text a
 
         Bold a ->
-            Bold a
+            Bold (List.map map a)
 
         Italic a ->
-            Italic a
+            Italic (List.map map a)
+
+        Underline a ->
+            Underline (List.map map a)
 
         Strikethrough a ->
-            Strikethrough a
-
-        BoldItalic a ->
-            BoldItalic a
-
-        BoldStrikethrough a ->
-            BoldStrikethrough a
-
-        ItalicStrikethrough a ->
-            ItalicStrikethrough a
-
-        BoldItalicStrikethrough a ->
-            BoldItalicStrikethrough a
+            Strikethrough (List.map map a)
 
         Ping a ->
             Ping a
@@ -109,38 +98,43 @@ text =
 
 
 bold : String -> Markdown a
-bold =
+bold text2 =
+    Bold [ Text text2 ]
+
+
+boldMarkdown : List (Markdown a) -> Markdown a
+boldMarkdown =
     Bold
 
 
 italic : String -> Markdown a
-italic =
+italic text2 =
+    Italic [ Text text2 ]
+
+
+italicMarkdown : List (Markdown a) -> Markdown a
+italicMarkdown =
     Italic
 
 
+underline : String -> Markdown a
+underline text2 =
+    Underline [ Text text2 ]
+
+
+underlineMarkdown : List (Markdown a) -> Markdown a
+underlineMarkdown =
+    Underline
+
+
 strikethrough : String -> Markdown a
-strikethrough =
+strikethrough text2 =
+    Strikethrough [ Text text2 ]
+
+
+strikethroughMarkdown : List (Markdown a) -> Markdown a
+strikethroughMarkdown =
     Strikethrough
-
-
-boldItalic : String -> Markdown a
-boldItalic =
-    BoldItalic
-
-
-boldStrikethrough : String -> Markdown a
-boldStrikethrough =
-    BoldStrikethrough
-
-
-italicStrikethrough : String -> Markdown a
-italicStrikethrough =
-    ItalicStrikethrough
-
-
-boldItalicStrikethrough : String -> Markdown a
-boldItalicStrikethrough =
-    BoldItalicStrikethrough
 
 
 ping : Id UserId -> Markdown a
@@ -161,8 +155,8 @@ spoiler =
 
 
 toString : List (Markdown a) -> String
-toString =
-    List.map toStringHelper >> String.concat
+toString markdown2 =
+    List.map toStringHelper markdown2 |> String.concat
 
 
 toStringHelper : Markdown a -> String
@@ -174,32 +168,23 @@ toStringHelper markdown =
         Quote content ->
             "\n> " ++ (List.map toStringHelper content |> String.concat) ++ "\n"
 
-        Code text_ ->
-            "`" ++ String.replace "`" "``" text_ ++ "`"
+        Code text2 ->
+            "`" ++ String.replace "`" "``" text2 ++ "`"
 
         Text text_ ->
             escapeText text_
 
-        Bold text_ ->
-            "**" ++ escapeText text_ ++ "**"
+        Bold markdown2 ->
+            "**" ++ toString markdown2 ++ "**"
 
-        Italic text_ ->
-            "_" ++ escapeText text_ ++ "_"
+        Italic markdown2 ->
+            "_" ++ toString markdown2 ++ "_"
 
-        Strikethrough text_ ->
-            "~~" ++ escapeText text_ ++ "~~"
+        Underline markdown2 ->
+            "__" ++ toString markdown2 ++ "__"
 
-        BoldItalic text_ ->
-            "**_" ++ escapeText text_ ++ "_**"
-
-        BoldStrikethrough text_ ->
-            "**_" ++ escapeText text_ ++ "_**"
-
-        ItalicStrikethrough text_ ->
-            "**_" ++ escapeText text_ ++ "_**"
-
-        BoldItalicStrikethrough text_ ->
-            "~~**_" ++ escapeText text_ ++ "_**~~"
+        Strikethrough markdown2 ->
+            "~~" ++ toString markdown2 ++ "~~"
 
         Ping userId ->
             "<@!" ++ Discord.Id.toString userId ++ ">"

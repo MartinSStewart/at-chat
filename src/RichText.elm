@@ -5,17 +5,21 @@ module RichText exposing
     , fromNonemptyString
     , mentionsUser
     , textInputView
+    , toDiscord
     , toString
     , view
     )
 
 import Array exposing (Array)
+import Discord.Id
+import Discord.Markdown
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import OneToOne exposing (OneToOne)
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
@@ -843,8 +847,8 @@ textInputViewHelper state allUsers nonempty =
 
                 NormalText char text ->
                     [ Html.span
-                        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
-                        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+                        [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
+                          htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
                         , htmlAttrIf state.bold (Html.Attributes.style "text-shadow" "0.7px 0px 0px white")
                         , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
                         , htmlAttrIf state.spoiler (Html.Attributes.style "background-color" "rgb(0,0,0)")
@@ -939,3 +943,54 @@ hyperlinkToString protocol rest =
 formatText : String -> Html msg
 formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
+
+
+toDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> Nonempty RichText -> List (Discord.Markdown.Markdown a)
+toDiscord mapping content =
+    List.map
+        (\item ->
+            case item of
+                UserMention userId ->
+                    case OneToOne.first userId mapping of
+                        Just discordUserId ->
+                            Discord.Markdown.ping discordUserId
+
+                        Nothing ->
+                            Discord.Markdown.text "@???"
+
+                NormalText char string ->
+                    Discord.Markdown.text (String.cons char string)
+
+                Bold nonempty ->
+                    Discord.Markdown.boldMarkdown (toDiscord mapping nonempty)
+
+                Italic nonempty ->
+                    Discord.Markdown.italicMarkdown (toDiscord mapping nonempty)
+
+                Underline nonempty ->
+                    Discord.Markdown.underlineMarkdown (toDiscord mapping nonempty)
+
+                Strikethrough nonempty ->
+                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping nonempty)
+
+                Spoiler nonempty ->
+                    Discord.Markdown.spoiler (toDiscord mapping nonempty)
+
+                Hyperlink protocol string ->
+                    Discord.Markdown.text (hyperlinkToString protocol string)
+
+                InlineCode char string ->
+                    Discord.Markdown.code (String.cons char string)
+
+                CodeBlock language string ->
+                    Discord.Markdown.codeBlock
+                        (case language of
+                            Language language2 ->
+                                Just (String.Nonempty.toString language2)
+
+                            None ->
+                                Nothing
+                        )
+                        string
+        )
+        (List.Nonempty.toList content)

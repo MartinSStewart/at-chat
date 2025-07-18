@@ -11,6 +11,7 @@ import Array
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
+import Discord.Markdown
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -1601,7 +1602,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                                 PersonName.toString user.name
                                     ++ botMessageSeparator
                                     ++ " "
-                                    ++ RichText.toString (NonemptyDict.toSeqDict model.users) text
+                                    ++ Discord.Markdown.toString (RichText.toDiscord model.discordUsers text)
                             , replyTo = Nothing
                             }
                             |> Task.attempt
