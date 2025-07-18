@@ -396,6 +396,7 @@ type BackendMsg
             (List ( Discord.Id.Id Discord.Id.GuildId, ( List Discord.GuildMember, List Discord.Channel2 ) ))
         )
     | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
+    | DeletedDiscordMessage
 
 
 type LoginResult
@@ -458,6 +459,7 @@ type ServerChange
     | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
     | Server_DeleteMessage (Id UserId) MessageId
+    | Server_DiscordDeleteMessage MessageId
 
 
 type LocalChange

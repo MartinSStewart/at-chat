@@ -311,8 +311,12 @@ update msg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserDeletedMessage guildId channelId id ->
-                            ( model2, cmds )
+                        Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model
+                            in
+                            ( model3, cmd2 :: cmds )
 
                         Discord.UserEditedMessage guildId channelId id ->
                             ( model2, cmds )
@@ -417,6 +421,86 @@ update msg model =
 
                 Err _ ->
                     ( model, Command.none )
+
+        DeletedDiscordMessage ->
+            ( model, Command.none )
+
+
+getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
+getGuildFromDiscordId discordGuildId model =
+    case OneToOne.second discordGuildId model.discordGuilds of
+        Just guildId ->
+            case SeqDict.get guildId model.guilds of
+                Just guild ->
+                    Just ( guildId, guild )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+handleDiscordDeleteMessage :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id.Id Discord.Id.MessageId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
+    case getGuildFromDiscordId discordGuildId model of
+        Just ( guildId, guild ) ->
+            case
+                List.Extra.findMap
+                    (\( channelId, channel ) ->
+                        if channel.linkedId == Just discordChannelId then
+                            Just ( channelId, channel )
+
+                        else
+                            Nothing
+                    )
+                    (SeqDict.toList guild.channels)
+            of
+                Just ( channelId, channel ) ->
+                    case OneToOne.second messageId channel.linkedMessageIds of
+                        Just messageIndex ->
+                            ( { model
+                                | guilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    { channel
+                                                        | messages =
+                                                            Array.set messageIndex DeletedMessage channel.messages
+                                                        , linkedMessageIds =
+                                                            OneToOne.removeFirst messageId channel.linkedMessageIds
+                                                    }
+                                                    guild.channels
+                                        }
+                                        model.guilds
+                              }
+                            , broadcastToGuild
+                                (Server_DiscordDeleteMessage
+                                    { guildId = guildId
+                                    , channelId = channelId
+                                    , messageIndex = messageIndex
+                                    }
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 addDiscordUsers :
@@ -1243,9 +1327,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     guild
                             of
                                 Ok guild2 ->
-                                    ( { model2
-                                        | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds
-                                      }
+                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
                                     , Command.batch
                                         [ Lamdera.sendToFrontend
                                             clientId
@@ -1254,6 +1336,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             clientId
                                             (Server_DeleteMessage userId messageId |> ServerChange)
                                             model2
+                                        , case SeqDict.get messageId.channelId guild.channels of
+                                            Just channel ->
+                                                case
+                                                    ( channel.linkedId
+                                                    , OneToOne.first messageId.messageIndex channel.linkedMessageIds
+                                                    )
+                                                of
+                                                    ( Just discordChannelId, Just discordMessageId ) ->
+                                                        Discord.deleteMessage
+                                                            Env.botToken
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            }
+                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
+
+                                                    _ ->
+                                                        Command.none
+
+                                            Nothing ->
+                                                Command.none
                                         ]
                                     )
 

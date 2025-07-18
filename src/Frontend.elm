@@ -3028,6 +3028,31 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
+                Server_DiscordDeleteMessage messageId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (\guild ->
+                                    { guild
+                                        | channels =
+                                            SeqDict.updateIfExists
+                                                messageId.channelId
+                                                (\channel ->
+                                                    { channel
+                                                        | messages =
+                                                            Array.set
+                                                                messageId.messageIndex
+                                                                DeletedMessage
+                                                                channel.messages
+                                                    }
+                                                )
+                                                guild.channels
+                                    }
+                                )
+                                local.guilds
+                    }
+
 
 handleLocalChange :
     Time.Posix
