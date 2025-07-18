@@ -397,6 +397,7 @@ type BackendMsg
         )
     | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
+    | EditedDiscordMessage
 
 
 type LoginResult

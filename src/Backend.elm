@@ -318,8 +318,12 @@ update msg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserEditedMessage guildId channelId id ->
-                            ( model2, cmds )
+                        Discord.UserEditedMessage discordGuildId discordChannelId discordMessageId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordEditMessage discordGuildId discordChannelId discordMessageId model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model | discordModel = discordModel2 }, [] )
                 outMsgs
@@ -425,6 +429,9 @@ update msg model =
         DeletedDiscordMessage ->
             ( model, Command.none )
 
+        EditedDiscordMessage ->
+            ( model, Command.none )
+
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
 getGuildFromDiscordId discordGuildId model =
@@ -439,6 +446,44 @@ getGuildFromDiscordId discordGuildId model =
 
         Nothing ->
             Nothing
+
+
+handleDiscordEditMessage :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id.Id Discord.Id.MessageId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordEditMessage discordGuildId discordChannelId discordMessageId model =
+    case getGuildFromDiscordId discordGuildId model of
+        Just ( guildId, guild ) ->
+            case
+                List.Extra.findMap
+                    (\( channelId, channel ) ->
+                        if channel.linkedId == Just discordChannelId then
+                            Just ( channelId, channel )
+
+                        else
+                            Nothing
+                    )
+                    (SeqDict.toList guild.channels)
+            of
+                Just ( channelId, channel ) ->
+                    case OneToOne.second discordMessageId channel.linkedMessageIds of
+                        Just messageIndex ->
+                            -- For now, we'll just ignore Discord message edits since we don't have
+                            -- the edited content in this event. In a full implementation, we'd
+                            -- need to fetch the updated message content from Discord.
+                            ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 handleDiscordDeleteMessage :
@@ -1249,6 +1294,32 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> ServerChange
                                             )
                                             model2
+                                        , case SeqDict.get messageId.channelId guild.channels of
+                                            Just channel ->
+                                                case
+                                                    ( channel.linkedId
+                                                    , OneToOne.first messageId.messageIndex channel.linkedMessageIds
+                                                    )
+                                                of
+                                                    ( Just discordChannelId, Just discordMessageId ) ->
+                                                        case NonemptyDict.get userId model2.users of
+                                                            Just user ->
+                                                                Discord.editMessage
+                                                                    Env.botToken
+                                                                    { channelId = discordChannelId
+                                                                    , messageId = discordMessageId
+                                                                    , content = toDiscordContent user model newContent
+                                                                    }
+                                                                    |> Task.attempt (\_ -> EditedDiscordMessage)
+
+                                                            Nothing ->
+                                                                Command.none
+
+                                                    _ ->
+                                                        Command.none
+
+                                            Nothing ->
+                                                Command.none
                                         ]
                                     )
 
@@ -1380,6 +1451,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
+
+
+toDiscordContent : BackendUser -> BackendModel -> Nonempty RichText -> String
+toDiscordContent user model content =
+    PersonName.toString user.name
+        ++ botMessageSeparator
+        ++ " "
+        ++ Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
 
 
 joinGuildByInvite :
@@ -1700,11 +1779,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                         Discord.createMessage
                             Env.botToken
                             { channelId = discordChannelId
-                            , content =
-                                PersonName.toString user.name
-                                    ++ botMessageSeparator
-                                    ++ " "
-                                    ++ Discord.Markdown.toString (RichText.toDiscord model.discordUsers text)
+                            , content = toDiscordContent user model text
                             , replyTo = Nothing
                             }
                             |> Task.attempt

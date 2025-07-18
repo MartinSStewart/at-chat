@@ -343,8 +343,8 @@ editMessage authentication { channelId, messageId, content } =
         authentication
         (JD.succeed ())
         [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId ]
-        [ Url.Builder.string "content" content ]
-        (JE.object [])
+        []
+        (JE.object [ ( "content", JE.string content ) ])
 
 
 {-| Delete a message.
