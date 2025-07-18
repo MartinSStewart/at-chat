@@ -88,7 +88,7 @@ view windowWidth =
     Ui.column
         [ MyUi.montserrat
         , if windowWidth < 800 then
-            Ui.paddingWith { left = 24, right = 24, top = 96, bottom = 48 }
+            Ui.paddingWith { left = 24, right = 24, top = 120, bottom = 48 }
 
           else
             Ui.paddingWith { left = 48, right = 48, top = 120, bottom = 48 }

@@ -163,32 +163,6 @@ init =
                 [ ( Id.fromInt 0
                   , guild
                   )
-                , ( Id.fromInt 1
-                  , { createdAt = Time.millisToPosix 0
-                    , createdBy = adminUserId
-                    , name = Unsafe.guildName "Second Guild"
-                    , icon = Nothing
-                    , channels =
-                        SeqDict.fromList
-                            [ ( Id.fromInt 0
-                              , { createdAt = Time.millisToPosix 0
-                                , createdBy = adminUserId
-                                , name = Unsafe.channelName "First Channel"
-                                , messages =
-                                    Array.empty
-                                , status = ChannelActive
-                                , lastTypedAt = SeqDict.empty
-                                , linkedId = Nothing
-                                , linkedMessageIds = OneToOne.empty
-                                }
-                              )
-                            ]
-                    , members = SeqDict.fromList []
-                    , owner = adminUserId
-                    , invites = SeqDict.empty
-                    , announcementChannel = Id.fromInt 0
-                    }
-                  )
                 ]
       , discordModel = Discord.init
       , discordNotConnected = True
@@ -349,8 +323,18 @@ update msg model =
         GotDiscordGuilds time result ->
             case result of
                 Ok data ->
-                    ( addDiscordUsers time data.users model
-                        |> addDiscordGuilds time data.guilds
+                    let
+                        users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
+                        users =
+                            List.concatMap
+                                (\( _, ( members, _ ) ) ->
+                                    List.map (\member -> ( member.user.id, member )) members
+                                )
+                                data
+                                |> SeqDict.fromList
+                    in
+                    ( addDiscordUsers time users model
+                        |> addDiscordGuilds time (SeqDict.fromList data)
                     , Command.none
                     )
 
@@ -369,9 +353,7 @@ update msg model =
                         (\guild ->
                             Task.map2
                                 (\members channels ->
-                                    ( members
-                                    , ( guild.id, channels )
-                                    )
+                                    ( guild.id, ( members, channels ) )
                                 )
                                 (Discord.listGuildMembers
                                     Env.botToken
@@ -384,22 +366,6 @@ update msg model =
                         )
                         guilds
                         |> Task.sequence
-                        |> Task.map
-                            (\guilds2 ->
-                                let
-                                    users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-                                    users =
-                                        List.concatMap
-                                            (\( members, _ ) ->
-                                                List.map (\member -> ( member.user.id, member )) members
-                                            )
-                                            guilds2
-                                            |> SeqDict.fromList
-                                in
-                                { users = users
-                                , guilds = List.map Tuple.second guilds2 |> SeqDict.fromList
-                                }
-                            )
                         |> Task.attempt (GotDiscordGuilds time)
                     )
 
@@ -489,12 +455,12 @@ addDiscordUsers time newUsers model =
 
 addDiscordGuilds :
     Time.Posix
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) (List Discord.Channel)
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) ( List Discord.GuildMember, List Discord.Channel2 )
     -> BackendModel
     -> BackendModel
 addDiscordGuilds time guilds model =
     SeqDict.foldl
-        (\discordGuildId discordChannels model2 ->
+        (\discordGuildId ( guildMembers, discordChannels ) model2 ->
             case OneToOne.second discordGuildId model2.discordGuilds of
                 Just _ ->
                     model2
@@ -546,7 +512,18 @@ addDiscordGuilds time guilds model =
                             , name = GuildName.fromStringLossy "Imported"
                             , icon = Nothing
                             , channels = channels
-                            , members = SeqDict.empty
+                            , members =
+                                List.filterMap
+                                    (\guildMember ->
+                                        case OneToOne.second guildMember.user.id model.discordUsers of
+                                            Just userId ->
+                                                Just ( userId, { joinedAt = time } )
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    guildMembers
+                                    |> SeqDict.fromList
                             , owner = ownerId
                             , invites = SeqDict.empty
                             , announcementChannel = Id.fromInt 0
@@ -557,6 +534,7 @@ addDiscordGuilds time guilds model =
                             LocalState.addMember time adminUserId newGuild
                                 |> Result.withDefault newGuild
 
+                        guildId : Id GuildId
                         guildId =
                             Id.nextId model.guilds
                     in

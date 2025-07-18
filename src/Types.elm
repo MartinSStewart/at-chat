@@ -393,9 +393,7 @@ type BackendMsg
         Time.Posix
         (Result
             Discord.HttpError
-            { users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-            , guilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) (List Discord.Channel)
-            }
+            (List ( Discord.Id.Id Discord.Id.GuildId, ( List Discord.GuildMember, List Discord.Channel2 ) ))
         )
     | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
 
