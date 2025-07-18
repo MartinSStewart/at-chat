@@ -234,9 +234,9 @@ loggedInAsView local =
             [ Ui.width (Ui.px 30)
             , Ui.paddingXY 4 0
             , Ui.alignRight
-            , Ui.Input.button PressedLogOut
+            , Ui.Input.button PressedShowUserOption
             ]
-            (Ui.html Icons.signoutSvg)
+            (Ui.html Icons.gearIcon)
         ]
 
 

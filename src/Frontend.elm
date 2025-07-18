@@ -23,6 +23,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Lamdera as LamderaCore
@@ -53,9 +54,11 @@ import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
+import Ui.Input
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
+import UserOptions
 import Vector2d exposing (Vector2d)
 
 
@@ -331,6 +334,7 @@ loadedInitHelper time loginData loading =
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
             , sidebarMode = ChannelSidebarOpened
+            , showUserOptions = False
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -2273,6 +2277,16 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedShowUserOption ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showUserOptions = True }, Command.none ))
+                model
+
+        PressedCloseUserOptions ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showUserOptions = False }, Command.none ))
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -3653,7 +3667,13 @@ view model =
                             LoggedIn loggedIn ->
                                 layout
                                     loaded
-                                    []
+                                    [ if loggedIn.showUserOptions then
+                                        UserOptions.view loggedIn
+                                            |> Ui.inFront
+
+                                      else
+                                        Ui.noAttr
+                                    ]
                                     (page loggedIn (Local.model loggedIn.localState))
 
                             NotLoggedIn { loginForm } ->

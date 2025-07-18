@@ -145,6 +145,7 @@ type alias LoggedIn2 =
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
+    , showUserOptions : Bool
     }
 
 
@@ -350,6 +351,9 @@ type FrontendMsg
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
     | CheckMessageAltPress Time.Posix Int
+    | PressedShowUserOption
+    | PressedCloseUserOptions
+    | PressedToggleDiscordWebsocket
 
 
 type alias NewChannelForm =
@@ -425,6 +429,7 @@ type alias LoginData =
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , discordWebsocketEnabled : Bool
     }
 
 
@@ -461,6 +466,7 @@ type ServerChange
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
     | Server_DeleteMessage (Id UserId) MessageId
     | Server_DiscordDeleteMessage MessageId
+    | Server_DiscordWebsocketToggled Bool
 
 
 type LocalChange
@@ -479,6 +485,7 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix MessageId
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
     | Local_DeleteMessage MessageId
+    | Local_ToggleDiscordWebsocket
 
 
 type ToBeFilledInByBackend a

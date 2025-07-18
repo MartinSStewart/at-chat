@@ -837,6 +837,7 @@ getLoginData userId user model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
+    , discordWebsocketEnabled = not model.discordNotConnected
     }
 
 
