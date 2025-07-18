@@ -318,10 +318,10 @@ update msg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserEditedMessage discordGuildId discordChannelId discordMessageId ->
+                        Discord.UserEditedMessage messageUpdate ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDiscordEditMessage discordGuildId discordChannelId discordMessageId model2
+                                    handleDiscordEditMessage messageUpdate model2
                             in
                             ( model3, cmd2 :: cmds )
                 )
@@ -449,18 +449,16 @@ getGuildFromDiscordId discordGuildId model =
 
 
 handleDiscordEditMessage :
-    Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
-    -> Discord.Id.Id Discord.Id.MessageId
+    Discord.MessageUpdate
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordEditMessage discordGuildId discordChannelId discordMessageId model =
-    case getGuildFromDiscordId discordGuildId model of
+handleDiscordEditMessage messageUpdate model =
+    case getGuildFromDiscordId messageUpdate.guildId model of
         Just ( guildId, guild ) ->
             case
                 List.Extra.findMap
                     (\( channelId, channel ) ->
-                        if channel.linkedId == Just discordChannelId then
+                        if channel.linkedId == Just messageUpdate.channelId then
                             Just ( channelId, channel )
 
                         else
@@ -469,7 +467,7 @@ handleDiscordEditMessage discordGuildId discordChannelId discordMessageId model 
                     (SeqDict.toList guild.channels)
             of
                 Just ( channelId, channel ) ->
-                    case OneToOne.second discordMessageId channel.linkedMessageIds of
+                    case OneToOne.second messageUpdate.id channel.linkedMessageIds of
                         Just messageIndex ->
                             -- For now, we'll just ignore Discord message edits since we don't have
                             -- the edited content in this event. In a full implementation, we'd

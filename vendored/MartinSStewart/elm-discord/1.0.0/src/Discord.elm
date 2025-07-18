@@ -3059,6 +3059,8 @@ type alias MessageUpdate =
     { id : Id MessageId
     , channelId : Id ChannelId
     , guildId : Id GuildId
+    , author : User
+    , content : String
     }
 
 
@@ -3068,6 +3070,8 @@ decodeMessageUpdate =
         |> JD.andMap (JD.field "id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "author" decodeUser)
+        |> JD.andMap (JD.field "content" JD.string)
 
 
 decodeGatewayEvent : JD.Decoder GatewayEvent
@@ -3313,7 +3317,7 @@ type OutMsg connection
     | SendWebsocketDataWithDelay connection Duration String
     | UserCreatedMessage (Id GuildId) Message
     | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
-    | UserEditedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
+    | UserEditedMessage MessageUpdate
 
 
 type alias Model connection =
@@ -3422,7 +3426,7 @@ handleGateway authToken response model =
                                     ( model, [] )
 
                         MessageUpdateEvent messageUpdate ->
-                            ( model, [] )
+                            ( model, [ UserEditedMessage messageUpdate ] )
 
                         MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
