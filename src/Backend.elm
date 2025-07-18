@@ -324,6 +324,13 @@ update msg model =
                                     handleDiscordEditMessage messageUpdate model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.FailedToParseWebsocketMessage error ->
+                            let
+                                _ =
+                                    Debug.log "gateway error" error
+                            in
+                            ( model2, cmds )
                 )
                 ( { model | discordModel = discordModel2 }, [] )
                 outMsgs
@@ -452,13 +459,13 @@ handleDiscordEditMessage :
     Discord.MessageUpdate
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordEditMessage messageUpdate model =
-    case getGuildFromDiscordId messageUpdate.guildId model of
+handleDiscordEditMessage edit model =
+    case getGuildFromDiscordId edit.guildId model of
         Just ( guildId, guild ) ->
             case
                 List.Extra.findMap
                     (\( channelId, channel ) ->
-                        if channel.linkedId == Just messageUpdate.channelId then
+                        if channel.linkedId == Just edit.channelId then
                             Just ( channelId, channel )
 
                         else
@@ -467,14 +474,38 @@ handleDiscordEditMessage messageUpdate model =
                     (SeqDict.toList guild.channels)
             of
                 Just ( channelId, channel ) ->
-                    case OneToOne.second messageUpdate.id channel.linkedMessageIds of
-                        Just messageIndex ->
-                            -- For now, we'll just ignore Discord message edits since we don't have
-                            -- the edited content in this event. In a full implementation, we'd
-                            -- need to fetch the updated message content from Discord.
-                            ( model, Command.none )
+                    case
+                        ( OneToOne.second edit.id channel.linkedMessageIds
+                        , OneToOne.second edit.author.id model.discordUsers
+                        )
+                    of
+                        ( Just messageIndex, Just userId ) ->
+                            let
+                                richText : Nonempty RichText
+                                richText =
+                                    RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) edit.content
+                            in
+                            case LocalState.editMessage userId edit.timestamp richText channelId messageIndex guild of
+                                Ok guild2 ->
+                                    ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
+                                    , broadcastToGuild
+                                        (Server_SendEditMessage
+                                            edit.timestamp
+                                            userId
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
+                                            richText
+                                            |> ServerChange
+                                        )
+                                        model
+                                    )
 
-                        Nothing ->
+                                Err _ ->
+                                    ( model, Command.none )
+
+                        _ ->
                             ( model, Command.none )
 
                 Nothing ->
@@ -740,7 +771,13 @@ handleDiscordCreateMessage discordGuildId message model =
                                                         , repliedTo = Nothing
                                                         }
                                                     )
-                                                    channel
+                                                    { channel
+                                                        | linkedMessageIds =
+                                                            OneToOne.insert
+                                                                message.id
+                                                                (Array.length channel.messages)
+                                                                channel.linkedMessageIds
+                                                    }
                                                 )
                                                 guild.channels
                                     }
@@ -2065,7 +2102,7 @@ sendLoginEmail :
 sendLoginEmail msg emailAddress loginCode =
     let
         _ =
-            Debug.log "a login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
+            Debug.log "login" (String.padLeft LoginForm.loginCodeLength '0' (String.fromInt loginCode))
     in
     { from = { name = "", email = Env.noReplyEmailAddress }
     , to = List.Nonempty.fromElement { name = "", email = emailAddress }

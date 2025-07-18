@@ -90,6 +90,7 @@ import Json.Encode as JE
 import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
 import Set exposing (Set)
+import String.Nonempty exposing (NonemptyString)
 import Time exposing (Posix(..))
 import Url exposing (Url)
 import Url.Builder exposing (QueryParameter)
@@ -3060,7 +3061,8 @@ type alias MessageUpdate =
     , channelId : Id ChannelId
     , guildId : Id GuildId
     , author : User
-    , content : String
+    , content : NonemptyString
+    , timestamp : Time.Posix
     }
 
 
@@ -3071,7 +3073,22 @@ decodeMessageUpdate =
         |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "author" decodeUser)
-        |> JD.andMap (JD.field "content" JD.string)
+        |> JD.andMap (JD.field "content" decodeNonemptyString)
+        |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
+
+
+decodeNonemptyString : JD.Decoder NonemptyString
+decodeNonemptyString =
+    JD.andThen
+        (\text ->
+            case String.Nonempty.fromString text of
+                Just nonempty ->
+                    JD.succeed nonempty
+
+                Nothing ->
+                    JD.fail "Expected nonempty string"
+        )
+        JD.string
 
 
 decodeGatewayEvent : JD.Decoder GatewayEvent
@@ -3318,6 +3335,7 @@ type OutMsg connection
     | UserCreatedMessage (Id GuildId) Message
     | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserEditedMessage MessageUpdate
+    | FailedToParseWebsocketMessage JD.Error
 
 
 type alias Model connection =
@@ -3471,8 +3489,8 @@ handleGateway authToken response model =
                 OpInvalidSession ->
                     ( { model | gatewayState = Nothing }, [ CloseAndReopenHandle connection ] )
 
-        ( _, Err _ ) ->
-            ( model, [] )
+        ( _, Err error ) ->
+            ( model, [ FailedToParseWebsocketMessage error ] )
 
         ( Nothing, Ok _ ) ->
             ( model, [] )
