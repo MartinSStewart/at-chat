@@ -1,7 +1,6 @@
 module Route exposing
     ( ChannelRoute(..)
     , Route(..)
-    , UserOverviewRouteData(..)
     , decode
     , encode
     )
@@ -17,7 +16,6 @@ import Url.Builder
 type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
-    | UserOverviewRoute UserOverviewRouteData
     | GuildRoute (Id GuildId) ChannelRoute
 
 
@@ -27,11 +25,6 @@ type ChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
-
-
-type UserOverviewRouteData
-    = PersonalRoute
-    | SpecificUserRoute (Id UserId)
 
 
 decode : Url -> Route
@@ -51,17 +44,6 @@ decode url =
                         _ ->
                             Nothing
                 }
-
-        [ "user-overview" ] ->
-            UserOverviewRoute PersonalRoute
-
-        [ "user-overview", userId ] ->
-            case Id.fromString userId of
-                Just userId2 ->
-                    UserOverviewRoute (SpecificUserRoute userId2)
-
-                Nothing ->
-                    HomePageRoute
 
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
@@ -128,18 +110,6 @@ encode route =
 
                         Nothing ->
                             []
-                    )
-
-                UserOverviewRoute maybeUserId ->
-                    ( "user-overview"
-                        :: (case maybeUserId of
-                                SpecificUserRoute userId ->
-                                    [ idToPath userId ]
-
-                                PersonalRoute ->
-                                    []
-                           )
-                    , []
                     )
 
                 GuildRoute guildId maybeChannelId ->

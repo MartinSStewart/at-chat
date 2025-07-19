@@ -7,6 +7,7 @@ module LocalState exposing
     , ChannelStatus(..)
     , FrontendChannel
     , FrontendGuild
+    , IsEnabled(..)
     , JoinGuildError(..)
     , LastTypedAt
     , LocalState
@@ -42,9 +43,9 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import Discord.Id
 import Duration
 import Effect.Time as Time
-import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -53,6 +54,7 @@ import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText(..))
@@ -60,7 +62,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), FrontendUser)
+import User exposing (BackendUser, EmailNotifications(..), EmailStatus(..), FrontendUser)
 
 
 type alias LocalState =
@@ -149,6 +151,8 @@ type alias BackendChannel =
     , messages : Array Message
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
 
 
@@ -221,10 +225,16 @@ type alias AdminData =
     { users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
+    , websocketEnabled : IsEnabled
     }
 
 
-createNewUser : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
+type IsEnabled
+    = IsEnabled
+    | IsDisabled
+
+
+createNewUser : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
 createNewUser createdAt name email userIsAdmin =
     { name = name
     , isAdmin = userIsAdmin
@@ -326,6 +336,8 @@ createGuild time userId guildName =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
+                , linkedId = Nothing
+                , linkedMessageIds = OneToOne.empty
                 }
               )
             ]
@@ -358,6 +370,8 @@ createChannel time userId channelName guild =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
+                , linkedId = Nothing
+                , linkedMessageIds = OneToOne.empty
                 }
                 guild.channels
     }

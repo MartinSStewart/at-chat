@@ -7,12 +7,14 @@
         "vendored/mdgriffith/elm-animator/2.0.0/src",
         "vendored/MartinSStewart/elm-email/1.0.0/src",
         "vendored/ianmackenzie/elm-float-extra/1.1.0/src",
-        "vendored/ianmackenzie/elm-geometry/3.11.0/src"
+        "vendored/ianmackenzie/elm-geometry/3.11.0/src",
+        "vendored/MartinSStewart/elm-discord/1.0.0/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
             "MartinSStewart/elm-nonempty-string": "2.0.0",
+            "MartinSStewart/elm-uint64": "2.0.0",
             "avh4/elm-color": "1.0.0",
             "bburdette/toop": "1.2.0",
             "billstclair/elm-sha256": "1.0.9",
@@ -30,10 +32,12 @@
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.3",
             "elm-community/easing-functions": "2.0.0",
+            "elm-community/json-extra": "4.3.0",
             "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.0.0",
             "ianmackenzie/elm-units": "2.10.0",
             "ianmackenzie/elm-units-interval": "3.2.0",
+            "icidasset/elm-binary": "2.1.0",
             "jinjor/elm-diff": "1.0.6",
             "lamdera/codecs": "1.0.0",
             "lamdera/containers": "1.0.0",
@@ -47,7 +51,8 @@
             "myrho/elm-round": "1.0.5",
             "pablohirafuji/elm-qrcode": "4.0.2",
             "phosphor-icons/phosphor-elm": "2.1.0",
-            "rtfeldman/elm-hex": "1.0.0"
+            "rtfeldman/elm-hex": "1.0.0",
+            "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },
         "indirect": {
             "TSFoster/elm-bytes-extra": "1.3.0",

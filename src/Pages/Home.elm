@@ -7,7 +7,6 @@ module Pages.Home exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html.Attributes
 import MyUi
-import Route exposing (Route(..), UserOverviewRouteData(..))
 import Types exposing (FrontendMsg(..), LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -37,19 +36,7 @@ header loginStatus =
                 }
             , case loginStatus of
                 LoggedIn _ ->
-                    Ui.el
-                        (Ui.Input.button
-                            (PressedLink
-                                (UserOverviewRoute PersonalRoute)
-                            )
-                            :: MyUi.touchPress
-                                (PressedLink
-                                    (UserOverviewRoute PersonalRoute)
-                                )
-                            :: Ui.id (Dom.idToString openDashboardButtonId)
-                            :: buttonAttributes
-                        )
-                        (Ui.text "Open Dashboard")
+                    Ui.none
 
                 NotLoggedIn _ ->
                     Ui.el
@@ -61,11 +48,6 @@ header loginStatus =
                         (Ui.text "Login/Signup")
             ]
         )
-
-
-openDashboardButtonId : HtmlId
-openDashboardButtonId =
-    Dom.id "homePage_openDashboardButton"
 
 
 buttonAttributes : List (Ui.Attribute msg)
@@ -88,7 +70,7 @@ view windowWidth =
     Ui.column
         [ MyUi.montserrat
         , if windowWidth < 800 then
-            Ui.paddingWith { left = 24, right = 24, top = 96, bottom = 48 }
+            Ui.paddingWith { left = 24, right = 24, top = 120, bottom = 48 }
 
           else
             Ui.paddingWith { left = 48, right = 48, top = 120, bottom = 48 }

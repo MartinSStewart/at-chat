@@ -39,16 +39,15 @@ import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
-import Pages.UserOverview
 import Pagination
-import Point2d
 import Ports
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
+import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
+import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -56,6 +55,7 @@ import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
+import UserOptions
 import Vector2d exposing (Vector2d)
 
 
@@ -261,6 +261,7 @@ loadedInitHelper time loginData loading =
                             { users = adminData.users
                             , emailNotificationsEnabled = adminData.emailNotificationsEnabled
                             , twoFactorAuthentication = adminData.twoFactorAuthentication
+                            , websocketEnabled = adminData.websocketEnabled
                             }
 
                     IsNotAdminLoginData ->
@@ -313,11 +314,6 @@ loadedInitHelper time loginData loading =
         loggedIn =
             { localState = localStateContainer
             , admin = Maybe.map (\( a, _, _ ) -> a) maybeAdmin
-            , userOverview =
-                Pages.UserOverview.init
-                    loginData.twoFactorAuthenticationEnabled
-                    (Just localState.localUser.user)
-                    |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
@@ -331,6 +327,14 @@ loadedInitHelper time loginData loading =
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
             , sidebarMode = ChannelSidebarOpened
+            , showUserOptions = False
+            , twoFactor =
+                case loginData.twoFactorAuthenticationEnabled of
+                    Just enabledAt ->
+                        TwoFactorAlreadyComplete enabledAt
+
+                    Nothing ->
+                        TwoFactorNotStarted
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -449,26 +453,6 @@ routeRequest previousRoute newRoute model =
                     )
                 )
                 model2
-
-        UserOverviewRoute maybeUserId ->
-            case maybeUserId of
-                SpecificUserRoute _ ->
-                    ( model2, Command.none )
-
-                PersonalRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( loggedIn
-                            , Local.model loggedIn.localState
-                                |> .localUser
-                                |> .userId
-                                |> SpecificUserRoute
-                                |> UserOverviewRoute
-                                |> Route.encode
-                                |> BrowserNavigation.replaceUrl model2.navigationKey
-                            )
-                        )
-                        model2
 
         GuildRoute guildId channelRoute ->
             let
@@ -600,9 +584,6 @@ routeRequiresLogin route =
             False
 
         AdminRoute _ ->
-            True
-
-        UserOverviewRoute _ ->
             True
 
         GuildRoute _ _ ->
@@ -783,33 +764,6 @@ updateLoaded msg model =
                     routePush model2 route
             in
             ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
-
-        UserOverviewMsg userOverviewMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case model.route of
-                        UserOverviewRoute userOverviewData ->
-                            let
-                                userId : Id UserId
-                                userId =
-                                    case userOverviewData of
-                                        PersonalRoute ->
-                                            (Local.model loggedIn.localState).localUser.userId
-
-                                        SpecificUserRoute userId2 ->
-                                            userId2
-
-                                ( userOverview2, cmd ) =
-                                    Pages.UserOverview.update userOverviewMsg (getUserOverview userId loggedIn)
-                            in
-                            ( { loggedIn | userOverview = SeqDict.insert userId userOverview2 loggedIn.userOverview }
-                            , Command.map UserOverviewToBackend UserOverviewMsg cmd
-                            )
-
-                        _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
 
         TypedMessage guildId channelId text ->
             updateLoggedIn
@@ -1643,7 +1597,7 @@ updateLoaded msg model =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editMessage
                                     , messageHover = NoMessageHover
                                 }
-                                Command.none
+                                (setFocus model Pages.Guild.channelTextInputId)
 
                         Nothing ->
                             ( loggedIn, Command.none )
@@ -2217,7 +2171,7 @@ updateLoaded msg model =
                                 NoMessageHover ->
                                     loggedIn.messageHover
 
-                                MessageHover messageId ->
+                                MessageHover _ ->
                                     loggedIn.messageHover
 
                                 MessageMenu messageMenu ->
@@ -2270,6 +2224,38 @@ updateLoaded msg model =
                       }
                     , Command.none
                     )
+                )
+                model
+
+        PressedShowUserOption ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showUserOptions = True }, Command.none ))
+                model
+
+        PressedCloseUserOptions ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showUserOptions = False }, Command.none ))
+                model
+
+        PressedSetDiscordWebsocket isEnabled ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_SetDiscordWebsocket isEnabled))
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        TwoFactorMsg twoFactorMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        ( twoFactor2, cmd ) =
+                            TwoFactorAuthentication.update twoFactorMsg loggedIn.twoFactor
+                    in
+                    ( { loggedIn | twoFactor = twoFactor2 }, Command.map TwoFactorToBackend TwoFactorMsg cmd )
                 )
                 model
 
@@ -2544,27 +2530,6 @@ setFocus model htmlId =
         Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
 
 
-getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
-getUserOverview userId loggedIn =
-    case SeqDict.get userId loggedIn.userOverview of
-        Just userOverview ->
-            userOverview
-
-        Nothing ->
-            let
-                localState =
-                    Local.model loggedIn.localState
-            in
-            Pages.UserOverview.init
-                Nothing
-                (if userId == localState.localUser.userId then
-                    Just localState.localUser.user
-
-                 else
-                    Nothing
-                )
-
-
 changeUpdate : LocalMsg -> LocalState -> LocalState
 changeUpdate localMsg local =
     case localMsg of
@@ -2803,6 +2768,17 @@ changeUpdate localMsg local =
                         Nothing ->
                             local
 
+                Local_SetDiscordWebsocket isEnabled ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin { adminData | websocketEnabled = isEnabled }
+
+                                IsNotAdmin ->
+                                    IsNotAdmin
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -3027,6 +3003,42 @@ changeUpdate localMsg local =
 
                         Nothing ->
                             local
+
+                Server_DiscordDeleteMessage messageId ->
+                    { local
+                        | guilds =
+                            SeqDict.updateIfExists
+                                messageId.guildId
+                                (\guild ->
+                                    { guild
+                                        | channels =
+                                            SeqDict.updateIfExists
+                                                messageId.channelId
+                                                (\channel ->
+                                                    { channel
+                                                        | messages =
+                                                            Array.set
+                                                                messageId.messageIndex
+                                                                DeletedMessage
+                                                                channel.messages
+                                                    }
+                                                )
+                                                guild.channels
+                                    }
+                                )
+                                local.guilds
+                    }
+
+                Server_SetWebsocketToggled isEnabled ->
+                    { local
+                        | adminData =
+                            case local.adminData of
+                                IsAdmin adminData ->
+                                    IsAdmin { adminData | websocketEnabled = isEnabled }
+
+                                IsNotAdmin ->
+                                    IsNotAdmin
+                    }
 
 
 handleLocalChange :
@@ -3327,36 +3339,14 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
-        UserOverviewToFrontend toFrontend2 ->
+        TwoFactorAuthenticationToFrontend toFrontend2 ->
             updateLoggedIn
                 (\loggedIn ->
-                    case model.route of
-                        UserOverviewRoute userOverviewData ->
-                            let
-                                userId : Id UserId
-                                userId =
-                                    case userOverviewData of
-                                        PersonalRoute ->
-                                            (Local.model loggedIn.localState).localUser.userId
-
-                                        SpecificUserRoute userId2 ->
-                                            userId2
-
-                                userOverview2 : Pages.UserOverview.Model
-                                userOverview2 =
-                                    Pages.UserOverview.updateFromBackend
-                                        toFrontend2
-                                        (getUserOverview userId loggedIn)
-                            in
-                            ( { loggedIn
-                                | userOverview =
-                                    SeqDict.insert userId userOverview2 loggedIn.userOverview
-                              }
-                            , Command.none
-                            )
-
-                        _ ->
-                            ( loggedIn, Command.none )
+                    ( { loggedIn
+                        | twoFactor = TwoFactorAuthentication.updateFromBackend toFrontend2 loggedIn.twoFactor
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -3464,6 +3454,9 @@ pendingChangesText localChange =
 
         Local_DeleteMessage _ ->
             "Delete message"
+
+        Local_SetDiscordWebsocket isEnabled ->
+            "Set discord websocket"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -3626,10 +3619,19 @@ view model =
                     requiresLogin page =
                         case loaded.loginStatus of
                             LoggedIn loggedIn ->
+                                let
+                                    local =
+                                        Local.model loggedIn.localState
+                                in
                                 layout
                                     loaded
-                                    []
-                                    (page loggedIn (Local.model loggedIn.localState))
+                                    [ if loggedIn.showUserOptions then
+                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
+
+                                      else
+                                        Ui.noAttr
+                                    ]
+                                    (page loggedIn local)
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
@@ -3646,7 +3648,22 @@ view model =
                     HomePageRoute ->
                         layout
                             loaded
-                            [ Ui.background MyUi.background3 ]
+                            [ Ui.background MyUi.background3
+                            , case loaded.loginStatus of
+                                LoggedIn loggedIn ->
+                                    let
+                                        local =
+                                            Local.model loggedIn.localState
+                                    in
+                                    if loggedIn.showUserOptions then
+                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
+
+                                    else
+                                        Ui.noAttr
+
+                                NotLoggedIn _ ->
+                                    Ui.noAttr
+                            ]
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView loaded loggedIn (Local.model loggedIn.localState)
@@ -3685,27 +3702,6 @@ view model =
                                         Ui.el
                                             [ Ui.centerY, Ui.centerX, Ui.width Ui.shrink ]
                                             (Ui.text "Admin access required to view this page")
-                            )
-
-                    UserOverviewRoute userOverviewData ->
-                        requiresLogin
-                            (\loggedIn local ->
-                                let
-                                    userId : Id UserId
-                                    userId =
-                                        case userOverviewData of
-                                            PersonalRoute ->
-                                                local.localUser.userId
-
-                                            SpecificUserRoute userId2 ->
-                                                userId2
-                                in
-                                Pages.UserOverview.view
-                                    loaded
-                                    userId
-                                    local
-                                    (getUserOverview userId loggedIn)
-                                    |> Ui.map UserOverviewMsg
                             )
 
                     GuildRoute guildId maybeChannelId ->

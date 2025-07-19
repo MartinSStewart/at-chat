@@ -109,6 +109,10 @@ test =
                             )
                             []
                         )
+        , Test.test " ~~~~" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString ' ' "~~~~")
+                    |> Expect.equal (Nonempty (NormalText ' ' "~~~~") [])
         , Test.fuzz markdownStringFuzzer "Round trip" <|
             \text ->
                 RichText.fromNonemptyString users text

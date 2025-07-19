@@ -1,5 +1,6 @@
 module Id exposing
     ( ChannelId(..)
+    , DiscordUserId(..)
     , GuildId(..)
     , Id(..)
     , InviteLinkId(..)
@@ -12,6 +13,10 @@ module Id exposing
 
 import List.Extra
 import SeqDict exposing (SeqDict)
+
+
+type DiscordUserId
+    = DiscordUserId Never
 
 
 type UserId

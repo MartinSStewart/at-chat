@@ -3,7 +3,7 @@ module RoutingTests exposing (roundtrip)
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id)
-import Route exposing (Route, UserOverviewRouteData(..))
+import Route exposing (Route)
 import Test exposing (Test)
 import Url
 
@@ -43,12 +43,6 @@ routeFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Route.HomePageRoute
         , Fuzz.map Route.AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe Fuzz.int))
-        , Fuzz.map Route.UserOverviewRoute
-            (Fuzz.oneOf
-                [ Fuzz.constant PersonalRoute
-                , Fuzz.map SpecificUserRoute idFuzzer
-                ]
-            )
         ]
 
 

@@ -2,6 +2,7 @@ module User exposing
     ( AdminUiSection(..)
     , BackendUser
     , EmailNotifications(..)
+    , EmailStatus(..)
     , FrontendUser
     , allEmailNotifications
     , backendToFrontend
@@ -23,7 +24,7 @@ import SeqSet exposing (SeqSet)
 type alias BackendUser =
     { name : PersonName
     , isAdmin : Bool
-    , email : EmailAddress
+    , email : EmailStatus
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Int
     , expandedSections : SeqSet AdminUiSection
@@ -32,6 +33,11 @@ type alias BackendUser =
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict ( Id GuildId, Id ChannelId ) Int
     }
+
+
+type EmailStatus
+    = RegisteredFromDiscord
+    | RegisteredDirectly EmailAddress
 
 
 type EmailNotifications

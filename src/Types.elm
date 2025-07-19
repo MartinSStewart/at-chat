@@ -39,26 +39,29 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord
+import Discord.Id
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
-import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
@@ -69,7 +72,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
-import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
+import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
@@ -127,7 +130,6 @@ type LoginStatus
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
-    , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
@@ -141,6 +143,8 @@ type alias LoggedIn2 =
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
+    , showUserOptions : Bool
+    , twoFactor : TwoFactorState
     }
 
 
@@ -226,6 +230,12 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , discordModel : Discord.Model Websocket.Connection
+    , discordNotConnected : Bool
+    , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
+    , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
+    , websocketEnabled : IsEnabled
     }
 
 
@@ -273,7 +283,6 @@ type FrontendMsg
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
-    | UserOverviewMsg Pages.UserOverview.Msg
     | TypedMessage (Id GuildId) (Id ChannelId) String
     | PressedSendMessage (Id GuildId) (Id ChannelId)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
@@ -341,6 +350,10 @@ type FrontendMsg
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
     | CheckMessageAltPress Time.Posix Int
+    | PressedShowUserOption
+    | PressedCloseUserOptions
+    | PressedSetDiscordWebsocket IsEnabled
+    | TwoFactorMsg TwoFactorAuthentication.Msg
 
 
 type alias NewChannelForm =
@@ -363,17 +376,32 @@ type ToBackend
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
-    | UserOverviewToBackend Pages.UserOverview.ToBackend
+    | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
 
 
 type BackendMsg
     = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | Connected SessionId ClientId
-    | Disconnected SessionId ClientId
+    | UserConnected SessionId ClientId
+    | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    | WebsocketCreatedHandle Websocket.Connection
+    | WebsocketSentData (Result Websocket.SendError ())
+    | WebsocketClosedByBackend Bool
+    | DiscordWebsocketMsg Discord.Msg
+    | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError (List Discord.PartialGuild))
+    | GotCurrentUser (Result Discord.HttpError Discord.User)
+    | GotDiscordGuilds
+        Time.Posix
+        (Result
+            Discord.HttpError
+            (List ( Discord.Id.Id Discord.Id.GuildId, ( List Discord.GuildMember, List Discord.Channel2 ) ))
+        )
+    | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
+    | DeletedDiscordMessage
+    | EditedDiscordMessage
 
 
 type LoginResult
@@ -391,7 +419,7 @@ type ToFrontend
     | AdminToFrontend Pages.Admin.ToFrontend
     | LocalChangeResponse ChangeId LocalChange
     | ChangeBroadcast LocalMsg
-    | UserOverviewToFrontend Pages.UserOverview.ToFrontend
+    | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
 
 
 type alias LoginData =
@@ -436,6 +464,8 @@ type ServerChange
     | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
     | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
     | Server_DeleteMessage (Id UserId) MessageId
+    | Server_DiscordDeleteMessage MessageId
+    | Server_SetWebsocketToggled IsEnabled
 
 
 type LocalChange
@@ -454,6 +484,7 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix MessageId
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
     | Local_DeleteMessage MessageId
+    | Local_SetDiscordWebsocket IsEnabled
 
 
 type ToBeFilledInByBackend a
