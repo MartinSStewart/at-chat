@@ -1,5 +1,5 @@
 module Discord.Markdown exposing
-    ( Markdown
+    ( Markdown(..)
     , Quotable
     , bold
     , boldMarkdown
@@ -8,6 +8,7 @@ module Discord.Markdown exposing
     , customEmoji
     , italic
     , italicMarkdown
+    , parser
     , ping
     , quote
     , spoiler
@@ -19,7 +20,10 @@ module Discord.Markdown exposing
     , underlineMarkdown
     )
 
+import Array exposing (Array)
 import Discord.Id exposing (CustomEmojiId, Id, UserId)
+import Parser exposing ((|.), (|=), Parser, Step(..))
+import UInt64
 
 
 type Quotable
@@ -178,7 +182,7 @@ toStringHelper markdown =
             "**" ++ toString markdown2 ++ "**"
 
         Italic markdown2 ->
-            "_" ++ toString markdown2 ++ "_"
+            "*" ++ toString markdown2 ++ "*"
 
         Underline markdown2 ->
             "__" ++ toString markdown2 ++ "__"
@@ -210,3 +214,407 @@ escapeText =
 
 
 -->> String.replace ":" "\\:"
+
+
+parser : String -> List (Markdown a)
+parser input =
+    case Parser.run discordMarkdownParser input of
+        Ok result ->
+            Array.toList result
+
+        Err _ ->
+            [ Text input ]
+
+
+type alias LoopState a =
+    { current : Array String, rest : Array (Markdown a) }
+
+
+type Modifiers
+    = IsBold
+    | IsItalic
+    | IsItalic2
+    | IsUnderlined
+    | IsStrikethrough
+    | IsSpoilered
+
+
+modifierToSymbol : Modifiers -> String
+modifierToSymbol modifier =
+    case modifier of
+        IsBold ->
+            "**"
+
+        IsItalic ->
+            "_"
+
+        IsItalic2 ->
+            "*"
+
+        IsUnderlined ->
+            "__"
+
+        IsStrikethrough ->
+            "~~"
+
+        IsSpoilered ->
+            "||"
+
+
+discordMarkdownParser : Parser (Array (Markdown a))
+discordMarkdownParser =
+    Parser.loop
+        { current = Array.empty, rest = Array.empty }
+        (\state ->
+            getRemainingText
+                |> Parser.andThen
+                    (\remainingText ->
+                        Parser.oneOf
+                            [ Parser.succeed
+                                (\userId ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (Ping userId) (parserHelper state))
+                                        }
+                                )
+                                |. Parser.symbol "<@!"
+                                |= discordUserIdParser
+                                |. Parser.symbol ">"
+                                |> Parser.backtrackable
+                            , Parser.succeed
+                                (\( name, emojiId ) ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (CustomEmoji name emojiId) (parserHelper state))
+                                        }
+                                )
+                                |. Parser.symbol "<:"
+                                |= customEmojiParser
+                                |. Parser.symbol ">"
+                                |> Parser.backtrackable
+                            , modifierHelper False IsBold Bold state []
+                            , modifierHelper False IsUnderlined Underline state []
+                            , modifierHelper False IsItalic Italic state []
+                            , modifierHelper True IsItalic2 Italic state []
+                            , modifierHelper False IsStrikethrough Strikethrough state []
+                            , modifierHelper False IsSpoilered Spoiler state []
+                            , Parser.succeed
+                                (\( language, content ) ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push
+                                                    (CodeBlock language content)
+                                                    (parserHelper state)
+                                                )
+                                        }
+                                )
+                                |= codeBlockParser
+                                |> Parser.backtrackable
+                            , Parser.succeed
+                                (\codeContent ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push
+                                                    (Code codeContent)
+                                                    (parserHelper state)
+                                                )
+                                        }
+                                )
+                                |. Parser.symbol "`"
+                                |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                                |. Parser.symbol "`"
+                                |> Parser.backtrackable
+                            , Parser.chompIf (\_ -> True)
+                                |> Parser.getChompedString
+                                |> Parser.map
+                                    (\a ->
+                                        Loop
+                                            { current = Array.push a state.current
+                                            , rest = state.rest
+                                            }
+                                    )
+                            , Parser.map (\() -> bailOut state []) Parser.end
+                            ]
+                    )
+        )
+
+
+discordUserIdParser : Parser (Id UserId)
+discordUserIdParser =
+    Parser.chompWhile Char.isDigit
+        |> Parser.getChompedString
+        |> Parser.andThen
+            (\idStr ->
+                case UInt64.fromString idStr of
+                    Just id ->
+                        Parser.succeed (Discord.Id.fromUInt64 id)
+
+                    Nothing ->
+                        Parser.problem "Invalid user ID"
+            )
+
+
+customEmojiParser : Parser ( String, Id CustomEmojiId )
+customEmojiParser =
+    Parser.succeed Tuple.pair
+        |= (Parser.chompWhile (\c -> c /= ':') |> Parser.getChompedString)
+        |. Parser.symbol ":"
+        |= (Parser.chompWhile Char.isDigit
+                |> Parser.getChompedString
+                |> Parser.andThen
+                    (\idStr ->
+                        case UInt64.fromString idStr of
+                            Just id ->
+                                Parser.succeed (Discord.Id.fromUInt64 id)
+
+                            Nothing ->
+                                Parser.problem "Invalid emoji ID"
+                    )
+           )
+
+
+codeBlockParser : Parser ( Maybe String, String )
+codeBlockParser =
+    Parser.succeed
+        (\blockContent ->
+            case String.split "\n" blockContent of
+                [ single ] ->
+                    ( Nothing, single )
+
+                head :: rest ->
+                    if String.contains " " head then
+                        ( Nothing, blockContent )
+
+                    else if String.isEmpty head then
+                        ( Nothing, String.join "\n" rest )
+
+                    else
+                        ( Just head, String.join "\n" rest )
+
+                [] ->
+                    ( Nothing, "" )
+        )
+        |. Parser.symbol "```"
+        |= Parser.loop
+            []
+            (\list ->
+                Parser.oneOf
+                    [ Parser.succeed (Done (List.reverse list |> String.concat))
+                        |. Parser.symbol "```"
+                    , Parser.succeed (\char -> Loop (char :: list))
+                        |= (Parser.chompIf (\_ -> True) |> Parser.getChompedString)
+                    ]
+            )
+
+
+bailOut : LoopState a -> List Modifiers -> Step state (Array (Markdown a))
+bailOut state modifiers =
+    Array.append
+        (case modifiers of
+            IsBold :: _ ->
+                Array.fromList [ Text "**" ]
+
+            IsItalic :: _ ->
+                Array.fromList [ Text "_" ]
+
+            IsItalic2 :: _ ->
+                Array.fromList [ Text "*" ]
+
+            IsUnderlined :: _ ->
+                Array.fromList [ Text "__" ]
+
+            IsStrikethrough :: _ ->
+                Array.fromList [ Text "~~" ]
+
+            IsSpoilered :: _ ->
+                Array.fromList [ Text "||" ]
+
+            [] ->
+                Array.empty
+        )
+        (Array.append state.rest (parserHelper state))
+        |> Done
+
+
+getRemainingText : Parser String
+getRemainingText =
+    Parser.succeed String.dropLeft
+        |= Parser.getOffset
+        |= Parser.getSource
+
+
+modifierHelper :
+    Bool
+    -> Modifiers
+    -> (List (Markdown a) -> Markdown a)
+    -> LoopState a
+    -> List Modifiers
+    -> Parser (Step (LoopState a) (Array (Markdown a)))
+modifierHelper noTrailingWhitespace modifier container state modifiers =
+    let
+        symbol : String
+        symbol =
+            modifierToSymbol modifier
+    in
+    if List.head modifiers == Just modifier then
+        Parser.map
+            (\() ->
+                case
+                    Array.append state.rest (parserHelper state)
+                        |> Array.toList
+                of
+                    [] ->
+                        Text symbol
+                            |> List.singleton
+                            |> Array.fromList
+                            |> Done
+
+                    nonEmpty ->
+                        Done (Array.fromList [ container nonEmpty ])
+            )
+            (Parser.symbol symbol)
+
+    else if List.member modifier modifiers then
+        getRemainingText
+            |> Parser.andThen
+                (\remainingText ->
+                    if String.startsWith symbol remainingText then
+                        bailOut state modifiers |> Parser.succeed
+
+                    else
+                        Parser.backtrackable (Parser.problem "")
+                )
+
+    else
+        Parser.succeed identity
+            |. Parser.symbol symbol
+            |= Parser.oneOf
+                [ if noTrailingWhitespace then
+                    getRemainingText
+                        |> Parser.andThen
+                            (\remainingText ->
+                                if
+                                    String.startsWith symbol remainingText
+                                        || String.startsWith " " remainingText
+                                then
+                                    Parser.backtrackable (Parser.problem "")
+
+                                else
+                                    Parser.map
+                                        (\a ->
+                                            Loop
+                                                { current = Array.empty
+                                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                                }
+                                        )
+                                        (nestedParser (modifier :: modifiers))
+                            )
+
+                  else
+                    Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.empty
+                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                }
+                        )
+                        (nestedParser (modifier :: modifiers))
+                , Loop { current = Array.push symbol state.current, rest = state.rest }
+                    |> Parser.succeed
+                ]
+
+
+nestedParser : List Modifiers -> Parser (Array (Markdown a))
+nestedParser modifiers =
+    Parser.loop
+        { current = Array.empty, rest = Array.empty }
+        (\state ->
+            getRemainingText
+                |> Parser.andThen
+                    (\remainingText ->
+                        Parser.oneOf
+                            [ Parser.succeed
+                                (\userId ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (Ping userId) (parserHelper state))
+                                        }
+                                )
+                                |. Parser.symbol "<@!"
+                                |= discordUserIdParser
+                                |. Parser.symbol ">"
+                                |> Parser.backtrackable
+                            , Parser.succeed
+                                (\( name, emojiId ) ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (CustomEmoji name emojiId) (parserHelper state))
+                                        }
+                                )
+                                |. Parser.symbol "<:"
+                                |= customEmojiParser
+                                |. Parser.symbol ">"
+                                |> Parser.backtrackable
+                            , modifierHelper True IsBold Bold state modifiers
+                            , modifierHelper False IsUnderlined Underline state modifiers
+                            , modifierHelper False IsItalic Italic state modifiers
+                            , modifierHelper False IsStrikethrough Strikethrough state modifiers
+                            , modifierHelper False IsSpoilered Spoiler state modifiers
+                            , Parser.succeed
+                                (\inlineCodeContent ->
+                                    Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push
+                                                    (Code inlineCodeContent)
+                                                    (parserHelper state)
+                                                )
+                                        }
+                                )
+                                |. Parser.symbol "`"
+                                |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                                |. Parser.symbol "`"
+                                |> Parser.backtrackable
+                            , Parser.chompIf (\_ -> True)
+                                |> Parser.getChompedString
+                                |> Parser.map
+                                    (\a ->
+                                        Loop
+                                            { current = Array.push a state.current
+                                            , rest = state.rest
+                                            }
+                                    )
+                            , Parser.map (\() -> bailOut state modifiers) Parser.end
+                            ]
+                    )
+        )
+
+
+parserHelper : LoopState a -> Array (Markdown a)
+parserHelper state =
+    case state.current |> Array.toList |> String.concat of
+        "" ->
+            Array.empty
+
+        textContent ->
+            Array.fromList [ Text textContent ]

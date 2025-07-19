@@ -3648,7 +3648,22 @@ view model =
                     HomePageRoute ->
                         layout
                             loaded
-                            [ Ui.background MyUi.background3 ]
+                            [ Ui.background MyUi.background3
+                            , case loaded.loginStatus of
+                                LoggedIn loggedIn ->
+                                    let
+                                        local =
+                                            Local.model loggedIn.localState
+                                    in
+                                    if loggedIn.showUserOptions then
+                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
+
+                                    else
+                                        Ui.noAttr
+
+                                NotLoggedIn _ ->
+                                    Ui.noAttr
+                            ]
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView loaded loggedIn (Local.model loggedIn.localState)
