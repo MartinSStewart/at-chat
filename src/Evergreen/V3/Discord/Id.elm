@@ -1,0 +1,39 @@
+module Evergreen.V3.Discord.Id exposing (..)
+
+import UInt64
+
+
+type ChannelId
+    = ChannelId Never
+
+
+type Id idType
+    = Id UInt64.UInt64
+
+
+type MessageId
+    = MessageId Never
+
+
+type GuildId
+    = GuildId Never
+
+
+type UserId
+    = UserId Never
+
+
+type RoleId
+    = RoleId Never
+
+
+type AttachmentId
+    = AttachmentId Never
+
+
+type CustomEmojiId
+    = CustomEmojiId Never
+
+
+type WebhookId
+    = WebhookId Never
