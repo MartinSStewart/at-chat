@@ -37,7 +37,6 @@ import LoginForm
 import NonemptyDict
 import OneToOne
 import Pages.Admin exposing (InitAdminData)
-import Pages.UserOverview
 import Pagination
 import PersonName
 import Postmark
@@ -1479,12 +1478,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         ]
                     )
 
-        UserOverviewToBackend toBackend2 ->
+        TwoFactorToBackend toBackend2 ->
             asUser
                 model2
                 sessionId
                 (\userId user ->
-                    userOverviewUpdateFromFrontend clientId time userId user toBackend2 model2
+                    twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend2 model2
                 )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
@@ -1595,17 +1594,17 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
             ( model, Command.none )
 
 
-userOverviewUpdateFromFrontend :
+twoFactorAuthenticationUpdateFromFrontend :
     ClientId
     -> Time.Posix
     -> Id UserId
     -> BackendUser
-    -> Pages.UserOverview.ToBackend
+    -> TwoFactorAuthentication.ToBackend
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-userOverviewUpdateFromFrontend clientId time userId user toBackend model =
+twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend model =
     case toBackend of
-        Pages.UserOverview.EnableTwoFactorAuthenticationRequest ->
+        TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest ->
             let
                 ( model2, secret ) =
                     SecretId.getUniqueId time model
@@ -1621,13 +1620,13 @@ userOverviewUpdateFromFrontend clientId time userId user toBackend model =
                                         { startedAt = time, secret = secret }
                                         model2.twoFactorAuthenticationSetup
                               }
-                            , Pages.UserOverview.EnableTwoFactorAuthenticationResponse
+                            , TwoFactorAuthentication.EnableTwoFactorAuthenticationResponse
                                 { qrCodeUrl =
                                     TOTP.Key.toString key
                                         -- https://github.com/choonkeat/elm-totp/issues/3
                                         |> String.replace "%3D" ""
                                 }
-                                |> UserOverviewToFrontend
+                                |> TwoFactorAuthenticationToFrontend
                                 |> Lamdera.sendToFrontend clientId
                             )
 
@@ -1637,7 +1636,7 @@ userOverviewUpdateFromFrontend clientId time userId user toBackend model =
                 RegisteredFromDiscord ->
                     ( model2, Command.none )
 
-        Pages.UserOverview.ConfirmTwoFactorAuthenticationRequest code ->
+        TwoFactorAuthentication.ConfirmTwoFactorAuthenticationRequest code ->
             case SeqDict.get userId model.twoFactorAuthenticationSetup of
                 Just data ->
                     if Duration.from data.startedAt time |> Quantity.lessThan Duration.hour then
@@ -1651,15 +1650,15 @@ userOverviewUpdateFromFrontend clientId time userId user toBackend model =
                                 , twoFactorAuthenticationSetup =
                                     SeqDict.remove userId model.twoFactorAuthenticationSetup
                               }
-                            , Pages.UserOverview.ConfirmTwoFactorAuthenticationResponse code True
-                                |> UserOverviewToFrontend
+                            , TwoFactorAuthentication.ConfirmTwoFactorAuthenticationResponse code True
+                                |> TwoFactorAuthenticationToFrontend
                                 |> Lamdera.sendToFrontend clientId
                             )
 
                         else
                             ( model
-                            , Pages.UserOverview.ConfirmTwoFactorAuthenticationResponse code False
-                                |> UserOverviewToFrontend
+                            , TwoFactorAuthentication.ConfirmTwoFactorAuthenticationResponse code False
+                                |> TwoFactorAuthenticationToFrontend
                                 |> Lamdera.sendToFrontend clientId
                             )
 

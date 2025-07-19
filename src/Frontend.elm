@@ -23,7 +23,6 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode exposing (Decoder)
 import Lamdera as LamderaCore
@@ -40,21 +39,19 @@ import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
-import Pages.UserOverview
 import Pagination
-import Point2d
 import Ports
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..), UserOverviewRouteData(..))
+import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
+import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import Ui.Input
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
@@ -317,11 +314,6 @@ loadedInitHelper time loginData loading =
         loggedIn =
             { localState = localStateContainer
             , admin = Maybe.map (\( a, _, _ ) -> a) maybeAdmin
-            , userOverview =
-                Pages.UserOverview.init
-                    loginData.twoFactorAuthenticationEnabled
-                    (Just localState.localUser.user)
-                    |> SeqDict.singleton loginData.userId
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
@@ -336,6 +328,13 @@ loadedInitHelper time loginData loading =
             , revealedSpoilers = Nothing
             , sidebarMode = ChannelSidebarOpened
             , showUserOptions = False
+            , twoFactor =
+                case loginData.twoFactorAuthenticationEnabled of
+                    Just enabledAt ->
+                        TwoFactorAlreadyComplete enabledAt
+
+                    Nothing ->
+                        TwoFactorNotStarted
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -454,26 +453,6 @@ routeRequest previousRoute newRoute model =
                     )
                 )
                 model2
-
-        UserOverviewRoute maybeUserId ->
-            case maybeUserId of
-                SpecificUserRoute _ ->
-                    ( model2, Command.none )
-
-                PersonalRoute ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( loggedIn
-                            , Local.model loggedIn.localState
-                                |> .localUser
-                                |> .userId
-                                |> SpecificUserRoute
-                                |> UserOverviewRoute
-                                |> Route.encode
-                                |> BrowserNavigation.replaceUrl model2.navigationKey
-                            )
-                        )
-                        model2
 
         GuildRoute guildId channelRoute ->
             let
@@ -605,9 +584,6 @@ routeRequiresLogin route =
             False
 
         AdminRoute _ ->
-            True
-
-        UserOverviewRoute _ ->
             True
 
         GuildRoute _ _ ->
@@ -788,33 +764,6 @@ updateLoaded msg model =
                     routePush model2 route
             in
             ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
-
-        UserOverviewMsg userOverviewMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case model.route of
-                        UserOverviewRoute userOverviewData ->
-                            let
-                                userId : Id UserId
-                                userId =
-                                    case userOverviewData of
-                                        PersonalRoute ->
-                                            (Local.model loggedIn.localState).localUser.userId
-
-                                        SpecificUserRoute userId2 ->
-                                            userId2
-
-                                ( userOverview2, cmd ) =
-                                    Pages.UserOverview.update userOverviewMsg (getUserOverview userId loggedIn)
-                            in
-                            ( { loggedIn | userOverview = SeqDict.insert userId userOverview2 loggedIn.userOverview }
-                            , Command.map UserOverviewToBackend UserOverviewMsg cmd
-                            )
-
-                        _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
 
         TypedMessage guildId channelId text ->
             updateLoggedIn
@@ -2299,6 +2248,17 @@ updateLoaded msg model =
                 )
                 model
 
+        TwoFactorMsg twoFactorMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        ( twoFactor2, cmd ) =
+                            TwoFactorAuthentication.update twoFactorMsg loggedIn.twoFactor
+                    in
+                    ( { loggedIn | twoFactor = twoFactor2 }, Command.map TwoFactorToBackend TwoFactorMsg cmd )
+                )
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -2568,27 +2528,6 @@ setFocus model htmlId =
 
     else
         Dom.focus htmlId |> Task.attempt (\_ -> SetFocus)
-
-
-getUserOverview : Id UserId -> LoggedIn2 -> Pages.UserOverview.Model
-getUserOverview userId loggedIn =
-    case SeqDict.get userId loggedIn.userOverview of
-        Just userOverview ->
-            userOverview
-
-        Nothing ->
-            let
-                localState =
-                    Local.model loggedIn.localState
-            in
-            Pages.UserOverview.init
-                Nothing
-                (if userId == localState.localUser.userId then
-                    Just localState.localUser.user
-
-                 else
-                    Nothing
-                )
 
 
 changeUpdate : LocalMsg -> LocalState -> LocalState
@@ -3400,36 +3339,14 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
-        UserOverviewToFrontend toFrontend2 ->
+        TwoFactorAuthenticationToFrontend toFrontend2 ->
             updateLoggedIn
                 (\loggedIn ->
-                    case model.route of
-                        UserOverviewRoute userOverviewData ->
-                            let
-                                userId : Id UserId
-                                userId =
-                                    case userOverviewData of
-                                        PersonalRoute ->
-                                            (Local.model loggedIn.localState).localUser.userId
-
-                                        SpecificUserRoute userId2 ->
-                                            userId2
-
-                                userOverview2 : Pages.UserOverview.Model
-                                userOverview2 =
-                                    Pages.UserOverview.updateFromBackend
-                                        toFrontend2
-                                        (getUserOverview userId loggedIn)
-                            in
-                            ( { loggedIn
-                                | userOverview =
-                                    SeqDict.insert userId userOverview2 loggedIn.userOverview
-                              }
-                            , Command.none
-                            )
-
-                        _ ->
-                            ( loggedIn, Command.none )
+                    ( { loggedIn
+                        | twoFactor = TwoFactorAuthentication.updateFromBackend toFrontend2 loggedIn.twoFactor
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -3709,7 +3626,7 @@ view model =
                                 layout
                                     loaded
                                     [ if loggedIn.showUserOptions then
-                                        UserOptions.view local loggedIn |> Ui.inFront
+                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
 
                                       else
                                         Ui.noAttr
@@ -3770,27 +3687,6 @@ view model =
                                         Ui.el
                                             [ Ui.centerY, Ui.centerX, Ui.width Ui.shrink ]
                                             (Ui.text "Admin access required to view this page")
-                            )
-
-                    UserOverviewRoute userOverviewData ->
-                        requiresLogin
-                            (\loggedIn local ->
-                                let
-                                    userId : Id UserId
-                                    userId =
-                                        case userOverviewData of
-                                            PersonalRoute ->
-                                                local.localUser.userId
-
-                                            SpecificUserRoute userId2 ->
-                                                userId2
-                                in
-                                Pages.UserOverview.view
-                                    loaded
-                                    userId
-                                    local
-                                    (getUserOverview userId loggedIn)
-                                    |> Ui.map UserOverviewMsg
                             )
 
                     GuildRoute guildId maybeChannelId ->

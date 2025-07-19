@@ -62,7 +62,6 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
-import Pages.UserOverview
 import PersonName exposing (PersonName)
 import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
@@ -73,7 +72,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
-import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
+import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
@@ -131,7 +130,6 @@ type LoginStatus
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
-    , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
@@ -146,6 +144,7 @@ type alias LoggedIn2 =
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , showUserOptions : Bool
+    , twoFactor : TwoFactorState
     }
 
 
@@ -284,7 +283,6 @@ type FrontendMsg
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
-    | UserOverviewMsg Pages.UserOverview.Msg
     | TypedMessage (Id GuildId) (Id ChannelId) String
     | PressedSendMessage (Id GuildId) (Id ChannelId)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
@@ -355,6 +353,7 @@ type FrontendMsg
     | PressedShowUserOption
     | PressedCloseUserOptions
     | PressedSetDiscordWebsocket IsEnabled
+    | TwoFactorMsg TwoFactorAuthentication.Msg
 
 
 type alias NewChannelForm =
@@ -377,7 +376,7 @@ type ToBackend
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
-    | UserOverviewToBackend Pages.UserOverview.ToBackend
+    | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
 
@@ -420,7 +419,7 @@ type ToFrontend
     | AdminToFrontend Pages.Admin.ToFrontend
     | LocalChangeResponse ChangeId LocalChange
     | ChangeBroadcast LocalMsg
-    | UserOverviewToFrontend Pages.UserOverview.ToFrontend
+    | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
 
 
 type alias LoginData =

@@ -1,15 +1,23 @@
 module UserOptions exposing (view)
 
+import Effect.Browser.Dom as Dom
 import Icons
 import LocalState exposing (AdminStatus(..), IsEnabled(..), LocalState)
+import LoginForm exposing (CodeStatus(..))
 import MyUi
+import QRCode
+import SeqDict
+import Time
+import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoggedIn2)
 import Ui exposing (Element)
+import Ui.Font
 import Ui.Input
+import Ui.Prose
 
 
-view : LocalState -> LoggedIn2 -> Element FrontendMsg
-view local loggedIn =
+view : Time.Posix -> LocalState -> LoggedIn2 -> Element FrontendMsg
+view time local loggedIn =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.background MyUi.background1
@@ -55,5 +63,7 @@ view local loggedIn =
 
                 IsNotAdmin ->
                     Ui.none
+            , TwoFactorAuthentication.twoFactor time loggedIn.twoFactor
+                |> Ui.map TwoFactorMsg
             ]
         )
