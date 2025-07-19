@@ -17,6 +17,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
+    | AiChatRoute
 
 
 type ChannelRoute
@@ -44,6 +45,9 @@ decode url =
                         _ ->
                             Nothing
                 }
+
+        [ "ai-chat" ] ->
+            AiChatRoute
 
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
@@ -111,6 +115,9 @@ encode route =
                         Nothing ->
                             []
                     )
+
+                AiChatRoute ->
+                    ( [ "ai-chat" ], [] )
 
                 GuildRoute guildId maybeChannelId ->
                     ( [ "g", Id.toString guildId ]

@@ -95,6 +95,20 @@ exports.init = async function init(app) {
         }
     });
 
+    app.ports.save_user_settings_to_js.subscribe(function (data) {
+        window.localStorage.setItem("ai-chat-settings", data);
+    });
+
+    app.ports.load_user_settings_to_js.subscribe(function (data) {
+        let localStorageValue = window.localStorage.getItem("ai-chat-settings");
+        if (localStorageValue !== null) {
+          app.ports.load_user_settings_from_js.send(localStorageValue);
+        }
+        else {
+          app.ports.load_user_settings_from_js.send("");
+        }
+    });
+
     function copyTextToClipboard(text) {
         if (!navigator.clipboard) {
             fallbackCopyTextToClipboard(text);

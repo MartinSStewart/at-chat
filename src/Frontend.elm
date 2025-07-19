@@ -1,5 +1,6 @@
 module Frontend exposing (app, app_)
 
+import AiChat
 import Array
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
@@ -216,6 +217,9 @@ initLoadedFrontend loading time loginResult =
                     , Command.none
                     )
 
+        ( aiChatModel, aiChatCmd ) =
+            AiChat.init
+
         model : LoadedFrontend
         model =
             { navigationKey = loading.navigationKey
@@ -230,13 +234,14 @@ initLoadedFrontend loading time loginResult =
             , pwaStatus = loading.pwaStatus
             , drag = NoDrag
             , scrolledToBottomOfChannel = True
+            , aiChatModel = aiChatModel
             }
 
         ( model2, cmdA ) =
             routeRequest Nothing model.route model
     in
     ( model2
-    , Command.batch [ cmdB, cmdA ]
+    , Command.batch [ cmdB, cmdA, Command.map AiChatToBackend AiChatMsg aiChatCmd ]
     )
 
 
@@ -576,6 +581,9 @@ routeRequest previousRoute newRoute model =
                                 ]
                             )
 
+        AiChatRoute ->
+            ( model, Command.none )
+
 
 routeRequiresLogin : Route -> Bool
 routeRequiresLogin route =
@@ -585,6 +593,9 @@ routeRequiresLogin route =
 
         AdminRoute _ ->
             True
+
+        AiChatRoute ->
+            False
 
         GuildRoute _ _ ->
             True
@@ -2259,6 +2270,15 @@ updateLoaded msg model =
                 )
                 model
 
+        AiChatMsg aiChatMsg ->
+            let
+                ( aiChatModel2, aiChatCmd ) =
+                    AiChat.update aiChatMsg model.aiChatModel
+            in
+            ( { model | aiChatModel = aiChatModel2 }
+            , Command.map AiChatToBackend AiChatMsg aiChatCmd
+            )
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -3350,6 +3370,13 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
+        AiChatToFrontend aiChatToFrontend ->
+            let
+                ( newAiChatModel, cmd ) =
+                    AiChat.updateFromBackend aiChatToFrontend model.aiChatModel
+            in
+            ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
+
 
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 scrollToBottomOfChannel =
@@ -3703,6 +3730,11 @@ view model =
                                             [ Ui.centerY, Ui.centerX, Ui.width Ui.shrink ]
                                             (Ui.text "Admin access required to view this page")
                             )
+
+                    AiChatRoute ->
+                        AiChat.view loaded.aiChatModel
+                            |> Ui.map AiChatMsg
+                            |> layout loaded []
 
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)

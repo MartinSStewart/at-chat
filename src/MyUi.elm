@@ -30,6 +30,7 @@ module MyUi exposing
     , hoverAndReplyToColor
     , hoverHighlight
     , hoverText
+    , id
     , inputBackground
     , inputBorder
     , insetBottom
@@ -107,7 +108,7 @@ column attrs children =
 
 
 errorBox : HtmlId -> (String -> msg) -> String -> Element msg
-errorBox id onPress error =
+errorBox htmlId onPress error =
     Ui.row
         [ Ui.border 1
         , Ui.borderColor errorColor
@@ -128,7 +129,7 @@ errorBox id onPress error =
 
             -- We can't use touchPress here. iPads don't let you trigger clipboard copy on touch start.
             , Ui.Input.button (onPress error)
-            , Dom.idToString id |> Ui.id
+            , id htmlId
             ]
             [ Icons.copy, Ui.text "Copy" ]
         ]
@@ -462,10 +463,10 @@ buttonShadows =
 
 
 primaryButton : HtmlId -> msg -> String -> Element msg
-primaryButton id onPress text =
+primaryButton htmlId onPress text =
     button
         [ Ui.Input.button onPress
-        , Dom.idToString id |> Ui.id
+        , id htmlId
         ]
         text
 
@@ -489,10 +490,10 @@ montserrat =
 
 
 secondaryButton : HtmlId -> List (Ui.Attribute msg) -> msg -> String -> Element msg
-secondaryButton id attrs onPress label2 =
+secondaryButton htmlId attrs onPress label2 =
     button
         ([ Ui.Input.button onPress
-         , Dom.idToString id |> Ui.id
+         , id htmlId
          , Ui.background secondaryGray
          , Ui.borderColor secondaryGrayBorder
          , Ui.Font.color (Ui.rgb 0 0 0)
@@ -522,6 +523,11 @@ deleteButton htmlId onPress =
 hoverText : String -> Ui.Attribute msg
 hoverText text =
     Ui.htmlAttribute (Html.Attributes.title text)
+
+
+id : HtmlId -> Ui.Attribute msg
+id htmlId =
+    Ui.id (Dom.idToString htmlId)
 
 
 css : Html msg

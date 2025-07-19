@@ -7,6 +7,7 @@ module Backend exposing
     , loginEmailSubject
     )
 
+import AiChat
 import Array
 import ChannelName
 import Discord exposing (OptionalData(..))
@@ -426,6 +427,9 @@ update msg model =
 
         EditedDiscordMessage ->
             ( model, Command.none )
+
+        AiChatBackendMsg aiChatMsg ->
+            ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
@@ -1485,6 +1489,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\userId user ->
                     twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend2 model2
                 )
+
+        AiChatToBackend aiChatToBackend ->
+            ( model2
+            , Command.map
+                AiChatToFrontend
+                AiChatBackendMsg
+                (AiChat.updateFromFrontend sessionId clientId aiChatToBackend)
+            )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
             asUser

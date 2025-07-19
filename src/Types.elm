@@ -34,6 +34,7 @@ module Types exposing
     , messageMenuMobileOffset
     )
 
+import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
@@ -113,6 +114,7 @@ type alias LoadedFrontend =
     , pwaStatus : PwaStatus
     , drag : Drag
     , scrolledToBottomOfChannel : Bool
+    , aiChatModel : AiChat.FrontendModel
     }
 
 
@@ -354,6 +356,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | PressedSetDiscordWebsocket IsEnabled
     | TwoFactorMsg TwoFactorAuthentication.Msg
+    | AiChatMsg AiChat.FrontendMsg
 
 
 type alias NewChannelForm =
@@ -379,6 +382,7 @@ type ToBackend
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
+    | AiChatToBackend AiChat.ToBackend
 
 
 type BackendMsg
@@ -402,6 +406,7 @@ type BackendMsg
     | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
+    | AiChatBackendMsg AiChat.BackendMsg
 
 
 type LoginResult
@@ -420,6 +425,7 @@ type ToFrontend
     | LocalChangeResponse ChangeId LocalChange
     | ChangeBroadcast LocalMsg
     | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
+    | AiChatToFrontend AiChat.ToFrontend
 
 
 type alias LoginData =
