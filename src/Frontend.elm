@@ -101,6 +101,7 @@ subscriptions model =
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
+        , AiChat.subscriptions |> Subscription.map AiChatMsg
         , case model of
             Loading _ ->
                 Subscription.none
@@ -3732,7 +3733,7 @@ view model =
                             )
 
                     AiChatRoute ->
-                        AiChat.view loaded.aiChatModel
+                        AiChat.view loaded.windowSize loaded.aiChatModel
                             |> Ui.map AiChatMsg
                             |> layout loaded []
 

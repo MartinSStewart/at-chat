@@ -701,12 +701,12 @@ cancelButtonBackground =
 
 deleteButtonBackground : Ui.Color
 deleteButtonBackground =
-    Ui.rgb 255 240 250
+    Ui.rgb 180 50 40
 
 
 deleteButtonFont : Ui.Color
 deleteButtonFont =
-    Ui.rgb 255 0 0
+    Ui.rgb 255 240 250
 
 
 buttonBorder : Ui.Color
