@@ -75,22 +75,23 @@ sendString (Connection id url) data =
         )
 
 
-{-| Close the websocket connection
+{-| Close the websocket connection. This won't trigger any close notifications in `listen`.
 -}
 close : Connection -> Task restriction x ()
 close (Connection id url) =
     Effect.Internal.WebsocketClose (Websocket.Connection id url) Effect.Internal.Succeed
 
 
-{-| Listen for incoming messages through a websocket connection. You'll also get notified if the connection closes.
+{-| Listen for incoming messages through a websocket connection.
+You'll also get notified if the connection closes unexpectedly (or in other words, you won't get notified if you're the one closing it with `close`).
 -}
 listen : Connection -> (String -> msg) -> ({ code : CloseEventCode, reason : String } -> msg) -> Subscription restriction msg
-listen (Connection id url) onData onClose =
+listen (Connection id url) onData onUnexpectedClose =
     Effect.Internal.WebsocketListen
         (Websocket.Connection id url)
         onData
         (\closeData ->
-            onClose
+            onUnexpectedClose
                 { code =
                     case closeData.code of
                         Websocket.NormalClosure ->

@@ -124,14 +124,16 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
 
             websocketData.websocket.addEventListener('close', function (event) {
                 try {
+                    if (websocketData.isClosed === false) {
 
-                websocketData.websocket.isClosed = true;
-                console.log("Websocket: close happened in _LamderaWebsocket_listen");
-                console.log(event);
-                __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
-                    connection,
-                    A2(__Websocket_closedEvent, event.code, event.reason)
-                )));
+                        websocketData.websocket.isClosed = true;
+                        console.log("Websocket: close happened in _LamderaWebsocket_listen");
+                        console.log(event);
+                        __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
+                            connection,
+                            A2(__Websocket_closedEvent, event.code, event.reason)
+                        )));
+                    }
 
                 }
                 catch (error) {
@@ -141,15 +143,15 @@ var _LamderaWebsocket_listen = F2(function(router, connection)
 
             websocketData.websocket.addEventListener('error', function (event) {
                 try {
-
-                websocketData.websocket.isClosed = true;
-                console.log("Websocket: error happened in _LamderaWebsocket_listen");
-                console.log(event);
-                __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
-                    connection,
-                    A2(__Websocket_closedEvent, event.code, event.reason)
-                )));
-
+                    if (websocketData.isClosed === false) {
+                        websocketData.websocket.isClosed = true;
+                        console.log("Websocket: error happened in _LamderaWebsocket_listen");
+                        console.log(event);
+                        __Scheduler_rawSpawn(A2(__Platform_sendToSelf, router, __Utils_Tuple2(
+                            connection,
+                            A2(__Websocket_closedEvent, event.code, event.reason)
+                        )));
+                    }
                 }
                 catch (error) {
                     console.log("Websocket: Exception in _LamderaWebsocket_listen error listener. " + error);
@@ -210,19 +212,19 @@ var _LamderaWebsocket_close = F2(function(router, connection) {
     {
         try {
 
-        var websocketData = _LamderaWebsocket_websockets[connection.a];
+            var websocketData = _LamderaWebsocket_websockets[connection.a];
 
-        console.log("Websocket: connection closed by user");
+            console.log("Websocket: connection closed by user");
 
-        if (websocketData) {
-            websocketData.websocket.close();
-            websocketData.isClosed = true;
+            if (websocketData) {
+                websocketData.websocket.close();
+                websocketData.isClosed = true;
 
-            callback(__Scheduler_succeed(0));
-        }
-        else {
-            callback(__Scheduler_succeed(0));
-        }
+                callback(__Scheduler_succeed(0));
+            }
+            else {
+                callback(__Scheduler_succeed(0));
+            }
 
         }
         catch (error) {
