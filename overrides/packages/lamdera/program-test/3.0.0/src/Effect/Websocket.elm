@@ -19,7 +19,8 @@ type Connection
     = Connection String String
 
 
-{-| Create a websocket handle that you can then open by calling listen or sendString.
+{-| Create a websocket handle that you can then open by calling `listen` or `sendString`.
+Make sure to call `close` when you are finished with it.
 -}
 createHandle : (Connection -> msg) -> String -> Command restriction toMsg msg
 createHandle gotConnection url =
