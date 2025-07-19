@@ -242,7 +242,7 @@ update msg model =
             )
 
         WebsocketSentData result ->
-            case Debug.log "SentData" result of
+            case result of
                 Ok () ->
                     ( model, Command.none )
 
@@ -348,10 +348,6 @@ update msg model =
                     )
 
                 Err error ->
-                    let
-                        _ =
-                            Debug.log "error" error
-                    in
                     ( model, Command.none )
 
         GotCurrentUserGuilds time result ->
@@ -710,7 +706,7 @@ handleDiscordCreateMessage discordGuildId message model =
         ( model, Command.none )
 
     else
-        case String.Nonempty.fromString message.content |> Debug.log "message" of
+        case String.Nonempty.fromString message.content of
             Just nonempty ->
                 let
                     maybeData =
@@ -739,7 +735,7 @@ handleDiscordCreateMessage discordGuildId message model =
                             Nothing ->
                                 Nothing
                 in
-                case ( OneToOne.second message.author.id model.discordUsers, maybeData |> Debug.log "data" ) of
+                case ( OneToOne.second message.author.id model.discordUsers, maybeData ) of
                     ( Just userId, Just { guildId, guild, channelId, channel } ) ->
                         let
                             richText : Nonempty RichText
