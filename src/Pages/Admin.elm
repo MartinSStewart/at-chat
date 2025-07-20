@@ -1301,8 +1301,8 @@ section expandedSections section2 content =
     in
     MyUi.column
         [ Ui.background MyUi.secondaryGray
-        , MyUi.rounded
-        , MyUi.padding
+        , Ui.rounded 8
+        , Ui.padding 8
         ]
         (if SeqSet.member section2 expandedSections then
             Ui.el

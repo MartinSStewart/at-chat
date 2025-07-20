@@ -10,9 +10,9 @@ module TwoFactorAuthentication exposing
     , getCode
     , getConfig
     , isValidCode
-    , twoFactor
     , update
     , updateFromBackend
+    , view
     )
 
 import Duration
@@ -121,7 +121,7 @@ type alias TwoFactorSetupData =
 
 type Msg
     = PressedStart2FaSetup
-    | PressedCopyError String
+    | PressedCopy String
     | TypedTwoFactorCode String
 
 
@@ -148,7 +148,7 @@ update msg twoFactorStatus =
                 _ ->
                     ( twoFactorStatus, Command.none )
 
-        PressedCopyError text ->
+        PressedCopy text ->
             ( twoFactorStatus, Ports.copyToClipboard text )
 
         TypedTwoFactorCode code ->
@@ -200,16 +200,17 @@ updateFromBackend toFrontend model =
                     model
 
 
-twoFactor : Time.Posix -> TwoFactorState -> Element Msg
-twoFactor time twoFactorStatus =
+view : Bool -> Time.Posix -> TwoFactorState -> Element Msg
+view isMobile time twoFactorStatus =
     container
+        isMobile
         "Two-factor authentication"
         [ case twoFactorStatus of
             TwoFactorNotStarted ->
                 MyUi.primaryButton
                     (Dom.id "userOverview_start2FaSetup")
                     PressedStart2FaSetup
-                    "Enable two factor authentication"
+                    "Add two factor authentication"
 
             TwoFactorLoading ->
                 MyUi.primaryButton
@@ -218,7 +219,7 @@ twoFactor time twoFactorStatus =
                     "Loading..."
 
             TwoFactorSetup data ->
-                twoFactorSetupView data
+                setupView isMobile data
 
             TwoFactorComplete ->
                 Ui.column
@@ -237,8 +238,8 @@ twoFactor time twoFactorStatus =
         ]
 
 
-twoFactorSetupView : TwoFactorSetupData -> Element Msg
-twoFactorSetupView { qrCodeUrl, code, attempts } =
+setupView : Bool -> TwoFactorSetupData -> Element Msg
+setupView isMobile { qrCodeUrl, code, attempts } =
     case QRCode.fromString qrCodeUrl of
         Ok qrCode ->
             let
@@ -295,12 +296,24 @@ twoFactorSetupView { qrCodeUrl, code, attempts } =
                     )
                 , step 2
                     (Ui.column
-                        [ Ui.spacing 4 ]
+                        [ Ui.spacing 8 ]
                         [ Ui.text "Scan this QR code using the app"
-                        , QRCode.toSvgWithoutQuietZone
-                            [ MyUi.widthAttr 260, MyUi.heightAttr 260 ]
-                            qrCode
-                            |> Ui.html
+                        , Ui.el
+                            [ Ui.background MyUi.white
+                            , Ui.padding 12
+                            , Ui.rounded 8
+                            , Ui.width Ui.shrink
+                            , if isMobile then
+                                Ui.centerX
+
+                              else
+                                Ui.noAttr
+                            ]
+                            (QRCode.toSvgWithoutQuietZone
+                                [ MyUi.widthAttr 260, MyUi.heightAttr 260 ]
+                                qrCode
+                                |> Ui.html
+                            )
                         ]
                     )
                 , step 3
@@ -328,29 +341,46 @@ twoFactorSetupView { qrCodeUrl, code, attempts } =
         Err _ ->
             MyUi.errorBox
                 (Dom.id "userOverview_qrCodeError")
-                PressedCopyError
+                PressedCopy
                 "Something went wrong when setting up two factor authentication"
 
 
-container : String -> List (Element msg) -> Element msg
-container label contents =
+container : Bool -> String -> List (Element msg) -> Element msg
+container isMobile label contents =
+    let
+        paddingX =
+            if isMobile then
+                8
+
+            else
+                16
+    in
     Ui.el
-        [ Ui.paddingWith { left = 0, right = 0, top = 10, bottom = 0 }
+        [ Ui.paddingWith
+            { left = paddingX
+            , right = paddingX
+            , top = 10
+            , bottom = 0
+            }
         , Ui.text label
             |> Ui.el
                 [ Ui.Font.bold
                 , Ui.Font.size 14
-                , Ui.move { x = 12, y = 0, z = 0 }
+                , Ui.move
+                    { x = paddingX + 12
+                    , y = 0
+                    , z = 0
+                    }
                 , Ui.paddingXY 2 0
                 , Ui.width Ui.shrink
-                , Ui.background MyUi.white
+                , Ui.background MyUi.background1
                 ]
             |> Ui.inFront
         ]
         (Ui.column
             [ Ui.border 1
             , Ui.rounded 4
-            , Ui.padding 12
+            , Ui.padding 16
             ]
             contents
         )

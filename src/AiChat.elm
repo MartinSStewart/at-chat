@@ -661,6 +661,7 @@ view windowSize model =
                 , Ui.attrIf (model.chatHistory == "") Ui.Font.italic
                 , containerShadow
                 , Ui.height Ui.fill
+                , Ui.background MyUi.inputBackground
                 ]
                 [ Ui.Input.multiline
                     [ Ui.border 0, MyUi.id chatHistoryInputId, Ui.paddingXY 12 8, Ui.background MyUi.inputBackground ]

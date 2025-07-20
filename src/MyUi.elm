@@ -41,11 +41,9 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
-    , padding
     , primaryButton
     , radioRowWithSeparators
     , replyToColor
-    , rounded
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
@@ -85,19 +83,9 @@ rhythm =
     8
 
 
-padding : Ui.Attribute msg
-padding =
-    Ui.padding rhythm
-
-
 spacing : Ui.Attribute msg
 spacing =
     Ui.spacing rhythm
-
-
-rounded : Ui.Attribute msg
-rounded =
-    Ui.rounded rhythm
 
 
 {-| Column with preapplied standard spacing.
@@ -440,7 +428,7 @@ button : List (Ui.Attribute msg) -> String -> Element msg
 button attrs text =
     Ui.el
         ([ Ui.paddingXY 8 4
-         , rounded
+         , Ui.rounded 8
          , Ui.border 1
          , Ui.width Ui.shrink
          , Ui.background green500

@@ -3654,7 +3654,8 @@ view model =
                                 layout
                                     loaded
                                     [ if loggedIn.showUserOptions then
-                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
+                                        UserOptions.view (MyUi.isMobile loaded) loaded.time local loggedIn
+                                            |> Ui.inFront
 
                                       else
                                         Ui.noAttr
@@ -3684,7 +3685,7 @@ view model =
                                             Local.model loggedIn.localState
                                     in
                                     if loggedIn.showUserOptions then
-                                        UserOptions.view loaded.time local loggedIn |> Ui.inFront
+                                        UserOptions.view (MyUi.isMobile loaded) loaded.time local loggedIn |> Ui.inFront
 
                                     else
                                         Ui.noAttr
