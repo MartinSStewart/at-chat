@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -75,6 +75,7 @@ These are functions that return a url pointing to a particular image.
 
 -}
 
+import Array exposing (Array)
 import Binary
 import Bitwise
 import Dict exposing (Dict)
@@ -1064,7 +1065,7 @@ teamIconUrl { size, imageType } teamId teamIconHash =
 
 discordApiUrl : String
 discordApiUrl =
-    "https://discord.com/api/v6"
+    "https://discord.com/api/v10"
 
 
 discordCdnUrl : String
@@ -1907,37 +1908,55 @@ type alias ChannelInviteConfig =
 
 
 type alias Permissions =
-    { createInstantInvite : Bool
-    , kickMembers : Bool
-    , banMembers : Bool
-    , administrator : Bool
-    , manageChannels : Bool
-    , manageGuild : Bool
-    , addReaction : Bool
-    , viewAuditLog : Bool
-    , prioritySpeaker : Bool
-    , stream : Bool
-    , viewChannel : Bool
-    , sendMessages : Bool
-    , sentTextToSpeechMessages : Bool
-    , manageMessages : Bool
-    , embedLinks : Bool
-    , attachFiles : Bool
-    , readMessageHistory : Bool
-    , mentionEveryone : Bool
-    , useExternalEmojis : Bool
-    , viewGuildInsights : Bool
-    , connect : Bool
-    , speak : Bool
-    , muteMembers : Bool
-    , deafenMembers : Bool
-    , moveMembers : Bool
-    , useVoiceActivityDetection : Bool
-    , changeNickname : Bool
-    , manageNicknames : Bool
-    , manageRoles : Bool
-    , manageWebhooks : Bool
-    , manageEmojis : Bool
+    { createInstantInvite : Bool --0
+    , kickMembers : Bool -- 1
+    , banMembers : Bool -- 2
+    , administrator : Bool -- 3
+    , manageChannels : Bool -- 4
+    , manageGuild : Bool -- 5
+    , addReaction : Bool -- 6
+    , viewAuditLog : Bool -- 7
+    , prioritySpeaker : Bool -- 8
+    , stream : Bool -- 9
+    , viewChannel : Bool -- 10
+    , sendMessages : Bool -- 11
+    , sentTextToSpeechMessages : Bool -- 12
+    , manageMessages : Bool -- 13
+    , embedLinks : Bool -- 14
+    , attachFiles : Bool -- 15
+    , readMessageHistory : Bool -- 16
+    , mentionEveryone : Bool -- 17
+    , useExternalEmojis : Bool -- 18
+    , viewGuildInsights : Bool -- 19
+    , connect : Bool -- 20
+    , speak : Bool -- 21
+    , muteMembers : Bool -- 22
+    , deafenMembers : Bool -- 23
+    , moveMembers : Bool -- 24
+    , useVoiceActivityDetection : Bool -- 25
+    , changeNickname : Bool -- 26
+    , manageNicknames : Bool -- 27
+    , manageRoles : Bool -- 28
+    , manageWebhooks : Bool -- 29
+    , manageGuildExpressions : Bool -- 30
+    , useApplicationCommands : Bool -- 31
+    , requestToSpeak : Bool -- 32
+    , manageEvents : Bool -- 33
+    , manageThreads : Bool -- 34
+    , createPublicThreads : Bool -- 35
+    , createPrivateThreads : Bool -- 36
+    , useExternalStickers : Bool -- 37
+    , sendMessagesInThreads : Bool -- 38
+    , useEmbeddedActivities : Bool -- 39
+    , moderateMembers : Bool -- 40
+    , viewCreatorMontetizationAnalytics : Bool -- 41
+    , useSoundboard : Bool -- 42
+    , createGuildExpressions : Bool -- 43
+    , createEvents : Bool -- 44
+    , useExternalSounds : Bool -- 45
+    , sendVoiceMessages : Bool -- 46
+    , sendPolls : Bool -- 49
+    , useExternalApps : Bool -- 50
     }
 
 
@@ -2608,16 +2627,90 @@ decodeGuild =
         |> JD.andMap (decodeOptionalData "approximate_presence_count" JD.int)
 
 
+stringToBinary : String -> Array Bool
+stringToBinary str =
+    if str == "0" then
+        Array.empty
+
+    else
+        stringToBinaryHelper str [] |> List.reverse |> Array.fromList
+
+
+stringToBinaryHelper : String -> List Bool -> List Bool
+stringToBinaryHelper str acc =
+    if str == "0" then
+        acc
+
+    else
+        let
+            ( quotient, remainder ) =
+                divideByTwo str
+        in
+        stringToBinaryHelper quotient (remainder :: acc)
+
+
+divideByTwo : String -> ( String, Bool )
+divideByTwo str =
+    let
+        chars =
+            String.toList str
+
+        ( result, finalRemainder ) =
+            divideByTwoHelper chars [] 0
+
+        resultStr =
+            case result of
+                [] ->
+                    "0"
+
+                _ ->
+                    String.fromList result
+    in
+    ( resultStr, finalRemainder /= 0 )
+
+
+divideByTwoHelper : List Char -> List Char -> Int -> ( List Char, Int )
+divideByTwoHelper chars acc carry =
+    case chars of
+        [] ->
+            ( List.reverse acc, carry )
+
+        c :: rest ->
+            let
+                digit =
+                    Char.toCode c - Char.toCode '0'
+
+                current =
+                    carry * 10 + digit
+
+                quotient =
+                    current // 2
+
+                remainder =
+                    modBy 2 current
+
+                newAcc =
+                    if List.isEmpty acc && quotient == 0 then
+                        acc
+
+                    else
+                        Char.fromCode (quotient + Char.toCode '0') :: acc
+            in
+            divideByTwoHelper rest newAcc remainder
+
+
 decodePermissions : JD.Decoder Permissions
 decodePermissions =
     JD.map
         (\value ->
             let
+                permissions : Array Bool
                 permissions =
-                    value |> List.singleton |> Binary.fromIntegers |> Binary.toBooleans
+                    stringToBinary value
 
+                getPermission : Int -> Bool
                 getPermission position =
-                    List.drop position permissions |> List.head |> Maybe.withDefault False
+                    Array.get position permissions |> Maybe.withDefault False
             in
             Permissions
                 (getPermission 0)
@@ -2651,8 +2744,27 @@ decodePermissions =
                 (getPermission 28)
                 (getPermission 29)
                 (getPermission 30)
+                (getPermission 31)
+                (getPermission 32)
+                (getPermission 33)
+                (getPermission 34)
+                (getPermission 35)
+                (getPermission 36)
+                (getPermission 37)
+                (getPermission 38)
+                (getPermission 39)
+                (getPermission 40)
+                (getPermission 41)
+                (getPermission 42)
+                (getPermission 43)
+                (getPermission 44)
+                (getPermission 45)
+                (getPermission 46)
+                -- This isn't a mistake, discord skips 47 and 48
+                (getPermission 49)
+                (getPermission 50)
         )
-        JD.int
+        JD.string
 
 
 decodeChannel : JD.Decoder Channel
