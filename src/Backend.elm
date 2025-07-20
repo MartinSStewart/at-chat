@@ -336,7 +336,7 @@ update msg model =
                         users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
                         users =
                             List.concatMap
-                                (\( _, ( members, _ ) ) ->
+                                (\( _, ( _, members, _ ) ) ->
                                     List.map (\member -> ( member.user.id, member )) members
                                 )
                                 data
@@ -348,6 +348,10 @@ update msg model =
                     )
 
                 Err error ->
+                    let
+                        _ =
+                            Debug.log "GotDiscordGuilds" error
+                    in
                     ( model, Command.none )
 
         GotCurrentUserGuilds time result ->
@@ -355,26 +359,31 @@ update msg model =
                 Ok guilds ->
                     ( model
                     , List.map
-                        (\guild ->
-                            Task.map2
-                                (\members channels ->
-                                    ( guild.id, ( members, channels ) )
+                        (\partialGuild ->
+                            Task.map3
+                                (\guild members channels ->
+                                    ( guild.id, ( guild, members, channels ) )
                                 )
+                                (Discord.getGuild Env.botToken partialGuild.id)
                                 (Discord.listGuildMembers
                                     Env.botToken
-                                    { guildId = guild.id
+                                    { guildId = partialGuild.id
                                     , limit = 100
                                     , after = Discord.Missing
                                     }
                                 )
-                                (Discord.getGuildChannels Env.botToken guild.id)
+                                (Discord.getGuildChannels Env.botToken partialGuild.id)
                         )
                         guilds
                         |> Task.sequence
                         |> Task.attempt (GotDiscordGuilds time)
                     )
 
-                Err _ ->
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotCurrentUserGuilds" error
+                    in
                     ( model, Command.none )
 
         SentMessageToDiscord messageId result ->
@@ -591,7 +600,7 @@ addDiscordUsers time newUsers model =
                         user =
                             LocalState.createNewUser
                                 time
-                                (PersonName.fromStringLossy (Discord.usernameToString discordUser.user.username))
+                                (PersonName.fromStringLossy discordUser.user.username)
                                 RegisteredFromDiscord
                                 False
                     in
@@ -606,12 +615,12 @@ addDiscordUsers time newUsers model =
 
 addDiscordGuilds :
     Time.Posix
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) ( List Discord.GuildMember, List Discord.Channel2 )
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 )
     -> BackendModel
     -> BackendModel
 addDiscordGuilds time guilds model =
     SeqDict.foldl
-        (\discordGuildId ( guildMembers, discordChannels ) model2 ->
+        (\discordGuildId ( discordGuild, guildMembers, discordChannels ) model2 ->
             case OneToOne.second discordGuildId model2.discordGuilds of
                 Just _ ->
                     model2
@@ -620,39 +629,53 @@ addDiscordGuilds time guilds model =
                     let
                         ownerId : Id UserId
                         ownerId =
-                            adminUserId
+                            case OneToOne.second discordGuild.ownerId model2.discordUsers of
+                                Just ownerId2 ->
+                                    ownerId2
+
+                                Nothing ->
+                                    adminUserId
 
                         channels : SeqDict (Id ChannelId) BackendChannel
                         channels =
-                            List.indexedMap
-                                (\index channel ->
-                                    case channel.type_ of
-                                        Discord.GuildText ->
-                                            ( Id.fromInt index
-                                            , { createdAt = time
-                                              , createdBy = ownerId
-                                              , name =
-                                                    (case channel.name of
-                                                        Included name ->
-                                                            name
+                            List.sortBy
+                                (\channel ->
+                                    case channel.position of
+                                        Included position ->
+                                            position
 
-                                                        Missing ->
-                                                            "Channel " ++ String.fromInt index
-                                                    )
-                                                        |> ChannelName.fromStringLossy
-                                              , messages = Array.empty
-                                              , status = ChannelActive
-                                              , lastTypedAt = SeqDict.empty
-                                              , linkedId = Just channel.id
-                                              , linkedMessageIds = OneToOne.empty
-                                              }
-                                            )
-                                                |> Just
-
-                                        _ ->
-                                            Nothing
+                                        Missing ->
+                                            9999
                                 )
                                 discordChannels
+                                |> List.indexedMap
+                                    (\index channel ->
+                                        case channel.type_ of
+                                            Discord.GuildText ->
+                                                ( Id.fromInt index
+                                                , { createdAt = time
+                                                  , createdBy = ownerId
+                                                  , name =
+                                                        (case channel.name of
+                                                            Included name ->
+                                                                name
+
+                                                            Missing ->
+                                                                "Channel " ++ String.fromInt index
+                                                        )
+                                                            |> ChannelName.fromStringLossy
+                                                  , messages = Array.empty
+                                                  , status = ChannelActive
+                                                  , lastTypedAt = SeqDict.empty
+                                                  , linkedId = Just channel.id
+                                                  , linkedMessageIds = OneToOne.empty
+                                                  }
+                                                )
+                                                    |> Just
+
+                                            _ ->
+                                                Nothing
+                                    )
                                 |> List.filterMap identity
                                 |> SeqDict.fromList
 
@@ -660,15 +683,19 @@ addDiscordGuilds time guilds model =
                         newGuild =
                             { createdAt = time
                             , createdBy = ownerId
-                            , name = GuildName.fromStringLossy "Imported"
+                            , name = GuildName.fromStringLossy discordGuild.name
                             , icon = Nothing
                             , channels = channels
                             , members =
                                 List.filterMap
                                     (\guildMember ->
-                                        case OneToOne.second guildMember.user.id model.discordUsers of
+                                        case OneToOne.second guildMember.user.id model2.discordUsers of
                                             Just userId ->
-                                                Just ( userId, { joinedAt = time } )
+                                                if userId == ownerId then
+                                                    Nothing
+
+                                                else
+                                                    Just ( userId, { joinedAt = time } )
 
                                             Nothing ->
                                                 Nothing
@@ -687,7 +714,7 @@ addDiscordGuilds time guilds model =
 
                         guildId : Id GuildId
                         guildId =
-                            Id.nextId model.guilds
+                            Id.nextId model2.guilds
                     in
                     { model2
                         | discordGuilds =

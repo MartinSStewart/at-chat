@@ -26,6 +26,7 @@ module MyUi exposing
     , gray
     , heightAttr
     , highlightedBorder
+    , hover
     , hoverAndMentionColor
     , hoverAndReplyToColor
     , hoverHighlight
@@ -72,6 +73,7 @@ import Round
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
@@ -448,6 +450,11 @@ buttonShadows =
     [ { color = Ui.rgba 0 0 0 0.1, x = 0, y = 2, blur = 4, size = -1 }
     , { color = Ui.rgba 0 0 0 0.1, x = 0, y = 0, blur = 2, size = -2 }
     ]
+
+
+hover : List Ui.Anim.Animated -> Ui.Attribute msg
+hover animated =
+    Ui.Anim.hovered (Ui.Anim.ms 10) animated
 
 
 primaryButton : HtmlId -> msg -> String -> Element msg

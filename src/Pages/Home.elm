@@ -52,7 +52,7 @@ header loginStatus =
 
 buttonAttributes : List (Ui.Attribute msg)
 buttonAttributes =
-    [ Ui.Anim.hovered (Ui.Anim.ms 10) [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
+    [ MyUi.hover [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
     , Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8

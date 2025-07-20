@@ -45,6 +45,7 @@ import Time
 import Touch
 import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Gradient
@@ -941,7 +942,7 @@ channelHeader isMobile2 content =
 
 channelHeaderHeight : number
 channelHeaderHeight =
-    40
+    38
 
 
 scrollable : Bool -> Ui.Attribute msg
@@ -1706,6 +1707,7 @@ channelColumnContainer header content =
                 , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
                 , Ui.height (Ui.px 40)
+                , MyUi.noShrinking
                 ]
                 header
             , content
@@ -1756,19 +1758,19 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                             channelNameHover == Just ( guildId, channelId )
                     in
                     Ui.row
-                        [ if isSelected then
-                            Ui.Font.color MyUi.font1
-
-                          else
-                            Ui.Font.color MyUi.font2
-                        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                         , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId)
                         , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
+                        , Ui.clipWithEllipsis
+                        , Ui.height (Ui.px channelHeaderHeight)
+                        , MyUi.hoverText (ChannelName.toString channel.name)
+                        , Ui.contentCenterY
+                        , MyUi.noShrinking
                         ]
-                        [ Ui.row
+                        [ Ui.el
                             [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId Nothing)))
                             , Ui.paddingWith
-                                { left = 8
+                                { left = 26
                                 , right =
                                     if isHover then
                                         0
@@ -1778,29 +1780,31 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                                 , top = 0
                                 , bottom = 0
                                 }
-                            , MyUi.noShrinking
-                            , Ui.height (Ui.px channelHeaderHeight)
-                            , Ui.clipWithEllipsis
-                            , MyUi.hoverText (ChannelName.toString channel.name)
-                            , Ui.contentCenterY
-                            ]
-                            [ Ui.el
+                            , Ui.el
                                 [ channelHasNotifications currentUserId currentUser guildId channelId channel
                                     |> GuildIcon.notificationView MyUi.background2
                                 , Ui.width (Ui.px 20)
-                                , Ui.paddingWith { left = 0, right = 4, top = 0, bottom = 0 }
+                                , Ui.move { x = 4, y = 0, z = 0 }
                                 ]
                                 (Ui.html Icons.hashtag)
-                            , Ui.text (ChannelName.toString channel.name)
+                                |> Ui.inFront
+                            , if isSelected then
+                                Ui.Font.color MyUi.font1
+
+                              else
+                                Ui.Font.color MyUi.font3
+                            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
                             ]
+                            (Ui.text (ChannelName.toString channel.name))
                         , if isHover then
                             Ui.el
                                 [ Ui.alignRight
                                 , Ui.width (Ui.px 26)
                                 , Ui.contentCenterY
                                 , Ui.height Ui.fill
-                                , Ui.paddingXY 4 0
+                                , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
                                 , Ui.Font.color MyUi.font3
+                                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
                                 , Ui.Input.button
                                     (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                                 ]

@@ -5,9 +5,9 @@ module Discord exposing
     , Emoji(..)
     , Guild, GuildMember, PartialGuild
     , Invite, InviteWithMetadata, InviteCode(..)
-    , username, nickname, Username(..), Nickname, NameError(..), getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
+    , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, nicknameErrorToString, nicknameToString, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, usernameErrorToString, usernameToString, websocketGatewayUrl
+    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -56,7 +56,7 @@ For that reason it's probably a good idea to have a look at the source code and 
 
 # User
 
-@docs username, nickname, Username, Nickname, NameError, getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
+@docs getCurrentUser, getCurrentUserGuilds, User, PartialUser, UserId, Permissions
 
 
 # Voice
@@ -875,78 +875,6 @@ deleteInvite authentication (InviteCode inviteCode) =
 --- USER ENDPOINTS ---
 
 
-username : String -> Result NameError Username
-username usernameText =
-    if String.length usernameText < 2 then
-        Err NameTooShort
-
-    else if String.length usernameText > 32 then
-        Err NameTooLong
-
-    else if List.any (\substring -> String.contains substring usernameText) invalidNameSubstrings then
-        Err NameContainsInvalidSubstring
-
-    else if String.any (\char -> Set.member char invalidNameCharacters) usernameText then
-        Err NameContainsInvalidCharacters
-
-    else
-        String.trim usernameText |> Username |> Ok
-
-
-usernameToString : Username -> String
-usernameToString (Username username_) =
-    username_
-
-
-nickname : String -> Result NameError Nickname
-nickname nicknameText =
-    if String.length nicknameText < 1 then
-        Err NameTooShort
-
-    else if String.length nicknameText > 32 then
-        Err NameTooLong
-
-    else
-        String.trim nicknameText |> Nickname |> Ok
-
-
-nicknameToString : Nickname -> String
-nicknameToString (Nickname nickname_) =
-    nickname_
-
-
-usernameErrorToString : NameError -> String
-usernameErrorToString usernameError =
-    case usernameError of
-        NameTooShort ->
-            "Username is too short. Must be at least 2 characters long."
-
-        NameTooLong ->
-            "Username is too long. Must be 32 characters or shorter."
-
-        NameContainsInvalidCharacters ->
-            "Username contains invalid characters."
-
-        NameContainsInvalidSubstring ->
-            "Username contains an invalid substring."
-
-
-nicknameErrorToString : NameError -> String
-nicknameErrorToString nicknameError =
-    case nicknameError of
-        NameTooShort ->
-            "Nickname is too short. Must be at least 1 character long."
-
-        NameTooLong ->
-            "Nickname is too long. Must be 32 characters or shorter."
-
-        NameContainsInvalidCharacters ->
-            "Nickname contains invalid characters."
-
-        NameContainsInvalidSubstring ->
-            "Nickname contains an invalid substring."
-
-
 {-| Returns the user object of the requester's account.
 For OAuth2, this requires the identify scope, which will return the object without an email, and optionally the email scope, which returns the object with an email.
 -}
@@ -983,7 +911,7 @@ createDmChannel authentication userId =
 -}
 modifyCurrentUser :
     Authentication
-    -> { username : Modify Username, avatar : Modify (Maybe DataUri) }
+    -> { username : Modify String, avatar : Modify (Maybe DataUri) }
     -> Task r HttpError User
 modifyCurrentUser authentication modifications =
     httpPatch
@@ -992,7 +920,7 @@ modifyCurrentUser authentication modifications =
         [ "users", "@me" ]
         []
         (JE.object
-            (encodeModify "username" encodeUsername modifications.username
+            (encodeModify "username" JE.string modifications.username
                 ++ encodeModify "avatar" (JE.maybe encodeDataUri) modifications.avatar
             )
         )
@@ -1352,16 +1280,6 @@ imageSizeQuery size =
 
         DefaultImageSize ->
             []
-
-
-invalidNameSubstrings : List String
-invalidNameSubstrings =
-    [ "discordtag", "everyone", "here", "```" ]
-
-
-invalidNameCharacters : Set Char
-invalidNameCharacters =
-    Set.fromList [ '@', '#', ':' ]
 
 
 httpErrorToString : HttpError -> String
@@ -1808,7 +1726,7 @@ type Nickname
 
 type alias GuildMember =
     { user : User
-    , nickname : Maybe Nickname
+    , nickname : Maybe String
     , roles : List (Id RoleId)
     , joinedAt : Time.Posix
     , premiumSince : OptionalData (Maybe Time.Posix)
@@ -1818,7 +1736,7 @@ type alias GuildMember =
 
 
 type alias GuildMemberNoUser =
-    { nickname : Maybe Nickname
+    { nickname : Maybe String
     , roles : List (Id RoleId)
     , joinedAt : Time.Posix
     , premiumSince : OptionalData (Maybe Time.Posix)
@@ -1934,8 +1852,14 @@ type ChannelType
     | GuildVoice
     | GroupDirectMessage
     | GuildCategory
-    | GuildNews
-    | GuildStore
+    | GuildAnnouncement
+    | AnnouncementThread
+    | PublicThread
+    | PrivateThread
+    | GuildStageVoice
+    | GuildDirectory
+    | GuildForum
+    | GuildMedia
 
 
 type alias Invite =
@@ -2028,20 +1952,9 @@ type alias Attachment =
     }
 
 
-type Username
-    = Username String
-
-
-type NameError
-    = NameTooShort
-    | NameTooLong
-    | NameContainsInvalidCharacters
-    | NameContainsInvalidSubstring
-
-
 type alias User =
     { id : Id UserId
-    , username : Username
+    , username : String
     , discriminator : UserDiscriminator
     , avatar : Maybe (ImageHash AvatarHash)
     , bot : OptionalData Bool
@@ -2058,7 +1971,7 @@ type alias User =
 
 type alias PartialUser =
     { id : Id UserId
-    , username : Username
+    , username : String
     , avatar : Maybe (ImageHash AvatarHash)
     , discriminator : UserDiscriminator
     }
@@ -2414,7 +2327,7 @@ decodeGuildMember : JD.Decoder GuildMember
 decodeGuildMember =
     JD.succeed GuildMember
         |> JD.andMap (JD.field "user" decodeUser)
-        |> JD.andMap (JD.field "nick" (JD.nullable decodeNickname))
+        |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
         |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
@@ -2425,7 +2338,7 @@ decodeGuildMember =
 decodeGuildMemberNoUser : JD.Decoder GuildMemberNoUser
 decodeGuildMemberNoUser =
     JD.succeed GuildMemberNoUser
-        |> JD.andMap (JD.field "nick" (JD.nullable decodeNickname))
+        |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
         |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
@@ -2554,7 +2467,7 @@ decodeUser : JD.Decoder User
 decodeUser =
     JD.succeed User
         |> JD.andMap (JD.field "id" Discord.Id.decodeId)
-        |> JD.andMap (JD.field "username" decodeUsername)
+        |> JD.andMap (JD.field "username" JD.string)
         |> JD.andMap (JD.field "discriminator" decodeDiscriminator)
         |> JD.andMap (JD.field "avatar" (JD.nullable decodeHash))
         |> JD.andMap (decodeOptionalData "bot" JD.bool)
@@ -2566,34 +2479,6 @@ decodeUser =
         |> JD.andMap (decodeOptionalData "flags" JD.int)
         |> JD.andMap (decodeOptionalData "premium_type" JD.int)
         |> JD.andMap (decodeOptionalData "public_flags" JD.int)
-
-
-decodeUsername : JD.Decoder Username
-decodeUsername =
-    JD.andThen
-        (\name ->
-            case username name of
-                Ok username_ ->
-                    JD.succeed username_
-
-                Err error ->
-                    JD.fail ("Invalid username. " ++ usernameErrorToString error)
-        )
-        JD.string
-
-
-decodeNickname : JD.Decoder Nickname
-decodeNickname =
-    JD.andThen
-        (\name ->
-            case nickname name of
-                Ok nickname_ ->
-                    JD.succeed nickname_
-
-                Err error ->
-                    JD.fail ("Invalid username. " ++ nicknameErrorToString error)
-        )
-        JD.string
 
 
 decodeAttachment : JD.Decoder Attachment
@@ -2828,13 +2713,31 @@ decodeChannelType =
                     JD.succeed GuildCategory
 
                 5 ->
-                    JD.succeed GuildNews
+                    JD.succeed GuildAnnouncement
 
-                6 ->
-                    JD.succeed GuildStore
+                10 ->
+                    JD.succeed AnnouncementThread
+
+                11 ->
+                    JD.succeed PublicThread
+
+                12 ->
+                    JD.succeed PrivateThread
+
+                13 ->
+                    JD.succeed GuildStageVoice
+
+                14 ->
+                    JD.succeed GuildDirectory
+
+                15 ->
+                    JD.succeed GuildForum
+
+                16 ->
+                    JD.succeed GuildMedia
 
                 _ ->
-                    JD.fail "Invalid channel type."
+                    JD.fail ("Invalid channel type: " ++ String.fromInt value)
         )
         JD.int
 
@@ -2899,7 +2802,7 @@ decodePartialUser : JD.Decoder PartialUser
 decodePartialUser =
     JD.map4 PartialUser
         (JD.field "id" Discord.Id.decodeId)
-        (JD.field "username" decodeUsername)
+        (JD.field "username" JD.string)
         (JD.field "avatar" (JD.nullable decodeHash))
         (JD.field "discriminator" decodeDiscriminator)
 
@@ -2970,11 +2873,6 @@ encodeModify fieldName encoder modify =
 
         Unchanged ->
             []
-
-
-encodeUsername : Username -> JE.Value
-encodeUsername =
-    usernameToString >> JE.string
 
 
 encodeDataUri : DataUri -> JE.Value
@@ -3230,7 +3128,7 @@ type alias GuildMemberUpdate =
     { guildId : Id GuildId
     , roles : List (Id RoleId)
     , user : User
-    , nickname : OptionalData (Maybe Nickname)
+    , nickname : OptionalData (Maybe String)
     , joinedAt : Time.Posix
     , premiumSince : OptionalData (Maybe Time.Posix)
     , deaf : OptionalData Bool
@@ -3245,7 +3143,7 @@ decodeGuildMemberUpdate =
         |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
         |> JD.andMap (JD.field "user" decodeUser)
-        |> JD.andMap (decodeOptionalData "nick" (JD.nullable decodeNickname))
+        |> JD.andMap (decodeOptionalData "nick" (JD.nullable JD.string))
         |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
         |> JD.andMap (decodeOptionalData "premium_since" (JD.nullable Iso8601.decoder))
         |> JD.andMap (decodeOptionalData "deaf" JD.bool)

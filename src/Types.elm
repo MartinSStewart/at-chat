@@ -401,7 +401,7 @@ type BackendMsg
         Time.Posix
         (Result
             Discord.HttpError
-            (List ( Discord.Id.Id Discord.Id.GuildId, ( List Discord.GuildMember, List Discord.Channel2 ) ))
+            (List ( Discord.Id.Id Discord.Id.GuildId, ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 ) ))
         )
     | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
