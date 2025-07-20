@@ -16,6 +16,7 @@ view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view isMobile time local loggedIn =
     Ui.el
         [ Ui.height Ui.fill
+        , Ui.heightMin 0
         , Ui.background MyUi.background1
         , Ui.inFront
             (Ui.row
