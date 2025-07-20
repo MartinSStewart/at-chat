@@ -485,31 +485,35 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute _ maybeMessageIndex ->
+                ChannelRoute channelId maybeMessageIndex ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( if sameGuild || previousRoute == Nothing then
-                                startOpeningChannelSidebar loggedIn
+                            handleLocalChange
+                                model.time
+                                (Just (Local_ViewChannel guildId channelId))
+                                (if sameGuild || previousRoute == Nothing then
+                                    startOpeningChannelSidebar loggedIn
 
-                              else
-                                loggedIn
-                            , Command.batch
-                                [ setFocus model3 Pages.Guild.channelTextInputId
-                                , case maybeMessageIndex of
-                                    Just messageIndex ->
-                                        smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                                            |> Task.attempt (\_ -> ScrolledToMessage)
+                                 else
+                                    loggedIn
+                                )
+                                (Command.batch
+                                    [ setFocus model3 Pages.Guild.channelTextInputId
+                                    , case maybeMessageIndex of
+                                        Just messageIndex ->
+                                            smoothScroll (Pages.Guild.messageHtmlId messageIndex)
+                                                |> Task.attempt (\_ -> ScrolledToMessage)
 
-                                    Nothing ->
-                                        if sameChannel then
-                                            Command.none
+                                        Nothing ->
+                                            if sameChannel then
+                                                Command.none
 
-                                        else
-                                            Process.sleep Duration.millisecond
-                                                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                                |> Task.attempt (\_ -> ScrolledToBottom)
-                                ]
-                            )
+                                            else
+                                                Process.sleep Duration.millisecond
+                                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                                    ]
+                                )
                         )
                         model3
 
@@ -2800,6 +2804,16 @@ changeUpdate localMsg local =
                                     IsNotAdmin
                     }
 
+                Local_ViewChannel guildId channelId ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = User.setLastChannelViewed guildId channelId localUser.user }
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -3485,6 +3499,9 @@ pendingChangesText localChange =
 
         Local_SetDiscordWebsocket isEnabled ->
             "Set discord websocket"
+
+        Local_ViewChannel _ _ ->
+            "View channel"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

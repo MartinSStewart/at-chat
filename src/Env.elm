@@ -62,13 +62,3 @@ botToken_ =
 botToken : Authentication
 botToken =
     Discord.botToken botToken_
-
-
-botId_ : String
-botId_ =
-    ""
-
-
-botId : Discord.Id.Id DiscordUserId
-botId =
-    UInt64.fromString botId_ |> Maybe.withDefault UInt64.zero |> Discord.Id.fromUInt64

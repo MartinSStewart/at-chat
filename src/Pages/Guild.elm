@@ -185,7 +185,8 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
             , Ui.background MyUi.background1
             , scrollable canScroll2
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
-            , Html.Attributes.style "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0") |> Ui.htmlAttribute
+            , Html.Attributes.style "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
+                |> Ui.htmlAttribute
             ]
             (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
@@ -195,7 +196,12 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
                                 (PressedLink
                                     (GuildRoute
                                         guildId
-                                        (ChannelRoute guild.announcementChannel Nothing)
+                                        (ChannelRoute
+                                            (SeqDict.get guildId currentUser.lastChannelViewed
+                                                |> Maybe.withDefault guild.announcementChannel
+                                            )
+                                            Nothing
+                                        )
                                     )
                                 )
                             ]
@@ -1708,6 +1714,7 @@ channelColumnContainer header content =
                 , Ui.borderColor MyUi.border1
                 , Ui.height (Ui.px 40)
                 , MyUi.noShrinking
+                , Ui.clipWithEllipsis
                 ]
                 header
             , content
@@ -1725,8 +1732,12 @@ channelColumn :
     -> Bool
     -> Element FrontendMsg
 channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
+    let
+        guildName =
+            GuildName.toString guild.name
+    in
     channelColumnContainer
-        [ Ui.text (GuildName.toString guild.name)
+        [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , Ui.el
             [ Ui.width Ui.shrink
             , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
@@ -1748,6 +1759,9 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                         isSelected =
                             case channelRoute of
                                 ChannelRoute a _ ->
+                                    a == channelId
+
+                                EditChannelRoute a ->
                                     a == channelId
 
                                 _ ->

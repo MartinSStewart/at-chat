@@ -650,31 +650,76 @@ addDiscordGuilds time guilds model =
                                 discordChannels
                                 |> List.indexedMap
                                     (\index channel ->
-                                        case channel.type_ of
-                                            Discord.GuildText ->
-                                                ( Id.fromInt index
-                                                , { createdAt = time
-                                                  , createdBy = ownerId
-                                                  , name =
-                                                        (case channel.name of
-                                                            Included name ->
-                                                                name
+                                        let
+                                            _ =
+                                                Debug.log "channel" ( index, channel.name, channel.type_ )
 
-                                                            Missing ->
-                                                                "Channel " ++ String.fromInt index
-                                                        )
-                                                            |> ChannelName.fromStringLossy
-                                                  , messages = Array.empty
-                                                  , status = ChannelActive
-                                                  , lastTypedAt = SeqDict.empty
-                                                  , linkedId = Just channel.id
-                                                  , linkedMessageIds = OneToOne.empty
-                                                  }
-                                                )
-                                                    |> Just
+                                            isTextChannel : Bool
+                                            isTextChannel =
+                                                case channel.type_ of
+                                                    Discord.GuildAnnouncement ->
+                                                        True
 
-                                            _ ->
-                                                Nothing
+                                                    Discord.GuildText ->
+                                                        True
+
+                                                    Discord.DirectMessage ->
+                                                        True
+
+                                                    Discord.GuildVoice ->
+                                                        False
+
+                                                    Discord.GroupDirectMessage ->
+                                                        True
+
+                                                    Discord.GuildCategory ->
+                                                        False
+
+                                                    Discord.AnnouncementThread ->
+                                                        True
+
+                                                    Discord.PublicThread ->
+                                                        True
+
+                                                    Discord.PrivateThread ->
+                                                        True
+
+                                                    Discord.GuildStageVoice ->
+                                                        False
+
+                                                    Discord.GuildDirectory ->
+                                                        False
+
+                                                    Discord.GuildForum ->
+                                                        False
+
+                                                    Discord.GuildMedia ->
+                                                        False
+                                        in
+                                        if isTextChannel then
+                                            ( Id.fromInt index
+                                            , { createdAt = time
+                                              , createdBy = ownerId
+                                              , name =
+                                                    (case channel.name of
+                                                        Included name ->
+                                                            name
+
+                                                        Missing ->
+                                                            "Channel " ++ String.fromInt index
+                                                    )
+                                                        |> ChannelName.fromStringLossy
+                                              , messages = Array.empty
+                                              , status = ChannelActive
+                                              , lastTypedAt = SeqDict.empty
+                                              , linkedId = Just channel.id
+                                              , linkedMessageIds = OneToOne.empty
+                                              }
+                                            )
+                                                |> Just
+
+                                        else
+                                            Nothing
                                     )
                                 |> List.filterMap identity
                                 |> SeqDict.fromList
@@ -1508,6 +1553,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
                         ]
                     )
+
+                Local_ViewChannel guildId channelId ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            ( { model2
+                                | users =
+                                    NonemptyDict.insert
+                                        userId
+                                        (User.setLastChannelViewed guildId channelId user)
+                                        model2.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
 
         TwoFactorToBackend toBackend2 ->
             asUser

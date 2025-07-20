@@ -491,6 +491,7 @@ type LocalChange
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
     | Local_DeleteMessage MessageId
     | Local_SetDiscordWebsocket IsEnabled
+    | Local_ViewChannel (Id GuildId) (Id ChannelId)
 
 
 type ToBeFilledInByBackend a
