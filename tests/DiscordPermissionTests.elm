@@ -1,5 +1,6 @@
 module DiscordPermissionTests exposing (decodePermissionHelperTests)
 
+import Array exposing (Array)
 import Discord
 import Expect
 import Test exposing (Test, describe, test)
@@ -11,27 +12,27 @@ decodePermissionHelperTests =
         [ test "converts small decimal number to binary correctly" <|
             \_ ->
                 Discord.stringToBinary "5"
-                    |> Expect.equal [ True, False, True ]
+                    |> Expect.equal (Array.fromList [ True, False, True ])
         , test "converts zero to Binary module format" <|
             \_ ->
                 Discord.stringToBinary "0"
-                    |> Expect.equal [ False ]
+                    |> Expect.equal (Array.fromList [])
         , test "converts single digit to correct binary" <|
             \_ ->
                 Discord.stringToBinary "1"
-                    |> Expect.equal [ True ]
+                    |> Expect.equal (Array.fromList [ True ])
         , test "converts power of 2 correctly" <|
             \_ ->
                 Discord.stringToBinary "8"
-                    |> Expect.equal [ False, False, False, True ]
+                    |> Expect.equal (Array.fromList [ False, False, False, True ])
         , test "converts medium number correctly" <|
             \_ ->
                 Discord.stringToBinary "255"
-                    |> Expect.equal [ True, True, True, True, True, True, True, True ]
+                    |> Expect.equal (Array.fromList [ True, True, True, True, True, True, True, True ])
         , test "handles large number that fits in Int" <|
             \_ ->
                 Discord.stringToBinary "1024"
-                    |> Expect.equal [ False, False, False, False, False, False, False, False, False, False, True ]
+                    |> Expect.equal (Array.fromList [ False, False, False, False, False, False, False, False, False, False, True ])
         , test "handles edge case of largest safe integer" <|
             \_ ->
                 Discord.stringToBinary "863286312958"
@@ -39,7 +40,7 @@ decodePermissionHelperTests =
         ]
 
 
-helper : String -> List Bool
+helper : String -> Array Bool
 helper text =
     String.toList text
         |> List.map
@@ -51,3 +52,4 @@ helper text =
                     True
             )
         |> List.reverse
+        |> Array.fromList
