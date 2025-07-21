@@ -1273,11 +1273,14 @@ sendMessageToAi aiModel text token =
                                         Err Http.NetworkError
 
                                     BadStatus_ metadata body ->
-                                        if String.contains "maximum prompt length" body then
-                                            Http.BadBody "Chat history is too long" |> Err
+                                        (if String.contains "maximum prompt length" body then
+                                            "Chat history is too long"
 
-                                        else
-                                            Http.BadStatus metadata.statusCode |> Err
+                                         else
+                                            String.fromInt metadata.statusCode ++ ": " ++ body
+                                        )
+                                            |> Http.BadBody
+                                            |> Err
 
                                     GoodStatus_ metadata body ->
                                         String.lines body
