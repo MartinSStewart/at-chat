@@ -2627,76 +2627,95 @@ decodeGuild =
         |> JD.andMap (decodeOptionalData "approximate_presence_count" JD.int)
 
 
+exp : Int
+exp =
+    32
+
+
+base : Int
+base =
+    2 ^ exp
+
+
 stringToBinary : String -> Array Bool
 stringToBinary str =
-    if str == "0" then
-        Array.empty
+    String.foldl
+        (\c acc ->
+            case acc of
+                Nothing ->
+                    Nothing
 
-    else
-        stringToBinaryHelper str [] |> List.reverse |> Array.fromList
+                Just list ->
+                    case charToInt c of
+                        Nothing ->
+                            Nothing
+
+                        Just n ->
+                            Just (normalize n (List.map (\k -> k * 10) list))
+        )
+        (Just [])
+        str
+        |> Maybe.map
+            (\list ->
+                list
+                    |> List.concatMap
+                        (\b ->
+                            b
+                                |> intToBinaryListFixed exp
+                                |> List.reverse
+                        )
+                    |> Array.fromList
+            )
+        |> Maybe.withDefault Array.empty
 
 
-stringToBinaryHelper : String -> List Bool -> List Bool
-stringToBinaryHelper str acc =
-    if str == "0" then
-        acc
-
-    else
-        let
-            ( quotient, remainder ) =
-                divideByTwo str
-        in
-        stringToBinaryHelper quotient (remainder :: acc)
-
-
-divideByTwo : String -> ( String, Bool )
-divideByTwo str =
+intToBinaryListFixed : Int -> Int -> List Bool
+intToBinaryListFixed len i =
     let
-        chars =
-            String.toList str
+        go rl r acc =
+            if rl == 0 then
+                acc
 
-        ( result, finalRemainder ) =
-            divideByTwoHelper chars [] 0
-
-        resultStr =
-            case result of
-                [] ->
-                    "0"
-
-                _ ->
-                    String.fromList result
+            else
+                go (rl - 1) (r // 2) ((modBy 2 r == 1) :: acc)
     in
-    ( resultStr, finalRemainder /= 0 )
+    go len i []
 
 
-divideByTwoHelper : List Char -> List Char -> Int -> ( List Char, Int )
-divideByTwoHelper chars acc carry =
-    case chars of
+normalize : Int -> List Int -> List Int
+normalize carry list =
+    case list of
         [] ->
-            ( List.reverse acc, carry )
+            if carry == 0 then
+                []
 
-        c :: rest ->
+            else
+                [ carry ]
+
+        head :: tail ->
             let
-                digit =
-                    Char.toCode c - Char.toCode '0'
-
-                current =
-                    carry * 10 + digit
-
-                quotient =
-                    current // 2
-
-                remainder =
-                    modBy 2 current
-
-                newAcc =
-                    if List.isEmpty acc && quotient == 0 then
-                        acc
-
-                    else
-                        Char.fromCode (quotient + Char.toCode '0') :: acc
+                newHead : Int
+                newHead =
+                    head + carry
             in
-            divideByTwoHelper rest newAcc remainder
+            if newHead >= base then
+                modBy base newHead :: normalize (newHead // base) tail
+
+            else
+                newHead :: normalize 0 tail
+
+
+charToInt : Char -> Maybe Int
+charToInt c =
+    let
+        n =
+            Char.toCode c - Char.toCode '0'
+    in
+    if n >= 0 && n <= 9 then
+        Just n
+
+    else
+        Nothing
 
 
 decodePermissions : JD.Decoder Permissions
