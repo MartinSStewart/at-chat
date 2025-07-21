@@ -1187,28 +1187,11 @@ userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3"
 
 
-headers : List Http.Header
-headers =
-    [ Http.header "Accept" "*/*"
-    , Http.header "Accept-Encoding" "gzip, deflate, br, zstd"
-    , Http.header "Accept-Language" "en-US,en;q=0.5"
-    , Http.header "Connection" "keep-alive"
-    , Http.header "Content-Type" "application/x-www-form-urlencoded; charset=UTF-8"
-    , Http.header "Host" "data.toolbaz.com"
-    , Http.header "Origin" "http://localhost:8000"
-    , Http.header "Referer" "http://localhost:8000/"
-    , Http.header "Sec-Fetch-Dest" "empty"
-    , Http.header "Sec-Fetch-Mode" "cors"
-    , Http.header "Sec-Fetch-Site" "cross-site"
-    , Http.header "User-Agent" userAgent
-    ]
-
-
 sendMessageToAi : AiModel -> String -> String -> Task BackendOnly Http.Error String
 sendMessageToAi aiModel text token =
     Http.task
         { method = "POST"
-        , headers = headers
+        , headers = [ Http.header "User-Agent" userAgent ]
         , url = "https://data.toolbaz.com/token.php"
         , body = Http.stringBody "application/x-www-form-urlencoded; charset=UTF-8" ("session_id=&token=" ++ token)
         , resolver =
@@ -1241,7 +1224,7 @@ sendMessageToAi aiModel text token =
             (\token2 ->
                 Http.task
                     { method = "POST"
-                    , headers = headers
+                    , headers = [ Http.header "User-Agent" userAgent ]
                     , url = "https://data.toolbaz.com/writing.php"
                     , body =
                         [ ( "text", text )
