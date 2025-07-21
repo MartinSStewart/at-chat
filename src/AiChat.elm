@@ -599,6 +599,18 @@ view windowSize model =
         , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
         , Ui.Font.color MyUi.font1
         , Ui.background MyUi.background1
+        , Ui.el
+            [ MyUi.htmlStyle "height" MyUi.insetTop
+            , Ui.backgroundGradient
+                [ Ui.Gradient.linear
+                    (Ui.radians 0)
+                    [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
+                    , Ui.Gradient.percent 100 MyUi.background1
+                    ]
+                ]
+            ]
+            Ui.none
+            |> Ui.inFront
         ]
         [ Ui.el
             [ Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
@@ -615,7 +627,6 @@ view windowSize model =
                         , Ui.background MyUi.buttonBackground
                         , Ui.border 1
                         , Ui.borderColor MyUi.border1
-                        , Ui.move { x = -21, y = 4, z = 0 }
                         , MyUi.htmlStyle
                             "transform"
                             ("translateX(-21px) translateY(calc(4px + " ++ MyUi.insetTop ++ "))")
@@ -650,18 +661,6 @@ view windowSize model =
                 , Ui.height Ui.fill
                 , Ui.background MyUi.inputBackground
                 , MyUi.htmlStyle "padding-top" MyUi.insetTop
-                , Ui.el
-                    [ MyUi.htmlStyle "height" MyUi.insetTop
-                    , Ui.backgroundGradient
-                        [ Ui.Gradient.linear
-                            (Ui.radians 0)
-                            [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
-                            , Ui.Gradient.percent 100 MyUi.background1
-                            ]
-                        ]
-                    ]
-                    Ui.none
-                    |> Ui.inFront
                 ]
                 [ Ui.Input.multiline
                     [ Ui.border 0
