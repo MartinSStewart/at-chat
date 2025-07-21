@@ -670,7 +670,7 @@ view windowSize model =
                     ]
                     { onChange = TypedChatHistory
                     , text = model.chatHistory
-                    , placeholder = Just "Nothing in the chat history yet!"
+                    , placeholder = Just "Nothing in the chat history yet..."
                     , label = Ui.Input.labelHidden "chat-history-label"
                     , spellcheck = True
                     }

@@ -164,12 +164,6 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
                         [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
                         , Ui.Gradient.percent 100 MyUi.background1
                         ]
-
-                    --, Ui.Gradient.linear
-                    --    (Ui.radians 0)
-                    --    [ Ui.Gradient.percent 20 (Ui.rgba 0 0 0 0)
-                    --    , Ui.Gradient.percent 100 MyUi.background1
-                    --    ]
                     ]
                 , MyUi.htmlStyle "height" ("calc(max(6px, " ++ MyUi.insetTop ++ "))")
                 ]
@@ -1840,6 +1834,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                             , Ui.Font.color MyUi.font3
                             , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
                             , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
                             , if isSelected then
                                 Ui.Font.color MyUi.font1
 

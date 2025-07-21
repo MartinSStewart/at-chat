@@ -41,7 +41,7 @@ import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Pagination
-import Ports
+import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
@@ -3752,7 +3752,26 @@ view model =
                     AiChatRoute ->
                         AiChat.view loaded.windowSize loaded.aiChatModel
                             |> Ui.map AiChatMsg
-                            |> layout loaded []
+                            |> layout loaded
+                                [ if
+                                    (loaded.aiChatModel.chatHistory == "")
+                                        && (loaded.aiChatModel.message == "")
+                                        && MyUi.isMobile loaded
+                                        && (loaded.pwaStatus == BrowserView)
+                                  then
+                                    Ui.inFront
+                                        (Ui.el
+                                            [ Ui.centerX
+                                            , Ui.centerY
+                                            , Ui.widthMax 380
+                                            , Ui.padding 16
+                                            ]
+                                            LoginForm.mobileWarning
+                                        )
+
+                                  else
+                                    Ui.noAttr
+                                ]
 
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)

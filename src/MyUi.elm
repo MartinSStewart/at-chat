@@ -722,7 +722,7 @@ font2 =
 
 font3 : Ui.Color
 font3 =
-    Ui.rgb 200 200 200
+    Ui.rgb 160 180 200
 
 
 border1 : Ui.Color

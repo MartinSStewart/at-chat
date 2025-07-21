@@ -15,6 +15,7 @@ module LoginForm exposing
     , loginCodeInputId
     , loginCodeLength
     , maxLoginAttempts
+    , mobileWarning
     , needsTwoFactor
     , needsUserData
     , rateLimited
@@ -302,6 +303,40 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
+mobileWarning : Element msg
+mobileWarning =
+    Ui.column
+        [ Ui.spacing 8 ]
+        [ --Ui.Prose.paragraph
+          --   [ Ui.Font.bold
+          --   , Ui.Font.color (Ui.rgb 204 153 0) -- Orange/brown text
+          --   ]
+          --   [ Ui.el [ Ui.width (Ui.px 48) ] (Ui.html Icons.addApp)
+          --   , Ui.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
+          --   ]
+          Html.div
+            []
+            [ Html.div
+                [ Html.Attributes.style "float" "left"
+                , Html.Attributes.style "width" "44px"
+                , Html.Attributes.style "height" "40px"
+                , Html.Attributes.style "margin-right" "8px"
+                , Html.Attributes.style "color" "rgb(179,128,0)"
+                ]
+                [ Icons.addApp ]
+            , Html.b
+                [ Html.Attributes.style "color" "rgb(204,153,0)" ]
+                [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
+            ]
+            |> Ui.html
+        , Ui.Prose.paragraph
+            [ Ui.Font.color (Ui.rgb 179 128 0) -- Darker orange/brown text
+            , Ui.Font.size 16
+            ]
+            [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
+        ]
+
+
 view : LoginForm -> Bool -> PwaStatus -> Element Msg
 view loginForm isMobile pwaStatus =
     Ui.column
@@ -323,37 +358,7 @@ view loginForm isMobile pwaStatus =
                 , Ui.padding 16
                 , Ui.width Ui.fill
                 ]
-                (Ui.column
-                    [ Ui.spacing 8 ]
-                    [ --Ui.Prose.paragraph
-                      --   [ Ui.Font.bold
-                      --   , Ui.Font.color (Ui.rgb 204 153 0) -- Orange/brown text
-                      --   ]
-                      --   [ Ui.el [ Ui.width (Ui.px 48) ] (Ui.html Icons.addApp)
-                      --   , Ui.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
-                      --   ]
-                      Html.div
-                        []
-                        [ Html.div
-                            [ Html.Attributes.style "float" "left"
-                            , Html.Attributes.style "width" "44px"
-                            , Html.Attributes.style "height" "40px"
-                            , Html.Attributes.style "margin-right" "8px"
-                            , Html.Attributes.style "color" "rgb(179,128,0)"
-                            ]
-                            [ Icons.addApp ]
-                        , Html.b
-                            [ Html.Attributes.style "color" "rgb(204,153,0)" ]
-                            [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
-                        ]
-                        |> Ui.html
-                    , Ui.Prose.paragraph
-                        [ Ui.Font.color (Ui.rgb 179 128 0) -- Darker orange/brown text
-                        , Ui.Font.size 16
-                        ]
-                        [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
-                    ]
-                )
+                mobileWarning
 
           else
             Ui.none
