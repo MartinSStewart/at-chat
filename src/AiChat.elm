@@ -1125,7 +1125,7 @@ createToken prefix randomId currentTime =
             Json.Encode.object
                 [ ( "bR6wF"
                   , Json.Encode.object
-                        [ ( "nV5kP", Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3" )
+                        [ ( "nV5kP", Json.Encode.string userAgent )
                         , ( "lQ9jX", Json.Encode.string "en-US" )
                         , ( "sD2zR", Json.Encode.string "1920x1080" )
                         , ( "tY4hL", Json.Encode.string "Europe/Berlin" )
@@ -1170,27 +1170,45 @@ backendUpdate msg =
             Lamdera.sendToFrontend clientId (AiMessageResponse responseId result)
 
 
-updateFromFrontend : SessionId -> ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
-updateFromFrontend _ clientId msg =
+updateFromFrontend : Time.Posix -> ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
+updateFromFrontend time clientId msg =
     case msg of
         AiMessageRequest aiModel responseId text ->
-            Task.map
-                (\currentTime ->
-                    Random.step
-                        (generateToken currentTime)
-                        (Random.initialSeed (Time.posixToMillis currentTime))
-                        |> Tuple.first
-                )
-                Time.now
-                |> Task.andThen (\token -> sendMessageToAi aiModel text token)
+            Random.step
+                (generateToken time)
+                (Random.initialSeed (Time.posixToMillis time))
+                |> Tuple.first
+                |> sendMessageToAi aiModel text
                 |> Task.attempt (GotAiMessage clientId responseId)
+
+
+userAgent : String
+userAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3"
+
+
+headers : List Http.Header
+headers =
+    [ Http.header "Accept" "*/*"
+    , Http.header "Accept-Encoding" "gzip, deflate, br, zstd"
+    , Http.header "Accept-Language" "en-US,en;q=0.5"
+    , Http.header "Connection" "keep-alive"
+    , Http.header "Content-Type" "application/x-www-form-urlencoded; charset=UTF-8"
+    , Http.header "Host" "data.toolbaz.com"
+    , Http.header "Origin" "http://localhost:8000"
+    , Http.header "Referer" "http://localhost:8000/"
+    , Http.header "Sec-Fetch-Dest" "empty"
+    , Http.header "Sec-Fetch-Mode" "cors"
+    , Http.header "Sec-Fetch-Site" "cross-site"
+    , Http.header "User-Agent" userAgent
+    ]
 
 
 sendMessageToAi : AiModel -> String -> String -> Task BackendOnly Http.Error String
 sendMessageToAi aiModel text token =
     Http.task
         { method = "POST"
-        , headers = []
+        , headers = headers
         , url = "https://data.toolbaz.com/token.php"
         , body = Http.stringBody "application/x-www-form-urlencoded; charset=UTF-8" ("session_id=&token=" ++ token)
         , resolver =
@@ -1223,7 +1241,7 @@ sendMessageToAi aiModel text token =
             (\token2 ->
                 Http.task
                     { method = "POST"
-                    , headers = []
+                    , headers = headers
                     , url = "https://data.toolbaz.com/writing.php"
                     , body =
                         [ ( "text", text )
