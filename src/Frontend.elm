@@ -24,13 +24,13 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildId, Id, UserId)
-import Json.Decode exposing (Decoder)
+import Id exposing (ChannelId, Id, UserId)
+import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser, Message(..))
 import LoginForm
 import MessageInput
 import MessageMenu
@@ -49,7 +49,7 @@ import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -57,7 +57,7 @@ import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser)
 import UserOptions
-import Vector2d exposing (Vector2d)
+import Vector2d
 
 
 app :
@@ -136,7 +136,7 @@ subscriptions model =
                                     NoMessageHover ->
                                         Subscription.none
 
-                                    MessageHover messageId ->
+                                    MessageHover _ ->
                                         Subscription.none
 
                                     MessageMenu messageMenuExtraOptions ->
@@ -144,13 +144,13 @@ subscriptions model =
                                             MessageMenuClosing _ ->
                                                 Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
 
-                                            MessageMenuOpening record ->
+                                            MessageMenuOpening _ ->
                                                 Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
 
-                                            MessageMenuDragging record ->
+                                            MessageMenuDragging _ ->
                                                 Subscription.none
 
-                                            MessageMenuFixed record ->
+                                            MessageMenuFixed _ ->
                                                 Subscription.none
                                 ]
 
@@ -489,7 +489,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
-                                model.time
+                                model2.time
                                 (Just (Local_ViewChannel guildId channelId))
                                 (if sameGuild || previousRoute == Nothing then
                                     startOpeningChannelSidebar loggedIn
@@ -587,7 +587,7 @@ routeRequest previousRoute newRoute model =
                             )
 
         AiChatRoute ->
-            ( model, Command.none )
+            ( model2, Command.none )
 
 
 routeRequiresLogin : Route -> Bool
@@ -1384,7 +1384,7 @@ updateLoaded msg model =
                                                         NoMessageHover ->
                                                             loggedIn2.messageHover
 
-                                                        MessageHover messageId ->
+                                                        MessageHover _ ->
                                                             loggedIn2.messageHover
 
                                                         MessageMenu extraOptions ->
@@ -1503,6 +1503,10 @@ updateLoaded msg model =
                                         edit.text
                                         loggedIn.pingUser
 
+                                oldTypingDebouncer : Bool
+                                oldTypingDebouncer =
+                                    loggedIn.typingDebouncer
+
                                 loggedIn2 : LoggedIn2
                                 loggedIn2 =
                                     { loggedIn
@@ -1517,7 +1521,7 @@ updateLoaded msg model =
                             in
                             handleLocalChange
                                 model.time
-                                (if loggedIn.typingDebouncer then
+                                (if oldTypingDebouncer then
                                     Local_MemberEditTyping
                                         model.time
                                         { guildId = guildId
@@ -1871,10 +1875,10 @@ updateLoaded msg model =
                             Command.none
                     )
 
-                DragStart posix nonemptyDict ->
+                DragStart _ _ ->
                     ( model, Command.none )
 
-                Dragging record ->
+                Dragging _ ->
                     ( model, Command.none )
 
         TouchMoved time newTouches ->
@@ -2170,17 +2174,12 @@ updateLoaded msg model =
                 NoDrag ->
                     ( model, Command.none )
 
-                Dragging record ->
+                Dragging _ ->
                     ( model, Command.none )
 
         MessageMenuAnimated elapsedTime ->
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
                     ( { loggedIn
                         | messageHover =
                             case loggedIn.messageHover of
@@ -2232,10 +2231,10 @@ updateLoaded msg model =
                                                 { messageMenu | mobileMode = MessageMenuClosing offsetNext }
                                                     |> MessageMenu
 
-                                        MessageMenuDragging record ->
+                                        MessageMenuDragging _ ->
                                             MessageMenu messageMenu
 
-                                        MessageMenuFixed quantity ->
+                                        MessageMenuFixed _ ->
                                             MessageMenu messageMenu
                       }
                     , Command.none
@@ -2376,8 +2375,8 @@ handleTouchEnd time model =
                                 menuHeight =
                                     MessageMenu.mobileMenuMaxHeight
                                         messageMenu
-                                        (Local.model loggedIn.localState)
-                                        loggedIn
+                                        (Local.model loggedIn2.localState)
+                                        loggedIn2
                                         model
 
                                 halfwayPoint : Quantity Float CssPixels
@@ -2407,7 +2406,7 @@ handleTouchEnd time model =
                 NoMessageHover ->
                     loggedIn2
 
-                MessageHover messageId ->
+                MessageHover _ ->
                     loggedIn2
             , Command.none
             )
@@ -3497,7 +3496,7 @@ pendingChangesText localChange =
         Local_DeleteMessage _ ->
             "Delete message"
 
-        Local_SetDiscordWebsocket isEnabled ->
+        Local_SetDiscordWebsocket _ ->
             "Set discord websocket"
 
         Local_ViewChannel _ _ ->

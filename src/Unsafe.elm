@@ -3,7 +3,6 @@ module Unsafe exposing
     , emailAddress
     , guildName
     , personName
-    , uint64FromString
     , url
     )
 
@@ -11,7 +10,6 @@ import ChannelName exposing (ChannelName)
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
-import UInt64 exposing (UInt64)
 import Url exposing (Url)
 
 
@@ -60,16 +58,6 @@ emailAddress a =
     case EmailAddress.fromString a of
         Just b ->
             b
-
-        Nothing ->
-            unreachable 0
-
-
-uint64FromString : String -> UInt64
-uint64FromString string =
-    case UInt64.fromString string of
-        Just a ->
-            a
 
         Nothing ->
             unreachable 0

@@ -2,7 +2,6 @@ module RoutingTests exposing (roundtrip)
 
 import Expect
 import Fuzz exposing (Fuzzer)
-import Id exposing (Id)
 import Route exposing (Route)
 import Test exposing (Test)
 import Url
@@ -44,8 +43,3 @@ routeFuzzer =
         [ Fuzz.constant Route.HomePageRoute
         , Fuzz.map Route.AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe Fuzz.int))
         ]
-
-
-idFuzzer : Fuzzer (Id a)
-idFuzzer =
-    Fuzz.map Id.Id (Fuzz.intRange 0 10000)

@@ -1,22 +1,15 @@
-port module AiChat exposing (..)
+port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, FrontendMsg(..), LocalStorage, PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, init, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
-import Base64
-import Browser exposing (UrlRequest(..))
-import Browser.Dom
-import Browser.Events
-import Browser.Navigation as Nav
-import Bytes.Encode
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (BackendOnly, Command, FrontendOnly)
 import Effect.Http as Http exposing (Response(..))
-import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
+import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task exposing (Task)
-import Effect.Time as Time
+import Effect.Task as Task
 import Env
 import Html exposing (Html)
 import Html.Attributes
@@ -25,7 +18,6 @@ import Icons
 import Json.Decode
 import Json.Encode
 import MyUi
-import Random
 import SeqDict exposing (SeqDict)
 import Serialize exposing (Codec)
 import Svg
@@ -35,7 +27,6 @@ import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
-import Url
 
 
 port save_user_settings_to_js : Json.Encode.Value -> Cmd msg
@@ -110,10 +101,6 @@ type PendingResponse
 type SendMessageWith
     = SendWithEnter
     | SendWithShiftEnter
-
-
-type alias BackendModel =
-    {}
 
 
 type FrontendMsg
@@ -272,7 +259,7 @@ errorCodec =
         |> Serialize.finishCustomType
 
 
-seqDictCodec : Codec e key -> Codec e value -> Codec e (SeqDict.SeqDict key value)
+seqDictCodec : Codec e key -> Codec e value -> Codec e (SeqDict key value)
 seqDictCodec keyCodec valueCodec =
     Serialize.map
         SeqDict.fromList
@@ -483,7 +470,7 @@ update msg model =
                                     Pending ->
                                         response
 
-                                    GotError error ->
+                                    GotError _ ->
                                         response
                             )
                             model.pendingResponses
@@ -567,12 +554,12 @@ updateFromBackend msg model =
                     ( model, Command.none )
 
 
-chatHistoryId : Dom.HtmlId
+chatHistoryId : HtmlId
 chatHistoryId =
     Dom.id "chat-history"
 
 
-chatHistoryInputId : Dom.HtmlId
+chatHistoryInputId : HtmlId
 chatHistoryInputId =
     Dom.id "chat-history-input"
 
@@ -708,7 +695,7 @@ view windowSize model =
         ]
 
 
-responseView : Int -> Int -> ResponseId -> PendingResponse -> Ui.Element FrontendMsg
+responseView : Int -> Int -> ResponseId -> PendingResponse -> Element FrontendMsg
 responseView windowWidth responseCount responseId response =
     Ui.el
         [ min
@@ -727,7 +714,7 @@ responseView windowWidth responseCount responseId response =
                 Pending ->
                     Ui.none
 
-                GotError error ->
+                GotError _ ->
                     Ui.none
           , responseButton
                 (PressedRetry responseId)
@@ -819,7 +806,7 @@ responseView windowWidth responseCount responseId response =
         )
 
 
-responseButton : msg -> Ui.Color -> Html msg -> String -> Ui.Element msg
+responseButton : msg -> Ui.Color -> Html msg -> String -> Element msg
 responseButton msg color icon text =
     Ui.row
         [ Ui.background color
@@ -832,7 +819,7 @@ responseButton msg color icon text =
         [ Ui.el [ Ui.width (Ui.px 20), Ui.centerY ] (Ui.html icon), Ui.text text ]
 
 
-showOptionsButton : Ui.Element FrontendMsg
+showOptionsButton : Element FrontendMsg
 showOptionsButton =
     Ui.el
         [ Ui.Input.button PressedOptionsButton
@@ -847,10 +834,10 @@ showOptionsButton =
         (Ui.html Icons.gearIcon)
 
 
-optionsView : FrontendModel -> Ui.Element FrontendMsg
+optionsView : FrontendModel -> Element FrontendMsg
 optionsView model =
     let
-        userPrefixLabel : { element : Ui.Element FrontendMsg, id : Ui.Input.Label }
+        userPrefixLabel : { element : Element FrontendMsg, id : Ui.Input.Label }
         userPrefixLabel =
             Ui.Input.label
                 "user-label"
@@ -860,7 +847,7 @@ optionsView model =
                 ]
                 (Ui.text "User's name")
 
-        botPrefixLabel : { element : Ui.Element FrontendMsg, id : Ui.Input.Label }
+        botPrefixLabel : { element : Element FrontendMsg, id : Ui.Input.Label }
         botPrefixLabel =
             Ui.Input.label
                 "bot-label"
@@ -979,7 +966,7 @@ containerShadow =
     Ui.Shadow.shadows [ { x = 0, y = 2, blur = 8, size = 0, color = Ui.rgba 0 0 0 0.1 } ]
 
 
-userMessageView : FrontendModel -> Ui.Element FrontendMsg
+userMessageView : FrontendModel -> Element FrontendMsg
 userMessageView model =
     let
         message =
@@ -1140,10 +1127,10 @@ updateFromFrontend clientId msg =
                                 NetworkError_ ->
                                     Err Http.NetworkError
 
-                                BadStatus_ metadata body ->
+                                BadStatus_ _ body ->
                                     Http.BadBody body |> Err
 
-                                GoodStatus_ metadata body ->
+                                GoodStatus_ _ body ->
                                     case
                                         Json.Decode.decodeString
                                             (Json.Decode.field

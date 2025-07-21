@@ -14,14 +14,14 @@ module Pages.Guild exposing
 
 import Array
 import ChannelName
-import Coord exposing (Coord)
+import Coord
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
 import GuildIcon exposing (NotificationType(..))
 import GuildName
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)

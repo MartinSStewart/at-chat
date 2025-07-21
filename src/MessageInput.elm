@@ -28,7 +28,6 @@ import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
-import Ui.Events
 import Ui.Font
 import Ui.Input
 import User exposing (FrontendUser)

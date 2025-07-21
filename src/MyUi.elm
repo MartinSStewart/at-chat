@@ -11,7 +11,6 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , column
-    , contentContainerAttributes
     , css
     , datestamp
     , deleteButton
@@ -50,7 +49,6 @@ module MyUi exposing
     , secondaryGrayBorder
     , textLinkColor
     , timeElapsedView
-    , touchPress
     , userLabelHtml
     , white
     , widthAttr
@@ -66,9 +64,9 @@ import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
 import Id exposing (Id, UserId)
-import Json.Decode exposing (Decoder)
+import Json.Decode
 import PersonName exposing (PersonName)
-import Quantity exposing (Quantity)
+import Quantity
 import Round
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
@@ -469,14 +467,6 @@ primaryButton htmlId onPress text =
 touchPress : msg -> Ui.Attribute msg
 touchPress onPress =
     Html.Events.Extra.Touch.onStart (\_ -> onPress) |> Ui.htmlAttribute
-
-
-contentContainerAttributes : List (Ui.Attribute msg)
-contentContainerAttributes =
-    [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }
-    , Ui.centerX
-    , Ui.widthMax 1000
-    ]
 
 
 montserrat : Ui.Attribute msg

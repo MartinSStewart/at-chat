@@ -315,11 +315,7 @@ menuItems isMobile messageId position local model =
                         canEditAndDelete =
                             case message of
                                 UserTextMessage data ->
-                                    if data.createdBy == local.localUser.userId then
-                                        True
-
-                                    else
-                                        False
+                                    data.createdBy == local.localUser.userId
 
                                 _ ->
                                     False

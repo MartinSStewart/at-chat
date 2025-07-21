@@ -7,7 +7,7 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -148,8 +148,3 @@ encode route =
                     )
     in
     Url.Builder.absolute path query
-
-
-idToPath : Id a -> String
-idToPath id =
-    Id.toString id |> Url.percentEncode

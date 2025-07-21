@@ -62,7 +62,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), EmailStatus(..), FrontendUser)
+import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 
 
 type alias LocalState =

@@ -1,5 +1,6 @@
 module RichText exposing
-    ( RichText(..)
+    ( Language
+    , RichText(..)
     , RichTextState
     , append
     , fromNonemptyString
@@ -257,7 +258,7 @@ parser users modifiers =
             --in
             getRemainingText
                 |> Parser.andThen
-                    (\remainingText ->
+                    (\_ ->
                         --let
                         --    _ =
                         --        Debug.log "remaining" remainingText
@@ -296,7 +297,7 @@ parser users modifiers =
                             , Parser.succeed
                                 (\( language, text ) ->
                                     case String.Nonempty.fromString text of
-                                        Just a ->
+                                        Just _ ->
                                             Loop
                                                 { current = Array.empty
                                                 , rest =
@@ -595,7 +596,7 @@ mentionsUser userId nonempty =
                 InlineCode _ _ ->
                     False
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     False
         )
         nonempty
@@ -790,7 +791,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                            ]
                     )
 
-                CodeBlock language text ->
+                CodeBlock _ text ->
                     ( spoilerIndex2
                     , currentList
                         ++ [ Html.div

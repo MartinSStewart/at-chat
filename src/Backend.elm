@@ -300,14 +300,14 @@ update msg model =
                         Discord.UserCreatedMessage discordGuildId message ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDiscordCreateMessage discordGuildId message model
+                                    handleDiscordCreateMessage discordGuildId message model2
                             in
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model
+                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -394,26 +394,21 @@ update msg model =
                             SeqDict.updateIfExists
                                 messageId.guildId
                                 (\guild ->
-                                    let
-                                        guild2 : BackendGuild
-                                        guild2 =
-                                            { guild
-                                                | channels =
-                                                    SeqDict.updateIfExists
-                                                        messageId.channelId
-                                                        (\channel ->
-                                                            { channel
-                                                                | linkedMessageIds =
-                                                                    OneToOne.insert
-                                                                        message.id
-                                                                        messageId.messageIndex
-                                                                        channel.linkedMessageIds
-                                                            }
-                                                        )
-                                                        guild.channels
-                                            }
-                                    in
-                                    guild2
+                                    { guild
+                                        | channels =
+                                            SeqDict.updateIfExists
+                                                messageId.channelId
+                                                (\channel ->
+                                                    { channel
+                                                        | linkedMessageIds =
+                                                            OneToOne.insert
+                                                                message.id
+                                                                messageId.messageIndex
+                                                                channel.linkedMessageIds
+                                                    }
+                                                )
+                                                guild.channels
+                                    }
                                 )
                                 model.guilds
                       }
@@ -1393,7 +1388,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> ServerChange
                                             )
                                             model2
-                                        , case SeqDict.get messageId.channelId guild.channels of
+                                        , case SeqDict.get messageId.channelId guild2.channels of
                                             Just channel ->
                                                 case
                                                     ( channel.linkedId
@@ -1407,7 +1402,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     Env.botToken
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
-                                                                    , content = toDiscordContent user model newContent
+                                                                    , content = toDiscordContent user model2 newContent
                                                                     }
                                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
@@ -1506,7 +1501,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             clientId
                                             (Server_DeleteMessage userId messageId |> ServerChange)
                                             model2
-                                        , case SeqDict.get messageId.channelId guild.channels of
+                                        , case SeqDict.get messageId.channelId guild2.channels of
                                             Just channel ->
                                                 case
                                                     ( channel.linkedId
@@ -1914,7 +1909,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                     clientId
                     (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
                     model
-                , case channel.linkedId of
+                , case channel2.linkedId of
                     Just discordChannelId ->
                         Discord.createMessage
                             Env.botToken
@@ -1968,11 +1963,10 @@ broadcastToGuild msg model =
         (\( _, otherClientIds ) ->
             NonemptyDict.keys otherClientIds
                 |> List.Nonempty.toList
-                |> List.filterMap
+                |> List.map
                     (\otherClientId ->
                         ChangeBroadcast msg
                             |> Lamdera.sendToFrontend otherClientId
-                            |> Just
                     )
         )
         (SeqDict.toList model.connections)

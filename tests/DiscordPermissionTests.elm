@@ -16,7 +16,7 @@ decodePermissionHelperTests =
         , test "converts zero to Binary module format" <|
             \_ ->
                 Discord.stringToBinary "0"
-                    |> Expect.equal (Array.fromList [])
+                    |> Expect.equal Array.empty
         , test "converts single digit to correct binary" <|
             \_ ->
                 Discord.stringToBinary "1"
@@ -45,11 +45,7 @@ helper text =
     String.toList text
         |> List.map
             (\char ->
-                if char == '0' then
-                    False
-
-                else
-                    True
+                char /= '0'
             )
         |> List.reverse
         |> Array.fromList
