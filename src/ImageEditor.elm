@@ -389,7 +389,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , Ui.htmlAttribute (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
                             ]
                             Ui.none
                         )
@@ -406,7 +406,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , Ui.htmlAttribute (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
                             ]
                             Ui.none
                         )
@@ -423,7 +423,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , Ui.htmlAttribute (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
                             ]
                             Ui.none
                         )
@@ -440,7 +440,7 @@ view windowSize model =
 
                         Nothing ->
                             Ui.el
-                                [ Ui.htmlAttribute (Html.Attributes.style "pointer-events" "none")
+                                [ MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
                                 ]
                                 (Ui.html
                                     (Html.img
@@ -464,17 +464,17 @@ view windowSize model =
                         (Json.Decode.field "offsetX" Json.Decode.float)
                         (Json.Decode.field "offsetY" Json.Decode.float)
                         |> Html.Events.preventDefaultOn "mousedown"
-                        |> Ui.htmlAttribute
+                        |> MyUi.htmlStyle
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> Ui.htmlAttribute
+                            |> MyUi.htmlStyle
 
                       else
                         Json.Decode.map2 (\x_ y_ -> ( MovedImageEditor x_ y_, True ))
                             (Json.Decode.field "offsetX" Json.Decode.float)
                             (Json.Decode.field "offsetY" Json.Decode.float)
                             |> Html.Events.preventDefaultOn "mousemove"
-                            |> Ui.htmlAttribute
+                            |> MyUi.htmlStyle
                     , Html.Events.Extra.Touch.onStart
                         (\event ->
                             case List.reverse event.touches |> List.head of
@@ -484,11 +484,11 @@ view windowSize model =
                                 Nothing ->
                                     MouseDownImageEditor 0 0
                         )
-                        |> Ui.htmlAttribute
-                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> Ui.htmlAttribute
+                        |> MyUi.htmlStyle
+                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> MyUi.htmlStyle
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> Ui.htmlAttribute
+                            |> MyUi.htmlStyle
 
                       else
                         Html.Events.Extra.Touch.onMove
@@ -500,7 +500,7 @@ view windowSize model =
                                     Nothing ->
                                         MovedImageEditor 0 0
                             )
-                            |> Ui.htmlAttribute
+                            |> MyUi.htmlStyle
                     , drawNode x y
                     , drawNode (x + size) y
                     , drawNode x (y + size)

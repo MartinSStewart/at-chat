@@ -22,7 +22,7 @@ header loginStatus =
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ Html.Attributes.style "padding" (MyUi.insetTop ++ " 16px 0 16px") |> Ui.htmlAttribute
+            [ MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 16px 0 16px")
             , Ui.contentCenterY
             , MyUi.montserrat
             , Ui.widthMax 1280

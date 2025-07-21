@@ -30,6 +30,7 @@ module MyUi exposing
     , hoverAndReplyToColor
     , hoverHighlight
     , hoverText
+    , htmlStyle
     , id
     , inputBackground
     , inputBorder
@@ -412,7 +413,7 @@ radioRowWithSeparators attrs selected onPress separator children =
 
 noPointerEvents : Ui.Attribute msg
 noPointerEvents =
-    Html.Attributes.style "pointer-events" "none" |> Ui.htmlAttribute
+    htmlStyle "pointer-events" "none"
 
 
 
@@ -467,6 +468,11 @@ primaryButton htmlId onPress text =
 touchPress : msg -> Ui.Attribute msg
 touchPress onPress =
     Html.Events.Extra.Touch.onStart (\_ -> onPress) |> Ui.htmlAttribute
+
+
+htmlStyle : String -> String -> Ui.Attribute msg
+htmlStyle name value =
+    Ui.htmlAttribute (Html.Attributes.style name value)
 
 
 montserrat : Ui.Attribute msg
@@ -646,7 +652,7 @@ isMobile model =
 
 noShrinking : Ui.Attribute msg
 noShrinking =
-    Ui.htmlAttribute (Html.Attributes.style "flex-shrink" "0")
+    htmlStyle "flex-shrink" "0"
 
 
 background1 : Ui.Color

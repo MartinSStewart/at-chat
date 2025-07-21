@@ -184,7 +184,7 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
                 Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
             , Ui.heightMin 0
             , Ui.heightMax 400
-            , Ui.htmlAttribute (Html.Attributes.style "scrollbar-color" "black")
+            , MyUi.htmlStyle "scrollbar-color" "black"
             , Ui.background MyUi.background2
             ]
         |> Ui.el

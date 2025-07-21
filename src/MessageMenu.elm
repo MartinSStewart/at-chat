@@ -172,7 +172,8 @@ view model extraOptions local loggedIn =
                     }
                 , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
                 , Ui.background (Ui.rgb 0 0 0)
-                , Html.Attributes.style "padding"
+                , MyUi.htmlStyle
+                    "padding"
                     (String.fromInt topPadding
                         ++ "px 8px calc("
                         ++ MyUi.insetBottom
@@ -180,7 +181,6 @@ view model extraOptions local loggedIn =
                         ++ String.fromInt bottomPadding
                         ++ "px) 8px"
                     )
-                    |> Ui.htmlAttribute
                 , MyUi.blockClickPropagation MessageMenu_PressedContainer
                 ]
                 (Ui.el

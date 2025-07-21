@@ -25,6 +25,7 @@ import Svg.Attributes
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
+import Ui.Gradient
 import Ui.Input
 import Ui.Shadow
 
@@ -585,7 +586,7 @@ view windowSize model =
     in
     Ui.column
         [ if isMobile2 then
-            Ui.paddingXY 0 0
+            MyUi.htmlStyle "padding-bottom" MyUi.insetBottom
 
           else
             Ui.paddingXY 16 16
@@ -615,6 +616,9 @@ view windowSize model =
                         , Ui.border 1
                         , Ui.borderColor MyUi.border1
                         , Ui.move { x = -21, y = 4, z = 0 }
+                        , MyUi.htmlStyle
+                            "transform"
+                            ("translateX(-21px) translateY(calc(4px + " ++ MyUi.insetTop ++ "))")
                         , Ui.Font.size 14
                         , Ui.Font.bold
                         , Ui.spacing 4
@@ -630,7 +634,7 @@ view windowSize model =
             ]
             (Ui.column
                 [ Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
-                , Ui.htmlAttribute (Html.Attributes.style "overflow-y" "scroll")
+                , MyUi.htmlStyle "overflow-y" "scroll"
                 , Ui.attrIf (not isMobile2) (Ui.rounded 4)
                 , Ui.borderColor MyUi.inputBorder
                 , if isMobile2 then
@@ -645,9 +649,26 @@ view windowSize model =
                 , containerShadow
                 , Ui.height Ui.fill
                 , Ui.background MyUi.inputBackground
+                , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                , Ui.el
+                    [ MyUi.htmlStyle "height" MyUi.insetTop
+                    , Ui.backgroundGradient
+                        [ Ui.Gradient.linear
+                            (Ui.radians 0)
+                            [ Ui.Gradient.percent 0 (Ui.rgba 0 0 0 0)
+                            , Ui.Gradient.percent 100 MyUi.background1
+                            ]
+                        ]
+                    ]
+                    Ui.none
+                    |> Ui.inFront
                 ]
                 [ Ui.Input.multiline
-                    [ Ui.border 0, MyUi.id chatHistoryInputId, Ui.paddingXY 12 8, Ui.background MyUi.inputBackground ]
+                    [ Ui.border 0
+                    , MyUi.id chatHistoryInputId
+                    , Ui.paddingXY 12 8
+                    , Ui.background MyUi.inputBackground
+                    ]
                     { onChange = TypedChatHistory
                     , text = model.chatHistory
                     , placeholder = Just "Nothing in the chat history yet!"
@@ -670,8 +691,6 @@ view windowSize model =
                 , Ui.centerX
                 , Ui.spacing 8
                 , Ui.height (Ui.px (Coord.yRaw windowSize // 2))
-
-                --, Ui.htmlAttribute (Html.Attributes.style "flex-shrink" "0")
                 ]
                 (SeqDict.toList model.pendingResponses
                     |> List.map
@@ -770,7 +789,7 @@ responseView windowWidth responseCount responseId response =
                     ]
                     (Ui.Input.multiline
                         [ Ui.paddingXY 8 8
-                        , Ui.htmlAttribute (Html.Attributes.style "white-space" "pre-wrap")
+                        , MyUi.htmlStyle "white-space" "pre-wrap"
                         , Ui.border 0
                         , Ui.background MyUi.inputBackground
                         ]
@@ -1029,7 +1048,7 @@ userMessageView model =
             , Ui.borderColor MyUi.inputBorder
             , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
             , Ui.roundedWith { topLeft = 0, topRight = 4, bottomRight = 4, bottomLeft = 0 }
-            , Ui.htmlAttribute (Html.Attributes.style "flex-shrink" "0")
+            , MyUi.noShrinking
             ]
             (Ui.html sendIcon)
         ]

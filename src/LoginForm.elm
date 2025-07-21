@@ -481,7 +481,7 @@ loginCodeInput codeLength onInput loginCode label =
             [ Ui.Font.letterSpacing 26
             , Ui.paddingWith { left = 6, right = 0, top = 0, bottom = 8 }
             , inputFont
-            , Html.Attributes.attribute "inputmode" "numeric" |> Ui.htmlAttribute
+            , MyUi.htmlStyle "inputmode" "numeric"
             , Ui.border 0
             , Ui.background (Ui.rgba 0 0 0 0)
             , Ui.Font.color MyUi.font1

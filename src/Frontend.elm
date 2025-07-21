@@ -3590,8 +3590,8 @@ layout model attributes child =
                         )
                         |> Ui.htmlAttribute
                     , Ui.clip
-                    , Ui.htmlAttribute (Html.Attributes.style "user-select" "none")
-                    , Ui.htmlAttribute (Html.Attributes.style "-webkit-user-select" "none")
+                    , MyUi.htmlStyle "user-select" "none"
+                    , MyUi.htmlStyle "-webkit-user-select" "none"
                     ]
 
                 else

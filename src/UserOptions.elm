@@ -21,8 +21,7 @@ view isMobile time local loggedIn =
         , Ui.inFront
             (Ui.row
                 [ Ui.background MyUi.background1
-                , Html.Attributes.style "padding-top" MyUi.insetTop
-                    |> Ui.htmlAttribute
+                , MyUi.htmlStyle "padding-top" MyUi.insetTop
                 , Ui.el
                     [ Ui.alignBottom
                     , Ui.paddingXY
@@ -55,10 +54,9 @@ view isMobile time local loggedIn =
             )
         ]
         (Ui.column
-            [ Html.Attributes.style
+            [ MyUi.htmlStyle
                 "padding"
                 ("calc(80px + " ++ MyUi.insetTop ++ ") 0 calc(24px + " ++ MyUi.insetBottom ++ ") 0")
-                |> Ui.htmlAttribute
 
             --Ui.paddingXY 0 64
             , Ui.spacing 16
