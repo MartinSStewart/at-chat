@@ -1583,7 +1583,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             , Command.map
                 AiChatToFrontend
                 AiChatBackendMsg
-                (AiChat.updateFromFrontend time clientId aiChatToBackend)
+                (AiChat.updateFromFrontend clientId aiChatToBackend)
             )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->

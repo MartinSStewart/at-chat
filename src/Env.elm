@@ -62,3 +62,8 @@ botToken_ =
 botToken : Authentication
 botToken =
     Discord.botToken botToken_
+
+
+openRouterKey : String
+openRouterKey =
+    ""

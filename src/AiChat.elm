@@ -17,6 +17,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
+import Env
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -74,11 +75,12 @@ type alias FrontendModel =
     , pendingResponses : SeqDict ResponseId PendingResponse
     , responseCounter : Int
     , showOptions : Bool
-    , selectedModel : AiModel
+    , selectedModel : Maybe String
     , userPrefix : String
     , botPrefix : String
     , debounceCounter : Int
     , sendMessageWith : SendMessageWith
+    , aiModels : AiModelsStatus
     }
 
 
@@ -87,22 +89,12 @@ type alias LocalStorage =
     , chatHistory : String
     , pendingResponses : SeqDict ResponseId PendingResponse
     , showOptions : Bool
-    , selectedModel : AiModel
+    , selectedModel : Maybe String
     , userPrefix : String
     , botPrefix : String
     , sendMessageWith : SendMessageWith
     , responseCounter : Int
     }
-
-
-type AiModel
-    = Gemini_2_5_Flash
-    | GPT4o
-    | Grok3
-    | Llama4Maverick
-    | L3EuryaleV2_1
-    | MidnightRose
-    | Unfiltered_X
 
 
 type ResponseId
@@ -134,7 +126,7 @@ type FrontendMsg
     | PressedChatHistoryContainer
     | PressedClearChatHistory
     | PressedOptionsButton
-    | SelectedAiModel AiModel
+    | SelectedAiModel String
     | SelectedSendMessageWith SendMessageWith
     | TypedUserPrefix String
     | TypedBotPrefix String
@@ -142,10 +134,11 @@ type FrontendMsg
     | GotLocalStorage String
     | EditedResponse ResponseId String
     | NoOpFrontendMsg
+    | GotAiModels (Result Http.Error (List String))
 
 
 type ToBackend
-    = AiMessageRequest AiModel ResponseId String
+    = AiMessageRequest String ResponseId String
 
 
 type BackendMsg
@@ -167,14 +160,36 @@ init =
       , pendingResponses = SeqDict.empty
       , responseCounter = 0
       , showOptions = True
-      , selectedModel = GPT4o
+      , selectedModel = Nothing
       , userPrefix = "[user]"
       , botPrefix = "[bot]"
       , debounceCounter = 0
       , sendMessageWith = SendWithShiftEnter
+      , aiModels = LoadingAiModels
       }
-    , loadUserSettingsToJs
+    , Command.batch
+        [ loadUserSettingsToJs
+        , Http.get
+            { url = "https://openrouter.ai/api/v1/models"
+            , expect = Http.expectJson GotAiModels decodeModels
+            }
+        ]
     )
+
+
+type AiModelsStatus
+    = LoadingAiModels
+    | LoadedAiModels (List String)
+    | LoadingFailed Http.Error
+
+
+decodeModels : Json.Decode.Decoder (List String)
+decodeModels =
+    Json.Decode.field
+        "data"
+        (Json.Decode.list
+            (Json.Decode.field "id" Json.Decode.string)
+        )
 
 
 subscriptions : Subscription FrontendOnly FrontendMsg
@@ -189,7 +204,7 @@ localStorageCodec =
         |> Serialize.field .chatHistory Serialize.string
         |> Serialize.field .pendingResponses (seqDictCodec responseIdCodec pendingResponseCodec)
         |> Serialize.field .showOptions Serialize.bool
-        |> Serialize.field .selectedModel aiModelCodec
+        |> Serialize.field .selectedModel (Serialize.maybe Serialize.string)
         |> Serialize.field .userPrefix Serialize.string
         |> Serialize.field .botPrefix Serialize.string
         |> Serialize.field .sendMessageWith sendMessageWithCodec
@@ -265,13 +280,6 @@ seqDictCodec keyCodec valueCodec =
         (Serialize.list (Serialize.tuple keyCodec valueCodec))
 
 
-aiModelCodec : Codec e AiModel
-aiModelCodec =
-    Serialize.enum
-        Gemini_2_5_Flash
-        [ GPT4o, Grok3, Llama4Maverick, L3EuryaleV2_1, MidnightRose, Unfiltered_X ]
-
-
 sendMessageWithCodec : Codec e SendMessageWith
 sendMessageWithCodec =
     Serialize.enum
@@ -340,37 +348,42 @@ update msg model =
 
         PressedSend ->
             if SeqDict.size model.pendingResponses < 3 then
-                let
-                    newChatHistory : String
-                    newChatHistory =
-                        if String.trim model.message == "" then
-                            model.chatHistory
+                case model.selectedModel of
+                    Just aiModel ->
+                        let
+                            newChatHistory : String
+                            newChatHistory =
+                                if String.trim model.message == "" then
+                                    model.chatHistory
 
-                        else
-                            String.trimRight model.chatHistory
-                                ++ prefixWrapper model.userPrefix
-                                ++ String.trim model.message
-                                ++ prefixWrapper model.botPrefix
-                                |> String.trimLeft
+                                else
+                                    String.trimRight model.chatHistory
+                                        ++ prefixWrapper model.userPrefix
+                                        ++ String.trim model.message
+                                        ++ prefixWrapper model.botPrefix
+                                        |> String.trimLeft
 
-                    responseId =
-                        RespondId model.responseCounter
-                in
-                ( { model
-                    | message = ""
-                    , chatHistory = newChatHistory
-                    , pendingResponses =
-                        SeqDict.insert
-                            responseId
-                            Pending
-                            model.pendingResponses
-                    , responseCounter = model.responseCounter + 1
-                  }
-                , Command.batch
-                    [ Lamdera.sendToBackend (AiMessageRequest model.selectedModel responseId newChatHistory)
-                    , scrollToBottom
-                    ]
-                )
+                            responseId =
+                                RespondId model.responseCounter
+                        in
+                        ( { model
+                            | message = ""
+                            , chatHistory = newChatHistory
+                            , pendingResponses =
+                                SeqDict.insert
+                                    responseId
+                                    Pending
+                                    model.pendingResponses
+                            , responseCounter = model.responseCounter + 1
+                          }
+                        , Command.batch
+                            [ Lamdera.sendToBackend (AiMessageRequest aiModel responseId newChatHistory)
+                            , scrollToBottom
+                            ]
+                        )
+
+                    Nothing ->
+                        ( model, Command.none )
 
             else
                 ( model, Command.none )
@@ -395,14 +408,19 @@ update msg model =
             saveToLocalStorage { model | pendingResponses = SeqDict.remove responseId model.pendingResponses }
 
         PressedRetry responseId ->
-            ( { model
-                | pendingResponses = SeqDict.insert responseId Pending model.pendingResponses
-              }
-            , Command.batch
-                [ Lamdera.sendToBackend (AiMessageRequest model.selectedModel responseId model.chatHistory)
-                , scrollToTop (responseContainerId responseId)
-                ]
-            )
+            case model.selectedModel of
+                Just aiModel ->
+                    ( { model
+                        | pendingResponses = SeqDict.insert responseId Pending model.pendingResponses
+                      }
+                    , Command.batch
+                        [ Lamdera.sendToBackend (AiMessageRequest aiModel responseId model.chatHistory)
+                        , scrollToTop (responseContainerId responseId)
+                        ]
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
         PressedChatHistoryContainer ->
             ( model, Dom.focus chatHistoryInputId |> Task.attempt (\_ -> NoOpFrontendMsg) )
@@ -414,7 +432,7 @@ update msg model =
             saveToLocalStorage { model | showOptions = not model.showOptions }
 
         SelectedAiModel aiModel ->
-            saveToLocalStorage { model | selectedModel = aiModel }
+            saveToLocalStorage { model | selectedModel = Just aiModel }
 
         SelectedSendMessageWith sendMessageWith ->
             saveToLocalStorage { model | sendMessageWith = sendMessageWith }
@@ -474,6 +492,21 @@ update msg model =
         NoOpFrontendMsg ->
             ( model, Command.none )
 
+        GotAiModels result ->
+            ( case result of
+                Ok ok ->
+                    { model
+                        | aiModels = LoadedAiModels (List.sort ok)
+                        , selectedModel = Just "anthropic/claude-sonnet-4"
+                    }
+
+                Err err ->
+                    { model
+                        | aiModels = LoadingFailed err
+                    }
+            , Command.none
+            )
+
 
 prefixWrapper : String -> String
 prefixWrapper prefix =
@@ -493,48 +526,6 @@ scrollToTop id =
 responseContainerId : ResponseId -> HtmlId
 responseContainerId (RespondId responseId) =
     "responseContainer_" ++ String.fromInt responseId |> Dom.id
-
-
-aiModelToString : AiModel -> String
-aiModelToString model =
-    case model of
-        Gemini_2_5_Flash ->
-            "Gemini 2.5 Flash"
-
-        GPT4o ->
-            "GPT-4o"
-
-        Grok3 ->
-            "Grok 3 (beta)"
-
-        Llama4Maverick ->
-            "Llama 4 Maverick"
-
-        L3EuryaleV2_1 ->
-            "L3 Euryale v2.1 (unfiltered)"
-
-        MidnightRose ->
-            "Midnight Rose (unfiltered)"
-
-        Unfiltered_X ->
-            "Unfiltered X (unfiltered)"
-
-
-allAiModels : List AiModel
-allAiModels =
-    [ Gemini_2_5_Flash
-    , GPT4o
-    , Grok3
-    , Llama4Maverick
-    , L3EuryaleV2_1
-    , MidnightRose
-    , Unfiltered_X
-    ]
-
-
-aiModelFromString : String -> Maybe AiModel
-aiModelFromString str =
-    List.filter (\aiModel -> aiModelToString aiModel == str) allAiModels |> List.head
 
 
 updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -922,7 +913,7 @@ optionsView model =
                     , Ui.paddingXY 4 4
                     ]
                     (Ui.text "AI Model")
-                , Ui.html (aiModelDropdown model.selectedModel)
+                , Ui.html (aiModelDropdown model.aiModels model.selectedModel)
                 ]
             , Ui.column
                 []
@@ -1052,115 +1043,59 @@ userMessageView model =
         ]
 
 
-aiModelDropdown : AiModel -> Html FrontendMsg
-aiModelDropdown selected =
-    Html.select
-        [ Html.Attributes.value (aiModelToString selected)
-        , Html.Events.onInput
-            (\selectedKey ->
-                case aiModelFromString selectedKey of
-                    Just aiModel ->
-                        SelectedAiModel aiModel
-
-                    Nothing ->
-                        NoOpFrontendMsg
-            )
-        , Html.Attributes.style "width" "100%"
-        , Html.Attributes.style "padding" "7px 8px"
-        , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
-        , Html.Attributes.style "border-radius" "4px"
-        , Html.Attributes.style "font-size" "16px"
-        , Html.Attributes.style "background-color" "rgb(32,40,70)"
-        , Html.Attributes.style "color" "rgb(255,255,255)"
-        , Html.Attributes.style "cursor" "pointer"
-        ]
-        (allAiModels
-            |> List.map
-                (\aiModel ->
-                    Html.option
-                        [ Html.Attributes.value (aiModelToString aiModel)
-                        , Html.Attributes.selected (aiModel == selected)
-                        ]
-                        [ Html.text (aiModelToString aiModel) ]
+aiModelDropdown : AiModelsStatus -> Maybe String -> Html FrontendMsg
+aiModelDropdown status selected =
+    case status of
+        LoadedAiModels aiModels ->
+            Html.select
+                [ Html.Attributes.value (Maybe.withDefault "" selected)
+                , Html.Events.onInput SelectedAiModel
+                , Html.Attributes.style "width" "100%"
+                , Html.Attributes.style "padding" "7px 8px"
+                , Html.Attributes.style "border" "1px solid rgb(97,104,124)"
+                , Html.Attributes.style "border-radius" "4px"
+                , Html.Attributes.style "font-size" "16px"
+                , Html.Attributes.style "background-color" "rgb(32,40,70)"
+                , Html.Attributes.style "color" "rgb(255,255,255)"
+                , Html.Attributes.style "cursor" "pointer"
+                ]
+                (List.map
+                    (\aiModel ->
+                        Html.option
+                            [ Html.Attributes.value aiModel
+                            , Html.Attributes.selected (Just aiModel == selected)
+                            ]
+                            [ Html.text aiModel ]
+                    )
+                    aiModels
                 )
-        )
+
+        LoadingAiModels ->
+            Html.text "Loading..."
+
+        LoadingFailed error ->
+            (case error of
+                Http.BadUrl url ->
+                    "Bad url: "
+                        ++ url
+
+                Http.Timeout ->
+                    "Request timed out"
+
+                Http.NetworkError ->
+                    "Network error"
+
+                Http.BadStatus int ->
+                    "Bad status code " ++ String.fromInt int
+
+                Http.BadBody string ->
+                    "Bad body: " ++ string
+            )
+                |> Html.text
 
 
 
 --- Backend
-
-
-generateRandomString : Int -> Random.Generator String
-generateRandomString length =
-    let
-        chars =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-        charArray =
-            String.toList chars
-
-        charCount =
-            List.length charArray
-    in
-    Random.list length (Random.int 0 (charCount - 1))
-        |> Random.map (List.map (\i -> List.drop i charArray |> List.head |> Maybe.withDefault 'A'))
-        |> Random.map String.fromList
-
-
-generateToken : Time.Posix -> Random.Generator String
-generateToken currentTime =
-    Random.map2 createToken
-        (generateRandomString 6)
-        (generateRandomString 36)
-        |> Random.map (\tokenData -> tokenData currentTime)
-
-
-createToken : String -> String -> Time.Posix -> String
-createToken prefix randomId currentTime =
-    let
-        timestampSeconds =
-            Time.posixToMillis currentTime // 1000
-
-        tokenObject =
-            Json.Encode.object
-                [ ( "bR6wF"
-                  , Json.Encode.object
-                        [ ( "nV5kP", Json.Encode.string userAgent )
-                        , ( "lQ9jX", Json.Encode.string "en-US" )
-                        , ( "sD2zR", Json.Encode.string "1920x1080" )
-                        , ( "tY4hL", Json.Encode.string "Europe/Berlin" )
-                        , ( "pL8mC", Json.Encode.string "Win32" )
-                        , ( "cQ3vD", Json.Encode.int 24 )
-                        , ( "hK7jN", Json.Encode.string "unknown" )
-                        ]
-                  )
-                , ( "uT4bX"
-                  , Json.Encode.object
-                        [ ( "mM9wZ", Json.Encode.list Json.Encode.string [] )
-                        , ( "kP8jY", Json.Encode.list Json.Encode.string [] )
-                        ]
-                  )
-                , ( "tuTcS", Json.Encode.int timestampSeconds )
-                , ( "tDfxy", Json.Encode.null )
-                , ( "RtyJt", Json.Encode.string randomId )
-                ]
-
-        jsonString =
-            Json.Encode.encode 0 tokenObject
-
-        base64String =
-            stringToBase64 jsonString
-    in
-    prefix ++ base64String
-
-
-stringToBase64 : String -> String
-stringToBase64 str =
-    str
-        |> Bytes.Encode.string
-        |> Bytes.Encode.encode
-        |> Base64.fromBytes
-        |> Maybe.withDefault ""
 
 
 backendUpdate : BackendMsg -> Command BackendOnly ToFrontend BackendMsg
@@ -1170,128 +1105,62 @@ backendUpdate msg =
             Lamdera.sendToFrontend clientId (AiMessageResponse responseId result)
 
 
-updateFromFrontend : Time.Posix -> ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
-updateFromFrontend time clientId msg =
+updateFromFrontend : ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
+updateFromFrontend clientId msg =
     case msg of
         AiMessageRequest aiModel responseId text ->
-            Random.step
-                (generateToken time)
-                (Random.initialSeed (Time.posixToMillis time))
-                |> Tuple.first
-                |> sendMessageToAi aiModel text
-                |> Task.attempt (GotAiMessage clientId responseId)
-
-
-userAgent : String
-userAgent =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.3"
-
-
-sendMessageToAi : AiModel -> String -> String -> Task BackendOnly Http.Error String
-sendMessageToAi aiModel text token =
-    Http.task
-        { method = "POST"
-        , headers = [ Http.header "User-Agent" userAgent ]
-        , url = "https://data.toolbaz.com/token.php"
-        , body = Http.stringBody "application/x-www-form-urlencoded; charset=UTF-8" ("session_id=&token=" ++ token)
-        , resolver =
-            Http.stringResolver
-                (\result ->
-                    case result of
-                        BadUrl_ url ->
-                            Err (Http.BadUrl url)
-
-                        Timeout_ ->
-                            Err Http.Timeout
-
-                        NetworkError_ ->
-                            Err Http.NetworkError
-
-                        BadStatus_ metadata body ->
-                            Http.BadBody body |> Err
-
-                        GoodStatus_ metadata body ->
-                            case Json.Decode.decodeString (Json.Decode.field "token" Json.Decode.string) body of
-                                Ok ok ->
-                                    Ok ok
-
-                                Err error ->
-                                    Json.Decode.errorToString error |> Http.BadBody |> Err
-                )
-        , timeout = Just Duration.minute
-        }
-        |> Task.andThen
-            (\token2 ->
-                Http.task
-                    { method = "POST"
-                    , headers = [ Http.header "User-Agent" userAgent ]
-                    , url = "https://data.toolbaz.com/writing.php"
-                    , body =
-                        [ ( "text", text )
-                        , ( "capcha", token2 )
-                        , ( "model"
-                          , case aiModel of
-                                Gemini_2_5_Flash ->
-                                    "gemini-2.5-flash"
-
-                                GPT4o ->
-                                    "gpt-4o-latest"
-
-                                Grok3 ->
-                                    "grok-3-beta"
-
-                                Llama4Maverick ->
-                                    "Llama-4-Maverick"
-
-                                L3EuryaleV2_1 ->
-                                    "L3-70B-Euryale-v2.1"
-
-                                MidnightRose ->
-                                    "midnight-rose"
-
-                                Unfiltered_X ->
-                                    "unfiltered_x"
+            Http.task
+                { method = "POST"
+                , headers = [ Http.header "Authorization" ("Bearer " ++ Env.openRouterKey) ]
+                , url = "https://openrouter.ai/api/v1/chat/completions"
+                , body =
+                    Json.Encode.object
+                        [ ( "model", Json.Encode.string aiModel )
+                        , ( "messages"
+                          , Json.Encode.list
+                                identity
+                                [ Json.Encode.object
+                                    [ ( "role", Json.Encode.string "user" )
+                                    , ( "content", Json.Encode.string text )
+                                    ]
+                                ]
                           )
-                        , ( "session_id", "" )
                         ]
-                            |> List.map
-                                (\( key, value ) ->
-                                    key ++ "=" ++ Url.percentEncode value
-                                )
-                            |> String.join "&"
-                            |> Http.stringBody "application/x-www-form-urlencoded; charset=UTF-8"
-                    , resolver =
-                        Http.stringResolver
-                            (\result ->
-                                case result of
-                                    BadUrl_ url ->
-                                        Err (Http.BadUrl url)
+                        |> Http.jsonBody
+                , resolver =
+                    Http.stringResolver
+                        (\result ->
+                            case result of
+                                BadUrl_ url ->
+                                    Err (Http.BadUrl url)
 
-                                    Timeout_ ->
-                                        Err Http.Timeout
+                                Timeout_ ->
+                                    Err Http.Timeout
 
-                                    NetworkError_ ->
-                                        Err Http.NetworkError
+                                NetworkError_ ->
+                                    Err Http.NetworkError
 
-                                    BadStatus_ metadata body ->
-                                        (if String.contains "maximum prompt length" body then
-                                            "Chat history is too long"
+                                BadStatus_ metadata body ->
+                                    Http.BadBody body |> Err
 
-                                         else
-                                            String.fromInt metadata.statusCode ++ ": " ++ body
-                                        )
-                                            |> Http.BadBody
-                                            |> Err
+                                GoodStatus_ metadata body ->
+                                    case
+                                        Json.Decode.decodeString
+                                            (Json.Decode.field
+                                                "choices"
+                                                (Json.Decode.index
+                                                    0
+                                                    (Json.Decode.at [ "message", "content" ] Json.Decode.string)
+                                                )
+                                            )
+                                            body
+                                    of
+                                        Ok ok ->
+                                            Ok ok
 
-                                    GoodStatus_ metadata body ->
-                                        String.lines body
-                                            |> List.reverse
-                                            |> List.drop 2
-                                            |> List.reverse
-                                            |> String.join "\n"
-                                            |> String.replace "\u{000D}" ""
-                                            |> Ok
-                            )
-                    , timeout = Just (Duration.minutes 2)
-                    }
-            )
+                                        Err error ->
+                                            Json.Decode.errorToString error |> Http.BadBody |> Err
+                        )
+                , timeout = Nothing
+                }
+                |> Task.attempt (GotAiMessage clientId responseId)
