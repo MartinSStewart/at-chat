@@ -18,3 +18,4 @@ type Route
         { highlightLog : Maybe Int
         }
     | GuildRoute (Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId) ChannelRoute
+    | AiChatRoute

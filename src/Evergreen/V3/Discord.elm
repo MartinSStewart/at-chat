@@ -156,7 +156,25 @@ type alias Permissions =
     , manageNicknames : Bool
     , manageRoles : Bool
     , manageWebhooks : Bool
-    , manageEmojis : Bool
+    , manageGuildExpressions : Bool
+    , useApplicationCommands : Bool
+    , requestToSpeak : Bool
+    , manageEvents : Bool
+    , manageThreads : Bool
+    , createPublicThreads : Bool
+    , createPrivateThreads : Bool
+    , useExternalStickers : Bool
+    , sendMessagesInThreads : Bool
+    , useEmbeddedActivities : Bool
+    , moderateMembers : Bool
+    , viewCreatorMontetizationAnalytics : Bool
+    , useSoundboard : Bool
+    , createGuildExpressions : Bool
+    , createEvents : Bool
+    , useExternalSounds : Bool
+    , sendVoiceMessages : Bool
+    , sendPolls : Bool
+    , useExternalApps : Bool
     }
 
 
@@ -167,10 +185,6 @@ type alias PartialGuild =
     , owner : Bool
     , permissions : Permissions
     }
-
-
-type Username
-    = Username String
 
 
 type UserDiscriminator
@@ -188,7 +202,7 @@ type OptionalData a
 
 type alias User =
     { id : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.UserId
-    , username : Username
+    , username : String
     , discriminator : UserDiscriminator
     , avatar : Maybe (ImageHash AvatarHash)
     , bot : OptionalData Bool
@@ -203,13 +217,36 @@ type alias User =
     }
 
 
-type Nickname
-    = Nickname String
+type SplashHash
+    = SplashHash Never
+
+
+type DiscoverySplashHash
+    = DiscoverSplashHash Never
+
+
+type EmojiType
+    = UnicodeEmojiType String
+    | CustomEmojiType
+        { id : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.CustomEmojiId
+        , name : Maybe String
+        }
+
+
+type alias EmojiData =
+    { type_ : EmojiType
+    , roles : OptionalData (List (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.RoleId))
+    , user : OptionalData User
+    , requireColons : OptionalData Bool
+    , managed : OptionalData Bool
+    , animated : OptionalData Bool
+    , available : OptionalData Bool
+    }
 
 
 type alias GuildMember =
     { user : User
-    , nickname : Maybe Nickname
+    , nickname : Maybe String
     , roles : List (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.RoleId)
     , joinedAt : Time.Posix
     , premiumSince : OptionalData (Maybe Time.Posix)
@@ -224,12 +261,89 @@ type ChannelType
     | GuildVoice
     | GroupDirectMessage
     | GuildCategory
-    | GuildNews
-    | GuildStore
+    | GuildAnnouncement
+    | AnnouncementThread
+    | PublicThread
+    | PrivateThread
+    | GuildStageVoice
+    | GuildDirectory
+    | GuildForum
+    | GuildMedia
 
 
 type Bits
     = Bits Never
+
+
+type alias Channel =
+    { id : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId
+    , type_ : ChannelType
+    , guildId : OptionalData (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.GuildId)
+    , position : OptionalData Int
+    , name : OptionalData String
+    , topic : OptionalData (Maybe String)
+    , nsfw : OptionalData Bool
+    , lastMessageId : OptionalData (Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.MessageId))
+    , bitrate : OptionalData (Quantity.Quantity Int (Quantity.Rate Bits Duration.Seconds))
+    , userLimit : OptionalData Int
+    , rateLimitPerUser : OptionalData (Quantity.Quantity Int Duration.Seconds)
+    , recipients : OptionalData (List User)
+    , icon : OptionalData (Maybe String)
+    , ownerId : OptionalData (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.UserId)
+    , applicationId : OptionalData (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ApplicationId)
+    , parentId : OptionalData (Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId))
+    , lastPinTimestamp : OptionalData Time.Posix
+    }
+
+
+type BannerHash
+    = BannerHash Never
+
+
+type alias Guild =
+    { id : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.GuildId
+    , name : String
+    , icon : Maybe (ImageHash IconHash)
+    , splash : Maybe (ImageHash SplashHash)
+    , discoverySplash : Maybe (ImageHash DiscoverySplashHash)
+    , owner : OptionalData Bool
+    , ownerId : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.UserId
+    , permissions : OptionalData Permissions
+    , region : String
+    , afkChannelId : Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId)
+    , afkTimeout : Quantity.Quantity Int Duration.Seconds
+    , embedEnabled : OptionalData Bool
+    , embedChannelId : OptionalData (Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId))
+    , verificationLevel : Int
+    , defaultMessageNotifications : Int
+    , explicitContentFilter : Int
+    , emojis : List EmojiData
+    , features : List String
+    , mfaLevel : Int
+    , applicationId : Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ApplicationId)
+    , widgetEnabled : OptionalData Bool
+    , widgetChannelId : OptionalData (Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId))
+    , systemChannelId : Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId)
+    , systemChannelFlags : Int
+    , rulesChannelId : Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId)
+    , joinedAt : OptionalData Time.Posix
+    , large : OptionalData Bool
+    , unavailable : OptionalData Bool
+    , memberCount : OptionalData Int
+    , members : OptionalData (List GuildMember)
+    , channels : OptionalData (List Channel)
+    , maxPresences : OptionalData (Maybe Int)
+    , maxMembers : OptionalData Int
+    , vanityUrlCode : Maybe String
+    , description : Maybe String
+    , banner : Maybe (ImageHash BannerHash)
+    , premiumTier : Int
+    , premiumSubscriptionCount : OptionalData Int
+    , preferredLocale : String
+    , publicUpdatesChannelId : Maybe (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.ChannelId)
+    , approximateMemberCount : OptionalData Int
+    , approximatePresenceCount : OptionalData Int
+    }
 
 
 type alias Channel2 =
@@ -254,25 +368,6 @@ type alias Attachment =
     , proxyUrl : String
     , height : Maybe Int
     , width : Maybe Int
-    }
-
-
-type EmojiType
-    = UnicodeEmojiType String
-    | CustomEmojiType
-        { id : Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.CustomEmojiId
-        , name : Maybe String
-        }
-
-
-type alias EmojiData =
-    { type_ : EmojiType
-    , roles : OptionalData (List (Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.RoleId))
-    , user : OptionalData User
-    , requireColons : OptionalData Bool
-    , managed : OptionalData Bool
-    , animated : OptionalData Bool
-    , available : OptionalData Bool
     }
 
 

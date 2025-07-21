@@ -35,6 +35,7 @@ type alias BackendUser =
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Effect.Time.Posix
     , lastViewed : SeqDict.SeqDict ( Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId, Evergreen.V3.Id.Id Evergreen.V3.Id.ChannelId ) Int
+    , lastChannelViewed : SeqDict.SeqDict (Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId) (Evergreen.V3.Id.Id Evergreen.V3.Id.ChannelId)
     }
 
 

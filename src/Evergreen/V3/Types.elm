@@ -9,6 +9,7 @@ import Effect.Browser.Navigation
 import Effect.Lamdera
 import Effect.Time
 import Effect.Websocket
+import Evergreen.V3.AiChat
 import Evergreen.V3.ChannelName
 import Evergreen.V3.Coord
 import Evergreen.V3.CssPixels
@@ -105,6 +106,7 @@ type LocalChange
     | Local_SetLastViewed (Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId) (Evergreen.V3.Id.Id Evergreen.V3.Id.ChannelId) Int
     | Local_DeleteMessage MessageId
     | Local_SetDiscordWebsocket Evergreen.V3.LocalState.IsEnabled
+    | Local_ViewChannel (Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId) (Evergreen.V3.Id.Id Evergreen.V3.Id.ChannelId)
 
 
 type ServerChange
@@ -267,6 +269,7 @@ type alias LoadedFrontend =
     , pwaStatus : Evergreen.V3.Ports.PwaStatus
     , drag : Drag
     , scrolledToBottomOfChannel : Bool
+    , aiChatModel : Evergreen.V3.AiChat.FrontendModel
     }
 
 
@@ -417,6 +420,7 @@ type FrontendMsg
     | PressedCloseUserOptions
     | PressedSetDiscordWebsocket Evergreen.V3.LocalState.IsEnabled
     | TwoFactorMsg Evergreen.V3.TwoFactorAuthentication.Msg
+    | AiChatMsg Evergreen.V3.AiChat.FrontendMsg
 
 
 type ToBackend
@@ -430,6 +434,7 @@ type ToBackend
     | TwoFactorToBackend Evergreen.V3.TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Evergreen.V3.Id.Id Evergreen.V3.Id.GuildId) (Evergreen.V3.SecretId.SecretId Evergreen.V3.Id.InviteLinkId)
     | FinishUserCreationRequest Evergreen.V3.PersonName.PersonName
+    | AiChatToBackend Evergreen.V3.AiChat.ToBackend
 
 
 type BackendMsg
@@ -444,10 +449,11 @@ type BackendMsg
     | DiscordWebsocketMsg Evergreen.V3.Discord.Msg
     | GotCurrentUserGuilds Effect.Time.Posix (Result Evergreen.V3.Discord.HttpError (List Evergreen.V3.Discord.PartialGuild))
     | GotCurrentUser (Result Evergreen.V3.Discord.HttpError Evergreen.V3.Discord.User)
-    | GotDiscordGuilds Effect.Time.Posix (Result Evergreen.V3.Discord.HttpError (List ( Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.GuildId, ( List Evergreen.V3.Discord.GuildMember, List Evergreen.V3.Discord.Channel2 ) )))
+    | GotDiscordGuilds Effect.Time.Posix (Result Evergreen.V3.Discord.HttpError (List ( Evergreen.V3.Discord.Id.Id Evergreen.V3.Discord.Id.GuildId, ( Evergreen.V3.Discord.Guild, List Evergreen.V3.Discord.GuildMember, List Evergreen.V3.Discord.Channel2 ) )))
     | SentMessageToDiscord MessageId (Result Evergreen.V3.Discord.HttpError Evergreen.V3.Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
+    | AiChatBackendMsg Evergreen.V3.AiChat.BackendMsg
 
 
 type LoginResult
@@ -466,3 +472,4 @@ type ToFrontend
     | LocalChangeResponse Evergreen.V3.Local.ChangeId LocalChange
     | ChangeBroadcast LocalMsg
     | TwoFactorAuthenticationToFrontend Evergreen.V3.TwoFactorAuthentication.ToFrontend
+    | AiChatToFrontend Evergreen.V3.AiChat.ToFrontend

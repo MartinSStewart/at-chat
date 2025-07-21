@@ -23,16 +23,20 @@ type UserId
     = UserId Never
 
 
+type CustomEmojiId
+    = CustomEmojiId Never
+
+
 type RoleId
     = RoleId Never
 
 
+type ApplicationId
+    = ApplicationId Never
+
+
 type AttachmentId
     = AttachmentId Never
-
-
-type CustomEmojiId
-    = CustomEmojiId Never
 
 
 type WebhookId

@@ -39,7 +39,7 @@ type alias TwoFactorAuthenticationSetup =
 
 type Msg
     = PressedStart2FaSetup
-    | PressedCopyError String
+    | PressedCopy String
     | TypedTwoFactorCode String
 
 
