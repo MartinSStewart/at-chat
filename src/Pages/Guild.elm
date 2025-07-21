@@ -419,6 +419,7 @@ memberColumn local guild =
         , Ui.background MyUi.background2
         , Ui.Font.color MyUi.font1
         , Ui.width (Ui.px 200)
+        , Ui.scrollable
         ]
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
@@ -1783,6 +1784,8 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                         ]
                         [ Ui.el
                             [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId Nothing)))
+                            , Ui.height Ui.fill
+                            , Ui.contentCenterY
                             , Ui.paddingWith
                                 { left = 26
                                 , right =
@@ -1799,6 +1802,7 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
                                     |> GuildIcon.notificationView MyUi.background2
                                 , Ui.width (Ui.px 20)
                                 , Ui.move { x = 4, y = 0, z = 0 }
+                                , Ui.centerY
                                 ]
                                 (Ui.html Icons.hashtag)
                                 |> Ui.inFront

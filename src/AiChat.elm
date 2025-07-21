@@ -1207,7 +1207,7 @@ sendMessageToAi aiModel text token =
                             Err Http.NetworkError
 
                         BadStatus_ metadata body ->
-                            Http.BadStatus metadata.statusCode |> Err
+                            Http.BadBody body |> Err
 
                         GoodStatus_ metadata body ->
                             case Json.Decode.decodeString (Json.Decode.field "token" Json.Decode.string) body of
