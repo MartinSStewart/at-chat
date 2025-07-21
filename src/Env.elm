@@ -1,11 +1,8 @@
 module Env exposing (..)
 
 import Discord exposing (Authentication)
-import Discord.Id
 import EmailAddress exposing (EmailAddress)
-import Id exposing (DiscordUserId)
 import Postmark
-import UInt64
 import Unsafe
 
 
