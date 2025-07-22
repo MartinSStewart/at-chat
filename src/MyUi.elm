@@ -19,6 +19,7 @@ module MyUi exposing
     , emailAddress
     , errorBox
     , errorColor
+    , focusEffect
     , font1
     , font2
     , font3
@@ -48,6 +49,7 @@ module MyUi exposing
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
+    , simpleButton
     , textLinkColor
     , timeElapsedView
     , userLabelHtml
@@ -328,7 +330,7 @@ green500Border =
 
 secondaryGray : Ui.Color
 secondaryGray =
-    Ui.rgb 245 245 245
+    Ui.rgb 240 240 240
 
 
 secondaryGrayBorder : Ui.Color
@@ -461,8 +463,31 @@ primaryButton htmlId onPress text =
     button
         [ Ui.Input.button onPress
         , id htmlId
+        , focusEffect
         ]
         text
+
+
+simpleButton : HtmlId -> msg -> Element msg -> Element msg
+simpleButton htmlId onPress content =
+    Ui.el
+        [ Ui.Input.button onPress
+        , Ui.borderColor buttonBorder
+        , Ui.border 1
+        , Ui.background buttonBackground
+        , Ui.rounded 4
+        , id htmlId
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 8
+        , focusEffect
+        , Ui.Font.weight 500
+        ]
+        content
+
+
+focusEffect : Ui.Attribute msg
+focusEffect =
+    Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.borderColor white ]
 
 
 touchPress : msg -> Ui.Attribute msg
@@ -480,18 +505,21 @@ montserrat =
     Ui.Font.family [ Ui.Font.typeface "Montserrat", Ui.Font.typeface "Helvetica", Ui.Font.sansSerif ]
 
 
-secondaryButton : HtmlId -> List (Ui.Attribute msg) -> msg -> String -> Element msg
-secondaryButton htmlId attrs onPress label2 =
-    button
-        ([ Ui.Input.button onPress
-         , id htmlId
-         , Ui.background secondaryGray
-         , Ui.borderColor secondaryGrayBorder
-         , Ui.Font.color (Ui.rgb 0 0 0)
-         ]
-            ++ attrs
-        )
-        label2
+secondaryButton : HtmlId -> msg -> String -> Element msg
+secondaryButton htmlId onPress label2 =
+    Ui.el
+        [ Ui.Input.button onPress
+        , id htmlId
+        , Ui.background secondaryGray
+        , focusEffect
+        , Ui.border 1
+        , Ui.Font.color (Ui.rgb 0 0 0)
+        , Ui.rounded 4
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 8
+        , Ui.Font.weight 500
+        ]
+        (Ui.text label2)
 
 
 deleteButton : HtmlId -> msg -> Element msg

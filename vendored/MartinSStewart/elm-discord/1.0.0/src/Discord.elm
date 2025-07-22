@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg, Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -1837,7 +1837,103 @@ type alias Channel2 =
     , lastMessageId : OptionalData (Maybe (Id MessageId))
     , bitrate : OptionalData (Quantity Int (Rate Bits Seconds))
     , parentId : OptionalData (Maybe (Id ChannelId))
+    , permissionOverwrites : List Overwrite
     }
+
+
+type RoleOrUserId
+    = RoleOrUserId_RoleId (Id RoleId)
+    | RoleOrUserId_UserId (Id UserId)
+
+
+type alias Overwrite =
+    { id : RoleOrUserId
+    , allow : Permissions
+    , deny : Permissions
+    }
+
+
+noPermissions : Permissions
+noPermissions =
+    { createInstantInvite = False
+    , kickMembers = False
+    , banMembers = False
+    , administrator = False
+    , manageChannels = False
+    , manageGuild = False
+    , addReaction = False
+    , viewAuditLog = False
+    , prioritySpeaker = False
+    , stream = False
+    , viewChannel = False
+    , sendMessages = False
+    , sentTextToSpeechMessages = False
+    , manageMessages = False
+    , embedLinks = False
+    , attachFiles = False
+    , readMessageHistory = False
+    , mentionEveryone = False
+    , useExternalEmojis = False
+    , viewGuildInsights = False
+    , connect = False
+    , speak = False
+    , muteMembers = False
+    , deafenMembers = False
+    , moveMembers = False
+    , useVoiceActivityDetection = False
+    , changeNickname = False
+    , manageNicknames = False
+    , manageRoles = False
+    , manageWebhooks = False
+    , manageGuildExpressions = False
+    , useApplicationCommands = False
+    , requestToSpeak = False
+    , manageEvents = False
+    , manageThreads = False
+    , createPublicThreads = False
+    , createPrivateThreads = False
+    , useExternalStickers = False
+    , sendMessagesInThreads = False
+    , useEmbeddedActivities = False
+    , moderateMembers = False
+    , viewCreatorMontetizationAnalytics = False
+    , useSoundboard = False
+    , createGuildExpressions = False
+    , createEvents = False
+    , useExternalSounds = False
+    , sendVoiceMessages = False
+    , sendPolls = False
+    , useExternalApps = False
+    }
+
+
+decodeOverwrite : JD.Decoder Overwrite
+decodeOverwrite =
+    JD.map4
+        (\id type_ allow deny ->
+            case type_ of
+                0 ->
+                    { id = RoleOrUserId_RoleId id
+                    , allow = allow
+                    , deny = deny
+                    }
+                        |> JD.succeed
+
+                1 ->
+                    { id = RoleOrUserId_UserId (Discord.Id.toUInt64 id |> Discord.Id.fromUInt64)
+                    , allow = allow
+                    , deny = deny
+                    }
+                        |> JD.succeed
+
+                _ ->
+                    JD.fail ("Invalid overwrite object type. Expected a 0 or a 1 but got " ++ String.fromInt type_)
+        )
+        (JD.field "id" Discord.Id.decodeId)
+        (JD.field "type" JD.int)
+        (JD.optionalNullableField "allow" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
+        (JD.optionalNullableField "deny" decodePermissions |> JD.map (Maybe.withDefault noPermissions))
+        |> JD.andThen identity
 
 
 type alias PartialChannel =
@@ -2821,6 +2917,7 @@ decodeChannel2 =
         |> JD.andMap (decodeOptionalData "last_message_id" (JD.nullable Discord.Id.decodeId))
         |> JD.andMap (decodeOptionalData "bitrate" (JD.map Quantity JD.int))
         |> JD.andMap (decodeOptionalData "parent_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "permission_overwrites" (JD.list decodeOverwrite))
 
 
 decodeChannelType : JD.Decoder ChannelType

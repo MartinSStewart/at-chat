@@ -207,16 +207,16 @@ view isMobile time twoFactorStatus =
         "Two-factor authentication"
         [ case twoFactorStatus of
             TwoFactorNotStarted ->
-                MyUi.primaryButton
+                MyUi.simpleButton
                     (Dom.id "userOverview_start2FaSetup")
                     PressedStart2FaSetup
-                    "Add two factor authentication"
+                    (Ui.text "Add two factor authentication")
 
             TwoFactorLoading ->
-                MyUi.primaryButton
+                MyUi.simpleButton
                     (Dom.id "userOverview_start2FaSetup")
                     PressedStart2FaSetup
-                    "Loading..."
+                    (Ui.text "Loading...")
 
             TwoFactorSetup data ->
                 setupView isMobile data

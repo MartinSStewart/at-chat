@@ -163,6 +163,7 @@ type alias FrontendChannel =
     , messages : Array Message
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
 
 
@@ -180,6 +181,7 @@ channelToFrontend channel =
             , messages = channel.messages
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
+            , linkedMessageIds = channel.linkedMessageIds
             }
                 |> Just
 
@@ -261,28 +263,29 @@ getUser userId local =
 
 createMessage :
     Message
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int }
 createMessage message channel =
     { channel
         | messages =
             case message of
                 UserTextMessage data ->
                     let
-                        messageCount : Int
-                        messageCount =
+                        previousIndex : Int
+                        previousIndex =
                             Array.length channel.messages - 1
                     in
-                    case Array.get messageCount channel.messages of
+                    case Array.get previousIndex channel.messages of
                         Just (UserTextMessage previous) ->
                             if
                                 (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
                                     && (previous.editedAt == Nothing)
                                     && (previous.createdBy == data.createdBy)
                                     && not (SeqDict.isEmpty previous.reactions)
+                                    && not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
                             then
                                 Array.set
-                                    messageCount
+                                    previousIndex
                                     (UserTextMessage
                                         { previous
                                             | content =
@@ -395,6 +398,7 @@ createChannelFrontend time userId channelName guild =
                 , messages = Array.empty
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
+                , linkedMessageIds = OneToOne.empty
                 }
                 guild.channels
     }
@@ -505,6 +509,7 @@ addMember :
                     { d
                         | messages : Array Message
                         , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                        , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
                     }
         }
     ->
@@ -520,6 +525,7 @@ addMember :
                         { d
                             | messages : Array Message
                             , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
                         }
             }
 addMember time userId guild =

@@ -777,11 +777,10 @@ userSection user adminData model =
         , Ui.Lazy.lazy3 userTableView model.userTable adminData.users adminData.twoFactorAuthentication
         , Ui.row
             [ Ui.spacing 16 ]
-            (MyUi.secondaryButton
+            (MyUi.simpleButton
                 addUserRowButtonId
-                [ Ui.background MyUi.white ]
                 PressedAddUserRow
-                "Add new user"
+                (Ui.text "Add new user")
                 :: (if
                         SeqDict.isEmpty model.userTable.changedUsers
                             && Array.isEmpty model.userTable.newUsers
@@ -790,11 +789,10 @@ userSection user adminData model =
                         []
 
                     else
-                        [ MyUi.secondaryButton
+                        [ MyUi.simpleButton
                             (Dom.id "Admin_resetUserChanges")
-                            [ Ui.background MyUi.white ]
                             PressedResetUserChanges
-                            "Reset"
+                            (Ui.text "Reset")
                         , MyUi.primaryButton saveUserChangesButtonId PressedSaveUserChanges "Save changes"
                         , case model.submitError of
                             Just error ->

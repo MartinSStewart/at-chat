@@ -412,6 +412,7 @@ view loginForm isMobile pwaStatus =
                         , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
                         , Ui.Font.color MyUi.buttonFontColor
+                        , MyUi.focusEffect
                         ]
                         (Ui.text "Submit")
                     ]
@@ -707,8 +708,8 @@ enterEmailView model =
             )
         , Ui.row
             [ Ui.spacing 16 ]
-            [ MyUi.secondaryButton cancelButtonId [] PressedCancelLogin "Cancel"
-            , MyUi.primaryButton submitEmailButtonId PressedSubmitEmail "Login"
+            [ MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel"
+            , MyUi.simpleButton submitEmailButtonId PressedSubmitEmail (Ui.text "Login")
             ]
         , if model.rateLimited then
             errorView "Too many login attempts have been made. Please try again later."

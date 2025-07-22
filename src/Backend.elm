@@ -691,7 +691,10 @@ addDiscordGuilds time guilds model =
                                                     Discord.GuildMedia ->
                                                         False
                                         in
-                                        if isTextChannel then
+                                        if
+                                            not (List.any (\a -> a.deny.viewChannel) channel.permissionOverwrites)
+                                                && isTextChannel
+                                        then
                                             ( Id.fromInt index
                                             , { createdAt = time
                                               , createdBy = ownerId

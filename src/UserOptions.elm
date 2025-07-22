@@ -1,5 +1,6 @@
 module UserOptions exposing (view)
 
+import Effect.Browser.Dom as Dom
 import Html.Attributes
 import Icons
 import LocalState exposing (AdminStatus(..), IsEnabled(..), LocalState)
@@ -8,6 +9,7 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoggedIn2)
 import Ui exposing (Element)
+import Ui.Anim
 import Ui.Font
 import Ui.Input
 
@@ -93,5 +95,17 @@ view isMobile time local loggedIn =
                     Ui.none
             , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
+            , Ui.el
+                [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]
+                (MyUi.simpleButton
+                    (Dom.id "options_logout")
+                    PressedLogOut
+                    (Ui.row
+                        [ Ui.spacing 8, Ui.paddingWith { left = 0, top = 0, bottom = 0, right = 8 } ]
+                        [ Ui.el [ Ui.width (Ui.px 26) ] (Ui.html Icons.logoutSvg)
+                        , Ui.text "Logout"
+                        ]
+                    )
+                )
             ]
         )
