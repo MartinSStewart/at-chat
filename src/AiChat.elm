@@ -486,11 +486,11 @@ update msg model =
                     { model
                         | aiModels = LoadedAiModels (List.sort ok)
                         , selectedModel =
-                            if List.member "anthropic/claude-sonnet-4" ok then
+                            if List.member "anthropic/claude-sonnet-4" ok && model.selectedModel == Nothing then
                                 Just "anthropic/claude-sonnet-4"
 
                             else
-                                Nothing
+                                model.selectedModel
                     }
 
                 Err err ->
