@@ -9,6 +9,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration, Seconds)
 import Ease
+import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
@@ -41,6 +42,7 @@ import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Pagination
+import PersonName
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
@@ -333,7 +335,7 @@ loadedInitHelper time loginData loading =
             , replyTo = SeqDict.empty
             , revealedSpoilers = Nothing
             , sidebarMode = ChannelSidebarOpened
-            , showUserOptions = False
+            , userOptions = Nothing
             , twoFactor =
                 case loginData.twoFactorAuthenticationEnabled of
                     Just enabledAt ->
@@ -2244,12 +2246,12 @@ updateLoaded msg model =
 
         PressedShowUserOption ->
             updateLoggedIn
-                (\loggedIn -> ( { loggedIn | showUserOptions = True }, Command.none ))
+                (\loggedIn -> ( { loggedIn | userOptions = Just { name = Editable.init } }, Command.none ))
                 model
 
         PressedCloseUserOptions ->
             updateLoggedIn
-                (\loggedIn -> ( { loggedIn | showUserOptions = False }, Command.none ))
+                (\loggedIn -> ( { loggedIn | userOptions = Nothing }, Command.none ))
                 model
 
         PressedSetDiscordWebsocket isEnabled ->
@@ -2282,6 +2284,29 @@ updateLoaded msg model =
             ( { model | aiChatModel = aiChatModel2 }
             , Command.map AiChatToBackend AiChatMsg aiChatCmd
             )
+
+        UserNameEditableMsg editableMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case editableMsg of
+                                Editable.Edit editable ->
+                                    ( { loggedIn | userOptions = Just { userOptions | name = editable } }
+                                    , Command.none
+                                    )
+
+                                Editable.PressedAcceptEdit value ->
+                                    handleLocalChange
+                                        model.time
+                                        (Just (Local_SetName value))
+                                        { loggedIn | userOptions = Just { userOptions | name = Editable.init } }
+                                        Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
@@ -2813,6 +2838,13 @@ changeUpdate localMsg local =
                             { localUser | user = User.setLastChannelViewed guildId channelId localUser.user }
                     }
 
+                Local_SetName name ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local | localUser = { localUser | user = User.setName name localUser.user } }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildId channelId text repliedTo ->
@@ -3072,6 +3104,20 @@ changeUpdate localMsg local =
 
                                 IsNotAdmin ->
                                     IsNotAdmin
+                    }
+
+                Server_SetName userId name ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | otherUsers =
+                                    SeqDict.updateIfExists userId (User.setName name) localUser.otherUsers
+                            }
                     }
 
 
@@ -3502,6 +3548,9 @@ pendingChangesText localChange =
         Local_ViewChannel _ _ ->
             "View channel"
 
+        Local_SetName personName ->
+            "Set display name"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -3669,12 +3718,18 @@ view model =
                                 in
                                 layout
                                     loaded
-                                    [ if loggedIn.showUserOptions then
-                                        UserOptions.view (MyUi.isMobile loaded) loaded.time local loggedIn
-                                            |> Ui.inFront
+                                    [ case loggedIn.userOptions of
+                                        Just userOptions ->
+                                            UserOptions.view
+                                                (MyUi.isMobile loaded)
+                                                loaded.time
+                                                local
+                                                loggedIn
+                                                userOptions
+                                                |> Ui.inFront
 
-                                      else
-                                        Ui.noAttr
+                                        Nothing ->
+                                            Ui.noAttr
                                     ]
                                     (page loggedIn local)
 
@@ -3700,11 +3755,18 @@ view model =
                                         local =
                                             Local.model loggedIn.localState
                                     in
-                                    if loggedIn.showUserOptions then
-                                        UserOptions.view (MyUi.isMobile loaded) loaded.time local loggedIn |> Ui.inFront
+                                    case loggedIn.userOptions of
+                                        Just userOptions ->
+                                            UserOptions.view
+                                                (MyUi.isMobile loaded)
+                                                loaded.time
+                                                local
+                                                loggedIn
+                                                userOptions
+                                                |> Ui.inFront
 
-                                    else
-                                        Ui.noAttr
+                                        Nothing ->
+                                            Ui.noAttr
 
                                 NotLoggedIn _ ->
                                     Ui.noAttr

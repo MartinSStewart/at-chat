@@ -30,6 +30,7 @@ module Types exposing
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
+    , UserOptionsModel
     , WaitingForLoginTokenData
     , messageMenuMobileOffset
     )
@@ -43,6 +44,7 @@ import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
 import Duration exposing (Duration)
+import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
@@ -145,9 +147,13 @@ type alias LoggedIn2 =
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
-    , showUserOptions : Bool
+    , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
     }
+
+
+type alias UserOptionsModel =
+    { name : Editable.Model }
 
 
 type ChannelSidebarMode
@@ -357,6 +363,7 @@ type FrontendMsg
     | PressedSetDiscordWebsocket IsEnabled
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.FrontendMsg
+    | UserNameEditableMsg (Editable.Msg PersonName)
 
 
 type alias NewChannelForm =
@@ -472,6 +479,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) MessageId
     | Server_DiscordDeleteMessage MessageId
     | Server_SetWebsocketToggled IsEnabled
+    | Server_SetName (Id UserId) PersonName
 
 
 type LocalChange
@@ -492,6 +500,7 @@ type LocalChange
     | Local_DeleteMessage MessageId
     | Local_SetDiscordWebsocket IsEnabled
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
+    | Local_SetName PersonName
 
 
 type ToBeFilledInByBackend a

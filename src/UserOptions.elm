@@ -1,21 +1,22 @@
 module UserOptions exposing (view)
 
+import Editable
 import Effect.Browser.Dom as Dom
-import Html.Attributes
 import Icons
 import LocalState exposing (AdminStatus(..), IsEnabled(..), LocalState)
 import MyUi
+import PersonName
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoggedIn2)
+import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Input
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> Element FrontendMsg
-view isMobile time local loggedIn =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -95,6 +96,13 @@ view isMobile time local loggedIn =
                     Ui.none
             , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
+            , Editable.view
+                (Dom.id "userOptions_name")
+                "Display Name"
+                PersonName.fromString
+                UserNameEditableMsg
+                (PersonName.toString local.localUser.user.name)
+                model.name
             , Ui.el
                 [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]
                 (MyUi.simpleButton

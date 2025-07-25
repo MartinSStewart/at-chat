@@ -1271,7 +1271,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , broadcastToUser
                                     clientId
                                     userId
-                                    (Local_NewGuild time guildName (FilledInByBackend guildId))
+                                    (Local_NewGuild time guildName (FilledInByBackend guildId) |> LocalChange userId)
                                     model2
                                 ]
                             )
@@ -1476,7 +1476,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToUser clientId userId localMsg model2
+                                , broadcastToUser clientId userId (LocalChange userId localMsg) model2
                                 ]
                             )
                         )
@@ -1568,6 +1568,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetName name ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            ( { model2
+                                | users = NonemptyDict.insert userId { user | name = name } model2.users
+                              }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                , broadcastToEveryoneWhoCanSeeUser
+                                    clientId
+                                    userId
+                                    (LocalChange userId localMsg)
+                                    model
+                                ]
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2
@@ -1589,6 +1608,27 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
+
+
+broadcastToEveryoneWhoCanSeeUser :
+    ClientId
+    -> Id UserId
+    -> LocalMsg
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+broadcastToEveryoneWhoCanSeeUser clientId userId change model =
+    SeqDict.foldl
+        (\_ guild state ->
+            if userId == guild.owner || SeqDict.member userId guild.members then
+                guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
+
+            else
+                state
+        )
+        SeqSet.empty
+        model.guilds
+        |> SeqSet.foldl (\userId2 cmds -> broadcastToUser clientId userId2 change model :: cmds) []
+        |> Command.batch
 
 
 toDiscordContent : BackendUser -> BackendModel -> Nonempty RichText -> String
@@ -1976,7 +2016,7 @@ broadcastToGuild msg model =
         |> Command.batch
 
 
-broadcastToUser : ClientId -> Id UserId -> LocalChange -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToUser : ClientId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 broadcastToUser clientToSkip userId msg model =
     SeqDict.filterMap
         (\sessionId otherUserId ->
@@ -1989,7 +2029,7 @@ broadcastToUser clientToSkip userId msg model =
                                     Nothing
 
                                 else
-                                    ChangeBroadcast (LocalChange userId msg)
+                                    ChangeBroadcast msg
                                         |> Lamdera.sendToFrontend otherClientId
                                         |> Just
                             )

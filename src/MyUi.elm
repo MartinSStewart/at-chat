@@ -16,6 +16,7 @@ module MyUi exposing
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
+    , disabledButtonBackground
     , emailAddress
     , errorBox
     , errorColor
@@ -711,6 +712,11 @@ inputBorder =
 buttonBackground : Ui.Color
 buttonBackground =
     Ui.rgb 64 122 178
+
+
+disabledButtonBackground : Ui.Color
+disabledButtonBackground =
+    Ui.rgb 130 133 135
 
 
 cancelButtonBackground : Ui.Color

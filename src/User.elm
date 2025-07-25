@@ -9,6 +9,7 @@ module User exposing
     , backendToFrontendForUser
     , sectionToString
     , setLastChannelViewed
+    , setName
     , toString
     )
 
@@ -40,6 +41,11 @@ type alias BackendUser =
 setLastChannelViewed : Id GuildId -> Id ChannelId -> BackendUser -> BackendUser
 setLastChannelViewed guildId channelId user =
     { user | lastChannelViewed = SeqDict.insert guildId channelId user.lastChannelViewed }
+
+
+setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }
+setName name user =
+    { user | name = name }
 
 
 type EmailStatus
