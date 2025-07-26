@@ -3458,7 +3458,7 @@ type OutMsg connection
     | OpenHandle
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
-    | UserCreatedMessage (Id GuildId) Message
+    | UserCreatedMessage Message
     | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserEditedMessage MessageUpdate
     | FailedToParseWebsocketMessage JD.Error
@@ -3566,12 +3566,7 @@ handleGateway authToken response model =
                             ( model, [] )
 
                         MessageCreateEvent message ->
-                            case message.guildId of
-                                Included guildId ->
-                                    ( model, [ UserCreatedMessage guildId message ] )
-
-                                Missing ->
-                                    ( model, [] )
+                            ( model, [ UserCreatedMessage message ] )
 
                         MessageUpdateEvent messageUpdate ->
                             ( model, [ UserEditedMessage messageUpdate ] )

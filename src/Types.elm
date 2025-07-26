@@ -57,7 +57,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, DirectMessageChannel, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -244,6 +244,7 @@ type alias BackendModel =
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , websocketEnabled : IsEnabled
+    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
     }
 
 

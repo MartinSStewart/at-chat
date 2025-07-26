@@ -5,6 +5,8 @@ module LocalState exposing
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
+    , DirectMessageChannel
+    , DirectMessageChannelId
     , FrontendChannel
     , FrontendGuild
     , IsEnabled(..)
@@ -28,6 +30,8 @@ module LocalState exposing
     , deleteChannel
     , deleteChannelFrontend
     , deleteMessage
+    , directMessageChannelId
+    , directMessageChannelInit
     , editChannel
     , editMessage
     , getGuildAndChannel
@@ -154,6 +158,30 @@ type alias BackendChannel =
     , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
+
+
+type alias DirectMessageChannel =
+    { messages : Array Message
+    , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+    }
+
+
+type DirectMessageChannelId
+    = DirectMessageChannelId (Id UserId) (Id UserId)
+
+
+directMessageChannelInit : DirectMessageChannel
+directMessageChannelInit =
+    { messages = Array.empty
+    , lastTypedAt = SeqDict.empty
+    , linkedMessageIds = OneToOne.empty
+    }
+
+
+directMessageChannelId : Id UserId -> Id UserId -> DirectMessageChannelId
+directMessageChannelId (Id userIdA) (Id userIdB) =
+    DirectMessageChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
 
 
 type alias FrontendChannel =
