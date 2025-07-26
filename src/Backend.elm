@@ -156,6 +156,7 @@ init =
       , discordUsers = OneToOne.empty
       , discordBotId = Nothing
       , websocketEnabled = IsEnabled
+      , directMessages = SeqDict.empty
       }
     , Command.none
     )
@@ -879,6 +880,9 @@ handleDiscordCreateMessage message model =
 
                     Nothing ->
                         ( model, Command.none )
+
+            _ ->
+                ( model, Command.none )
 
 
 updateFromFrontend :

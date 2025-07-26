@@ -52,7 +52,7 @@ import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, Id(..), InviteLinkId, UserId)
 import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
