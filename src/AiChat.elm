@@ -790,6 +790,8 @@ responseView windowWidth responseCount responseId response =
                     , Ui.height Ui.fill
                     , Ui.rounded 4
                     , Ui.borderColor MyUi.inputBorder
+                    , Ui.scrollable
+                    , Ui.htmlAttribute (Html.Attributes.style "min-height" "0")
                     , Ui.Font.italic
                     , Ui.Font.color MyUi.errorColor
                     ]
@@ -1105,19 +1107,11 @@ updateFromFrontend clientId msg =
             Http.task
                 { method = "POST"
                 , headers = [ Http.header "Authorization" ("Bearer " ++ Env.openRouterKey) ]
-                , url = "https://openrouter.ai/api/v1/chat/completions"
+                , url = "https://openrouter.ai/api/v1/completions"
                 , body =
                     Json.Encode.object
                         [ ( "model", Json.Encode.string aiModel )
-                        , ( "messages"
-                          , Json.Encode.list
-                                identity
-                                [ Json.Encode.object
-                                    [ ( "role", Json.Encode.string "user" )
-                                    , ( "content", Json.Encode.string text )
-                                    ]
-                                ]
-                          )
+                        , ( "prompt", Json.Encode.string text )
                         ]
                         |> Http.jsonBody
                 , resolver =
@@ -1143,7 +1137,7 @@ updateFromFrontend clientId msg =
                                                 "choices"
                                                 (Json.Decode.index
                                                     0
-                                                    (Json.Decode.at [ "message", "content" ] Json.Decode.string)
+                                                    (Json.Decode.field "text" Json.Decode.string)
                                                 )
                                             )
                                             body
