@@ -136,6 +136,7 @@ type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
     , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
+    , dmDrafts : SeqDict (Id UserId) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
@@ -145,7 +146,9 @@ type alias LoggedIn2 =
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
     , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
+    , dmEditMessage : SeqDict (Id UserId) EditMessage
     , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , dmReplyTo : SeqDict (Id UserId) Int
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
@@ -366,6 +369,12 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
+    | PressedDmCloseReplyTo (Id UserId)
+    | TypedDmMessage (Id UserId) String
+    | PressedDmSendMessage (Id UserId)
+    | PressedDmArrowInDropdown (Id UserId) Int
+    | PressedDmArrowUpInEmptyInput (Id UserId)
+    | PressedDmPingUser (Id UserId) Int
 
 
 type alias NewChannelForm =

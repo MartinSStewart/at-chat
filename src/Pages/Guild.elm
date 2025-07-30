@@ -2,6 +2,7 @@ module Pages.Guild exposing
     ( channelHeaderHeight
     , channelTextInputId
     , conversationContainerId
+    , dmInputConfig
     , dmView
     , dropdownButtonId
     , guildView
@@ -16,7 +17,7 @@ module Pages.Guild exposing
 import Array
 import ChannelName
 import Coord
-import DmChannel
+import DmChannel exposing (DmChannel)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -342,17 +343,18 @@ dmView model userId loggedIn local =
                     ]
                 , loggedInAsView local
                 ]
-            , dmChannelView userId loggedIn local
+            , dmChannelView userId loggedIn local model
             ]
 
 
-dmChannelView : Id UserId -> LoggedIn2 -> LocalState -> Element FrontendMsg
-dmChannelView userId loggedIn local =
-    case SeqDict.get userId local.dmChannels of
-        Just dmChannel ->
-            Ui.text ("Conversation " ++ Id.toString userId)
+dmChannelView : Id UserId -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView otherUserId loggedIn local model =
+    case SeqDict.get otherUserId local.localUser.otherUsers of
+        Just otherUser ->
+            SeqDict.get otherUserId local.dmChannels
+                |> Maybe.withDefault DmChannel.init
+                |> dmConversationView otherUserId otherUser maybeMessageHighlight loggedIn model local
 
-        --conversationView guildId channelId maybeMessageHighlight loggedIn model local channel
         Nothing ->
             Ui.el
                 [ Ui.centerY
@@ -360,7 +362,7 @@ dmChannelView userId loggedIn local =
                 , Ui.Font.color MyUi.font1
                 , Ui.Font.size 20
                 ]
-                (Ui.text "Channel does not exist")
+                (Ui.text "User not found")
 
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
@@ -739,6 +741,248 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
+dmConversationViewHelper :
+    Id UserId
+    -> Maybe Int
+    -> DmChannel
+    -> LoggedIn2
+    -> LocalState
+    -> LoadedFrontend
+    -> List (Element FrontendMsg)
+dmConversationViewHelper otherUserId maybeMessageHighlight channel loggedIn local model =
+    let
+        maybeEditing : Maybe EditMessage
+        maybeEditing =
+            SeqDict.get otherUserId loggedIn.dmEditMessage
+
+        othersEditing : SeqSet Int
+        othersEditing =
+            SeqDict.remove local.localUser.userId channel.lastTypedAt
+                |> SeqDict.values
+                |> List.filterMap
+                    (\a ->
+                        if Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3) then
+                            a.messageIndex
+
+                        else
+                            Nothing
+                    )
+                |> SeqSet.fromList
+
+        replyToIndex : Maybe Int
+        replyToIndex =
+            SeqDict.get otherUserId loggedIn.dmReplyTo
+
+        revealedSpoilers : SeqDict Int (NonemptySet Int)
+        revealedSpoilers =
+            -- TODO
+            SeqDict.empty
+
+        --case loggedIn.revealedSpoilers of
+        --    Just revealed ->
+        --        if revealed.guildId == guildId && revealed.channelId == channelId then
+        --            revealed.messages
+        --
+        --        else
+        --            SeqDict.empty
+        --
+        --    Nothing ->
+        --        SeqDict.empty
+        lastViewedIndex : Int
+        lastViewedIndex =
+            SeqDict.get ( guildId, channelId ) local.localUser.user.lastViewed |> Maybe.withDefault -1
+    in
+    Array.foldr
+        (\message ( index, list ) ->
+            let
+                messageHover : IsHovered
+                messageHover =
+                    case loggedIn.messageHover of
+                        MessageMenu { messageId } ->
+                            if messageId.guildId == guildId && messageId.channelId == channelId then
+                                if messageId.messageIndex == index then
+                                    IsHoveredButNoMenu
+
+                                else
+                                    IsNotHovered
+
+                            else
+                                IsNotHovered
+
+                        MessageHover a ->
+                            if a.guildId == guildId && a.channelId == channelId then
+                                if a.messageIndex == index then
+                                    IsHovered
+
+                                else
+                                    IsNotHovered
+
+                            else
+                                IsNotHovered
+
+                        _ ->
+                            IsNotHovered
+
+                otherUserIsEditing : Bool
+                otherUserIsEditing =
+                    SeqSet.member index othersEditing
+
+                isEditing : Maybe EditMessage
+                isEditing =
+                    case maybeEditing of
+                        Just editing ->
+                            if editing.messageIndex == index then
+                                Just editing
+
+                            else
+                                Nothing
+
+                        Nothing ->
+                            Nothing
+
+                highlight : HighlightMessage
+                highlight =
+                    if maybeMessageHighlight == Just index then
+                        UrlHighlight
+
+                    else if replyToIndex == Just index then
+                        ReplyToHighlight
+
+                    else
+                        NoHighlight
+
+                newLine : List (Element msg)
+                newLine =
+                    if lastViewedIndex == index - 1 then
+                        [ Ui.el
+                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                            , Ui.borderColor MyUi.alertColor
+                            , Ui.inFront
+                                (Ui.el
+                                    [ Ui.Font.color MyUi.font1
+                                    , Ui.background MyUi.alertColor
+                                    , Ui.width Ui.shrink
+                                    , Ui.paddingXY 4 0
+                                    , Ui.alignRight
+                                    , Ui.Font.size 12
+                                    , Ui.Font.bold
+                                    , Ui.height (Ui.px 15)
+                                    , Ui.roundedWith
+                                        { bottomLeft = 4, bottomRight = 0, topLeft = 0, topRight = 0 }
+                                    ]
+                                    (Ui.text "New")
+                                )
+                            ]
+                            Ui.none
+                        ]
+
+                    else
+                        []
+
+                maybeRepliedTo : Maybe ( Int, Message )
+                maybeRepliedTo =
+                    case message of
+                        UserTextMessage data ->
+                            case data.repliedTo of
+                                Just repliedToIndex ->
+                                    case Array.get repliedToIndex channel.messages of
+                                        Just message2 ->
+                                            Just ( repliedToIndex, message2 )
+
+                                        Nothing ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                        UserJoinedMessage _ _ _ ->
+                            Nothing
+
+                        DeletedMessage ->
+                            Nothing
+            in
+            ( index - 1
+            , newLine
+                ++ (case isEditing of
+                        Just editing ->
+                            if MyUi.isMobile model then
+                                -- On mobile, we show the editor at the bottom instead
+                                messageView
+                                    revealedSpoilers
+                                    highlight
+                                    messageHover
+                                    otherUserIsEditing
+                                    local.localUser
+                                    maybeRepliedTo
+                                    index
+                                    message
+
+                            else
+                                messageEditingView
+                                    { guildId = guildId, channelId = channelId, messageIndex = index }
+                                    message
+                                    maybeRepliedTo
+                                    revealedSpoilers
+                                    editing
+                                    loggedIn.pingUser
+                                    local
+
+                        Nothing ->
+                            case messageHover of
+                                IsNotHovered ->
+                                    case highlight of
+                                        NoHighlight ->
+                                            case maybeRepliedTo of
+                                                Just _ ->
+                                                    messageView
+                                                        revealedSpoilers
+                                                        highlight
+                                                        messageHover
+                                                        otherUserIsEditing
+                                                        local.localUser
+                                                        maybeRepliedTo
+                                                        index
+                                                        message
+
+                                                Nothing ->
+                                                    Ui.Lazy.lazy5
+                                                        messageViewNotHovered
+                                                        otherUserIsEditing
+                                                        revealedSpoilers
+                                                        local.localUser
+                                                        index
+                                                        message
+
+                                        _ ->
+                                            messageView
+                                                revealedSpoilers
+                                                highlight
+                                                messageHover
+                                                otherUserIsEditing
+                                                local.localUser
+                                                maybeRepliedTo
+                                                index
+                                                message
+
+                                _ ->
+                                    messageView
+                                        revealedSpoilers
+                                        highlight
+                                        messageHover
+                                        otherUserIsEditing
+                                        local.localUser
+                                        maybeRepliedTo
+                                        index
+                                        message
+                   )
+                :: list
+            )
+        )
+        ( Array.length channel.messages - 1, [] )
+        channel.messages
+        |> Tuple.second
+
+
 conversationViewHelper :
     Id GuildId
     -> Id ChannelId
@@ -1028,6 +1272,21 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
+dmInputConfig : Id UserId -> MsgConfig FrontendMsg
+dmInputConfig userId =
+    { gotPingUserPosition = GotPingUserPosition
+    , textInputGotFocus = TextInputGotFocus
+    , textInputLostFocus = TextInputLostFocus
+    , typedMessage = TypedDmMessage userId
+    , pressedSendMessage = PressedDmSendMessage userId
+    , pressedArrowInDropdown = PressedDmArrowInDropdown userId
+    , pressedArrowUpInEmptyInput = PressedDmArrowUpInEmptyInput userId
+    , pressedPingUser = PressedDmPingUser userId
+    , pressedPingDropdownContainer = PressedPingDropdownContainer
+    , target = MessageInput.NewMessage
+    }
+
+
 messageInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
 messageInputConfig guildId channelId =
     { gotPingUserPosition = GotPingUserPosition
@@ -1060,6 +1319,142 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
                 else
                     UserScrolled { scrolledToBottomOfChannel = isAtBottom } |> Json.Decode.succeed
             )
+
+
+dmConversationView :
+    Id UserId
+    -> FrontendUser
+    -> Maybe Int
+    -> LoggedIn2
+    -> LoadedFrontend
+    -> LocalState
+    -> DmChannel
+    -> Element FrontendMsg
+dmConversationView otherUserId otherUser maybeMessageHighlight loggedIn model local channel =
+    let
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local
+
+        replyTo =
+            SeqDict.get otherUserId loggedIn.dmReplyTo
+
+        otherUserName =
+            PersonName.toString otherUser.name
+    in
+    Ui.column
+        [ Ui.height Ui.fill
+        , Ui.heightMin 0
+        ]
+        [ channelHeader
+            (MyUi.isMobile model)
+            (Ui.row
+                [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
+                [ Ui.text otherUserName ]
+            )
+        , Ui.el
+            [ case loggedIn.showEmojiSelector of
+                EmojiSelectorHidden ->
+                    Ui.noAttr
+
+                EmojiSelectorForReaction _ ->
+                    Ui.inFront emojiSelector
+
+                EmojiSelectorForMessage ->
+                    Ui.inFront emojiSelector
+            , Ui.heightMin 0
+            , Ui.height Ui.fill
+            ]
+            (Ui.column
+                [ Ui.height Ui.fill
+                , Ui.paddingXY 0 16
+                , scrollable (canScroll model)
+                , Ui.id (Dom.idToString conversationContainerId)
+                , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
+                , Ui.heightMin 0
+                ]
+                (Ui.el
+                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
+                    (Ui.text ("This is the start of your conversation with " ++ otherUserName))
+                    :: dmConversationViewHelper
+                        otherUserId
+                        maybeMessageHighlight
+                        channel
+                        loggedIn
+                        local
+                        model
+                )
+            )
+        , Ui.column
+            [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
+            [ case replyTo of
+                Just messageIndex ->
+                    case Array.get messageIndex channel.messages of
+                        Just (UserTextMessage data) ->
+                            replyToHeader (PressedDmCloseReplyTo otherUserId) data.createdBy local
+
+                        Just (UserJoinedMessage _ userId _) ->
+                            replyToHeader (PressedDmCloseReplyTo otherUserId) userId local
+
+                        Just DeletedMessage ->
+                            Ui.none
+
+                        Nothing ->
+                            Ui.none
+
+                Nothing ->
+                    Ui.none
+            , MessageInput.view
+                (replyTo == Nothing)
+                (MyUi.isMobile model)
+                (dmInputConfig otherUserId)
+                channelTextInputId
+                ("Write a message to @" ++ PersonName.toString otherUser.name)
+                (case SeqDict.get otherUserId loggedIn.dmDrafts of
+                    Just text ->
+                        String.Nonempty.toString text
+
+                    Nothing ->
+                        ""
+                )
+                loggedIn.pingUser
+                local
+            , (case
+                SeqDict.filter
+                    (\_ a ->
+                        (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
+                            && (a.messageIndex == Nothing)
+                    )
+                    (SeqDict.remove local.localUser.userId channel.lastTypedAt)
+                    |> SeqDict.keys
+               of
+                [ single ] ->
+                    User.toString single allUsers ++ " is typing..."
+
+                _ ->
+                    " "
+              )
+                |> Ui.text
+                |> Ui.el
+                    [ Ui.Font.bold
+                    , Ui.Font.size 13
+                    , Ui.Font.color MyUi.font3
+                    , MyUi.htmlStyle "white-space" "pre-wrap"
+                    , MyUi.noShrinking
+                    , Ui.contentCenterY
+                    , MyUi.htmlStyle
+                        "padding"
+                        ("0 calc(12px + "
+                            ++ MyUi.insetBottom
+                            ++ " * 0.5) "
+                            ++ MyUi.insetBottom
+                            ++ " calc(12px + "
+                            ++ MyUi.insetBottom
+                            ++ " * 0.5)"
+                        )
+                    ]
+            ]
+        ]
 
 
 conversationView :
@@ -1130,10 +1525,10 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
-                            replyToHeader guildId channelId data.createdBy local
+                            replyToHeader (PressedCloseReplyTo guildId channelId) data.createdBy local
 
                         Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader guildId channelId userId local
+                            replyToHeader (PressedCloseReplyTo guildId channelId) userId local
 
                         Just DeletedMessage ->
                             Ui.none
@@ -1210,8 +1605,8 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
         ]
 
 
-replyToHeader : Id GuildId -> Id ChannelId -> Id UserId -> LocalState -> Element FrontendMsg
-replyToHeader guildId channelId userId local =
+replyToHeader : msg -> Id UserId -> LocalState -> Element msg
+replyToHeader onPress userId local =
     Ui.Prose.paragraph
         [ Ui.Font.color MyUi.font2
         , Ui.background MyUi.background2
@@ -1221,7 +1616,7 @@ replyToHeader guildId channelId userId local =
         , Ui.borderColor MyUi.border1
         , Ui.inFront
             (Ui.el
-                [ Ui.Input.button (PressedCloseReplyTo guildId channelId)
+                [ Ui.Input.button onPress
                 , Ui.width (Ui.px 32)
                 , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
                 , Ui.alignRight

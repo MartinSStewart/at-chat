@@ -2317,6 +2317,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDmCloseReplyTo userId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | dmReplyTo = SeqDict.remove userId loggedIn.dmReplyTo
+                      }
+                    , setFocus model Pages.Guild.channelTextInputId
+                    )
+                )
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
