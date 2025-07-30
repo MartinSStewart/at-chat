@@ -7,6 +7,7 @@ module User exposing
     , allEmailNotifications
     , backendToFrontend
     , backendToFrontendForUser
+    , profileImage
     , sectionToString
     , setLastChannelViewed
     , setName
@@ -19,6 +20,7 @@ import Id exposing (ChannelId, GuildId, Id, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Ui exposing (Element)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -119,3 +121,14 @@ toString userId allUsers =
 
         Nothing ->
             "<missing>"
+
+
+profileImage : Element msg
+profileImage =
+    Ui.el
+        [ Ui.background (Ui.rgb 100 100 100)
+        , Ui.rounded 8
+        , Ui.width (Ui.px 40)
+        , Ui.height (Ui.px 40)
+        ]
+        Ui.none

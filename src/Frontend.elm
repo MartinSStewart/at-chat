@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DirectMessageChannel
+import DmChannel
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -277,7 +277,7 @@ loadedInitHelper time loginData loading =
                     IsNotAdminLoginData ->
                         IsNotAdmin
             , guilds = loginData.guilds
-            , directMessages = loginData.directMessages
+            , dmChannels = loginData.dmChannels
             , joinGuildError = Nothing
             , localUser =
                 { userId = loginData.userId
@@ -594,6 +594,9 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.none )
 
+        DmRoute _ ->
+            ( model2, Command.none )
+
 
 routeRequiresLogin : Route -> Bool
 routeRequiresLogin route =
@@ -608,6 +611,9 @@ routeRequiresLogin route =
             False
 
         GuildRoute _ _ ->
+            True
+
+        DmRoute _ ->
             True
 
 
@@ -3125,14 +3131,24 @@ changeUpdate localMsg local =
 
                 Server_DiscordDirectMessage time discordMessageId sender richText ->
                     { local
-                        | directMessages =
-                            DirectMessageChannel.addMessage
-                                time
-                                (Just discordMessageId)
+                        | dmChannels =
+                            SeqDict.update
                                 sender
-                                local.localUser.userId
-                                richText
-                                local.directMessages
+                                (\maybe ->
+                                    Maybe.withDefault DmChannel.init maybe
+                                        |> LocalState.createMessage
+                                            (UserTextMessage
+                                                { createdAt = time
+                                                , createdBy = sender
+                                                , content = richText
+                                                , reactions = SeqDict.empty
+                                                , editedAt = Nothing
+                                                , repliedTo = Nothing
+                                                }
+                                            )
+                                        |> Just
+                                )
+                                local.dmChannels
                     }
 
 
@@ -3852,5 +3868,8 @@ view model =
 
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
+
+                    DmRoute userId ->
+                        requiresLogin (Pages.Guild.dmView loaded userId)
         ]
     }

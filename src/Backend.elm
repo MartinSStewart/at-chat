@@ -10,10 +10,10 @@ module Backend exposing
 import AiChat
 import Array
 import ChannelName
-import DirectMessageChannel exposing (LastTypedAt)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
+import DmChannel exposing (LastTypedAt)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -158,7 +158,7 @@ init =
       , discordUsers = OneToOne.empty
       , discordBotId = Nothing
       , websocketEnabled = IsEnabled
-      , directMessages = SeqDict.empty
+      , dmChannels = SeqDict.empty
       }
     , Command.none
     )
@@ -794,14 +794,24 @@ handleDiscordCreateMessage message model =
                         RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) nonempty
                 in
                 ( { model
-                    | directMessages =
-                        DirectMessageChannel.addMessage
-                            message.timestamp
-                            (Just message.id)
-                            userId
-                            adminUserId
-                            richText
-                            model.directMessages
+                    | dmChannels =
+                        SeqDict.update
+                            (DmChannel.channelIdFromUserIds userId adminUserId)
+                            (\maybe ->
+                                Maybe.withDefault DmChannel.init maybe
+                                    |> LocalState.createMessage
+                                        (UserTextMessage
+                                            { createdAt = message.timestamp
+                                            , createdBy = userId
+                                            , content = richText
+                                            , reactions = SeqDict.empty
+                                            , editedAt = Nothing
+                                            , repliedTo = Nothing
+                                            }
+                                        )
+                                    |> Just
+                            )
+                            model.dmChannels
                   }
                 , broadcastToUser
                     Nothing
@@ -918,10 +928,18 @@ getLoginData userId user model =
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
     , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontendForUser userId guild) model.guilds
-    , directMessages =
-        SeqDict.filter
-            (\id _ -> DirectMessageChannel.includesUserId userId id)
-            model.directMessages
+    , dmChannels =
+        SeqDict.foldl
+            (\dmChannelId dmChannel dict ->
+                case DmChannel.otherUserId userId dmChannelId of
+                    Just otherUserId ->
+                        SeqDict.insert otherUserId dmChannel dict
+
+                    Nothing ->
+                        dict
+            )
+            SeqDict.empty
+            model.dmChannels
     , user = user
     , otherUsers =
         NonemptyDict.toList model.users

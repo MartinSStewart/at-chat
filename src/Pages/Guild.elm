@@ -2,6 +2,7 @@ module Pages.Guild exposing
     ( channelHeaderHeight
     , channelTextInputId
     , conversationContainerId
+    , dmView
     , dropdownButtonId
     , guildView
     , homePageLoggedInView
@@ -15,6 +16,7 @@ module Pages.Guild exposing
 import Array
 import ChannelName
 import Coord
+import DmChannel
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -295,6 +297,72 @@ homePageLoggedInView model loggedIn local =
                     ]
 
 
+dmView : LoadedFrontend -> Id UserId -> LoggedIn2 -> LocalState -> Element FrontendMsg
+dmView model userId loggedIn local =
+    if MyUi.isMobile model then
+        Ui.row
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background1
+            ]
+            [ Ui.column
+                [ Ui.height Ui.fill
+                ]
+                [ Ui.row
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ Ui.Lazy.lazy5
+                        guildColumn
+                        model.route
+                        local.localUser.userId
+                        local.localUser.user
+                        local.guilds
+                        (canScroll model)
+                    , friendsColumn local
+                    ]
+                , loggedInAsView local
+                ]
+            ]
+
+    else
+        Ui.row
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background1
+            ]
+            [ Ui.column
+                [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
+                [ Ui.row
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ Ui.Lazy.lazy5
+                        guildColumn
+                        model.route
+                        local.localUser.userId
+                        local.localUser.user
+                        local.guilds
+                        (canScroll model)
+                    , friendsColumn local
+                    ]
+                , loggedInAsView local
+                ]
+            , dmChannelView userId loggedIn local
+            ]
+
+
+dmChannelView : Id UserId -> LoggedIn2 -> LocalState -> Element FrontendMsg
+dmChannelView userId loggedIn local =
+    case SeqDict.get userId local.dmChannels of
+        Just dmChannel ->
+            Ui.text ("Conversation " ++ Id.toString userId)
+
+        --conversationView guildId channelId maybeMessageHighlight loggedIn model local channel
+        Nothing ->
+            Ui.el
+                [ Ui.centerY
+                , Ui.Font.center
+                , Ui.Font.color MyUi.font1
+                , Ui.Font.size 20
+                ]
+                (Ui.text "Channel does not exist")
+
+
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
     case loggedIn.newGuildForm of
@@ -439,7 +507,7 @@ memberLabel : LocalState -> Id UserId -> Element msg
 memberLabel local userId =
     Ui.row
         [ Ui.spacing 8, Ui.paddingXY 4 4 ]
-        [ userProfileImage
+        [ User.profileImage
         , case LocalState.getUser userId local of
             Just user ->
                 Ui.text (PersonName.toString user.name)
@@ -1342,17 +1410,6 @@ type HighlightMessage
     | UrlHighlight
 
 
-userProfileImage : Element msg
-userProfileImage =
-    Ui.el
-        [ Ui.background (Ui.rgb 100 100 100)
-        , Ui.rounded 8
-        , Ui.width (Ui.px 40)
-        , Ui.height (Ui.px 40)
-        ]
-        Ui.none
-
-
 messageView :
     SeqDict Int (NonemptySet Int)
     -> HighlightMessage
@@ -1408,7 +1465,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                         , Ui.width Ui.shrink
                         , Ui.alignTop
                         ]
-                        userProfileImage
+                        User.profileImage
                     , Ui.column
                         []
                         [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
@@ -1864,7 +1921,29 @@ friendsColumn local =
             ]
             (Ui.text "Direct messages")
         ]
-        Ui.none
+        (Ui.column
+            []
+            (List.filterMap
+                (\( otherUserId, dmChannel ) ->
+                    case SeqDict.get otherUserId local.localUser.otherUsers of
+                        Just otherUser ->
+                            Ui.row
+                                [ Ui.clipWithEllipsis
+                                , Ui.spacing 8
+                                , Ui.padding 4
+                                , Ui.Input.button (PressedLink (Route.DmRoute otherUserId))
+                                ]
+                                [ User.profileImage
+                                , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+                                ]
+                                |> Just
+
+                        Nothing ->
+                            Nothing
+                )
+                (SeqDict.toList local.dmChannels)
+            )
+        )
 
 
 newChannelFormInit : NewChannelForm

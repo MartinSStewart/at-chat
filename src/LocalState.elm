@@ -40,8 +40,8 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
-import DirectMessageChannel exposing (DirectMessageChannel, DirectMessageChannelId, LastTypedAt)
 import Discord.Id
+import DmChannel exposing (DmChannel, DmChannelId, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -67,7 +67,7 @@ import User exposing (BackendUser, EmailNotifications(..), EmailStatus, Frontend
 type alias LocalState =
     { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
+    , dmChannels : SeqDict (Id UserId) DmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     }

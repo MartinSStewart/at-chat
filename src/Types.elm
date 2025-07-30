@@ -41,9 +41,9 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DirectMessageChannel exposing (DirectMessageChannel, DirectMessageChannelId)
 import Discord
 import Discord.Id
+import DmChannel exposing (DmChannel, DmChannelId)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -245,7 +245,7 @@ type alias BackendModel =
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , websocketEnabled : IsEnabled
-    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
+    , dmChannels : SeqDict DmChannelId DmChannel
     }
 
 
@@ -442,7 +442,7 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
+    , dmChannels : SeqDict (Id UserId) DmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     }

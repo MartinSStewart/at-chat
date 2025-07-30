@@ -7,7 +7,7 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -17,6 +17,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
+    | DmRoute (Id UserId)
     | AiChatRoute
 
 
@@ -94,6 +95,14 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
+        [ "d", userId ] ->
+            case Id.fromString userId of
+                Just userId2 ->
+                    DmRoute userId2
+
+                Nothing ->
+                    HomePageRoute
+
         _ ->
             HomePageRoute
 
@@ -146,5 +155,8 @@ encode route =
                            )
                     , []
                     )
+
+                DmRoute userId ->
+                    ( [ "d", Id.toString userId ], [] )
     in
     Url.Builder.absolute path query
