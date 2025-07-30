@@ -5,18 +5,13 @@ module LocalState exposing
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
-    , DirectMessageChannel
-    , DirectMessageChannelId
     , FrontendChannel
     , FrontendGuild
     , IsEnabled(..)
     , JoinGuildError(..)
-    , LastTypedAt
     , LocalState
     , LocalUser
     , LogWithTime
-    , Message(..)
-    , UserTextMessageData
     , addInvite
     , addMember
     , addReactionEmoji
@@ -30,8 +25,6 @@ module LocalState exposing
     , deleteChannel
     , deleteChannelFrontend
     , deleteMessage
-    , directMessageChannelId
-    , directMessageChannelInit
     , editChannel
     , editMessage
     , getGuildAndChannel
@@ -47,6 +40,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import DirectMessageChannel exposing (DirectMessageChannel, DirectMessageChannelId, LastTypedAt)
 import Discord.Id
 import Duration
 import Effect.Time as Time
@@ -56,6 +50,7 @@ import Id exposing (ChannelId, GuildId, Id(..), InviteLinkId, UserId)
 import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
+import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -72,6 +67,7 @@ import User exposing (BackendUser, EmailNotifications(..), EmailStatus, Frontend
 type alias LocalState =
     { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
+    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     }
@@ -160,30 +156,6 @@ type alias BackendChannel =
     }
 
 
-type alias DirectMessageChannel =
-    { messages : Array Message
-    , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
-    }
-
-
-type DirectMessageChannelId
-    = DirectMessageChannelId (Id UserId) (Id UserId)
-
-
-directMessageChannelInit : DirectMessageChannel
-directMessageChannelInit =
-    { messages = Array.empty
-    , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
-    }
-
-
-directMessageChannelId : Id UserId -> Id UserId -> DirectMessageChannelId
-directMessageChannelId (Id userIdA) (Id userIdB) =
-    DirectMessageChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
-
-
 type alias FrontendChannel =
     { createdAt : Time.Posix
     , createdBy : Id UserId
@@ -193,10 +165,6 @@ type alias FrontendChannel =
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
-
-
-type alias LastTypedAt =
-    { time : Time.Posix, messageIndex : Maybe Int }
 
 
 channelToFrontend : BackendChannel -> Maybe FrontendChannel
@@ -224,22 +192,6 @@ type alias Archived =
 type ChannelStatus
     = ChannelActive
     | ChannelDeleted { deletedAt : Time.Posix, deletedBy : Id UserId }
-
-
-type Message
-    = UserTextMessage UserTextMessageData
-    | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
-    | DeletedMessage
-
-
-type alias UserTextMessageData =
-    { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , content : Nonempty RichText
-    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
-    , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe Int
-    }
 
 
 type AdminStatus

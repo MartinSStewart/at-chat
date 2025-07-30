@@ -41,6 +41,7 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DirectMessageChannel exposing (DirectMessageChannel, DirectMessageChannelId)
 import Discord
 import Discord.Id
 import Duration exposing (Duration)
@@ -57,7 +58,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DirectMessageChannel, DirectMessageChannelId, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -441,6 +442,7 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
+    , directMessages : SeqDict DirectMessageChannelId DirectMessageChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     }
@@ -481,6 +483,7 @@ type ServerChange
     | Server_DiscordDeleteMessage MessageId
     | Server_SetWebsocketToggled IsEnabled
     | Server_SetName (Id UserId) PersonName
+    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText)
 
 
 type LocalChange

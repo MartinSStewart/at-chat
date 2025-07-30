@@ -7,6 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DirectMessageChannel
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -31,8 +32,9 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser, Message(..))
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
+import Message exposing (Message(..))
 import MessageInput
 import MessageMenu
 import MyUi
@@ -275,6 +277,7 @@ loadedInitHelper time loginData loading =
                     IsNotAdminLoginData ->
                         IsNotAdmin
             , guilds = loginData.guilds
+            , directMessages = loginData.directMessages
             , joinGuildError = Nothing
             , localUser =
                 { userId = loginData.userId
@@ -3118,6 +3121,18 @@ changeUpdate localMsg local =
                                 | otherUsers =
                                     SeqDict.updateIfExists userId (User.setName name) localUser.otherUsers
                             }
+                    }
+
+                Server_DiscordDirectMessage time discordMessageId sender richText ->
+                    { local
+                        | directMessages =
+                            DirectMessageChannel.addMessage
+                                time
+                                (Just discordMessageId)
+                                sender
+                                local.localUser.userId
+                                richText
+                                local.directMessages
                     }
 
 

@@ -27,8 +27,9 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
-import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser, Message(..))
+import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
+import Message exposing (Message(..))
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MyUi

@@ -20,7 +20,8 @@ import Html.Attributes
 import Icons
 import Id exposing (ChannelId, GuildId, Id)
 import Json.Decode
-import LocalState exposing (LocalState, Message(..))
+import LocalState exposing (LocalState)
+import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
 import MyUi
 import Quantity exposing (Quantity, Rate)
