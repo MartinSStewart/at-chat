@@ -7,6 +7,7 @@ module LocalState exposing
     , ChannelStatus(..)
     , FrontendChannel
     , FrontendGuild
+    , GuildOrDmId(..)
     , IsEnabled(..)
     , JoinGuildError(..)
     , LocalState
@@ -28,6 +29,7 @@ module LocalState exposing
     , editChannel
     , editMessage
     , getGuildAndChannel
+    , getMessages
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
@@ -231,6 +233,31 @@ createNewUser createdAt name email userIsAdmin =
     , dmLastViewed = SeqDict.empty
     , lastChannelViewed = SeqDict.empty
     }
+
+
+type GuildOrDmId
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_Dm (Id UserId)
+
+
+getMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
+getMessages guildOrDmId local =
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId ->
+            case getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    Just channel.messages
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    Just dmChannel.messages
+
+                Nothing ->
+                    Nothing
 
 
 getUser : Id UserId -> LocalState -> Maybe FrontendUser

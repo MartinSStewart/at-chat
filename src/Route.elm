@@ -161,7 +161,16 @@ encode route =
                     , []
                     )
 
-                DmRoute userId ->
-                    ( [ "d", Id.toString userId ], [] )
+                DmRoute userId maybeMessageIndex ->
+                    ( [ "d", Id.toString userId ]
+                        ++ (case maybeMessageIndex of
+                                Just messageIndex ->
+                                    [ "m", String.fromInt messageIndex ]
+
+                                Nothing ->
+                                    []
+                           )
+                    , []
+                    )
     in
     Url.Builder.absolute path query
