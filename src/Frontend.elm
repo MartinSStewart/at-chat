@@ -1300,29 +1300,16 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | messageHover =
-                            case model.route of
-                                GuildRoute guildId (ChannelRoute channelId _) ->
-                                    if
-                                        MessageHover (GuildOrDmId_Guild guildId channelId) messageIndex
-                                            == loggedIn.messageHover
-                                    then
+                            case routeToMessageId model.route of
+                                Just messageId ->
+                                    if MessageHover messageId messageIndex == loggedIn.messageHover then
                                         NoMessageHover
 
                                     else
                                         loggedIn.messageHover
 
-                                DmRoute otherUserId _ ->
-                                    if
-                                        MessageHover (GuildOrDmId_Dm otherUserId) messageIndex
-                                            == loggedIn.messageHover
-                                    then
-                                        NoMessageHover
-
-                                    else
-                                        loggedIn.messageHover
-
-                                _ ->
-                                    ( model, Command.none )
+                                Nothing ->
+                                    loggedIn.messageHover
                       }
                     , Command.none
                     )
@@ -1361,7 +1348,7 @@ updateLoaded msg model =
                                     loggedIn.messageHover
 
                                 MessageMenu a ->
-                                    MessageHover a.messageId
+                                    MessageHover a.messageId a.messageIndex
                       }
                     , Command.none
                     )
@@ -1385,7 +1372,7 @@ updateLoaded msg model =
                                                     )
                                                         |> Just
 
-                                                Nothing ->
+                                                _ ->
                                                     Nothing
 
                                         Nothing ->
@@ -1401,7 +1388,7 @@ updateLoaded msg model =
                                                     )
                                                         |> Just
 
-                                                Nothing ->
+                                                _ ->
                                                     Nothing
 
                                         Nothing ->
@@ -1514,24 +1501,20 @@ updateLoaded msg model =
                 model
 
         PressedReactionEmoji_Remove messageIndex emoji ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId _) ->
-                    updateLoggedIn
-                        (\loggedIn ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case routeToMessageId model.route of
+                        Just messageId ->
                             handleLocalChange
                                 model.time
-                                (Local_RemoveReactionEmoji
-                                    { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
-                                    emoji
-                                    |> Just
-                                )
+                                (Local_RemoveReactionEmoji messageId messageIndex emoji |> Just)
                                 loggedIn
                                 Command.none
-                        )
-                        model
 
-                _ ->
-                    ( model, Command.none )
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         GotPingUserPositionForEditMessage result ->
             updateLoggedIn
@@ -2124,17 +2107,10 @@ updateLoaded msg model =
             ( model, Command.none )
 
         MessageMenu_PressedShowFullMenu messageIndex clickedAt ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId _) ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            let
-                                messageId =
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , messageIndex = messageIndex
-                                    }
-                            in
+            updateLoggedIn
+                (\loggedIn ->
+                    case routeToMessageId model.route of
+                        Just messageId ->
                             ( { loggedIn
                                 | messageHover =
                                     MessageMenu
@@ -2143,12 +2119,14 @@ updateLoaded msg model =
                                                 (Coord.xy (-MessageMenu.width - 8) -8)
                                                 clickedAt
                                         , messageId = messageId
+                                        , messageIndex = messageIndex
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
                                                 , targetOffset =
                                                     MessageMenu.mobileMenuOpeningOffset
                                                         messageId
+                                                        messageIndex
                                                         (Local.model loggedIn.localState)
                                                         model
                                                 }
@@ -2156,18 +2134,18 @@ updateLoaded msg model =
                               }
                             , Command.none
                             )
-                        )
-                        model
 
-                _ ->
-                    ( model, Command.none )
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
-        MessageMenu_PressedDeleteMessage messageId ->
+        MessageMenu_PressedDeleteMessage messageId messageIndex ->
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (Just (Local_DeleteMessage messageId))
+                        (Just (Local_DeleteMessage messageId messageIndex))
                         (MessageMenu.close model loggedIn)
                         Command.none
                 )
@@ -2190,10 +2168,10 @@ updateLoaded msg model =
         MessageMenu_PressedContainer ->
             ( model, Command.none )
 
-        PressedCancelMessageEdit guildId channelId ->
+        PressedCancelMessageEdit messageId ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | editMessage = SeqDict.remove ( guildId, channelId ) loggedIn.editMessage }
+                    ( { loggedIn | editMessage = SeqDict.remove messageId loggedIn.editMessage }
                     , Command.none
                     )
                 )
@@ -2240,7 +2218,7 @@ updateLoaded msg model =
                                 NoMessageHover ->
                                     loggedIn.messageHover
 
-                                MessageHover _ ->
+                                MessageHover _ _ ->
                                     loggedIn.messageHover
 
                                 MessageMenu messageMenu ->
@@ -2360,59 +2338,31 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedDmCloseReplyTo userId ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | dmReplyTo = SeqDict.remove userId loggedIn.dmReplyTo
-                      }
-                    , setFocus model Pages.Guild.channelTextInputId
-                    )
-                )
-                model
-
-        TypedDmMessage otherUserId string ->
-            Debug.todo ""
-
-        PressedDmSendMessage otherUserId ->
-            Debug.todo ""
-
-        PressedDmArrowInDropdown otherUserId int ->
-            Debug.todo ""
-
-        PressedDmArrowUpInEmptyInput otherUserId ->
-            Debug.todo ""
-
-        PressedDmPingUser otherUserId int ->
-            Debug.todo ""
-
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
-    case model.route of
-        GuildRoute guildId (ChannelRoute channelId _) ->
-            let
-                messageId : MessageId
-                messageId =
-                    { guildId = guildId
-                    , channelId = channelId
-                    , messageIndex = messageIndex
-                    }
-            in
+    case routeToMessageId model.route of
+        Just messageId ->
             { loggedIn
                 | messageHover =
                     MessageMenu
                         { messageId = messageId
+                        , messageIndex = messageIndex
                         , position = clickedAt
                         , mobileMode =
                             MessageMenuOpening
                                 { offset = Quantity.zero
-                                , targetOffset = MessageMenu.mobileMenuOpeningOffset messageId local model
+                                , targetOffset =
+                                    MessageMenu.mobileMenuOpeningOffset
+                                        messageId
+                                        messageIndex
+                                        local
+                                        model
                                 }
                         }
             }
 
-        _ ->
+        Nothing ->
             loggedIn
 
 
@@ -2509,7 +2459,7 @@ handleTouchEnd time model =
                 NoMessageHover ->
                     loggedIn2
 
-                MessageHover _ ->
+                MessageHover _ _ ->
                     loggedIn2
             , Command.none
             )
@@ -2676,54 +2626,59 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildId channelId text repliedTo ->
-                    case LocalState.getGuildAndChannel guildId channelId local of
-                        Just ( guild, channel ) ->
-                            let
-                                user =
-                                    local.localUser.user
+                Local_SendMessage createdAt messageId text repliedTo ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( guild, channel ) ->
+                                    let
+                                        user =
+                                            local.localUser.user
 
-                                localUser =
-                                    local.localUser
-                            in
-                            { local
-                                | guilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert
-                                                    channelId
-                                                    (LocalState.createMessage
-                                                        (UserTextMessage
-                                                            { createdAt = createdAt
-                                                            , createdBy = local.localUser.userId
-                                                            , content = text
-                                                            , reactions = SeqDict.empty
-                                                            , editedAt = Nothing
-                                                            , repliedTo = repliedTo
-                                                            }
-                                                        )
-                                                        channel
-                                                    )
-                                                    guild.channels
-                                        }
-                                        local.guilds
-                                , localUser =
-                                    { localUser
-                                        | user =
-                                            { user
-                                                | lastViewed =
-                                                    SeqDict.insert
-                                                        ( guildId, channelId )
-                                                        (Array.length channel.messages)
-                                                        user.lastViewed
+                                        localUser =
+                                            local.localUser
+                                    in
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.insert
+                                                            channelId
+                                                            (LocalState.createMessage
+                                                                (UserTextMessage
+                                                                    { createdAt = createdAt
+                                                                    , createdBy = local.localUser.userId
+                                                                    , content = text
+                                                                    , reactions = SeqDict.empty
+                                                                    , editedAt = Nothing
+                                                                    , repliedTo = repliedTo
+                                                                    }
+                                                                )
+                                                                channel
+                                                            )
+                                                            guild.channels
+                                                }
+                                                local.guilds
+                                        , localUser =
+                                            { localUser
+                                                | user =
+                                                    { user
+                                                        | lastViewed =
+                                                            SeqDict.insert
+                                                                ( guildId, channelId )
+                                                                (Array.length channel.messages)
+                                                                user.lastViewed
+                                                    }
                                             }
                                     }
-                            }
 
-                        Nothing ->
-                            local
+                                Nothing ->
+                                    local
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
                 Local_NewChannel time guildId channelName ->
                     { local
@@ -2782,77 +2737,102 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                Local_MemberTyping time guildId channelId ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (LocalState.memberIsTyping local.localUser.userId time channelId)
-                                local.guilds
-                    }
+                Local_MemberTyping time messageId ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.memberIsTyping local.localUser.userId time channelId)
+                                        local.guilds
+                            }
 
-                Local_AddReactionEmoji messageId emoji ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (LocalState.addReactionEmoji
-                                    emoji
-                                    local.localUser.userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                )
-                                local.guilds
-                    }
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
-                Local_RemoveReactionEmoji messageId emoji ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (LocalState.removeReactionEmoji
-                                    emoji
-                                    local.localUser.userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                )
-                                local.guilds
-                    }
+                Local_AddReactionEmoji messageId messageIndex emoji ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.addReactionEmoji
+                                            emoji
+                                            local.localUser.userId
+                                            channelId
+                                            messageIndex
+                                        )
+                                        local.guilds
+                            }
 
-                Local_SendEditMessage time messageId newContent ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (\guild ->
-                                    LocalState.editMessage
-                                        local.localUser.userId
-                                        time
-                                        newContent
-                                        messageId.channelId
-                                        messageId.messageIndex
-                                        guild
-                                        |> Result.withDefault guild
-                                )
-                                local.guilds
-                    }
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
-                Local_MemberEditTyping time messageId ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (\guild ->
-                                    LocalState.memberIsEditTyping
-                                        local.localUser.userId
-                                        time
-                                        messageId.channelId
-                                        messageId.messageIndex
-                                        guild
-                                        |> Result.withDefault guild
-                                )
-                                local.guilds
-                    }
+                Local_RemoveReactionEmoji messageId messageIndex emoji ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.removeReactionEmoji
+                                            emoji
+                                            local.localUser.userId
+                                            channelId
+                                            messageIndex
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
+
+                Local_SendEditMessage time messageId messageIndex newContent ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (\guild ->
+                                            LocalState.editMessage
+                                                local.localUser.userId
+                                                time
+                                                newContent
+                                                channelId
+                                                messageIndex
+                                                guild
+                                                |> Result.withDefault guild
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
+
+                Local_MemberEditTyping time messageId messageIndex ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (\guild ->
+                                            LocalState.memberIsEditTyping
+                                                local.localUser.userId
+                                                time
+                                                channelId
+                                                messageIndex
+                                                guild
+                                                |> Result.withDefault guild
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
                 Local_SetLastViewed guildId channelId messageIndex ->
                     let
@@ -2873,27 +2853,32 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Local_DeleteMessage messageId ->
-                    case SeqDict.get messageId.guildId local.guilds of
-                        Just guild ->
-                            case
-                                LocalState.deleteMessage
-                                    local.localUser.userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                    guild
-                            of
-                                Ok guild2 ->
-                                    { local
-                                        | guilds =
-                                            SeqDict.insert messageId.guildId guild2 local.guilds
-                                    }
+                Local_DeleteMessage messageId messageIndex ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            case SeqDict.get guildId local.guilds of
+                                Just guild ->
+                                    case
+                                        LocalState.deleteMessage
+                                            local.localUser.userId
+                                            channelId
+                                            messageIndex
+                                            guild
+                                    of
+                                        Ok guild2 ->
+                                            { local
+                                                | guilds =
+                                                    SeqDict.insert guildId guild2 local.guilds
+                                            }
 
-                                Err () ->
+                                        Err () ->
+                                            local
+
+                                Nothing ->
                                     local
 
-                        Nothing ->
-                            local
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
                 Local_SetDiscordWebsocket isEnabled ->
                     { local
@@ -3068,85 +3053,110 @@ changeUpdate localMsg local =
                                 local.guilds
                     }
 
-                Server_AddReactionEmoji userId messageId emoji ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (LocalState.addReactionEmoji emoji userId messageId.channelId messageId.messageIndex)
-                                local.guilds
-                    }
+                Server_AddReactionEmoji userId messageId messageIndex emoji ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.addReactionEmoji emoji userId channelId messageIndex)
+                                        local.guilds
+                            }
 
-                Server_RemoveReactionEmoji userId messageId emoji ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (LocalState.removeReactionEmoji
-                                    emoji
-                                    userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                )
-                                local.guilds
-                    }
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
-                Server_SendEditMessage time userId messageId newContent ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (\guild ->
-                                    LocalState.editMessage
-                                        userId
-                                        time
-                                        newContent
-                                        messageId.channelId
-                                        messageId.messageIndex
-                                        guild
-                                        |> Result.withDefault guild
-                                )
-                                local.guilds
-                    }
+                Server_RemoveReactionEmoji userId messageId messageIndex emoji ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.removeReactionEmoji
+                                            emoji
+                                            userId
+                                            channelId
+                                            messageIndex
+                                        )
+                                        local.guilds
+                            }
 
-                Server_MemberEditTyping time userId messageId ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                messageId.guildId
-                                (\guild ->
-                                    LocalState.memberIsEditTyping
-                                        userId
-                                        time
-                                        messageId.channelId
-                                        messageId.messageIndex
-                                        guild
-                                        |> Result.withDefault guild
-                                )
-                                local.guilds
-                    }
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
-                Server_DeleteMessage userId messageId ->
-                    case SeqDict.get messageId.guildId local.guilds of
-                        Just guild ->
-                            case
-                                LocalState.deleteMessage
-                                    userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                    guild
-                            of
-                                Ok guild2 ->
-                                    { local
-                                        | guilds =
-                                            SeqDict.insert messageId.guildId guild2 local.guilds
-                                    }
+                Server_SendEditMessage time userId messageId messageIndex newContent ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (\guild ->
+                                            LocalState.editMessage
+                                                userId
+                                                time
+                                                newContent
+                                                channelId
+                                                messageIndex
+                                                guild
+                                                |> Result.withDefault guild
+                                        )
+                                        local.guilds
+                            }
 
-                                Err () ->
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
+
+                Server_MemberEditTyping time userId messageId messageIndex ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (\guild ->
+                                            LocalState.memberIsEditTyping
+                                                userId
+                                                time
+                                                channelId
+                                                messageIndex
+                                                guild
+                                                |> Result.withDefault guild
+                                        )
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
+
+                Server_DeleteMessage userId messageId messageIndex ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            case SeqDict.get guildId local.guilds of
+                                Just guild ->
+                                    case
+                                        LocalState.deleteMessage
+                                            userId
+                                            channelId
+                                            messageIndex
+                                            guild
+                                    of
+                                        Ok guild2 ->
+                                            { local
+                                                | guilds =
+                                                    SeqDict.insert guildId guild2 local.guilds
+                                            }
+
+                                        Err () ->
+                                            local
+
+                                Nothing ->
                                     local
 
-                        Nothing ->
-                            local
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
                 Server_DiscordDeleteMessage messageId ->
                     { local
@@ -3603,7 +3613,7 @@ pendingChangesText localChange =
                     else
                         "Disabled email notifications"
 
-        Local_SendMessage _ _ _ _ _ ->
+        Local_SendMessage _ _ _ _ ->
             "Sent a message"
 
         Local_NewChannel _ _ _ ->
@@ -3621,25 +3631,25 @@ pendingChangesText localChange =
         Local_NewGuild _ _ _ ->
             "Created new guild"
 
-        Local_MemberTyping _ _ _ ->
+        Local_MemberTyping _ _ ->
             "Is typing notification"
 
-        Local_AddReactionEmoji _ _ ->
+        Local_AddReactionEmoji _ _ _ ->
             "Added reaction emoji"
 
-        Local_RemoveReactionEmoji _ _ ->
+        Local_RemoveReactionEmoji _ _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage _ _ _ ->
+        Local_SendEditMessage _ _ _ _ ->
             "Edit message"
 
-        Local_MemberEditTyping _ _ ->
+        Local_MemberEditTyping _ _ _ ->
             "Editing message"
 
         Local_SetLastViewed _ _ _ ->
             "Viewed channel"
 
-        Local_DeleteMessage _ ->
+        Local_DeleteMessage _ _ ->
             "Delete message"
 
         Local_SetDiscordWebsocket _ ->
@@ -3665,6 +3675,9 @@ layout model attributes child =
                 let
                     local =
                         Local.model loggedIn.localState
+
+                    maybeMessageId =
+                        routeToMessageId model.route
                 in
                 [ Local.networkError
                     (\change ->
@@ -3678,19 +3691,19 @@ layout model attributes child =
                     model.time
                     loggedIn.localState
                     |> Ui.inFront
-                , case model.route of
-                    GuildRoute guildId (ChannelRoute channelId _) ->
+                , case maybeMessageId of
+                    Just messageId ->
                         case loggedIn.pingUser of
                             Just pingUser ->
                                 MessageInput.pingDropdownView
                                     (case pingUser.target of
                                         MessageInput.NewMessage ->
-                                            Pages.Guild.messageInputConfig guildId channelId
+                                            Pages.Guild.messageInputConfig messageId
 
                                         MessageInput.EditMessage ->
-                                            MessageMenu.editMessageTextInputConfig guildId channelId
+                                            MessageMenu.editMessageTextInputConfig messageId
                                     )
-                                    guildId
+                                    messageId
                                     local
                                     Pages.Guild.dropdownButtonId
                                     pingUser
@@ -3706,7 +3719,7 @@ layout model attributes child =
                         MessageMenu.view model extraOptions local loggedIn
                             |> Ui.inFront
 
-                    MessageHover _ ->
+                    MessageHover _ _ ->
                         Ui.noAttr
 
                     NoMessageHover ->
@@ -3954,7 +3967,7 @@ messageIdToMessage messageId messageIndex local =
                         Just (UserTextMessage message) ->
                             Just message
 
-                        Nothing ->
+                        _ ->
                             Nothing
 
                 Nothing ->
@@ -3967,14 +3980,11 @@ messageIdToMessage messageId messageIndex local =
                         Just (UserTextMessage message) ->
                             Just message
 
-                        Nothing ->
+                        _ ->
                             Nothing
 
                 Nothing ->
                     Nothing
-
-        _ ->
-            Nothing
 
 
 messageIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
@@ -3995,9 +4005,6 @@ messageIdToMessages messageId local =
 
                 Nothing ->
                     Nothing
-
-        _ ->
-            Nothing
 
 
 routeToMessageId : Route -> Maybe GuildOrDmId

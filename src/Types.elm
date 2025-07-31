@@ -371,9 +371,6 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
-    | PressedDmCloseReplyTo (Id UserId)
-    | PressedDmArrowInDropdown (Id UserId) Int
-    | PressedDmArrowUpInEmptyInput (Id UserId)
 
 
 type alias NewChannelForm =
@@ -483,11 +480,11 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
-    | Server_AddReactionEmoji (Id UserId) MessageId Emoji
-    | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
-    | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
-    | Server_DeleteMessage (Id UserId) MessageId
+    | Server_AddReactionEmoji (Id UserId) GuildOrDmId Int Emoji
+    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId Int Emoji
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText)
+    | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmId Int
+    | Server_DeleteMessage (Id UserId) GuildOrDmId Int
     | Server_DiscordDeleteMessage MessageId
     | Server_SetWebsocketToggled IsEnabled
     | Server_SetName (Id UserId) PersonName
@@ -505,11 +502,11 @@ type LocalChange
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix GuildOrDmId
     | Local_AddReactionEmoji GuildOrDmId Int Emoji
-    | Local_RemoveReactionEmoji MessageId Emoji
+    | Local_RemoveReactionEmoji GuildOrDmId Int Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText)
     | Local_MemberEditTyping Time.Posix GuildOrDmId Int
     | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
-    | Local_DeleteMessage MessageId
+    | Local_DeleteMessage GuildOrDmId Int
     | Local_SetDiscordWebsocket IsEnabled
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
     | Local_SetName PersonName

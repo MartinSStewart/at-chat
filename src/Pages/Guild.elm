@@ -1398,10 +1398,10 @@ dmConversationView otherUserId otherUser maybeMessageHighlight loggedIn model lo
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
-                            replyToHeader (PressedDmCloseReplyTo otherUserId) data.createdBy local
+                            replyToHeader (PressedCloseReplyTo (GuildOrDmId_Dm otherUserId)) data.createdBy local
 
                         Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader (PressedDmCloseReplyTo otherUserId) userId local
+                            replyToHeader (PressedCloseReplyTo (GuildOrDmId_Dm otherUserId)) userId local
 
                         Just DeletedMessage ->
                             Ui.none
@@ -1535,10 +1535,10 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
-                            replyToHeader (PressedCloseReplyTo guildId channelId) data.createdBy local
+                            replyToHeader (PressedCloseReplyTo messageId) data.createdBy local
 
                         Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader (PressedCloseReplyTo guildId channelId) userId local
+                            replyToHeader (PressedCloseReplyTo messageId) userId local
 
                         Just DeletedMessage ->
                             Ui.none
