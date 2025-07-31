@@ -47,7 +47,7 @@ import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
+import Types exposing (DmMessageId, Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -298,8 +298,8 @@ homePageLoggedInView model loggedIn local =
                     ]
 
 
-dmView : LoadedFrontend -> Id UserId -> LoggedIn2 -> LocalState -> Element FrontendMsg
-dmView model userId loggedIn local =
+dmView : LoadedFrontend -> Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> Element FrontendMsg
+dmView model userId maybeMessageHighlight loggedIn local =
     if MyUi.isMobile model then
         Ui.row
             [ Ui.height Ui.fill
@@ -343,12 +343,12 @@ dmView model userId loggedIn local =
                     ]
                 , loggedInAsView local
                 ]
-            , dmChannelView userId loggedIn local model
+            , dmChannelView userId maybeMessageHighlight loggedIn local model
             ]
 
 
-dmChannelView : Id UserId -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-dmChannelView otherUserId loggedIn local model =
+dmChannelView : Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
     case SeqDict.get otherUserId local.localUser.otherUsers of
         Just otherUser ->
             SeqDict.get otherUserId local.dmChannels
@@ -790,7 +790,7 @@ dmConversationViewHelper otherUserId maybeMessageHighlight channel loggedIn loca
         --        SeqDict.empty
         lastViewedIndex : Int
         lastViewedIndex =
-            SeqDict.get ( guildId, channelId ) local.localUser.user.lastViewed |> Maybe.withDefault -1
+            SeqDict.get otherUserId local.localUser.user.dmLastViewed |> Maybe.withDefault -1
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -918,8 +918,8 @@ dmConversationViewHelper otherUserId maybeMessageHighlight channel loggedIn loca
                                     message
 
                             else
-                                messageEditingView
-                                    { guildId = guildId, channelId = channelId, messageIndex = index }
+                                dmMessageEditingView
+                                    { otherUserId = otherUserId, messageIndex = index }
                                     message
                                     maybeRepliedTo
                                     revealedSpoilers
@@ -1691,6 +1691,88 @@ reactionEmojiView messageIndex currentUserId reactions =
             |> Just
 
 
+dmMessageEditingView :
+    DmMessageId
+    -> Message
+    -> Maybe ( Int, Message )
+    -> SeqDict Int (NonemptySet Int)
+    -> EditMessage
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> Element FrontendMsg
+dmMessageEditingView messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
+    case message of
+        UserTextMessage data ->
+            let
+                maybeReactions =
+                    reactionEmojiView messageId.messageIndex local.localUser.userId data.reactions
+            in
+            Ui.column
+                [ Ui.Font.color MyUi.font1
+                , Ui.background MyUi.hoverHighlight
+                , Ui.paddingWith
+                    { left = 0
+                    , right = 0
+                    , top = 4
+                    , bottom =
+                        if maybeReactions == Nothing then
+                            8
+
+                        else
+                            4
+                    }
+                , Ui.spacing 4
+                , messageHtmlId messageId.messageIndex |> Dom.idToString |> Ui.id
+                ]
+                [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
+                    |> Ui.el [ Ui.paddingXY 8 0 ]
+                , User.toString data.createdBy (LocalState.allUsers local)
+                    ++ " "
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
+                , Ui.column
+                    []
+                    [ MessageInput.view
+                        True
+                        False
+                        (MessageMenu.dmEditMessageTextInputConfig messageId.otherUserId)
+                        MessageMenu.editMessageTextInputId
+                        ""
+                        editing.text
+                        pingUser
+                        local
+                        |> Ui.el [ Ui.paddingXY 5 0 ]
+                    , Ui.row
+                        [ Ui.Font.size 14
+                        , Ui.Font.color MyUi.font3
+                        , Ui.paddingXY 12 0
+                        , MyUi.htmlStyle "white-space" "pre-wrap"
+                        ]
+                        [ Ui.text "Press "
+                        , Ui.el
+                            [ Ui.Input.button (PressedDmCancelMessageEdit messageId.otherUserId)
+                            , Ui.Font.color MyUi.font1
+                            , Ui.width Ui.shrink
+                            ]
+                            (Ui.text "escape")
+                        , Ui.text " to cancel edit"
+                        ]
+                    ]
+                , case maybeReactions of
+                    Just reactionView ->
+                        Ui.el [ Ui.paddingXY 8 0 ] reactionView
+
+                    Nothing ->
+                        Ui.none
+                ]
+
+        UserJoinedMessage _ _ _ ->
+            Ui.none
+
+        DeletedMessage ->
+            Ui.none
+
+
 messageEditingView :
     MessageId
     -> Message
@@ -2326,7 +2408,7 @@ friendsColumn local =
                                 [ Ui.clipWithEllipsis
                                 , Ui.spacing 8
                                 , Ui.padding 4
-                                , Ui.Input.button (PressedLink (Route.DmRoute otherUserId))
+                                , Ui.Input.button (PressedLink (Route.DmRoute otherUserId Nothing))
                                 ]
                                 [ User.profileImage
                                 , Ui.el [] (Ui.text (PersonName.toString otherUser.name))

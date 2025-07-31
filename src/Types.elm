@@ -3,6 +3,7 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DmMessageId
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -227,6 +228,10 @@ type EmojiSelector
 
 type alias MessageId =
     { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Int }
+
+
+type alias DmMessageId =
+    { otherUserId : Id UserId, messageIndex : Int }
 
 
 type alias BackendModel =

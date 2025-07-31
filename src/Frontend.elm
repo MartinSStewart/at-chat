@@ -346,6 +346,9 @@ loadedInitHelper time loginData loading =
 
                     Nothing ->
                         TwoFactorNotStarted
+            , dmEditMessage = SeqDict.empty
+            , dmReplyTo = SeqDict.empty
+            , dmDrafts = SeqDict.empty
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -594,7 +597,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.none )
 
-        DmRoute _ ->
+        DmRoute _ _ ->
             ( model2, Command.none )
 
 
@@ -613,7 +616,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DmRoute _ ->
+        DmRoute _ _ ->
             True
 
 
@@ -2328,6 +2331,21 @@ updateLoaded msg model =
                 )
                 model
 
+        TypedDmMessage otherUserId string ->
+            Debug.todo ""
+
+        PressedDmSendMessage otherUserId ->
+            Debug.todo ""
+
+        PressedDmArrowInDropdown otherUserId int ->
+            Debug.todo ""
+
+        PressedDmArrowUpInEmptyInput otherUserId ->
+            Debug.todo ""
+
+        PressedDmPingUser otherUserId int ->
+            Debug.todo ""
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -3880,7 +3898,7 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
-                    DmRoute userId ->
-                        requiresLogin (Pages.Guild.dmView loaded userId)
+                    DmRoute userId maybeMessageHighlight ->
+                        requiresLogin (Pages.Guild.dmView loaded userId maybeMessageHighlight)
         ]
     }
