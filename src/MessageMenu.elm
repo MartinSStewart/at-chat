@@ -18,9 +18,8 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (ChannelId, GuildId, Id)
 import Json.Decode
-import LocalState exposing (GuildOrDmId, LocalState)
+import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
 import MyUi
@@ -32,7 +31,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User
+import User exposing (GuildOrDmId)
 
 
 width : number

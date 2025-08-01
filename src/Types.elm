@@ -59,7 +59,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, GuildOrDmId, IsEnabled, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -80,7 +80,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, FrontendUser, GuildOrDmId)
 
 
 type FrontendModel
@@ -464,7 +464,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -505,7 +505,7 @@ type LocalChange
     | Local_RemoveReactionEmoji GuildOrDmId Int Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText)
     | Local_MemberEditTyping Time.Posix GuildOrDmId Int
-    | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
+    | Local_SetLastViewed GuildOrDmId Int
     | Local_DeleteMessage GuildOrDmId Int
     | Local_SetDiscordWebsocket IsEnabled
     | Local_ViewChannel (Id GuildId) (Id ChannelId)

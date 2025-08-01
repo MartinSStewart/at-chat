@@ -7,7 +7,6 @@ module LocalState exposing
     , ChannelStatus(..)
     , FrontendChannel
     , FrontendGuild
-    , GuildOrDmId(..)
     , IsEnabled(..)
     , JoinGuildError(..)
     , LocalState
@@ -63,7 +62,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
+import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser, GuildOrDmId(..))
 
 
 type alias LocalState =
@@ -233,11 +232,6 @@ createNewUser createdAt name email userIsAdmin =
     , dmLastViewed = SeqDict.empty
     , lastChannelViewed = SeqDict.empty
     }
-
-
-type GuildOrDmId
-    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_Dm (Id UserId)
 
 
 getMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
@@ -787,7 +781,7 @@ markAllChannelsAsViewed guildId guild user =
         | lastViewed =
             SeqDict.foldl
                 (\channelId channel state ->
-                    SeqDict.insert ( guildId, channelId ) (Array.length channel.messages - 1) state
+                    SeqDict.insert (GuildOrDmId_Guild guildId channelId) (Array.length channel.messages - 1) state
                 )
                 user.lastViewed
                 guild.channels

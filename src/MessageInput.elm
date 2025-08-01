@@ -20,7 +20,7 @@ import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
-import LocalState exposing (GuildOrDmId(..), LocalState)
+import LocalState exposing (LocalState)
 import MyUi
 import PersonName
 import RichText
@@ -30,7 +30,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Input
-import User exposing (FrontendUser)
+import User exposing (FrontendUser, GuildOrDmId(..))
 
 
 type alias MentionUserDropdown =

@@ -32,7 +32,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, GuildOrDmId(..), LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..))
 import MessageInput
@@ -59,7 +59,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser)
+import User exposing (BackendUser, GuildOrDmId(..))
 import UserOptions
 import Vector2d
 
@@ -759,27 +759,21 @@ updateLoaded msg model =
                 ( model2, cmd ) =
                     updateLoggedIn
                         (\loggedIn ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-                            in
                             handleLocalChange
                                 model.time
-                                (case model.route of
-                                    GuildRoute guildId (ChannelRoute channelId _) ->
-                                        case LocalState.getGuildAndChannel guildId channelId local of
-                                            Just ( _, channel ) ->
+                                (case routeToMessageId model.route of
+                                    Just messageId ->
+                                        case messageIdToMessages messageId (Local.model loggedIn.localState) of
+                                            Just messages ->
                                                 Local_SetLastViewed
-                                                    guildId
-                                                    channelId
-                                                    (Array.length channel.messages - 1)
+                                                    messageId
+                                                    (Array.length messages - 1)
                                                     |> Just
 
                                             Nothing ->
                                                 Nothing
 
-                                    _ ->
+                                    Nothing ->
                                         Nothing
                                 )
                                 loggedIn
@@ -1219,48 +1213,39 @@ updateLoaded msg model =
                                 Nothing ->
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
-                                            case model.route of
-                                                GuildRoute guildId (ChannelRoute channelId _) ->
-                                                    let
-                                                        local =
-                                                            Local.model loggedIn2.localState
-
-                                                        id =
-                                                            GuildOrDmId_Guild guildId channelId
-                                                    in
+                                            case routeToMessageId model.route of
+                                                Just messageId ->
                                                     handleLocalChange
                                                         model.time
-                                                        (case SeqDict.get guildId local.guilds of
-                                                            Just guild ->
-                                                                case SeqDict.get channelId guild.channels of
-                                                                    Just channel ->
-                                                                        Local_SetLastViewed
-                                                                            guildId
-                                                                            channelId
-                                                                            (Array.length channel.messages - 1)
-                                                                            |> Just
-
-                                                                    Nothing ->
-                                                                        Nothing
+                                                        (case
+                                                            messageIdToMessages
+                                                                messageId
+                                                                (Local.model loggedIn2.localState)
+                                                         of
+                                                            Just messages ->
+                                                                Local_SetLastViewed
+                                                                    messageId
+                                                                    (Array.length messages - 1)
+                                                                    |> Just
 
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        (if SeqDict.member id loggedIn2.editMessage then
+                                                        (if SeqDict.member messageId loggedIn2.editMessage then
                                                             { loggedIn2
                                                                 | editMessage =
-                                                                    SeqDict.remove id loggedIn2.editMessage
+                                                                    SeqDict.remove messageId loggedIn2.editMessage
                                                             }
 
                                                          else
                                                             { loggedIn2
                                                                 | replyTo =
-                                                                    SeqDict.remove id loggedIn2.replyTo
+                                                                    SeqDict.remove messageId loggedIn2.replyTo
                                                             }
                                                         )
                                                         (setFocus model Pages.Guild.channelTextInputId)
 
-                                                _ ->
+                                                Nothing ->
                                                     ( loggedIn2, Command.none )
 
                                         _ ->
@@ -2667,7 +2652,7 @@ changeUpdate localMsg local =
                                                     { user
                                                         | lastViewed =
                                                             SeqDict.insert
-                                                                ( guildId, channelId )
+                                                                messageId
                                                                 (Array.length channel.messages)
                                                                 user.lastViewed
                                                     }
@@ -2834,7 +2819,7 @@ changeUpdate localMsg local =
                         GuildOrDmId_Dm id ->
                             Debug.todo ""
 
-                Local_SetLastViewed guildId channelId messageIndex ->
+                Local_SetLastViewed messageId messageIndex ->
                     let
                         user =
                             local.localUser.user
@@ -2848,7 +2833,7 @@ changeUpdate localMsg local =
                                 | user =
                                     { user
                                         | lastViewed =
-                                            SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                                            SeqDict.insert messageId messageIndex user.lastViewed
                                     }
                             }
                     }
@@ -2910,60 +2895,65 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt guildId channelId text repliedTo ->
-                    case LocalState.getGuildAndChannel guildId channelId local of
-                        Just ( guild, channel ) ->
-                            let
-                                localUser : LocalUser
-                                localUser =
-                                    local.localUser
+                Server_SendMessage userId createdAt messageId text repliedTo ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( guild, channel ) ->
+                                    let
+                                        localUser : LocalUser
+                                        localUser =
+                                            local.localUser
 
-                                user : BackendUser
-                                user =
-                                    localUser.user
-                            in
-                            { local
-                                | guilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert
-                                                    channelId
-                                                    (LocalState.createMessage
-                                                        (UserTextMessage
-                                                            { createdAt = createdAt
-                                                            , createdBy = userId
-                                                            , content = text
-                                                            , reactions = SeqDict.empty
-                                                            , editedAt = Nothing
-                                                            , repliedTo = repliedTo
-                                                            }
-                                                        )
-                                                        channel
-                                                    )
-                                                    guild.channels
-                                        }
-                                        local.guilds
-                                , localUser =
-                                    { localUser
-                                        | user =
-                                            if userId == localUser.userId then
-                                                { user
-                                                    | lastViewed =
+                                        user : BackendUser
+                                        user =
+                                            localUser.user
+                                    in
+                                    { local
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild
+                                                    | channels =
                                                         SeqDict.insert
-                                                            ( guildId, channelId )
-                                                            (Array.length channel.messages)
-                                                            user.lastViewed
+                                                            channelId
+                                                            (LocalState.createMessage
+                                                                (UserTextMessage
+                                                                    { createdAt = createdAt
+                                                                    , createdBy = userId
+                                                                    , content = text
+                                                                    , reactions = SeqDict.empty
+                                                                    , editedAt = Nothing
+                                                                    , repliedTo = repliedTo
+                                                                    }
+                                                                )
+                                                                channel
+                                                            )
+                                                            guild.channels
                                                 }
+                                                local.guilds
+                                        , localUser =
+                                            { localUser
+                                                | user =
+                                                    if userId == localUser.userId then
+                                                        { user
+                                                            | lastViewed =
+                                                                SeqDict.insert
+                                                                    messageId
+                                                                    (Array.length channel.messages)
+                                                                    user.lastViewed
+                                                        }
 
-                                            else
-                                                user
+                                                    else
+                                                        user
+                                            }
                                     }
-                            }
 
-                        Nothing ->
-                            local
+                                Nothing ->
+                                    local
+
+                        GuildOrDmId_Dm id ->
+                            Debug.todo ""
 
                 Server_NewChannel time guildId channelName ->
                     { local
@@ -3502,25 +3492,30 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     Command.none
 
-                        ServerChange (Server_SendMessage senderId _ guildId channelId content maybeRepliedTo) ->
-                            case LocalState.getGuildAndChannel guildId channelId local of
-                                Just ( _, channel ) ->
-                                    Command.batch
-                                        [ playNotificationSound
-                                            senderId
-                                            maybeRepliedTo
-                                            channel
-                                            local
-                                            content
-                                            model
-                                        , if model.scrolledToBottomOfChannel then
-                                            scrollToBottomOfChannel
+                        ServerChange (Server_SendMessage senderId _ messageId content maybeRepliedTo) ->
+                            case messageId of
+                                GuildOrDmId_Guild guildId channelId ->
+                                    case LocalState.getGuildAndChannel guildId channelId local of
+                                        Just ( _, channel ) ->
+                                            Command.batch
+                                                [ playNotificationSound
+                                                    senderId
+                                                    maybeRepliedTo
+                                                    channel
+                                                    local
+                                                    content
+                                                    model
+                                                , if model.scrolledToBottomOfChannel then
+                                                    scrollToBottomOfChannel
 
-                                          else
+                                                  else
+                                                    Command.none
+                                                ]
+
+                                        Nothing ->
                                             Command.none
-                                        ]
 
-                                Nothing ->
+                                GuildOrDmId_Dm id ->
                                     Command.none
 
                         _ ->
@@ -3646,7 +3641,7 @@ pendingChangesText localChange =
         Local_MemberEditTyping _ _ _ ->
             "Editing message"
 
-        Local_SetLastViewed _ _ _ ->
+        Local_SetLastViewed _ _ ->
             "Viewed channel"
 
         Local_DeleteMessage _ _ ->

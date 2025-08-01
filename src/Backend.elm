@@ -33,7 +33,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), GuildOrDmId(..), IsEnabled(..), JoinGuildError(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), IsEnabled(..), JoinGuildError(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -53,7 +53,7 @@ import TOTP.Key
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, EmailStatus(..))
+import User exposing (BackendUser, EmailStatus(..), GuildOrDmId(..))
 
 
 app :
@@ -888,8 +888,7 @@ handleDiscordCreateMessage message model =
                             (Server_SendMessage
                                 userId
                                 message.timestamp
-                                guildId
-                                channelId
+                                (GuildOrDmId_Guild guildId channelId)
                                 richText
                                 Nothing
                                 |> ServerChange
@@ -1544,7 +1543,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         GuildOrDmId_Dm otherUserId ->
                             Debug.todo ""
 
-                Local_SetLastViewed guildId channelId messageIndex ->
+                Local_SetLastViewed messageId messageIndex ->
                     asUser
                         model2
                         sessionId
@@ -1553,7 +1552,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | users =
                                     NonemptyDict.insert
                                         userId
-                                        { user | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed }
+                                        { user | lastViewed = SeqDict.insert messageId messageIndex user.lastViewed }
                                         model2.users
                               }
                             , Command.batch
@@ -2029,7 +2028,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                     NonemptyDict.insert
                         userId
                         { user
-                            | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                            | lastViewed = SeqDict.insert (GuildOrDmId_Guild guildId channelId) messageIndex user.lastViewed
                         }
                         model.users
               }
@@ -2038,7 +2037,7 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuildExcludingOne
                     clientId
-                    (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
+                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text repliedTo |> ServerChange)
                     model
                 , case channel2.linkedId of
                     Just discordChannelId ->
