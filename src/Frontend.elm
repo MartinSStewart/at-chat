@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel
+import DmChannel exposing (DmChannel)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -2662,8 +2662,43 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm id ->
-                            Debug.todo ""
+                        GuildOrDmId_Dm otherUserId ->
+                            let
+                                user =
+                                    local.localUser.user
+
+                                localUser =
+                                    local.localUser
+
+                                dmChannel : DmChannel
+                                dmChannel =
+                                    SeqDict.get otherUserId local.dmChannels
+                                        |> Maybe.withDefault DmChannel.init
+                                        |> LocalState.createMessage
+                                            (UserTextMessage
+                                                { createdAt = createdAt
+                                                , createdBy = local.localUser.userId
+                                                , content = text
+                                                , reactions = SeqDict.empty
+                                                , editedAt = Nothing
+                                                , repliedTo = repliedTo
+                                                }
+                                            )
+                            in
+                            { local
+                                | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
+                                , localUser =
+                                    { localUser
+                                        | user =
+                                            { user
+                                                | lastViewed =
+                                                    SeqDict.insert
+                                                        messageId
+                                                        (Array.length dmChannel.messages - 1)
+                                                        user.lastViewed
+                                            }
+                                    }
+                            }
 
                 Local_NewChannel time guildId channelName ->
                     { local
@@ -2733,8 +2768,22 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
-                            Debug.todo ""
+                        GuildOrDmId_Dm otherUserId ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (\dmChannel ->
+                                            { dmChannel
+                                                | lastTypedAt =
+                                                    SeqDict.insert
+                                                        local.localUser.userId
+                                                        { time = time, messageIndex = Nothing }
+                                                        dmChannel.lastTypedAt
+                                            }
+                                        )
+                                        local.dmChannels
+                            }
 
                 Local_AddReactionEmoji messageId messageIndex emoji ->
                     case messageId of
@@ -2952,8 +3001,49 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm id ->
-                            Debug.todo ""
+                        GuildOrDmId_Dm otherUserId ->
+                            let
+                                localUser : LocalUser
+                                localUser =
+                                    local.localUser
+
+                                user : BackendUser
+                                user =
+                                    localUser.user
+
+                                dmChannel : DmChannel
+                                dmChannel =
+                                    SeqDict.get otherUserId local.dmChannels
+                                        |> Maybe.withDefault DmChannel.init
+                                        |> LocalState.createMessage
+                                            (UserTextMessage
+                                                { createdAt = createdAt
+                                                , createdBy = userId
+                                                , content = text
+                                                , reactions = SeqDict.empty
+                                                , editedAt = Nothing
+                                                , repliedTo = repliedTo
+                                                }
+                                            )
+                            in
+                            { local
+                                | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
+                                , localUser =
+                                    { localUser
+                                        | user =
+                                            if userId == localUser.userId then
+                                                { user
+                                                    | lastViewed =
+                                                        SeqDict.insert
+                                                            messageId
+                                                            (Array.length dmChannel.messages - 1)
+                                                            user.lastViewed
+                                                }
+
+                                            else
+                                                user
+                                    }
+                            }
 
                 Server_NewChannel time guildId channelName ->
                     { local
@@ -3034,14 +3124,33 @@ changeUpdate localMsg local =
                         Err error ->
                             { local | joinGuildError = Just error }
 
-                Server_MemberTyping time userId guildId channelId ->
-                    { local
-                        | guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (LocalState.memberIsTyping userId time channelId)
-                                local.guilds
-                    }
+                Server_MemberTyping time userId messageId ->
+                    case messageId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.memberIsTyping userId time channelId)
+                                        local.guilds
+                            }
+
+                        GuildOrDmId_Dm otherUserId ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (\dmChannel ->
+                                            { dmChannel
+                                                | lastTypedAt =
+                                                    SeqDict.insert
+                                                        userId
+                                                        { time = time, messageIndex = Nothing }
+                                                        dmChannel.lastTypedAt
+                                            }
+                                        )
+                                        local.dmChannels
+                            }
 
                 Server_AddReactionEmoji userId messageId messageIndex emoji ->
                     case messageId of

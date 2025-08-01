@@ -251,6 +251,7 @@ type alias BackendModel =
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , websocketEnabled : IsEnabled
     , dmChannels : SeqDict DmChannelId DmChannel
+    , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     }
 
 
@@ -417,10 +418,11 @@ type BackendMsg
             Discord.HttpError
             (List ( Discord.Id.Id Discord.Id.GuildId, ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 ) ))
         )
-    | SentMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
+    | SentGuildMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
+    | SentDirectMessageToDiscord DmChannelId Int (Result Discord.HttpError Discord.Message)
 
 
 type LoginResult
@@ -479,7 +481,7 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
-    | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
+    | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId Int Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId Int Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText)
