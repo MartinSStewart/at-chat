@@ -39,7 +39,6 @@ import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
 import NonemptyDict
-import NonemptySet
 import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pagination
@@ -1226,7 +1225,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                         GuildOrDmId_Dm otherUserId ->
                             asUser
-                                model
+                                model2
                                 sessionId
                                 (sendDirectMessage model2 time clientId changeId otherUserId text repliedTo)
 
@@ -1650,7 +1649,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         dmChannelId =
                                             DmChannel.channelIdFromUserIds userId otherUserId
                                     in
-                                    case SeqDict.get dmChannelId model.dmChannels of
+                                    case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
                                             case
                                                 LocalState.editMessageHelper
@@ -1685,7 +1684,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             model2
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordDmId ->
-                                                                case OneToOne.first messageIndex dmChannel.linkedMessageIds of
+                                                                case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
                                                                     Just discordMessageId ->
                                                                         case NonemptyDict.get userId model2.users of
                                                                             Just user ->
@@ -1986,7 +1985,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     clientId
                                     userId
                                     (LocalChange userId localMsg)
-                                    model
+                                    model2
                                 ]
                             )
                         )

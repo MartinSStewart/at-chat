@@ -45,18 +45,17 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DmChannel, DmChannelId, LastTypedAt)
+import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id(..), InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import Quantity
@@ -489,7 +488,7 @@ memberIsEditTypingHelper time userId messageIndex channel =
             else
                 Err ()
 
-        Nothing ->
+        _ ->
             Err ()
 
 

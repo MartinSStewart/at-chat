@@ -5,7 +5,6 @@ module Pages.Home exposing
     )
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Html.Attributes
 import MyUi
 import Types exposing (FrontendMsg(..), LoginStatus(..))
 import Ui exposing (Element)

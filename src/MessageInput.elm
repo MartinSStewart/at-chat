@@ -17,7 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildId, Id, UserId)
+import Id exposing (Id, UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (LocalState)

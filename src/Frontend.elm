@@ -44,7 +44,6 @@ import Pages.Admin
 import Pages.Guild
 import Pages.Home
 import Pagination
-import PersonName
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
@@ -53,7 +52,7 @@ import SeqDict
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), MessageId, RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -494,7 +493,7 @@ routeRequest previousRoute newRoute model =
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
-                                model2.time
+                                model3.time
                                 (Just (Local_ViewChannel guildId channelId))
                                 (if sameGuild || previousRoute == Nothing then
                                     startOpeningChannelSidebar loggedIn
@@ -2801,7 +2800,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Local_RemoveReactionEmoji messageId messageIndex emoji ->
@@ -2820,7 +2819,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Local_SendEditMessage time messageId messageIndex newContent ->
@@ -2843,7 +2842,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Local_MemberEditTyping time messageId messageIndex ->
@@ -2865,7 +2864,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Local_SetLastViewed messageId messageIndex ->
@@ -2911,7 +2910,7 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Local_SetDiscordWebsocket isEnabled ->
@@ -3163,7 +3162,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Server_RemoveReactionEmoji userId messageId messageIndex emoji ->
@@ -3182,7 +3181,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Server_SendEditMessage time userId messageId messageIndex newContent ->
@@ -3205,7 +3204,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Server_MemberEditTyping time userId messageId messageIndex ->
@@ -3227,7 +3226,7 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Server_DeleteMessage userId messageId messageIndex ->
@@ -3254,7 +3253,7 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             Debug.todo ""
 
                 Server_DiscordDeleteMessage messageId ->
@@ -3307,7 +3306,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordDirectMessage time discordMessageId sender richText ->
+                Server_DiscordDirectMessage time _ sender richText ->
                     { local
                         | dmChannels =
                             SeqDict.update
@@ -3624,7 +3623,7 @@ updateLoadedFromBackend msg model =
                                         Nothing ->
                                             Command.none
 
-                                GuildOrDmId_Dm id ->
+                                GuildOrDmId_Dm _ ->
                                     Command.none
 
                         _ ->
@@ -3762,7 +3761,7 @@ pendingChangesText localChange =
         Local_ViewChannel _ _ ->
             "View channel"
 
-        Local_SetName personName ->
+        Local_SetName _ ->
             "Set display name"
 
 

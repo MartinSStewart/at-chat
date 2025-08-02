@@ -26,7 +26,7 @@ import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font

@@ -46,7 +46,7 @@ import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
 import Touch
-import Types exposing (DmMessageId, Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageId, NewChannelForm, NewGuildForm)
+import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -2067,7 +2067,7 @@ friendsColumn local =
         (Ui.column
             []
             (List.filterMap
-                (\( otherUserId, dmChannel ) ->
+                (\( otherUserId, _ ) ->
                     case SeqDict.get otherUserId local.localUser.otherUsers of
                         Just otherUser ->
                             Ui.row
