@@ -25,8 +25,10 @@ module LocalState exposing
     , deleteChannel
     , deleteChannelFrontend
     , deleteMessage
+    , deleteMessageHelper
     , editChannel
     , editMessage
+    , editMessageHelper
     , getGuildAndChannel
     , getMessages
     , getUser
@@ -34,6 +36,7 @@ module LocalState exposing
     , guildToFrontendForUser
     , markAllChannelsAsViewed
     , memberIsEditTyping
+    , memberIsEditTypingHelper
     , memberIsTyping
     , removeReactionEmoji
     )
@@ -456,29 +459,35 @@ memberIsEditTyping :
 memberIsEditTyping userId time channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case Array.get messageIndex channel.messages of
-                Just (UserTextMessage data) ->
-                    if data.createdBy == userId then
-                        { guild
-                            | channels =
-                                SeqDict.insert
-                                    channelId
-                                    { channel
-                                        | lastTypedAt =
-                                            SeqDict.insert
-                                                userId
-                                                { time = time, messageIndex = Just messageIndex }
-                                                channel.lastTypedAt
-                                    }
-                                    guild.channels
-                        }
-                            |> Ok
-
-                    else
-                        Err ()
+            case memberIsEditTypingHelper time userId messageIndex channel of
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
                 _ ->
                     Err ()
+
+        Nothing ->
+            Err ()
+
+
+memberIsEditTypingHelper :
+    Time.Posix
+    -> Id UserId
+    -> Int
+    -> { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+    -> Result () { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+memberIsEditTypingHelper time userId messageIndex channel =
+    case Array.get messageIndex channel.messages of
+        Just (UserTextMessage data) ->
+            if data.createdBy == userId then
+                { channel
+                    | lastTypedAt =
+                        SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
 
         Nothing ->
             Err ()
@@ -571,51 +580,7 @@ addReactionEmoji emoji userId channelId messageIndex guild =
         (\channel ->
             { channel
                 | messages =
-                    Array.Extra.update messageIndex
-                        (\message ->
-                            case message of
-                                UserTextMessage message2 ->
-                                    { message2
-                                        | reactions =
-                                            SeqDict.update
-                                                emoji
-                                                (\maybeSet ->
-                                                    (case maybeSet of
-                                                        Just nonempty ->
-                                                            NonemptySet.insert userId nonempty
-
-                                                        Nothing ->
-                                                            NonemptySet.singleton userId
-                                                    )
-                                                        |> Just
-                                                )
-                                                message2.reactions
-                                    }
-                                        |> UserTextMessage
-
-                                UserJoinedMessage time userJoined reactions ->
-                                    UserJoinedMessage
-                                        time
-                                        userJoined
-                                        (SeqDict.update
-                                            emoji
-                                            (\maybeSet ->
-                                                (case maybeSet of
-                                                    Just nonempty ->
-                                                        NonemptySet.insert userId nonempty
-
-                                                    Nothing ->
-                                                        NonemptySet.singleton userId
-                                                )
-                                                    |> Just
-                                            )
-                                            reactions
-                                        )
-
-                                DeletedMessage ->
-                                    message
-                        )
-                        channel.messages
+                    Array.Extra.update messageIndex (Message.addReactionEmoji userId emoji) channel.messages
             }
         )
         channelId
@@ -642,10 +607,7 @@ editMessage :
             | channels :
                 SeqDict
                     (Id ChannelId)
-                    { b
-                        | messages : Array Message
-                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-                    }
+                    { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
         }
     ->
         Result
@@ -654,57 +616,64 @@ editMessage :
                 | channels :
                     SeqDict
                         (Id ChannelId)
-                        { b
-                            | messages : Array Message
-                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-                        }
+                        { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
             }
 editMessage editedBy time newContent channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case Array.get messageIndex channel.messages of
-                Just (UserTextMessage data) ->
-                    if data.createdBy == editedBy then
-                        { guild
-                            | channels =
-                                SeqDict.insert
-                                    channelId
-                                    { channel
-                                        | messages =
-                                            Array.set
-                                                messageIndex
-                                                ({ data | editedAt = Just time, content = newContent }
-                                                    |> UserTextMessage
-                                                )
-                                                channel.messages
-                                        , lastTypedAt =
-                                            SeqDict.update
-                                                editedBy
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just a ->
-                                                            if a.messageIndex == Just messageIndex then
-                                                                Nothing
-
-                                                            else
-                                                                maybe
-
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                channel.lastTypedAt
-                                    }
-                                    guild.channels
-                        }
-                            |> Ok
-
-                    else
-                        Err ()
+            case editMessageHelper time editedBy newContent messageIndex channel of
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
                 _ ->
                     Err ()
 
         Nothing ->
+            Err ()
+
+
+editMessageHelper :
+    Time.Posix
+    -> Id UserId
+    -> Nonempty RichText
+    -> Int
+    -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+    -> Result () { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+editMessageHelper time editedBy newContent messageIndex channel =
+    case Array.get messageIndex channel.messages of
+        Just (UserTextMessage data) ->
+            if data.createdBy == editedBy then
+                { channel
+                    | messages =
+                        Array.set
+                            messageIndex
+                            ({ data | editedAt = Just time, content = newContent }
+                                |> UserTextMessage
+                            )
+                            channel.messages
+                    , lastTypedAt =
+                        SeqDict.update
+                            editedBy
+                            (\maybe ->
+                                case maybe of
+                                    Just a ->
+                                        if a.messageIndex == Just messageIndex then
+                                            Nothing
+
+                                        else
+                                            maybe
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
             Err ()
 
 
@@ -721,49 +690,7 @@ removeReactionEmoji emoji userId channelId messageIndex guild =
             { channel
                 | messages =
                     Array.Extra.update messageIndex
-                        (\message ->
-                            case message of
-                                UserTextMessage message2 ->
-                                    { message2
-                                        | reactions =
-                                            SeqDict.update
-                                                emoji
-                                                (\maybeSet ->
-                                                    case maybeSet of
-                                                        Just nonempty ->
-                                                            NonemptySet.toSeqSet nonempty
-                                                                |> SeqSet.remove userId
-                                                                |> NonemptySet.fromSeqSet
-
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                message2.reactions
-                                    }
-                                        |> UserTextMessage
-
-                                UserJoinedMessage time userJoined reactions ->
-                                    UserJoinedMessage
-                                        time
-                                        userJoined
-                                        (SeqDict.update
-                                            emoji
-                                            (\maybeSet ->
-                                                case maybeSet of
-                                                    Just nonempty ->
-                                                        NonemptySet.toSeqSet nonempty
-                                                            |> SeqSet.remove userId
-                                                            |> NonemptySet.fromSeqSet
-
-                                                    Nothing ->
-                                                        Nothing
-                                            )
-                                            reactions
-                                        )
-
-                                DeletedMessage ->
-                                    message
-                        )
+                        (Message.removeReactionEmoji userId emoji)
                         channel.messages
             }
         )
@@ -797,28 +724,32 @@ deleteMessage :
 deleteMessage userId channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case Array.get messageIndex channel.messages of
-                Just (UserTextMessage message) ->
-                    if message.createdBy == userId then
-                        { guild
-                            | channels =
-                                SeqDict.insert
-                                    channelId
-                                    { channel
-                                        | messages =
-                                            Array.set messageIndex DeletedMessage channel.messages
-                                    }
-                                    guild.channels
-                        }
-                            |> Ok
-
-                    else
-                        Err ()
+            case deleteMessageHelper userId messageIndex channel of
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
                 _ ->
                     Err ()
 
         Nothing ->
+            Err ()
+
+
+deleteMessageHelper :
+    Id UserId
+    -> Int
+    -> { a | messages : Array Message }
+    -> Result () { a | messages : Array Message }
+deleteMessageHelper userId messageIndex channel =
+    case Array.get messageIndex channel.messages of
+        Just (UserTextMessage message) ->
+            if message.createdBy == userId then
+                Ok { channel | messages = Array.set messageIndex DeletedMessage channel.messages }
+
+            else
+                Err ()
+
+        _ ->
             Err ()
 
 
