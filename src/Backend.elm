@@ -815,11 +815,15 @@ handleDiscordCreateMessage message model =
                     richText : Nonempty RichText
                     richText =
                         RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) nonempty
+
+                    dmChannelId : DmChannelId
+                    dmChannelId =
+                        DmChannel.channelIdFromUserIds userId adminUserId
                 in
                 ( { model
                     | dmChannels =
                         SeqDict.update
-                            (DmChannel.channelIdFromUserIds userId adminUserId)
+                            dmChannelId
                             (\maybe ->
                                 Maybe.withDefault DmChannel.init maybe
                                     |> LocalState.createMessage
@@ -835,6 +839,7 @@ handleDiscordCreateMessage message model =
                                     |> Just
                             )
                             model.dmChannels
+                    , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
                   }
                 , broadcastToUser
                     Nothing
