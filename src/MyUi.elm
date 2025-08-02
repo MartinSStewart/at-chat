@@ -44,6 +44,7 @@ module MyUi exposing
     , montserrat
     , noPointerEvents
     , noShrinking
+    , prewrap
     , primaryButton
     , radioRowWithSeparators
     , replyToColor
@@ -457,6 +458,11 @@ buttonShadows =
 hover : List Ui.Anim.Animated -> Ui.Attribute msg
 hover animated =
     Ui.Anim.hovered (Ui.Anim.ms 10) animated
+
+
+prewrap : Ui.Attribute msg
+prewrap =
+    htmlStyle "white-space" "pre-wrap"
 
 
 primaryButton : HtmlId -> msg -> String -> Element msg

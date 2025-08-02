@@ -2,7 +2,6 @@ module Pages.Guild exposing
     ( channelHeaderHeight
     , channelTextInputId
     , conversationContainerId
-    , dmView
     , dropdownButtonId
     , guildView
     , homePageLoggedInView
@@ -242,8 +241,8 @@ loggedInAsView local =
         ]
 
 
-homePageLoggedInView : LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
-homePageLoggedInView model loggedIn local =
+homePageLoggedInView : Maybe (Id UserId) -> Maybe Int -> LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
+homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local =
     case loggedIn.newGuildForm of
         Just form ->
             newGuildFormView form
@@ -266,7 +265,7 @@ homePageLoggedInView model loggedIn local =
                                 local.localUser.user
                                 local.guilds
                                 (canScroll model)
-                            , friendsColumn local
+                            , friendsColumn maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -288,61 +287,28 @@ homePageLoggedInView model loggedIn local =
                                 local.localUser.user
                                 local.guilds
                                 (canScroll model)
-                            , friendsColumn local
+                            , friendsColumn maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
-                    , Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] (Ui.text "Work in progress")
-                    ]
+                    , case maybeOtherUserId of
+                        Just otherUserId ->
+                            dmChannelView otherUserId maybeMessageHighlight loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
 
-
-dmView : LoadedFrontend -> Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> Element FrontendMsg
-dmView model userId maybeMessageHighlight loggedIn local =
-    if MyUi.isMobile model then
-        Ui.row
-            [ Ui.height Ui.fill
-            , Ui.background MyUi.background1
-            ]
-            [ Ui.column
-                [ Ui.height Ui.fill
-                ]
-                [ Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ Ui.Lazy.lazy5
-                        guildColumn
-                        model.route
-                        local.localUser.userId
-                        local.localUser.user
-                        local.guilds
-                        (canScroll model)
-                    , friendsColumn local
+                        Nothing ->
+                            Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] (Ui.text "Work in progress")
                     ]
-                , loggedInAsView local
-                ]
-            ]
-
-    else
-        Ui.row
-            [ Ui.height Ui.fill
-            , Ui.background MyUi.background1
-            ]
-            [ Ui.column
-                [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
-                [ Ui.row
-                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                    [ Ui.Lazy.lazy5
-                        guildColumn
-                        model.route
-                        local.localUser.userId
-                        local.localUser.user
-                        local.guilds
-                        (canScroll model)
-                    , friendsColumn local
-                    ]
-                , loggedInAsView local
-                ]
-            , dmChannelView userId maybeMessageHighlight loggedIn local model
-            ]
 
 
 dmChannelView : Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
@@ -351,7 +317,13 @@ dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
         Just otherUser ->
             SeqDict.get otherUserId local.dmChannels
                 |> Maybe.withDefault DmChannel.init
-                |> dmConversationView otherUserId otherUser maybeMessageHighlight loggedIn model local
+                |> conversationView
+                    (GuildOrDmId_Dm otherUserId)
+                    maybeMessageHighlight
+                    loggedIn
+                    model
+                    local
+                    (PersonName.toString otherUser.name)
 
         Nothing ->
             Ui.el
@@ -470,7 +442,7 @@ guildView model guildId channelRoute loggedIn local =
                             ]
 
                 Nothing ->
-                    homePageLoggedInView model loggedIn local
+                    homePageLoggedInView Nothing Nothing model loggedIn local
 
 
 memberColumn : LocalState -> FrontendGuild -> Element FrontendMsg
@@ -565,7 +537,14 @@ channelView channelRoute guildId guild loggedIn local model =
         ChannelRoute channelId maybeMessageHighlight ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    conversationView guildId channelId maybeMessageHighlight loggedIn model local channel
+                    conversationView
+                        (GuildOrDmId_Guild guildId channelId)
+                        maybeMessageHighlight
+                        loggedIn
+                        model
+                        local
+                        (ChannelName.toString channel.name)
+                        channel
 
                 Nothing ->
                     Ui.el
@@ -1062,160 +1041,22 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
             )
 
 
-dmConversationView :
-    Id UserId
-    -> FrontendUser
-    -> Maybe Int
-    -> LoggedIn2
-    -> LoadedFrontend
-    -> LocalState
-    -> DmChannel
-    -> Element FrontendMsg
-dmConversationView otherUserId otherUser maybeMessageHighlight loggedIn model local channel =
-    let
-        allUsers : SeqDict (Id UserId) FrontendUser
-        allUsers =
-            LocalState.allUsers local
-
-        replyTo =
-            SeqDict.get (GuildOrDmId_Dm otherUserId) loggedIn.replyTo
-
-        otherUserName =
-            PersonName.toString otherUser.name
-    in
-    Ui.column
-        [ Ui.height Ui.fill
-        , Ui.heightMin 0
-        ]
-        [ channelHeader
-            (MyUi.isMobile model)
-            (Ui.row
-                [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
-                [ Ui.text otherUserName ]
-            )
-        , Ui.el
-            [ case loggedIn.showEmojiSelector of
-                EmojiSelectorHidden ->
-                    Ui.noAttr
-
-                EmojiSelectorForReaction _ _ ->
-                    Ui.inFront emojiSelector
-
-                EmojiSelectorForMessage ->
-                    Ui.inFront emojiSelector
-            , Ui.heightMin 0
-            , Ui.height Ui.fill
-            ]
-            (Ui.column
-                [ Ui.height Ui.fill
-                , Ui.paddingXY 0 16
-                , scrollable (canScroll model)
-                , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
-                , Ui.heightMin 0
-                ]
-                (Ui.el
-                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
-                    (Ui.text ("This is the start of your conversation with " ++ otherUserName))
-                    :: conversationViewHelper
-                        (GuildOrDmId_Dm otherUserId)
-                        maybeMessageHighlight
-                        channel
-                        loggedIn
-                        local
-                        model
-                )
-            )
-        , Ui.column
-            [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
-            [ case replyTo of
-                Just messageIndex ->
-                    case Array.get messageIndex channel.messages of
-                        Just (UserTextMessage data) ->
-                            replyToHeader (PressedCloseReplyTo (GuildOrDmId_Dm otherUserId)) data.createdBy local
-
-                        Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader (PressedCloseReplyTo (GuildOrDmId_Dm otherUserId)) userId local
-
-                        Just DeletedMessage ->
-                            Ui.none
-
-                        Nothing ->
-                            Ui.none
-
-                Nothing ->
-                    Ui.none
-            , MessageInput.view
-                (replyTo == Nothing)
-                (MyUi.isMobile model)
-                (messageInputConfig (GuildOrDmId_Dm otherUserId))
-                channelTextInputId
-                ("Write a message to @" ++ PersonName.toString otherUser.name)
-                (case SeqDict.get (GuildOrDmId_Dm otherUserId) loggedIn.drafts of
-                    Just text ->
-                        String.Nonempty.toString text
-
-                    Nothing ->
-                        ""
-                )
-                loggedIn.pingUser
-                local
-            , (case
-                SeqDict.filter
-                    (\_ a ->
-                        (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
-                            && (a.messageIndex == Nothing)
-                    )
-                    (SeqDict.remove local.localUser.userId channel.lastTypedAt)
-                    |> SeqDict.keys
-               of
-                [ single ] ->
-                    User.toString single allUsers ++ " is typing..."
-
-                _ ->
-                    " "
-              )
-                |> Ui.text
-                |> Ui.el
-                    [ Ui.Font.bold
-                    , Ui.Font.size 13
-                    , Ui.Font.color MyUi.font3
-                    , MyUi.htmlStyle "white-space" "pre-wrap"
-                    , MyUi.noShrinking
-                    , Ui.contentCenterY
-                    , MyUi.htmlStyle
-                        "padding"
-                        ("0 calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5) "
-                            ++ MyUi.insetBottom
-                            ++ " calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5)"
-                        )
-                    ]
-            ]
-        ]
-
-
 conversationView :
-    Id GuildId
-    -> Id ChannelId
+    GuildOrDmId
     -> Maybe Int
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
-    -> FrontendChannel
+    -> String
+    -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> Element FrontendMsg
-conversationView guildId channelId maybeMessageHighlight loggedIn model local channel =
+conversationView messageId maybeMessageHighlight loggedIn model local name channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             LocalState.allUsers local
 
-        messageId =
-            GuildOrDmId_Guild guildId channelId
-
+        replyTo : Maybe Int
         replyTo =
             SeqDict.get messageId loggedIn.replyTo
     in
@@ -1225,9 +1066,23 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
         ]
         [ channelHeader
             (MyUi.isMobile model)
-            (Ui.row
-                [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
-                [ Ui.html Icons.hashtag, Ui.text (ChannelName.toString channel.name) ]
+            (case messageId of
+                GuildOrDmId_Dm _ ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1 ]
+                        [ Ui.el
+                            [ Ui.Font.color MyUi.font3
+                            , Ui.width Ui.shrink
+                            , MyUi.prewrap
+                            ]
+                            (Ui.text "Private chat with ")
+                        , Ui.text name
+                        ]
+
+                GuildOrDmId_Guild guildId channelId ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
+                        [ Ui.html Icons.hashtag, Ui.text name ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of
@@ -1252,7 +1107,13 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                 ]
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
-                    (Ui.text ("This is the start of #" ++ ChannelName.toString channel.name))
+                    (case messageId of
+                        GuildOrDmId_Guild _ _ ->
+                            Ui.text ("This is the start of #" ++ name)
+
+                        GuildOrDmId_Dm _ ->
+                            Ui.text ("This is the start of your conversation with " ++ name)
+                    )
                     :: conversationViewHelper
                         messageId
                         maybeMessageHighlight
@@ -1286,7 +1147,13 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                 (MyUi.isMobile model)
                 (messageInputConfig messageId)
                 channelTextInputId
-                ("Write a message in #" ++ ChannelName.toString channel.name)
+                (case messageId of
+                    GuildOrDmId_Guild _ _ ->
+                        "Write a message in #" ++ name
+
+                    GuildOrDmId_Dm _ ->
+                        "Write a message to " ++ name
+                )
                 (case SeqDict.get messageId loggedIn.drafts of
                     Just text ->
                         String.Nonempty.toString text
@@ -1330,7 +1197,7 @@ conversationView guildId channelId maybeMessageHighlight loggedIn model local ch
                     [ Ui.Font.bold
                     , Ui.Font.size 13
                     , Ui.Font.color MyUi.font3
-                    , MyUi.htmlStyle "white-space" "pre-wrap"
+                    , MyUi.prewrap
                     , MyUi.noShrinking
                     , Ui.contentCenterY
                     , MyUi.htmlStyle
@@ -1490,7 +1357,7 @@ messageEditingView messageId messageIndex message maybeRepliedTo revealedSpoiler
                         [ Ui.Font.size 14
                         , Ui.Font.color MyUi.font3
                         , Ui.paddingXY 12 0
-                        , MyUi.htmlStyle "white-space" "pre-wrap"
+                        , MyUi.prewrap
                         ]
                         [ Ui.text "Press "
                         , Ui.el
@@ -2053,8 +1920,8 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
         )
 
 
-friendsColumn : LocalState -> Element FrontendMsg
-friendsColumn local =
+friendsColumn : Maybe (Id UserId) -> LocalState -> Element FrontendMsg
+friendsColumn openedOtherUserId local =
     channelColumnContainer
         [ Ui.el
             [ Ui.Font.bold
@@ -2070,11 +1937,25 @@ friendsColumn local =
                 (\( otherUserId, _ ) ->
                     case SeqDict.get otherUserId local.localUser.otherUsers of
                         Just otherUser ->
+                            let
+                                isSelected : Bool
+                                isSelected =
+                                    Just otherUserId == openedOtherUserId
+                            in
                             Ui.row
                                 [ Ui.clipWithEllipsis
                                 , Ui.spacing 8
                                 , Ui.padding 4
                                 , Ui.Input.button (PressedLink (Route.DmRoute otherUserId Nothing))
+                                , Ui.Font.color
+                                    (if isSelected then
+                                        MyUi.font1
+
+                                     else
+                                        MyUi.font3
+                                    )
+                                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                                , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                                 ]
                                 [ User.profileImage
                                 , Ui.el [] (Ui.text (PersonName.toString otherUser.name))

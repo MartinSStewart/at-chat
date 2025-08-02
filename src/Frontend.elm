@@ -591,7 +591,7 @@ routeRequest previousRoute newRoute model =
                             )
 
         AiChatRoute ->
-            ( model2, Command.none )
+            ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
         DmRoute _ _ ->
             ( model2, Command.none )
@@ -1262,15 +1262,12 @@ updateLoaded msg model =
             else
                 updateLoggedIn
                     (\loggedIn ->
-                        case ( model.route, loggedIn.messageHover ) of
-                            ( _, MessageMenu _ ) ->
+                        case ( routeToMessageId model.route, loggedIn.messageHover ) of
+                            ( Nothing, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
-                            ( GuildRoute guildId (ChannelRoute channelId _), _ ) ->
-                                ( { loggedIn
-                                    | messageHover =
-                                        MessageHover (GuildOrDmId_Guild guildId channelId) messageIndex
-                                  }
+                            ( Just messageId, _ ) ->
+                                ( { loggedIn | messageHover = MessageHover messageId messageIndex }
                                 , Command.none
                                 )
 
@@ -3989,7 +3986,12 @@ view model =
                             ]
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
-                                    Pages.Guild.homePageLoggedInView loaded loggedIn (Local.model loggedIn.localState)
+                                    Pages.Guild.homePageLoggedInView
+                                        Nothing
+                                        Nothing
+                                        loaded
+                                        loggedIn
+                                        (Local.model loggedIn.localState)
 
                                 NotLoggedIn { loginForm } ->
                                     Ui.el
@@ -4055,7 +4057,7 @@ view model =
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
                     DmRoute userId maybeMessageHighlight ->
-                        requiresLogin (Pages.Guild.dmView loaded userId maybeMessageHighlight)
+                        requiresLogin (Pages.Guild.homePageLoggedInView (Just userId) maybeMessageHighlight loaded)
         ]
     }
 
