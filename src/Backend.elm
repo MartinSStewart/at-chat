@@ -334,7 +334,7 @@ update msg model =
                 outMsgs
                 |> Tuple.mapSecond Command.batch
 
-        GotDiscordGuilds time result ->
+        GotDiscordGuilds time botUserId result ->
             case result of
                 Ok data ->
                     let
@@ -346,6 +346,7 @@ update msg model =
                                 )
                                 data
                                 |> SeqDict.fromList
+                                |> SeqDict.remove botUserId
                     in
                     ( addDiscordUsers time users model
                         |> addDiscordGuilds time (SeqDict.fromList data)
@@ -361,8 +362,8 @@ update msg model =
 
         GotCurrentUserGuilds time result ->
             case result of
-                Ok guilds ->
-                    ( model
+                Ok ( botUser, guilds ) ->
+                    ( { model | discordBotId = Just botUser.id }
                     , List.map
                         (\partialGuild ->
                             Task.map3
@@ -381,7 +382,7 @@ update msg model =
                         )
                         guilds
                         |> Task.sequence
-                        |> Task.attempt (GotDiscordGuilds time)
+                        |> Task.attempt (GotDiscordGuilds time botUser.id)
                     )
 
                 Err error ->
@@ -419,14 +420,6 @@ update msg model =
                       }
                     , Command.none
                     )
-
-                Err _ ->
-                    ( model, Command.none )
-
-        GotCurrentUser result ->
-            case result of
-                Ok user ->
-                    ( { model | discordBotId = Just user.id }, Command.none )
 
                 Err _ ->
                     ( model, Command.none )
@@ -800,7 +793,7 @@ handleDiscordCreateMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
 handleDiscordCreateMessage message model =
-    if Just message.author.id == model.discordBotId && String.contains botMessageSeparator message.content then
+    if Just message.author.id == model.discordBotId then
         ( model, Command.none )
 
     else
@@ -1021,8 +1014,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( { model2 | discordNotConnected = False }
                 , Command.batch
                     [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                    , Discord.getCurrentUser Env.botToken |> Task.attempt GotCurrentUser
-                    , Discord.getCurrentUserGuilds Env.botToken
+                    , Task.map2
+                        Tuple.pair
+                        (Discord.getCurrentUser Env.botToken)
+                        (Discord.getCurrentUserGuilds Env.botToken)
                         |> Task.attempt (GotCurrentUserGuilds time)
                     , cmd
                     ]
@@ -1618,18 +1613,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
                                                         of
                                                             ( Just discordChannelId, Just discordMessageId ) ->
-                                                                case NonemptyDict.get userId model2.users of
-                                                                    Just user ->
-                                                                        Discord.editMessage
-                                                                            Env.botToken
-                                                                            { channelId = discordChannelId
-                                                                            , messageId = discordMessageId
-                                                                            , content = toDiscordContent user model2 newContent
-                                                                            }
-                                                                            |> Task.attempt (\_ -> EditedDiscordMessage)
-
-                                                                    Nothing ->
-                                                                        Command.none
+                                                                Discord.editMessage
+                                                                    Env.botToken
+                                                                    { channelId = discordChannelId
+                                                                    , messageId = discordMessageId
+                                                                    , content = toDiscordContent model2 newContent
+                                                                    }
+                                                                    |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                                             _ ->
                                                                 Command.none
@@ -1691,18 +1681,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             Just discordDmId ->
                                                                 case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
                                                                     Just discordMessageId ->
-                                                                        case NonemptyDict.get userId model2.users of
-                                                                            Just user ->
-                                                                                Discord.editMessage
-                                                                                    Env.botToken
-                                                                                    { channelId = discordDmId
-                                                                                    , messageId = discordMessageId
-                                                                                    , content = toDiscordContent user model2 newContent
-                                                                                    }
-                                                                                    |> Task.attempt (\_ -> EditedDiscordMessage)
-
-                                                                            Nothing ->
-                                                                                Command.none
+                                                                        Discord.editMessage
+                                                                            Env.botToken
+                                                                            { channelId = discordDmId
+                                                                            , messageId = discordMessageId
+                                                                            , content = toDiscordContent model2 newContent
+                                                                            }
+                                                                            |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                                                     _ ->
                                                                         Command.none
@@ -2039,12 +2024,9 @@ broadcastToEveryoneWhoCanSeeUser clientId userId change model =
         |> Command.batch
 
 
-toDiscordContent : BackendUser -> BackendModel -> Nonempty RichText -> String
-toDiscordContent user model content =
-    PersonName.toString user.name
-        ++ botMessageSeparator
-        ++ " "
-        ++ Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
+toDiscordContent : BackendModel -> Nonempty RichText -> String
+toDiscordContent model content =
+    Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
 
 
 joinGuildByInvite :
@@ -2300,11 +2282,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
 
-botMessageSeparator : String
-botMessageSeparator =
-    "꞉"
-
-
 sendDirectMessage :
     BackendModel
     -> Time.Posix
@@ -2368,7 +2345,7 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
                 Discord.createMessage
                     Env.botToken
                     { channelId = discordChannelId
-                    , content = toDiscordContent user model text
+                    , content = toDiscordContent model text
                     , replyTo = Nothing
                     }
                     |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
@@ -2441,7 +2418,7 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                         Discord.createMessage
                             Env.botToken
                             { channelId = discordChannelId
-                            , content = toDiscordContent user model text
+                            , content = toDiscordContent model text
                             , replyTo = Nothing
                             }
                             |> Task.attempt

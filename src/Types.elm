@@ -405,10 +405,10 @@ type BackendMsg
     | WebsocketSentData (Result Websocket.SendError ())
     | WebsocketClosedByBackend Bool
     | DiscordWebsocketMsg Discord.Msg
-    | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError (List Discord.PartialGuild))
-    | GotCurrentUser (Result Discord.HttpError Discord.User)
+    | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
     | GotDiscordGuilds
         Time.Posix
+        (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
             (List ( Discord.Id.Id Discord.Id.GuildId, ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 ) ))
