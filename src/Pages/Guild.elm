@@ -84,11 +84,11 @@ channelHasNotifications :
     -> GuildOrDmId
     -> FrontendChannel
     -> NotificationType
-channelHasNotifications currentUserId currentUser messageId channel =
+channelHasNotifications currentUserId currentUser guildOrDmId channel =
     let
         lastViewed : Int
         lastViewed =
-            SeqDict.get messageId currentUser.lastViewed
+            SeqDict.get guildOrDmId currentUser.lastViewed
                 |> Maybe.withDefault -1
                 |> (+) 1
     in
@@ -734,11 +734,11 @@ conversationViewHelper :
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper messageId maybeMessageHighlight channel loggedIn local model =
+conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local model =
     let
         maybeEditing : Maybe EditMessage
         maybeEditing =
-            SeqDict.get messageId loggedIn.editMessage
+            SeqDict.get guildOrDmId loggedIn.editMessage
 
         othersEditing : SeqSet Int
         othersEditing =
@@ -756,13 +756,13 @@ conversationViewHelper messageId maybeMessageHighlight channel loggedIn local mo
 
         replyToIndex : Maybe Int
         replyToIndex =
-            SeqDict.get messageId loggedIn.replyTo
+            SeqDict.get guildOrDmId loggedIn.replyTo
 
         revealedSpoilers : SeqDict Int (NonemptySet Int)
         revealedSpoilers =
             case loggedIn.revealedSpoilers of
                 Just revealed ->
-                    if revealed.messageId == messageId then
+                    if revealed.guildOrDmId == guildOrDmId then
                         revealed.messages
 
                     else
@@ -773,7 +773,7 @@ conversationViewHelper messageId maybeMessageHighlight channel loggedIn local mo
 
         lastViewedIndex : Int
         lastViewedIndex =
-            SeqDict.get messageId local.localUser.user.lastViewed |> Maybe.withDefault -1
+            SeqDict.get guildOrDmId local.localUser.user.lastViewed |> Maybe.withDefault -1
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -782,7 +782,7 @@ conversationViewHelper messageId maybeMessageHighlight channel loggedIn local mo
                 messageHover =
                     case loggedIn.messageHover of
                         MessageMenu messageMenu ->
-                            if messageId == messageMenu.messageId then
+                            if guildOrDmId == messageMenu.guildOrDmId then
                                 if messageMenu.messageIndex == index then
                                     IsHoveredButNoMenu
 
@@ -792,8 +792,8 @@ conversationViewHelper messageId maybeMessageHighlight channel loggedIn local mo
                             else
                                 IsNotHovered
 
-                        MessageHover messageIdA messageIndex ->
-                            if messageId == messageIdA then
+                        MessageHover guildOrDmIdA messageIndex ->
+                            if guildOrDmId == guildOrDmIdA then
                                 if messageIndex == index then
                                     IsHovered
 
@@ -902,7 +902,7 @@ conversationViewHelper messageId maybeMessageHighlight channel loggedIn local mo
 
                             else
                                 messageEditingView
-                                    messageId
+                                    guildOrDmId
                                     index
                                     message
                                     maybeRepliedTo
@@ -1058,7 +1058,7 @@ conversationView :
     -> String
     -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> Element FrontendMsg
-conversationView messageId maybeMessageHighlight loggedIn model local name channel =
+conversationView guildOrDmId maybeMessageHighlight loggedIn model local name channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -1066,7 +1066,7 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
 
         replyTo : Maybe Int
         replyTo =
-            SeqDict.get messageId loggedIn.replyTo
+            SeqDict.get guildOrDmId loggedIn.replyTo
     in
     Ui.column
         [ Ui.height Ui.fill
@@ -1074,7 +1074,7 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
         ]
         [ channelHeader
             (MyUi.isMobile model)
-            (case messageId of
+            (case guildOrDmId of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1 ]
@@ -1126,7 +1126,7 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                 ]
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
-                    (case messageId of
+                    (case guildOrDmId of
                         GuildOrDmId_Guild _ _ ->
                             Ui.text ("This is the start of #" ++ name)
 
@@ -1142,7 +1142,7 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                                 )
                     )
                     :: conversationViewHelper
-                        messageId
+                        guildOrDmId
                         maybeMessageHighlight
                         channel
                         loggedIn
@@ -1156,10 +1156,10 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
                         Just (UserTextMessage data) ->
-                            replyToHeader (PressedCloseReplyTo messageId) data.createdBy local
+                            replyToHeader (PressedCloseReplyTo guildOrDmId) data.createdBy local
 
                         Just (UserJoinedMessage _ userId _) ->
-                            replyToHeader (PressedCloseReplyTo messageId) userId local
+                            replyToHeader (PressedCloseReplyTo guildOrDmId) userId local
 
                         Just DeletedMessage ->
                             Ui.none
@@ -1172,9 +1172,9 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
             , MessageInput.view
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
-                (messageInputConfig messageId)
+                (messageInputConfig guildOrDmId)
                 channelTextInputId
-                (case messageId of
+                (case guildOrDmId of
                     GuildOrDmId_Guild _ _ ->
                         "Write a message in #" ++ name
 
@@ -1187,7 +1187,7 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                                     name
                                )
                 )
-                (case SeqDict.get messageId loggedIn.drafts of
+                (case SeqDict.get guildOrDmId loggedIn.drafts of
                     Just text ->
                         String.Nonempty.toString text
 
@@ -1344,7 +1344,7 @@ messageEditingView :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView messageId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser local =
+messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1379,7 +1379,7 @@ messageEditingView messageId messageIndex message maybeRepliedTo revealedSpoiler
                     [ MessageInput.view
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig messageId)
+                        (MessageMenu.editMessageTextInputConfig guildOrDmId)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
@@ -1394,7 +1394,7 @@ messageEditingView messageId messageIndex message maybeRepliedTo revealedSpoiler
                         ]
                         [ Ui.text "Press "
                         , Ui.el
-                            [ Ui.Input.button (PressedCancelMessageEdit messageId)
+                            [ Ui.Input.button (PressedCancelMessageEdit guildOrDmId)
                             , Ui.Font.color MyUi.font1
                             , Ui.width Ui.shrink
                             ]

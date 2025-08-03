@@ -173,7 +173,7 @@ type MessageHover
 
 type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
-    , messageId : GuildOrDmId
+    , guildOrDmId : GuildOrDmId
     , messageIndex : Int
     , mobileMode : MessageHoverMobileMode
     }
@@ -207,7 +207,7 @@ messageMenuMobileOffset mobileMode =
 
 
 type alias RevealedSpoilers =
-    { messageId : GuildOrDmId
+    { guildOrDmId : GuildOrDmId
     , messages : SeqDict Int (NonemptySet Int)
     }
 

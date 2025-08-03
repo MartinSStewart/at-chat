@@ -306,13 +306,13 @@ newAtSymbol oldText text =
 
 
 userDropdownList : GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
-userDropdownList messageId local =
+userDropdownList guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             LocalState.allUsers local
     in
-    (case messageId of
+    (case guildOrDmId of
         GuildOrDmId_Guild guildId _ ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
@@ -338,15 +338,15 @@ userDropdownList messageId local =
 
 
 pressedArrowInDropdown : GuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
-pressedArrowInDropdown messageId index maybePingUser local =
+pressedArrowInDropdown guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
             { pingUser
                 | dropdownIndex =
                     if index < 0 then
-                        List.length (userDropdownList messageId local) - 1
+                        List.length (userDropdownList guildOrDmId local) - 1
 
-                    else if index >= List.length (userDropdownList messageId local) then
+                    else if index >= List.length (userDropdownList guildOrDmId local) then
                         0
 
                     else
@@ -367,8 +367,8 @@ pressedPingUser :
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedPingUser setFocusMsg messageId channelTextInputId index pingUser local inputText =
-    case ( pingUser, userDropdownList messageId local |> List.Extra.getAt index ) of
+pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local inputText =
+    case ( pingUser, userDropdownList guildOrDmId local |> List.Extra.getAt index ) of
         ( Just { charIndex }, Just ( _, user ) ) ->
             let
                 applyText : NonemptyString -> NonemptyString
@@ -425,7 +425,7 @@ pingDropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element msg
-pingDropdownView msgConfig messageId localState dropdownButtonId { dropdownIndex, inputElement } =
+pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownIndex, inputElement } =
     Ui.column
         [ Ui.background MyUi.background2
         , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
@@ -478,6 +478,6 @@ pingDropdownView msgConfig messageId localState dropdownButtonId { dropdownIndex
                         ]
                         (Ui.text (PersonName.toString user.name))
                 )
-                (userDropdownList messageId localState)
+                (userDropdownList guildOrDmId localState)
             )
         ]

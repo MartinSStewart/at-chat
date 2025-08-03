@@ -77,7 +77,7 @@ close model loggedIn =
                         NoMessageHover
                 , editMessage =
                     if isMobile then
-                        SeqDict.remove extraOptions.messageId loggedIn.editMessage
+                        SeqDict.remove extraOptions.guildOrDmId loggedIn.editMessage
 
                     else
                         loggedIn.editMessage
@@ -86,7 +86,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEdit extraOptions.messageId extraOptions.messageIndex loggedIn of
+    (case showEdit extraOptions.guildOrDmId extraOptions.messageIndex loggedIn of
         Just edit ->
             toFloat (List.length (String.lines edit)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
@@ -94,7 +94,7 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
             let
                 itemCount : Float
                 itemCount =
-                    menuItems True extraOptions.messageId extraOptions.messageIndex Coord.origin local model |> List.length |> toFloat
+                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex Coord.origin local model |> List.length |> toFloat
             in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
@@ -102,11 +102,11 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
 
 
 mobileMenuOpeningOffset : GuildOrDmId -> Int -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuOpeningOffset messageId messageIndex local model =
+mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True messageId messageIndex Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId messageIndex Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -132,8 +132,8 @@ mobileCloseButton =
 
 
 showEdit : GuildOrDmId -> Int -> LoggedIn2 -> Maybe String
-showEdit messageId messageIndex loggedIn =
-    case SeqDict.get messageId loggedIn.editMessage of
+showEdit guildOrDmId messageIndex loggedIn =
+    case SeqDict.get guildOrDmId loggedIn.editMessage of
         Just edit ->
             if edit.messageIndex == messageIndex then
                 Just edit.text
@@ -148,9 +148,9 @@ showEdit messageId messageIndex loggedIn =
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     let
-        messageId : GuildOrDmId
-        messageId =
-            extraOptions.messageId
+        guildOrDmId : GuildOrDmId
+        guildOrDmId =
+            extraOptions.guildOrDmId
     in
     if MyUi.isMobile model then
         Ui.el
@@ -193,12 +193,12 @@ view model extraOptions local loggedIn =
                         ]
                         Ui.none
                     )
-                    :: (case showEdit messageId extraOptions.messageIndex loggedIn of
+                    :: (case showEdit guildOrDmId extraOptions.messageIndex loggedIn of
                             Just edit ->
                                 [ MessageInput.view
                                     True
                                     True
-                                    (editMessageTextInputConfig messageId)
+                                    (editMessageTextInputConfig guildOrDmId)
                                     editMessageTextInputId
                                     ""
                                     edit
@@ -214,7 +214,7 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions.messageId extraOptions.messageIndex extraOptions.position local model)
+                                    (menuItems True extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
                        )
                 )
                 |> Ui.below
@@ -235,19 +235,19 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions.messageId extraOptions.messageIndex extraOptions.position local model)
+            (menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
 
 
 editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
-editMessageTextInputConfig messageId =
+editMessageTextInputConfig guildOrDmId =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
-    , typedMessage = TypedEditMessage messageId
-    , pressedSendMessage = PressedSendEditMessage messageId
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage messageId
+    , typedMessage = TypedEditMessage guildOrDmId
+    , pressedSendMessage = PressedSendEditMessage guildOrDmId
+    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId
     , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage messageId
+    , pressedPingUser = PressedPingUserForEditMessage guildOrDmId
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
     , target = MessageInput.EditMessage
     }
@@ -301,8 +301,8 @@ miniButton onPress svg =
 
 
 menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile messageId messageIndex position local model =
-    case LocalState.getMessages messageId local of
+menuItems isMobile guildOrDmId messageIndex position local model =
+    case LocalState.getMessages guildOrDmId local of
         Just messages ->
             case Array.get messageIndex messages of
                 Just message ->
@@ -369,7 +369,7 @@ menuItems isMobile messageId messageIndex position local model =
                                 isMobile
                                 Icons.delete
                                 "Delete message"
-                                (MessageMenu_PressedDeleteMessage messageId messageIndex)
+                                (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
                             )
                             |> Just
 

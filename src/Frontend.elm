@@ -763,11 +763,11 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (case routeToMessageId model.route of
-                                    Just messageId ->
-                                        case messageIdToMessages messageId (Local.model loggedIn.localState) of
+                                    Just guildOrDmId ->
+                                        case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
                                             Just messages ->
                                                 Local_SetLastViewed
-                                                    messageId
+                                                    guildOrDmId
                                                     (Array.length messages - 1)
                                                     |> Just
 
@@ -787,16 +787,16 @@ updateLoaded msg model =
             in
             ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
 
-        TypedMessage messageId text ->
+        TypedMessage guildOrDmId text ->
             updateLoggedIn
                 (\loggedIn ->
                     let
                         ( pingUser, cmd ) =
                             MessageInput.multilineUpdate
-                                (Pages.Guild.messageInputConfig messageId)
+                                (Pages.Guild.messageInputConfig guildOrDmId)
                                 Pages.Guild.channelTextInputId
                                 text
-                                (case SeqDict.get messageId loggedIn.drafts of
+                                (case SeqDict.get guildOrDmId loggedIn.drafts of
                                     Just nonempty ->
                                         String.Nonempty.toString nonempty
 
@@ -808,7 +808,7 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (if loggedIn.typingDebouncer then
-                            Local_MemberTyping model.time messageId |> Just
+                            Local_MemberTyping model.time guildOrDmId |> Just
 
                          else
                             Nothing
@@ -818,10 +818,10 @@ updateLoaded msg model =
                             , drafts =
                                 case String.Nonempty.fromString text of
                                     Just nonempty ->
-                                        SeqDict.insert messageId nonempty loggedIn.drafts
+                                        SeqDict.insert guildOrDmId nonempty loggedIn.drafts
 
                                     Nothing ->
-                                        SeqDict.remove messageId loggedIn.drafts
+                                        SeqDict.remove guildOrDmId loggedIn.drafts
                             , typingDebouncer = False
                         }
                         (Command.batch
@@ -838,10 +838,10 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | typingDebouncer = True }, Command.none ))
                 model
 
-        PressedSendMessage messageId ->
+        PressedSendMessage guildOrDmId ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get messageId loggedIn.drafts of
+                    case SeqDict.get guildOrDmId loggedIn.drafts of
                         Just nonempty ->
                             let
                                 local : LocalState
@@ -852,14 +852,14 @@ updateLoaded msg model =
                                 model.time
                                 (Local_SendMessage
                                     model.time
-                                    messageId
+                                    guildOrDmId
                                     (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
-                                    (SeqDict.get messageId loggedIn.replyTo)
+                                    (SeqDict.get guildOrDmId loggedIn.replyTo)
                                     |> Just
                                 )
                                 { loggedIn
-                                    | drafts = SeqDict.remove messageId loggedIn.drafts
-                                    , replyTo = SeqDict.remove messageId loggedIn.replyTo
+                                    | drafts = SeqDict.remove guildOrDmId loggedIn.drafts
+                                    , replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo
                                 }
                                 scrollToBottomOfChannel
 
@@ -1131,16 +1131,16 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedPingUser messageId index ->
+        PressedPingUser guildOrDmId index ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get messageId loggedIn.drafts of
+                    case SeqDict.get guildOrDmId loggedIn.drafts of
                         Just text ->
                             let
                                 ( pingUser, text2, cmd ) =
                                     MessageInput.pressedPingUser
                                         SetFocus
-                                        messageId
+                                        guildOrDmId
                                         Pages.Guild.channelTextInputId
                                         index
                                         loggedIn.pingUser
@@ -1149,7 +1149,7 @@ updateLoaded msg model =
                             in
                             ( { loggedIn
                                 | pingUser = pingUser
-                                , drafts = SeqDict.insert messageId text2 loggedIn.drafts
+                                , drafts = SeqDict.insert guildOrDmId text2 loggedIn.drafts
                               }
                             , cmd
                             )
@@ -1215,33 +1215,33 @@ updateLoaded msg model =
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
                                             case routeToMessageId model.route of
-                                                Just messageId ->
+                                                Just guildOrDmId ->
                                                     handleLocalChange
                                                         model.time
                                                         (case
                                                             messageIdToMessages
-                                                                messageId
+                                                                guildOrDmId
                                                                 (Local.model loggedIn2.localState)
                                                          of
                                                             Just messages ->
                                                                 Local_SetLastViewed
-                                                                    messageId
+                                                                    guildOrDmId
                                                                     (Array.length messages - 1)
                                                                     |> Just
 
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        (if SeqDict.member messageId loggedIn2.editMessage then
+                                                        (if SeqDict.member guildOrDmId loggedIn2.editMessage then
                                                             { loggedIn2
                                                                 | editMessage =
-                                                                    SeqDict.remove messageId loggedIn2.editMessage
+                                                                    SeqDict.remove guildOrDmId loggedIn2.editMessage
                                                             }
 
                                                          else
                                                             { loggedIn2
                                                                 | replyTo =
-                                                                    SeqDict.remove messageId loggedIn2.replyTo
+                                                                    SeqDict.remove guildOrDmId loggedIn2.replyTo
                                                             }
                                                         )
                                                         (setFocus model Pages.Guild.channelTextInputId)
@@ -1268,8 +1268,8 @@ updateLoaded msg model =
                             ( Nothing, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
-                            ( Just messageId, _ ) ->
-                                ( { loggedIn | messageHover = MessageHover messageId messageIndex }
+                            ( Just guildOrDmId, _ ) ->
+                                ( { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
                                 , Command.none
                                 )
 
@@ -1284,8 +1284,8 @@ updateLoaded msg model =
                     ( { loggedIn
                         | messageHover =
                             case routeToMessageId model.route of
-                                Just messageId ->
-                                    if MessageHover messageId messageIndex == loggedIn.messageHover then
+                                Just guildOrDmId ->
+                                    if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
                                         NoMessageHover
 
                                     else
@@ -1331,7 +1331,7 @@ updateLoaded msg model =
                                     loggedIn.messageHover
 
                                 MessageMenu a ->
-                                    MessageHover a.messageId a.messageIndex
+                                    MessageHover a.guildOrDmId a.messageIndex
                       }
                     , Command.none
                     )
@@ -1385,13 +1385,13 @@ updateLoaded msg model =
                             Local.model loggedIn.localState
                     in
                     ( case maybeMessageAndId of
-                        Just ( messageId, message ) ->
+                        Just ( guildOrDmId, message ) ->
                             let
                                 loggedIn2 =
                                     { loggedIn
                                         | editMessage =
                                             SeqDict.insert
-                                                messageId
+                                                guildOrDmId
                                                 { messageIndex = messageIndex
                                                 , text =
                                                     RichText.toString (LocalState.allUsers local) message.content
@@ -1438,10 +1438,10 @@ updateLoaded msg model =
                         EmojiSelectorHidden ->
                             ( loggedIn, Command.none )
 
-                        EmojiSelectorForReaction messageId messageIndex ->
+                        EmojiSelectorForReaction guildOrDmId messageIndex ->
                             handleLocalChange
                                 model.time
-                                (Local_AddReactionEmoji messageId messageIndex emoji |> Just)
+                                (Local_AddReactionEmoji guildOrDmId messageIndex emoji |> Just)
                                 { loggedIn | showEmojiSelector = EmojiSelectorHidden }
                                 Command.none
 
@@ -1487,10 +1487,10 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case routeToMessageId model.route of
-                        Just messageId ->
+                        Just guildOrDmId ->
                             handleLocalChange
                                 model.time
-                                (Local_RemoveReactionEmoji messageId messageIndex emoji |> Just)
+                                (Local_RemoveReactionEmoji guildOrDmId messageIndex emoji |> Just)
                                 loggedIn
                                 Command.none
 
@@ -1513,15 +1513,15 @@ updateLoaded msg model =
                 )
                 model
 
-        TypedEditMessage messageId text ->
+        TypedEditMessage guildOrDmId text ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get messageId loggedIn.editMessage of
+                    case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
                             let
                                 ( pingUser, cmd ) =
                                     MessageInput.multilineUpdate
-                                        (MessageMenu.editMessageTextInputConfig messageId)
+                                        (MessageMenu.editMessageTextInputConfig guildOrDmId)
                                         MessageMenu.editMessageTextInputId
                                         text
                                         edit.text
@@ -1537,7 +1537,7 @@ updateLoaded msg model =
                                         | pingUser = pingUser
                                         , editMessage =
                                             SeqDict.insert
-                                                messageId
+                                                guildOrDmId
                                                 { edit | text = text }
                                                 loggedIn.editMessage
                                         , typingDebouncer = False
@@ -1546,7 +1546,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (if oldTypingDebouncer then
-                                    Local_MemberEditTyping model.time messageId edit.messageIndex |> Just
+                                    Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
 
                                  else
                                     Nothing
@@ -1584,10 +1584,10 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedSendEditMessage messageId ->
+        PressedSendEditMessage guildOrDmId ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get messageId loggedIn.editMessage of
+                    case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
                             let
                                 local : LocalState
@@ -1598,7 +1598,7 @@ updateLoaded msg model =
                                 model.time
                                 (case
                                     ( String.Nonempty.fromString edit.text
-                                    , messageIdToMessage messageId edit.messageIndex local
+                                    , messageIdToMessage guildOrDmId edit.messageIndex local
                                     )
                                  of
                                     ( Just nonempty, Just message ) ->
@@ -1615,7 +1615,7 @@ updateLoaded msg model =
                                         else
                                             Local_SendEditMessage
                                                 model.time
-                                                messageId
+                                                guildOrDmId
                                                 edit.messageIndex
                                                 richText
                                                 |> Just
@@ -1625,7 +1625,7 @@ updateLoaded msg model =
                                 )
                                 { loggedIn
                                     | editMessage =
-                                        SeqDict.remove messageId loggedIn.editMessage
+                                        SeqDict.remove guildOrDmId loggedIn.editMessage
                                     , messageHover = NoMessageHover
                                 }
                                 (setFocus model Pages.Guild.channelTextInputId)
@@ -1635,13 +1635,13 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedArrowInDropdownForEditMessage messageId index ->
+        PressedArrowInDropdownForEditMessage guildOrDmId index ->
             updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | pingUser =
                             MessageInput.pressedArrowInDropdown
-                                messageId
+                                guildOrDmId
                                 index
                                 loggedIn.pingUser
                                 (Local.model loggedIn.localState)
@@ -1651,10 +1651,10 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedPingUserForEditMessage messageId dropdownIndex ->
+        PressedPingUserForEditMessage guildOrDmId dropdownIndex ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get messageId loggedIn.editMessage of
+                    case SeqDict.get guildOrDmId loggedIn.editMessage of
                         Just edit ->
                             case String.Nonempty.fromString edit.text of
                                 Just nonempty ->
@@ -1662,7 +1662,7 @@ updateLoaded msg model =
                                         ( pingUser, text2, cmd ) =
                                             MessageInput.pressedPingUser
                                                 SetFocus
-                                                messageId
+                                                guildOrDmId
                                                 MessageMenu.editMessageTextInputId
                                                 dropdownIndex
                                                 loggedIn.pingUser
@@ -1673,7 +1673,7 @@ updateLoaded msg model =
                                         | pingUser = pingUser
                                         , editMessage =
                                             SeqDict.insert
-                                                messageId
+                                                guildOrDmId
                                                 { edit | text = String.Nonempty.toString text2 }
                                                 loggedIn.editMessage
                                       }
@@ -1688,7 +1688,7 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedArrowUpInEmptyInput messageId ->
+        PressedArrowUpInEmptyInput guildOrDmId ->
             updateLoggedIn
                 (\loggedIn ->
                     let
@@ -1698,7 +1698,7 @@ updateLoaded msg model =
 
                         maybeMessages : Maybe (Array Message)
                         maybeMessages =
-                            messageIdToMessages messageId local
+                            messageIdToMessages guildOrDmId local
                     in
                     case maybeMessages of
                         Just messages ->
@@ -1743,7 +1743,7 @@ updateLoaded msg model =
                                     ( { loggedIn
                                         | editMessage =
                                             SeqDict.insert
-                                                messageId
+                                                guildOrDmId
                                                 { messageIndex = index
                                                 , text =
                                                     RichText.toString (LocalState.allUsers local) message
@@ -1793,10 +1793,10 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedCloseReplyTo messageId ->
+        PressedCloseReplyTo guildOrDmId ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | replyTo = SeqDict.remove messageId loggedIn.replyTo }
+                    ( { loggedIn | replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo }
                     , setFocus model Pages.Guild.channelTextInputId
                     )
                 )
@@ -1806,20 +1806,20 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case routeToMessageId model.route of
-                        Just messageId ->
+                        Just guildOrDmId ->
                             let
                                 revealedSpoilers : RevealedSpoilers
                                 revealedSpoilers =
                                     case loggedIn.revealedSpoilers of
                                         Just a ->
-                                            if a.messageId == messageId then
+                                            if a.guildOrDmId == guildOrDmId then
                                                 a
 
                                             else
-                                                { messageId = messageId, messages = SeqDict.empty }
+                                                { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
 
                                         Nothing ->
-                                            { messageId = messageId, messages = SeqDict.empty }
+                                            { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
                             in
                             ( { loggedIn
                                 | revealedSpoilers =
@@ -2093,7 +2093,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case routeToMessageId model.route of
-                        Just messageId ->
+                        Just guildOrDmId ->
                             ( { loggedIn
                                 | messageHover =
                                     MessageMenu
@@ -2101,14 +2101,14 @@ updateLoaded msg model =
                                             Coord.plus
                                                 (Coord.xy (-MessageMenu.width - 8) -8)
                                                 clickedAt
-                                        , messageId = messageId
+                                        , guildOrDmId = guildOrDmId
                                         , messageIndex = messageIndex
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
                                                 , targetOffset =
                                                     MessageMenu.mobileMenuOpeningOffset
-                                                        messageId
+                                                        guildOrDmId
                                                         messageIndex
                                                         (Local.model loggedIn.localState)
                                                         model
@@ -2151,10 +2151,10 @@ updateLoaded msg model =
         MessageMenu_PressedContainer ->
             ( model, Command.none )
 
-        PressedCancelMessageEdit messageId ->
+        PressedCancelMessageEdit guildOrDmId ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | editMessage = SeqDict.remove messageId loggedIn.editMessage }
+                    ( { loggedIn | editMessage = SeqDict.remove guildOrDmId loggedIn.editMessage }
                     , Command.none
                     )
                 )
@@ -2325,11 +2325,11 @@ updateLoaded msg model =
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
     case routeToMessageId model.route of
-        Just messageId ->
+        Just guildOrDmId ->
             { loggedIn
                 | messageHover =
                     MessageMenu
-                        { messageId = messageId
+                        { guildOrDmId = guildOrDmId
                         , messageIndex = messageIndex
                         , position = clickedAt
                         , mobileMode =
@@ -2337,7 +2337,7 @@ handleAltPressedMessage messageIndex clickedAt loggedIn local model =
                                 { offset = Quantity.zero
                                 , targetOffset =
                                     MessageMenu.mobileMenuOpeningOffset
-                                        messageId
+                                        guildOrDmId
                                         messageIndex
                                         local
                                         model
@@ -2609,8 +2609,8 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt messageId text repliedTo ->
-                    case messageId of
+                Local_SendMessage createdAt guildOrDmId text repliedTo ->
+                    case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( guild, channel ) ->
@@ -2650,7 +2650,7 @@ changeUpdate localMsg local =
                                                     { user
                                                         | lastViewed =
                                                             SeqDict.insert
-                                                                messageId
+                                                                guildOrDmId
                                                                 (Array.length channel.messages)
                                                                 user.lastViewed
                                                     }
@@ -2691,7 +2691,7 @@ changeUpdate localMsg local =
                                             { user
                                                 | lastViewed =
                                                     SeqDict.insert
-                                                        messageId
+                                                        guildOrDmId
                                                         (Array.length dmChannel.messages - 1)
                                                         user.lastViewed
                                             }
@@ -2755,22 +2755,22 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                Local_MemberTyping time messageId ->
-                    memberTyping time local.localUser.userId messageId local
+                Local_MemberTyping time guildOrDmId ->
+                    memberTyping time local.localUser.userId guildOrDmId local
 
-                Local_AddReactionEmoji messageId messageIndex emoji ->
-                    addReactionEmoji local.localUser.userId messageId messageIndex emoji local
+                Local_AddReactionEmoji guildOrDmId messageIndex emoji ->
+                    addReactionEmoji local.localUser.userId guildOrDmId messageIndex emoji local
 
-                Local_RemoveReactionEmoji messageId messageIndex emoji ->
-                    removeReactionEmoji local.localUser.userId messageId messageIndex emoji local
+                Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
+                    removeReactionEmoji local.localUser.userId guildOrDmId messageIndex emoji local
 
-                Local_SendEditMessage time messageId messageIndex newContent ->
-                    editMessage time local.localUser.userId messageId newContent messageIndex local
+                Local_SendEditMessage time guildOrDmId messageIndex newContent ->
+                    editMessage time local.localUser.userId guildOrDmId newContent messageIndex local
 
-                Local_MemberEditTyping time messageId messageIndex ->
-                    memberEditTyping time local.localUser.userId messageId messageIndex local
+                Local_MemberEditTyping time guildOrDmId messageIndex ->
+                    memberEditTyping time local.localUser.userId guildOrDmId messageIndex local
 
-                Local_SetLastViewed messageId messageIndex ->
+                Local_SetLastViewed guildOrDmId messageIndex ->
                     let
                         user =
                             local.localUser.user
@@ -2784,13 +2784,13 @@ changeUpdate localMsg local =
                                 | user =
                                     { user
                                         | lastViewed =
-                                            SeqDict.insert messageId messageIndex user.lastViewed
+                                            SeqDict.insert guildOrDmId messageIndex user.lastViewed
                                     }
                             }
                     }
 
-                Local_DeleteMessage messageId messageIndex ->
-                    deleteMessage local.localUser.userId messageId messageIndex local
+                Local_DeleteMessage guildOrDmId messageIndex ->
+                    deleteMessage local.localUser.userId guildOrDmId messageIndex local
 
                 Local_SetDiscordWebsocket isEnabled ->
                     { local
@@ -2822,8 +2822,8 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt messageId text repliedTo ->
-                    case messageId of
+                Server_SendMessage userId createdAt guildOrDmId text repliedTo ->
+                    case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( guild, channel ) ->
@@ -2866,7 +2866,7 @@ changeUpdate localMsg local =
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
-                                                                    messageId
+                                                                    guildOrDmId
                                                                     (Array.length channel.messages)
                                                                     user.lastViewed
                                                         }
@@ -2913,7 +2913,7 @@ changeUpdate localMsg local =
                                                 { user
                                                     | lastViewed =
                                                         SeqDict.insert
-                                                            messageId
+                                                            guildOrDmId
                                                             (Array.length dmChannel.messages - 1)
                                                             user.lastViewed
                                                 }
@@ -3002,23 +3002,23 @@ changeUpdate localMsg local =
                         Err error ->
                             { local | joinGuildError = Just error }
 
-                Server_MemberTyping time userId messageId ->
-                    memberTyping time userId messageId local
+                Server_MemberTyping time userId guildOrDmId ->
+                    memberTyping time userId guildOrDmId local
 
-                Server_AddReactionEmoji userId messageId messageIndex emoji ->
-                    addReactionEmoji userId messageId messageIndex emoji local
+                Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
+                    addReactionEmoji userId guildOrDmId messageIndex emoji local
 
-                Server_RemoveReactionEmoji userId messageId messageIndex emoji ->
-                    removeReactionEmoji userId messageId messageIndex emoji local
+                Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
+                    removeReactionEmoji userId guildOrDmId messageIndex emoji local
 
-                Server_SendEditMessage time userId messageId messageIndex newContent ->
-                    editMessage time userId messageId newContent messageIndex local
+                Server_SendEditMessage time userId guildOrDmId messageIndex newContent ->
+                    editMessage time userId guildOrDmId newContent messageIndex local
 
-                Server_MemberEditTyping time userId messageId messageIndex ->
-                    memberEditTyping time userId messageId messageIndex local
+                Server_MemberEditTyping time userId guildOrDmId messageIndex ->
+                    memberEditTyping time userId guildOrDmId messageIndex local
 
-                Server_DeleteMessage userId messageId messageIndex ->
-                    deleteMessage userId messageId messageIndex local
+                Server_DeleteMessage userId guildOrDmId messageIndex ->
+                    deleteMessage userId guildOrDmId messageIndex local
 
                 Server_DiscordDeleteMessage messageId ->
                     { local
@@ -3094,8 +3094,8 @@ changeUpdate localMsg local =
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
-memberTyping time userId messageId local =
-    case messageId of
+memberTyping time userId guildOrDmId local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
@@ -3121,8 +3121,8 @@ memberTyping time userId messageId local =
 
 
 addReactionEmoji : Id UserId -> GuildOrDmId -> Int -> Emoji -> LocalState -> LocalState
-addReactionEmoji userId messageId messageIndex emoji local =
-    case messageId of
+addReactionEmoji userId guildOrDmId messageIndex emoji local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
@@ -3151,8 +3151,8 @@ addReactionEmoji userId messageId messageIndex emoji local =
 
 
 removeReactionEmoji : Id UserId -> GuildOrDmId -> Int -> Emoji -> LocalState -> LocalState
-removeReactionEmoji userId messageId messageIndex emoji local =
-    case messageId of
+removeReactionEmoji userId guildOrDmId messageIndex emoji local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
@@ -3181,8 +3181,8 @@ removeReactionEmoji userId messageId messageIndex emoji local =
 
 
 memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Int -> LocalState -> LocalState
-memberEditTyping time userId messageId messageIndex local =
-    case messageId of
+memberEditTyping time userId guildOrDmId messageIndex local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
@@ -3209,8 +3209,8 @@ memberEditTyping time userId messageId messageIndex local =
 
 
 editMessage : Time.Posix -> Id UserId -> GuildOrDmId -> Nonempty RichText -> Int -> LocalState -> LocalState
-editMessage time userId messageId newContent messageIndex local =
-    case messageId of
+editMessage time userId guildOrDmId newContent messageIndex local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
@@ -3248,8 +3248,8 @@ editMessage time userId messageId newContent messageIndex local =
 
 
 deleteMessage : Id UserId -> GuildOrDmId -> Int -> LocalState -> LocalState
-deleteMessage userId messageId messageIndex local =
-    case messageId of
+deleteMessage userId guildOrDmId messageIndex local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
@@ -3559,8 +3559,8 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     Command.none
 
-                        ServerChange (Server_SendMessage senderId _ messageId content maybeRepliedTo) ->
-                            case messageId of
+                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo) ->
+                            case guildOrDmId of
                                 GuildOrDmId_Guild guildId channelId ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
                                         Just ( _, channel ) ->
@@ -3754,18 +3754,18 @@ layout model attributes child =
                     loggedIn.localState
                     |> Ui.inFront
                 , case maybeMessageId of
-                    Just messageId ->
+                    Just guildOrDmId ->
                         case loggedIn.pingUser of
                             Just pingUser ->
                                 MessageInput.pingDropdownView
                                     (case pingUser.target of
                                         MessageInput.NewMessage ->
-                                            Pages.Guild.messageInputConfig messageId
+                                            Pages.Guild.messageInputConfig guildOrDmId
 
                                         MessageInput.EditMessage ->
-                                            MessageMenu.editMessageTextInputConfig messageId
+                                            MessageMenu.editMessageTextInputConfig guildOrDmId
                                     )
-                                    messageId
+                                    guildOrDmId
                                     local
                                     Pages.Guild.dropdownButtonId
                                     pingUser
@@ -4025,8 +4025,8 @@ view model =
 
 
 messageIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe Message.UserTextMessageData
-messageIdToMessage messageId messageIndex local =
-    case messageId of
+messageIdToMessage guildOrDmId messageIndex local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
@@ -4055,8 +4055,8 @@ messageIdToMessage messageId messageIndex local =
 
 
 messageIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
-messageIdToMessages messageId local =
-    case messageId of
+messageIdToMessages guildOrDmId local =
+    case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
