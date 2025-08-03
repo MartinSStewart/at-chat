@@ -17,7 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildId, Id, UserId)
+import Id exposing (Id, UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (LocalState)
@@ -30,7 +30,7 @@ import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
 import Ui.Input
-import User exposing (FrontendUser)
+import User exposing (FrontendUser, GuildOrDmId(..))
 
 
 type alias MentionUserDropdown =
@@ -305,42 +305,48 @@ newAtSymbol oldText text =
         |> .foundAtSymbol
 
 
-userDropdownList : Id GuildId -> LocalState -> List ( Id UserId, FrontendUser )
-userDropdownList guildId local =
-    case SeqDict.get guildId local.guilds of
-        Just guild ->
-            let
-                allUsers : SeqDict (Id UserId) FrontendUser
-                allUsers =
-                    LocalState.allUsers local
-            in
-            guild.owner
-                :: SeqDict.keys guild.members
-                |> List.filterMap
-                    (\userId ->
-                        case SeqDict.get userId allUsers of
-                            Just user ->
-                                Just ( userId, user )
+userDropdownList : GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList guildOrDmId local =
+    let
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers local
+    in
+    (case guildOrDmId of
+        GuildOrDmId_Guild guildId _ ->
+            case SeqDict.get guildId local.guilds of
+                Just guild ->
+                    guild.owner
+                        :: SeqDict.keys guild.members
 
-                            Nothing ->
-                                Nothing
-                    )
-                |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+                Nothing ->
+                    []
 
-        Nothing ->
-            []
+        GuildOrDmId_Dm otherUserId ->
+            [ local.localUser.userId, otherUserId ]
+    )
+        |> List.filterMap
+            (\userId ->
+                case SeqDict.get userId allUsers of
+                    Just user ->
+                        Just ( userId, user )
+
+                    Nothing ->
+                        Nothing
+            )
+        |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
 
 
-pressedArrowInDropdown : Id GuildId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
-pressedArrowInDropdown guildId index maybePingUser local =
+pressedArrowInDropdown : GuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+pressedArrowInDropdown guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
             { pingUser
                 | dropdownIndex =
                     if index < 0 then
-                        List.length (userDropdownList guildId local) - 1
+                        List.length (userDropdownList guildOrDmId local) - 1
 
-                    else if index >= List.length (userDropdownList guildId local) then
+                    else if index >= List.length (userDropdownList guildOrDmId local) then
                         0
 
                     else
@@ -354,15 +360,15 @@ pressedArrowInDropdown guildId index maybePingUser local =
 
 pressedPingUser :
     msg
-    -> Id GuildId
+    -> GuildOrDmId
     -> HtmlId
     -> Int
     -> Maybe MentionUserDropdown
     -> LocalState
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
-pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inputText =
-    case ( pingUser, userDropdownList guildId local |> List.Extra.getAt index ) of
+pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local inputText =
+    case ( pingUser, userDropdownList guildOrDmId local |> List.Extra.getAt index ) of
         ( Just { charIndex }, Just ( _, user ) ) ->
             let
                 applyText : NonemptyString -> NonemptyString
@@ -414,12 +420,12 @@ pressedPingUser setFocusMsg guildId channelTextInputId index pingUser local inpu
 
 pingDropdownView :
     MsgConfig msg
-    -> Id GuildId
+    -> GuildOrDmId
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element msg
-pingDropdownView msgConfig guildId localState dropdownButtonId { dropdownIndex, inputElement } =
+pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownIndex, inputElement } =
     Ui.column
         [ Ui.background MyUi.background2
         , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
@@ -472,6 +478,6 @@ pingDropdownView msgConfig guildId localState dropdownButtonId { dropdownIndex, 
                         ]
                         (Ui.text (PersonName.toString user.name))
                 )
-                (userDropdownList guildId localState)
+                (userDropdownList guildOrDmId localState)
             )
         ]

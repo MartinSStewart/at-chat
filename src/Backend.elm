@@ -9,11 +9,12 @@ module Backend exposing
 
 import AiChat
 import Array
+import Array.Extra
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
-import DmChannel exposing (LastTypedAt)
+import DmChannel exposing (DmChannel, DmChannelId, LastTypedAt)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
@@ -53,7 +54,7 @@ import TOTP.Key
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, EmailStatus(..))
+import User exposing (BackendUser, EmailStatus(..), GuildOrDmId(..))
 
 
 app :
@@ -159,6 +160,7 @@ init =
       , discordBotId = Nothing
       , websocketEnabled = IsEnabled
       , dmChannels = SeqDict.empty
+      , discordDms = OneToOne.empty
       }
     , Command.none
     )
@@ -205,7 +207,7 @@ update msg model =
                         )
                         model.connections
               }
-            , Command.none
+            , Lamdera.sendToFrontend clientId YouConnected
             )
 
         UserDisconnected sessionId clientId ->
@@ -332,7 +334,7 @@ update msg model =
                 outMsgs
                 |> Tuple.mapSecond Command.batch
 
-        GotDiscordGuilds time result ->
+        GotDiscordGuilds time botUserId result ->
             case result of
                 Ok data ->
                     let
@@ -344,6 +346,7 @@ update msg model =
                                 )
                                 data
                                 |> SeqDict.fromList
+                                |> SeqDict.remove botUserId
                     in
                     ( addDiscordUsers time users model
                         |> addDiscordGuilds time (SeqDict.fromList data)
@@ -359,8 +362,8 @@ update msg model =
 
         GotCurrentUserGuilds time result ->
             case result of
-                Ok guilds ->
-                    ( model
+                Ok ( botUser, guilds ) ->
+                    ( { model | discordBotId = Just botUser.id }
                     , List.map
                         (\partialGuild ->
                             Task.map3
@@ -379,7 +382,7 @@ update msg model =
                         )
                         guilds
                         |> Task.sequence
-                        |> Task.attempt (GotDiscordGuilds time)
+                        |> Task.attempt (GotDiscordGuilds time botUser.id)
                     )
 
                 Err error ->
@@ -389,7 +392,7 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        SentMessageToDiscord messageId result ->
+        SentGuildMessageToDiscord messageId result ->
             case result of
                 Ok message ->
                     ( { model
@@ -421,14 +424,6 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotCurrentUser result ->
-            case result of
-                Ok user ->
-                    ( { model | discordBotId = Just user.id }, Command.none )
-
-                Err _ ->
-                    ( model, Command.none )
-
         DeletedDiscordMessage ->
             ( model, Command.none )
 
@@ -437,6 +432,27 @@ update msg model =
 
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
+
+        SentDirectMessageToDiscord dmChannelId messageIndex result ->
+            case result of
+                Ok message ->
+                    ( { model
+                        | dmChannels =
+                            SeqDict.updateIfExists
+                                dmChannelId
+                                (\dmChannel ->
+                                    { dmChannel
+                                        | linkedMessageIds =
+                                            OneToOne.insert message.id messageIndex dmChannel.linkedMessageIds
+                                    }
+                                )
+                                model.dmChannels
+                      }
+                    , Command.none
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
 
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
@@ -488,13 +504,12 @@ handleDiscordEditMessage edit model =
                                 Ok guild2 ->
                                     ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
                                     , broadcastToGuild
+                                        guildId
                                         (Server_SendEditMessage
                                             edit.timestamp
                                             userId
-                                            { guildId = guildId
-                                            , channelId = channelId
-                                            , messageIndex = messageIndex
-                                            }
+                                            (GuildOrDmId_Guild guildId channelId)
+                                            messageIndex
                                             richText
                                             |> ServerChange
                                         )
@@ -556,6 +571,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                                         model.guilds
                               }
                             , broadcastToGuild
+                                guildId
                                 (Server_DiscordDeleteMessage
                                     { guildId = guildId
                                     , channelId = channelId
@@ -777,7 +793,7 @@ handleDiscordCreateMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
 handleDiscordCreateMessage message model =
-    if Just message.author.id == model.discordBotId && String.contains botMessageSeparator message.content then
+    if Just message.author.id == model.discordBotId then
         ( model, Command.none )
 
     else
@@ -792,11 +808,15 @@ handleDiscordCreateMessage message model =
                     richText : Nonempty RichText
                     richText =
                         RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) nonempty
+
+                    dmChannelId : DmChannelId
+                    dmChannelId =
+                        DmChannel.channelIdFromUserIds userId adminUserId
                 in
                 ( { model
                     | dmChannels =
                         SeqDict.update
-                            (DmChannel.channelIdFromUserIds userId adminUserId)
+                            dmChannelId
                             (\maybe ->
                                 Maybe.withDefault DmChannel.init maybe
                                     |> LocalState.createMessage
@@ -812,6 +832,7 @@ handleDiscordCreateMessage message model =
                                     |> Just
                             )
                             model.dmChannels
+                    , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
                   }
                 , broadcastToUser
                     Nothing
@@ -887,11 +908,11 @@ handleDiscordCreateMessage message model =
                                     model.guilds
                           }
                         , broadcastToGuild
+                            guildId
                             (Server_SendMessage
                                 userId
                                 message.timestamp
-                                guildId
-                                channelId
+                                (GuildOrDmId_Guild guildId channelId)
                                 richText
                                 Nothing
                                 |> ServerChange
@@ -993,8 +1014,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( { model2 | discordNotConnected = False }
                 , Command.batch
                     [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                    , Discord.getCurrentUser Env.botToken |> Task.attempt GotCurrentUser
-                    , Discord.getCurrentUserGuilds Env.botToken
+                    , Task.map2
+                        Tuple.pair
+                        (Discord.getCurrentUser Env.botToken)
+                        (Discord.getCurrentUserGuilds Env.botToken)
                         |> Task.attempt (GotCurrentUserGuilds time)
                     , cmd
                     ]
@@ -1191,12 +1214,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model2 time)
 
-                Local_SendMessage _ guildId channelId text repliedTo ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        guildId
-                        (sendMessage model2 time clientId changeId guildId channelId text repliedTo)
+                Local_SendMessage _ guildOrDmId text repliedTo ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (sendGuildMessage model2 time clientId changeId guildId channelId text repliedTo)
+
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (sendDirectMessage model2 time clientId changeId otherUserId text repliedTo)
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
@@ -1217,6 +1248,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuildExcludingOne
                                     clientId
+                                    guildId
                                     (Server_NewChannel time guildId channelName |> ServerChange)
                                     model2
                                 ]
@@ -1241,6 +1273,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuildExcludingOne
                                     clientId
+                                    guildId
                                     (Server_EditChannel guildId channelId channelName |> ServerChange)
                                     model2
                                 ]
@@ -1265,6 +1298,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuildExcludingOne
                                     clientId
+                                    guildId
                                     (Server_DeleteChannel guildId channelId |> ServerChange)
                                     model2
                                 ]
@@ -1294,6 +1328,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToGuildExcludingOne
                                     clientId
+                                    guildId
                                     (Server_NewInviteLink time userId guildId id |> ServerChange)
                                     model3
                                 ]
@@ -1330,191 +1365,414 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_MemberTyping _ guildId channelId ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        guildId
-                        (\userId _ guild ->
-                            ( { model2
-                                | guilds =
-                                    SeqDict.insert
-                                        guildId
-                                        (LocalState.memberIsTyping userId time channelId guild)
-                                        model2.guilds
-                              }
-                            , Command.batch
-                                [ Local_MemberTyping time guildId channelId
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuildExcludingOne
-                                    clientId
-                                    (Server_MemberTyping time userId guildId channelId |> ServerChange)
-                                    model2
-                                ]
-                            )
-                        )
-
-                Local_AddReactionEmoji messageId emoji ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        messageId.guildId
-                        (\userId _ guild ->
-                            ( { model2
-                                | guilds =
-                                    SeqDict.insert
-                                        messageId.guildId
-                                        (LocalState.addReactionEmoji
-                                            emoji
-                                            userId
-                                            messageId.channelId
-                                            messageId.messageIndex
-                                            guild
-                                        )
-                                        model2.guilds
-                              }
-                            , Command.batch
-                                [ Local_AddReactionEmoji messageId emoji
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuildExcludingOne
-                                    clientId
-                                    (Server_AddReactionEmoji userId messageId emoji |> ServerChange)
-                                    model2
-                                ]
-                            )
-                        )
-
-                Local_RemoveReactionEmoji messageId emoji ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        messageId.guildId
-                        (\userId _ guild ->
-                            ( { model2
-                                | guilds =
-                                    SeqDict.insert
-                                        messageId.guildId
-                                        (LocalState.removeReactionEmoji
-                                            emoji
-                                            userId
-                                            messageId.channelId
-                                            messageId.messageIndex
-                                            guild
-                                        )
-                                        model2.guilds
-                              }
-                            , Command.batch
-                                [ Local_RemoveReactionEmoji messageId emoji
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , broadcastToGuildExcludingOne
-                                    clientId
-                                    (Server_RemoveReactionEmoji userId messageId emoji |> ServerChange)
-                                    model2
-                                ]
-                            )
-                        )
-
-                Local_SendEditMessage _ messageId newContent ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        messageId.guildId
-                        (\userId _ guild ->
-                            case
-                                LocalState.editMessage
-                                    userId
-                                    time
-                                    newContent
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                    guild
-                            of
-                                Ok guild2 ->
-                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
+                Local_MemberTyping _ guildOrDmId ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    ( { model2
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                (LocalState.memberIsTyping userId time channelId guild)
+                                                model2.guilds
+                                      }
                                     , Command.batch
-                                        [ Local_SendEditMessage time messageId newContent
+                                        [ Local_MemberTyping time guildOrDmId
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToGuildExcludingOne
                                             clientId
-                                            (Server_SendEditMessage time userId messageId newContent
+                                            guildId
+                                            (Server_MemberTyping time userId (GuildOrDmId_Guild guildId channelId)
                                                 |> ServerChange
                                             )
                                             model2
-                                        , case SeqDict.get messageId.channelId guild2.channels of
-                                            Just channel ->
-                                                case
-                                                    ( channel.linkedId
-                                                    , OneToOne.first messageId.messageIndex channel.linkedMessageIds
+                                        ]
+                                    )
+                                )
+
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    ( { model2
+                                        | dmChannels =
+                                            SeqDict.updateIfExists
+                                                dmChannelId
+                                                (\dmChannel ->
+                                                    { dmChannel
+                                                        | lastTypedAt =
+                                                            SeqDict.insert userId { time = time, messageIndex = Nothing } dmChannel.lastTypedAt
+                                                    }
+                                                )
+                                                model2.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_MemberTyping time guildOrDmId
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastToUser
+                                            (Just clientId)
+                                            otherUserId
+                                            (Server_MemberTyping time userId (GuildOrDmId_Dm userId) |> ServerChange)
+                                            model2
+                                        ]
+                                    )
+                                )
+
+                Local_AddReactionEmoji guildOrDmId messageIndex emoji ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    ( { model2
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                (LocalState.addReactionEmoji
+                                                    emoji
+                                                    userId
+                                                    channelId
+                                                    messageIndex
+                                                    guild
+                                                )
+                                                model2.guilds
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , broadcastToGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_AddReactionEmoji userId guildOrDmId messageIndex emoji |> ServerChange)
+                                            model2
+                                        ]
+                                    )
+                                )
+
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    ( { model2
+                                        | dmChannels =
+                                            SeqDict.updateIfExists
+                                                dmChannelId
+                                                (\dmChannel ->
+                                                    { dmChannel
+                                                        | messages =
+                                                            Array.Extra.update messageIndex
+                                                                (Message.addReactionEmoji userId emoji)
+                                                                dmChannel.messages
+                                                    }
+                                                )
+                                                model2.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , broadcastToDmChannel
+                                            clientId
+                                            userId
+                                            otherUserId
+                                            (Server_AddReactionEmoji userId guildOrDmId messageIndex emoji)
+                                            model
+                                        ]
+                                    )
+                                )
+
+                Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    ( { model2
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                (LocalState.removeReactionEmoji
+                                                    emoji
+                                                    userId
+                                                    channelId
+                                                    messageIndex
+                                                    guild
+                                                )
+                                                model2.guilds
+                                      }
+                                    , Command.batch
+                                        [ Local_RemoveReactionEmoji guildOrDmId messageIndex emoji
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastToGuildExcludingOne
+                                            clientId
+                                            guildId
+                                            (Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji
+                                                |> ServerChange
+                                            )
+                                            model2
+                                        ]
+                                    )
+                                )
+
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    ( { model2
+                                        | dmChannels =
+                                            SeqDict.updateIfExists
+                                                dmChannelId
+                                                (\dmChannel ->
+                                                    { dmChannel
+                                                        | messages =
+                                                            Array.Extra.update messageIndex
+                                                                (Message.removeReactionEmoji userId emoji)
+                                                                dmChannel.messages
+                                                    }
+                                                )
+                                                model2.dmChannels
+                                      }
+                                    , Command.batch
+                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                        , broadcastToDmChannel
+                                            clientId
+                                            userId
+                                            otherUserId
+                                            (Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji)
+                                            model
+                                        ]
+                                    )
+                                )
+
+                Local_SendEditMessage _ guildOrDmId messageIndex newContent ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    case
+                                        LocalState.editMessage
+                                            userId
+                                            time
+                                            newContent
+                                            channelId
+                                            messageIndex
+                                            guild
+                                    of
+                                        Ok guild2 ->
+                                            ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
+                                            , Command.batch
+                                                [ Local_SendEditMessage time guildOrDmId messageIndex newContent
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastToGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_SendEditMessage time userId guildOrDmId messageIndex newContent
+                                                        |> ServerChange
                                                     )
-                                                of
-                                                    ( Just discordChannelId, Just discordMessageId ) ->
-                                                        case NonemptyDict.get userId model2.users of
-                                                            Just user ->
+                                                    model2
+                                                , case SeqDict.get channelId guild2.channels of
+                                                    Just channel ->
+                                                        case
+                                                            ( channel.linkedId
+                                                            , OneToOne.first messageIndex channel.linkedMessageIds
+                                                            )
+                                                        of
+                                                            ( Just discordChannelId, Just discordMessageId ) ->
                                                                 Discord.editMessage
                                                                     Env.botToken
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
-                                                                    , content = toDiscordContent user model2 newContent
+                                                                    , content = toDiscordContent model2 newContent
                                                                     }
                                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
-                                                            Nothing ->
+                                                            _ ->
                                                                 Command.none
 
-                                                    _ ->
+                                                    Nothing ->
                                                         Command.none
-
-                                            Nothing ->
-                                                Command.none
-                                        ]
-                                    )
-
-                                Err () ->
-                                    ( model2
-                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
-                                    )
-                        )
-
-                Local_MemberEditTyping _ messageId ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        messageId.guildId
-                        (\userId _ guild ->
-                            case
-                                LocalState.memberIsEditTyping
-                                    userId
-                                    time
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                    guild
-                            of
-                                Ok guild2 ->
-                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
-                                    , Command.batch
-                                        [ Local_MemberEditTyping time messageId
-                                            |> LocalChangeResponse changeId
-                                            |> Lamdera.sendToFrontend clientId
-                                        , broadcastToGuildExcludingOne
-                                            clientId
-                                            (Server_MemberEditTyping time userId messageId
-                                                |> ServerChange
+                                                ]
                                             )
-                                            model2
-                                        ]
-                                    )
 
-                                Err () ->
-                                    ( model2
-                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
-                                    )
-                        )
+                                        Err () ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
 
-                Local_SetLastViewed guildId channelId messageIndex ->
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    case SeqDict.get dmChannelId model2.dmChannels of
+                                        Just dmChannel ->
+                                            case
+                                                LocalState.editMessageHelper
+                                                    time
+                                                    userId
+                                                    newContent
+                                                    messageIndex
+                                                    dmChannel
+                                            of
+                                                Ok dmChannel2 ->
+                                                    ( { model2
+                                                        | dmChannels =
+                                                            SeqDict.insert dmChannelId dmChannel2 model2.dmChannels
+                                                      }
+                                                    , Command.batch
+                                                        [ Local_SendEditMessage time guildOrDmId messageIndex newContent
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , broadcastToDmChannel
+                                                            clientId
+                                                            userId
+                                                            otherUserId
+                                                            (Server_SendEditMessage time userId guildOrDmId messageIndex newContent)
+                                                            model
+                                                        , case OneToOne.first dmChannelId model2.discordDms of
+                                                            Just discordDmId ->
+                                                                case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
+                                                                    Just discordMessageId ->
+                                                                        Discord.editMessage
+                                                                            Env.botToken
+                                                                            { channelId = discordDmId
+                                                                            , messageId = discordMessageId
+                                                                            , content = toDiscordContent model2 newContent
+                                                                            }
+                                                                            |> Task.attempt (\_ -> EditedDiscordMessage)
+
+                                                                    _ ->
+                                                                        Command.none
+
+                                                            Nothing ->
+                                                                Command.none
+                                                        ]
+                                                    )
+
+                                                Err () ->
+                                                    ( model2
+                                                    , LocalChangeResponse changeId Local_Invalid
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    )
+
+                                        Nothing ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
+
+                Local_MemberEditTyping _ guildOrDmId messageIndex ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    case
+                                        LocalState.memberIsEditTyping
+                                            userId
+                                            time
+                                            channelId
+                                            messageIndex
+                                            guild
+                                    of
+                                        Ok guild2 ->
+                                            ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
+                                            , Command.batch
+                                                [ Local_MemberEditTyping time guildOrDmId messageIndex
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastToGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_MemberEditTyping time userId guildOrDmId messageIndex
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                ]
+                                            )
+
+                                        Err () ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
+
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId : DmChannelId
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    case SeqDict.get dmChannelId model2.dmChannels of
+                                        Just dmChannel ->
+                                            case LocalState.memberIsEditTypingHelper time userId messageIndex dmChannel of
+                                                Ok dmChannel2 ->
+                                                    ( { model2
+                                                        | dmChannels =
+                                                            SeqDict.insert dmChannelId dmChannel2 model2.dmChannels
+                                                      }
+                                                    , Command.batch
+                                                        [ Local_MemberEditTyping time guildOrDmId messageIndex
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , broadcastToUser
+                                                            (Just clientId)
+                                                            otherUserId
+                                                            (Server_MemberEditTyping time userId (GuildOrDmId_Dm userId) messageIndex |> ServerChange)
+                                                            model2
+                                                        ]
+                                                    )
+
+                                                _ ->
+                                                    ( model2
+                                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                                    )
+
+                                        Nothing ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
+
+                Local_SetLastViewed guildOrDmId messageIndex ->
                     asUser
                         model2
                         sessionId
@@ -1523,7 +1781,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 | users =
                                     NonemptyDict.insert
                                         userId
-                                        { user | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed }
+                                        { user | lastViewed = SeqDict.insert guildOrDmId messageIndex user.lastViewed }
                                         model2.users
                               }
                             , Command.batch
@@ -1534,59 +1792,121 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_DeleteMessage messageId ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        messageId.guildId
-                        (\userId _ guild ->
-                            case
-                                LocalState.deleteMessage
-                                    userId
-                                    messageId.channelId
-                                    messageId.messageIndex
-                                    guild
-                            of
-                                Ok guild2 ->
-                                    ( { model2 | guilds = SeqDict.insert messageId.guildId guild2 model2.guilds }
-                                    , Command.batch
-                                        [ Lamdera.sendToFrontend
-                                            clientId
-                                            (LocalChangeResponse changeId localMsg)
-                                        , broadcastToGuildExcludingOne
-                                            clientId
-                                            (Server_DeleteMessage userId messageId |> ServerChange)
-                                            model2
-                                        , case SeqDict.get messageId.channelId guild2.channels of
-                                            Just channel ->
-                                                case
-                                                    ( channel.linkedId
-                                                    , OneToOne.first messageId.messageIndex channel.linkedMessageIds
-                                                    )
-                                                of
-                                                    ( Just discordChannelId, Just discordMessageId ) ->
-                                                        Discord.deleteMessage
-                                                            Env.botToken
-                                                            { channelId = discordChannelId
-                                                            , messageId = discordMessageId
-                                                            }
-                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
+                Local_DeleteMessage guildOrDmId messageIndex ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId _ guild ->
+                                    case
+                                        LocalState.deleteMessage
+                                            userId
+                                            channelId
+                                            messageIndex
+                                            guild
+                                    of
+                                        Ok guild2 ->
+                                            ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend
+                                                    clientId
+                                                    (LocalChangeResponse changeId localMsg)
+                                                , broadcastToGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DeleteMessage userId guildOrDmId messageIndex |> ServerChange)
+                                                    model2
+                                                , case SeqDict.get channelId guild2.channels of
+                                                    Just channel ->
+                                                        case
+                                                            ( channel.linkedId
+                                                            , OneToOne.first messageIndex channel.linkedMessageIds
+                                                            )
+                                                        of
+                                                            ( Just discordChannelId, Just discordMessageId ) ->
+                                                                Discord.deleteMessage
+                                                                    Env.botToken
+                                                                    { channelId = discordChannelId
+                                                                    , messageId = discordMessageId
+                                                                    }
+                                                                    |> Task.attempt (\_ -> DeletedDiscordMessage)
 
-                                                    _ ->
+                                                            _ ->
+                                                                Command.none
+
+                                                    Nothing ->
                                                         Command.none
+                                                ]
+                                            )
 
-                                            Nothing ->
-                                                Command.none
-                                        ]
-                                    )
+                                        Err _ ->
+                                            ( model2
+                                            , Lamdera.sendToFrontend
+                                                clientId
+                                                (LocalChangeResponse changeId Local_Invalid)
+                                            )
+                                )
 
-                                Err _ ->
-                                    ( model2
-                                    , Lamdera.sendToFrontend
-                                        clientId
-                                        (LocalChangeResponse changeId Local_Invalid)
-                                    )
-                        )
+                        GuildOrDmId_Dm otherUserId ->
+                            asUser
+                                model2
+                                sessionId
+                                (\userId _ ->
+                                    let
+                                        dmChannelId : DmChannelId
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    case SeqDict.get dmChannelId model2.dmChannels of
+                                        Just dmChannel ->
+                                            case LocalState.deleteMessageHelper userId messageIndex dmChannel of
+                                                Ok dmChannel2 ->
+                                                    ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
+                                                    , Command.batch
+                                                        [ Lamdera.sendToFrontend
+                                                            clientId
+                                                            (LocalChangeResponse changeId localMsg)
+                                                        , broadcastToDmChannel
+                                                            clientId
+                                                            userId
+                                                            otherUserId
+                                                            (Server_DeleteMessage userId guildOrDmId messageIndex)
+                                                            model
+                                                        , case OneToOne.first dmChannelId model2.discordDms of
+                                                            Just discordChannelId ->
+                                                                case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
+                                                                    Just discordMessageId ->
+                                                                        Discord.deleteMessage
+                                                                            Env.botToken
+                                                                            { channelId = discordChannelId
+                                                                            , messageId = discordMessageId
+                                                                            }
+                                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
+
+                                                                    _ ->
+                                                                        Command.none
+
+                                                            Nothing ->
+                                                                Command.none
+                                                        ]
+                                                    )
+
+                                                Err _ ->
+                                                    ( model2
+                                                    , Lamdera.sendToFrontend
+                                                        clientId
+                                                        (LocalChangeResponse changeId Local_Invalid)
+                                                    )
+
+                                        Nothing ->
+                                            ( model2
+                                            , Lamdera.sendToFrontend
+                                                clientId
+                                                (LocalChangeResponse changeId Local_Invalid)
+                                            )
+                                )
 
                 Local_SetDiscordWebsocket isEnabled ->
                     ( { model2 | websocketEnabled = isEnabled, discordModel = Discord.init }
@@ -1635,7 +1955,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     clientId
                                     userId
                                     (LocalChange userId localMsg)
-                                    model
+                                    model2
                                 ]
                             )
                         )
@@ -1662,6 +1982,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
 
+        ReloadDataRequest ->
+            ( model2
+            , case getUserFromSessionId sessionId model2 of
+                Just ( userId, user ) ->
+                    getLoginData userId user model2
+                        |> Ok
+                        |> ReloadDataResponse
+                        |> Lamdera.sendToFrontend clientId
+
+                Nothing ->
+                    Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
+            )
+
 
 broadcastToEveryoneWhoCanSeeUser :
     ClientId
@@ -1684,12 +2017,9 @@ broadcastToEveryoneWhoCanSeeUser clientId userId change model =
         |> Command.batch
 
 
-toDiscordContent : BackendUser -> BackendModel -> Nonempty RichText -> String
-toDiscordContent user model content =
-    PersonName.toString user.name
-        ++ botMessageSeparator
-        ++ " "
-        ++ Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
+toDiscordContent : BackendModel -> Nonempty RichText -> String
+toDiscordContent model content =
+    Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
 
 
 joinGuildByInvite :
@@ -1727,6 +2057,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                     , Command.batch
                         [ broadcastToGuildExcludingOne
                             clientId
+                            guildId
                             (Server_MemberJoined
                                 time
                                 userId
@@ -1944,12 +2275,100 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
 
-botMessageSeparator : String
-botMessageSeparator =
-    "꞉"
+sendDirectMessage :
+    BackendModel
+    -> Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Id UserId
+    -> Nonempty RichText
+    -> Maybe Int
+    -> Id UserId
+    -> BackendUser
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendDirectMessage model time clientId changeId otherUserId text repliedTo userId user =
+    let
+        dmChannelId : DmChannelId
+        dmChannelId =
+            DmChannel.channelIdFromUserIds userId otherUserId
+
+        dmChannel : DmChannel
+        dmChannel =
+            SeqDict.get dmChannelId model.dmChannels
+                |> Maybe.withDefault DmChannel.init
+                |> LocalState.createMessage
+                    (UserTextMessage
+                        { createdAt = time
+                        , createdBy = userId
+                        , content = text
+                        , reactions = SeqDict.empty
+                        , editedAt = Nothing
+                        , repliedTo = repliedTo
+                        }
+                    )
+
+        messageIndex =
+            Array.length dmChannel.messages - 1
+    in
+    ( { model
+        | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+        , users =
+            NonemptyDict.insert
+                userId
+                { user
+                    | lastViewed = SeqDict.insert (GuildOrDmId_Dm otherUserId) messageIndex user.lastViewed
+                }
+                model.users
+      }
+    , Command.batch
+        [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo)
+            |> Lamdera.sendToFrontend clientId
+        , broadcastToDmChannel
+            clientId
+            userId
+            otherUserId
+            (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo)
+            model
+        , case OneToOne.first dmChannelId model.discordDms of
+            Just discordChannelId ->
+                Discord.createMessage
+                    Env.botToken
+                    { channelId = discordChannelId
+                    , content = toDiscordContent model text
+                    , replyTo = Nothing
+                    }
+                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
+
+            Nothing ->
+                Command.none
+        ]
+    )
 
 
-sendMessage :
+broadcastToDmChannel :
+    ClientId
+    -> Id UserId
+    -> Id UserId
+    -> ServerChange
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+broadcastToDmChannel clientId userId otherUserId serverMsg model =
+    let
+        localMsg : LocalMsg
+        localMsg =
+            ServerChange serverMsg
+    in
+    if userId == otherUserId then
+        broadcastToUser (Just clientId) userId localMsg model
+
+    else
+        Command.batch
+            [ broadcastToUser (Just clientId) userId localMsg model
+            , broadcastToUser (Just clientId) otherUserId localMsg model
+            ]
+
+
+sendGuildMessage :
     BackendModel
     -> Time.Posix
     -> ClientId
@@ -1962,7 +2381,7 @@ sendMessage :
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendMessage model time clientId changeId guildId channelId text repliedTo userId user guild =
+sendGuildMessage model time clientId changeId guildId channelId text repliedTo userId user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
@@ -1994,27 +2413,28 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
                     NonemptyDict.insert
                         userId
                         { user
-                            | lastViewed = SeqDict.insert ( guildId, channelId ) messageIndex user.lastViewed
+                            | lastViewed = SeqDict.insert (GuildOrDmId_Guild guildId channelId) messageIndex user.lastViewed
                         }
                         model.users
               }
             , Command.batch
-                [ LocalChangeResponse changeId (Local_SendMessage time guildId channelId text repliedTo)
+                [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Guild guildId channelId) text repliedTo)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuildExcludingOne
                     clientId
-                    (Server_SendMessage userId time guildId channelId text repliedTo |> ServerChange)
+                    guildId
+                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text repliedTo |> ServerChange)
                     model
                 , case channel2.linkedId of
                     Just discordChannelId ->
                         Discord.createMessage
                             Env.botToken
                             { channelId = discordChannelId
-                            , content = toDiscordContent user model text
+                            , content = toDiscordContent model text
                             , replyTo = Nothing
                             }
                             |> Task.attempt
-                                (SentMessageToDiscord
+                                (SentGuildMessageToDiscord
                                     { guildId = guildId
                                     , channelId = channelId
                                     , messageIndex = messageIndex
@@ -2032,8 +2452,8 @@ sendMessage model time clientId changeId guildId channelId text repliedTo userId
             )
 
 
-broadcastToGuildExcludingOne : ClientId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-broadcastToGuildExcludingOne clientToSkip msg model =
+broadcastToGuildExcludingOne : ClientId -> Id GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToGuildExcludingOne clientToSkip _ msg model =
     List.concatMap
         (\( _, otherClientIds ) ->
             NonemptyDict.keys otherClientIds
@@ -2053,8 +2473,8 @@ broadcastToGuildExcludingOne clientToSkip msg model =
         |> Command.batch
 
 
-broadcastToGuild : LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-broadcastToGuild msg model =
+broadcastToGuild : Id GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToGuild _ msg model =
     List.concatMap
         (\( _, otherClientIds ) ->
             NonemptyDict.keys otherClientIds

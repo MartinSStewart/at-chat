@@ -10,7 +10,7 @@ module DmChannel exposing
 import Array exposing (Array)
 import Discord.Id
 import Id exposing (Id(..), UserId)
-import Message exposing (Message(..))
+import Message exposing (Message)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import Time

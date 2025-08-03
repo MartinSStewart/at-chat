@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, FrontendMsg(..), LocalStorage, PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, init, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, FrontendMsg(..), LocalStorage, PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -155,14 +155,16 @@ init =
       , sendMessageWith = SendWithShiftEnter
       , aiModels = LoadingAiModels
       }
-    , Command.batch
-        [ loadUserSettingsToJs
-        , Http.get
-            { url = "https://openrouter.ai/api/v1/models"
-            , expect = Http.expectJson GotAiModels decodeModels
-            }
-        ]
+    , loadUserSettingsToJs
     )
+
+
+getModels : Command restriction toFrontend FrontendMsg
+getModels =
+    Http.get
+        { url = "https://openrouter.ai/api/v1/models"
+        , expect = Http.expectJson GotAiModels decodeModels
+        }
 
 
 type AiModelsStatus

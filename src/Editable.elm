@@ -1,4 +1,4 @@
-module Editable exposing (Model, Msg(..), init, view)
+module Editable exposing (Editing, Model, Msg(..), init, view)
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Icons

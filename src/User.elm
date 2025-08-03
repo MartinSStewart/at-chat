@@ -4,6 +4,7 @@ module User exposing
     , EmailNotifications(..)
     , EmailStatus(..)
     , FrontendUser
+    , GuildOrDmId(..)
     , allEmailNotifications
     , backendToFrontend
     , backendToFrontendForUser
@@ -35,9 +36,15 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , lastViewed : SeqDict GuildOrDmId Int
+    , dmLastViewed : SeqDict (Id UserId) Int
     , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
     }
+
+
+type GuildOrDmId
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_Dm (Id UserId)
 
 
 setLastChannelViewed : Id GuildId -> Id ChannelId -> BackendUser -> BackendUser

@@ -17,7 +17,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
-    | DmRoute (Id UserId)
+    | DmRoute (Id UserId) (Maybe Int)
     | AiChatRoute
 
 
@@ -95,10 +95,15 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
-        [ "d", userId ] ->
+        "d" :: userId :: rest ->
             case Id.fromString userId of
                 Just userId2 ->
-                    DmRoute userId2
+                    case rest of
+                        [ "m", messageIndex ] ->
+                            DmRoute userId2 (String.toInt messageIndex)
+
+                        _ ->
+                            DmRoute userId2 Nothing
 
                 Nothing ->
                     HomePageRoute
@@ -156,7 +161,16 @@ encode route =
                     , []
                     )
 
-                DmRoute userId ->
-                    ( [ "d", Id.toString userId ], [] )
+                DmRoute userId maybeMessageIndex ->
+                    ( [ "d", Id.toString userId ]
+                        ++ (case maybeMessageIndex of
+                                Just messageIndex ->
+                                    [ "m", String.fromInt messageIndex ]
+
+                                Nothing ->
+                                    []
+                           )
+                    , []
+                    )
     in
     Url.Builder.absolute path query

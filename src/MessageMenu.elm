@@ -18,7 +18,6 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (ChannelId, GuildId, Id)
 import Json.Decode
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
@@ -27,12 +26,12 @@ import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageId, MessageMenuExtraOptions)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User
+import User exposing (GuildOrDmId)
 
 
 width : number
@@ -46,7 +45,7 @@ close model loggedIn =
         NoMessageHover ->
             loggedIn
 
-        MessageHover _ ->
+        MessageHover _ _ ->
             loggedIn
 
         MessageMenu extraOptions ->
@@ -78,11 +77,7 @@ close model loggedIn =
                         NoMessageHover
                 , editMessage =
                     if isMobile then
-                        SeqDict.remove
-                            ( extraOptions.messageId.guildId
-                            , extraOptions.messageId.channelId
-                            )
-                            loggedIn.editMessage
+                        SeqDict.remove extraOptions.guildOrDmId loggedIn.editMessage
 
                     else
                         loggedIn.editMessage
@@ -91,7 +86,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEdit extraOptions.messageId loggedIn of
+    (case showEdit extraOptions.guildOrDmId extraOptions.messageIndex loggedIn of
         Just edit ->
             toFloat (List.length (String.lines edit)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
@@ -99,19 +94,19 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
             let
                 itemCount : Float
                 itemCount =
-                    menuItems True extraOptions.messageId Coord.origin local model |> List.length |> toFloat
+                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex Coord.origin local model |> List.length |> toFloat
             in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
         |> CssPixels.cssPixels
 
 
-mobileMenuOpeningOffset : MessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuOpeningOffset messageId local model =
+mobileMenuOpeningOffset : GuildOrDmId -> Int -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True messageId Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId messageIndex Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -136,11 +131,11 @@ mobileCloseButton =
     12
 
 
-showEdit : MessageId -> LoggedIn2 -> Maybe String
-showEdit messageId loggedIn =
-    case SeqDict.get ( messageId.guildId, messageId.channelId ) loggedIn.editMessage of
+showEdit : GuildOrDmId -> Int -> LoggedIn2 -> Maybe String
+showEdit guildOrDmId messageIndex loggedIn =
+    case SeqDict.get guildOrDmId loggedIn.editMessage of
         Just edit ->
-            if edit.messageIndex == messageId.messageIndex then
+            if edit.messageIndex == messageIndex then
                 Just edit.text
 
             else
@@ -153,9 +148,9 @@ showEdit messageId loggedIn =
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     let
-        messageId : MessageId
-        messageId =
-            extraOptions.messageId
+        guildOrDmId : GuildOrDmId
+        guildOrDmId =
+            extraOptions.guildOrDmId
     in
     if MyUi.isMobile model then
         Ui.el
@@ -198,12 +193,12 @@ view model extraOptions local loggedIn =
                         ]
                         Ui.none
                     )
-                    :: (case showEdit messageId loggedIn of
+                    :: (case showEdit guildOrDmId extraOptions.messageIndex loggedIn of
                             Just edit ->
                                 [ MessageInput.view
                                     True
                                     True
-                                    (editMessageTextInputConfig messageId.guildId messageId.channelId)
+                                    (editMessageTextInputConfig guildOrDmId)
                                     editMessageTextInputId
                                     ""
                                     edit
@@ -219,7 +214,7 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions.messageId extraOptions.position local model)
+                                    (menuItems True extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
                        )
                 )
                 |> Ui.below
@@ -240,19 +235,19 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions.messageId extraOptions.position local model)
+            (menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
 
 
-editMessageTextInputConfig : Id GuildId -> Id ChannelId -> MsgConfig FrontendMsg
-editMessageTextInputConfig guildId channelId =
+editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
+editMessageTextInputConfig guildOrDmId =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
-    , typedMessage = TypedEditMessage guildId channelId
-    , pressedSendMessage = PressedSendEditMessage guildId channelId
-    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildId
+    , typedMessage = TypedEditMessage guildOrDmId
+    , pressedSendMessage = PressedSendEditMessage guildOrDmId
+    , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId
     , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage guildId channelId
+    , pressedPingUser = PressedPingUserForEditMessage guildOrDmId
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
     , target = MessageInput.EditMessage
     }
@@ -305,11 +300,11 @@ miniButton onPress svg =
         (Ui.html svg)
 
 
-menuItems : Bool -> MessageId -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile messageId position local model =
-    case LocalState.getGuildAndChannel messageId.guildId messageId.channelId local of
-        Just ( _, channel ) ->
-            case Array.get messageId.messageIndex channel.messages of
+menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile guildOrDmId messageIndex position local model =
+    case LocalState.getMessages guildOrDmId local of
+        Just messages ->
+            case Array.get messageIndex messages of
                 Just message ->
                     let
                         canEditAndDelete : Bool
@@ -338,19 +333,19 @@ menuItems isMobile messageId position local model =
                         isMobile
                         Icons.smile
                         "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector messageId.messageIndex position)
+                        (MessageMenu_PressedShowReactionEmojiSelector messageIndex position)
                         |> Just
                     , if canEditAndDelete then
                         button
                             isMobile
                             Icons.pencil
                             "Edit message"
-                            (MessageMenu_PressedEditMessage messageId.messageIndex)
+                            (MessageMenu_PressedEditMessage messageIndex)
                             |> Just
 
                       else
                         Nothing
-                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageId.messageIndex) |> Just
+                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
                     , button
                         isMobile
                         Icons.copyIcon
@@ -374,7 +369,7 @@ menuItems isMobile messageId position local model =
                                 isMobile
                                 Icons.delete
                                 "Delete message"
-                                (MessageMenu_PressedDeleteMessage messageId)
+                                (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
                             )
                             |> Just
 
