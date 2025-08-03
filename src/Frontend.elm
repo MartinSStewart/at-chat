@@ -254,12 +254,7 @@ initLoadedFrontend loading time loginResult =
 loadedInitHelper :
     Time.Posix
     -> LoginData
-    ->
-        { a
-            | windowSize : Coord CssPixels
-            , navigationKey : Key
-            , route : Route
-        }
+    -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
 loadedInitHelper time loginData loading =
     let
@@ -3431,24 +3426,7 @@ updateLoadedFromBackend msg model =
                     ( model, Command.none )
 
         LoggedOutSession ->
-            case model.loginStatus of
-                LoggedIn _ ->
-                    let
-                        model2 : LoadedFrontend
-                        model2 =
-                            { model
-                                | loginStatus =
-                                    NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
-                            }
-                    in
-                    if routeRequiresLogin model2.route then
-                        routePush model2 HomePageRoute
-
-                    else
-                        ( model2, Command.none )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+            logout model
 
         AdminToFrontend adminToFrontend ->
             case model.loginStatus of
@@ -3608,6 +3586,48 @@ updateLoadedFromBackend msg model =
                     AiChat.updateFromBackend aiChatToFrontend model.aiChatModel
             in
             ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
+
+        YouConnected ->
+            case model.loginStatus of
+                LoggedIn _ ->
+                    ( model, Lamdera.sendToBackend ReloadDataRequest )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        ReloadDataResponse reloadData ->
+            case reloadData of
+                Ok loginData ->
+                    let
+                        ( loggedIn, cmd ) =
+                            loadedInitHelper model.time loginData model
+                    in
+                    ( { model | loginStatus = LoggedIn loggedIn }, cmd )
+
+                Err () ->
+                    logout model
+
+
+logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+logout model =
+    case model.loginStatus of
+        LoggedIn _ ->
+            let
+                model2 : LoadedFrontend
+                model2 =
+                    { model
+                        | loginStatus =
+                            NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
+                    }
+            in
+            if routeRequiresLogin model2.route then
+                routePush model2 HomePageRoute
+
+            else
+                ( model2, Command.none )
+
+        NotLoggedIn _ ->
+            ( model, Command.none )
 
 
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg

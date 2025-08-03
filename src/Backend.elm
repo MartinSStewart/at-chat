@@ -207,7 +207,7 @@ update msg model =
                         )
                         model.connections
               }
-            , Command.none
+            , Lamdera.sendToFrontend clientId YouConnected
             )
 
         UserDisconnected sessionId clientId ->
@@ -1981,6 +1981,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
+
+        ReloadDataRequest ->
+            ( model2
+            , case getUserFromSessionId sessionId model2 of
+                Just ( userId, user ) ->
+                    getLoginData userId user model2
+                        |> Ok
+                        |> ReloadDataResponse
+                        |> Lamdera.sendToFrontend clientId
+
+                Nothing ->
+                    Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
+            )
 
 
 broadcastToEveryoneWhoCanSeeUser :

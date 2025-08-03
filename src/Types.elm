@@ -393,6 +393,7 @@ type ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
     | AiChatToBackend AiChat.ToBackend
+    | ReloadDataRequest
 
 
 type BackendMsg
@@ -437,6 +438,8 @@ type ToFrontend
     | ChangeBroadcast LocalMsg
     | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
+    | YouConnected
+    | ReloadDataResponse (Result () LoginData)
 
 
 type alias LoginData =
