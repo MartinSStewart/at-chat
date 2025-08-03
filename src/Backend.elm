@@ -34,7 +34,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), IsEnabled(..), JoinGuildError(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -158,9 +158,9 @@ init =
       , discordGuilds = OneToOne.empty
       , discordUsers = OneToOne.empty
       , discordBotId = Nothing
-      , websocketEnabled = IsEnabled
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
+      , botToken = Nothing
       }
     , Command.none
     )
@@ -172,7 +172,7 @@ adminData model lastLogPageViewed =
     , users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
-    , websocketEnabled = model.websocketEnabled
+    , botToken = model.botToken
     }
 
 
@@ -268,71 +268,76 @@ update msg model =
             )
 
         DiscordWebsocketMsg discordMsg ->
-            let
-                ( discordModel2, outMsgs ) =
-                    Discord.update Env.botToken discordMsg model.discordModel
-            in
-            List.foldl
-                (\outMsg ( model2, cmds ) ->
-                    case outMsg of
-                        Discord.CloseAndReopenHandle connection ->
-                            ( model2
-                            , Task.perform (\() -> WebsocketClosedByBackend True) (Websocket.close connection)
-                                :: cmds
-                            )
+            case model.botToken of
+                Just botToken ->
+                    let
+                        ( discordModel2, outMsgs ) =
+                            Discord.update (botTokenToAuth botToken) discordMsg model.discordModel
+                    in
+                    List.foldl
+                        (\outMsg ( model2, cmds ) ->
+                            case outMsg of
+                                Discord.CloseAndReopenHandle connection ->
+                                    ( model2
+                                    , Task.perform (\() -> WebsocketClosedByBackend True) (Websocket.close connection)
+                                        :: cmds
+                                    )
 
-                        Discord.OpenHandle ->
-                            ( model2
-                            , Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                                :: cmds
-                            )
+                                Discord.OpenHandle ->
+                                    ( model2
+                                    , Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                                        :: cmds
+                                    )
 
-                        Discord.SendWebsocketData connection data ->
-                            ( model2
-                            , Task.attempt WebsocketSentData (Websocket.sendString connection data)
-                                :: cmds
-                            )
+                                Discord.SendWebsocketData connection data ->
+                                    ( model2
+                                    , Task.attempt WebsocketSentData (Websocket.sendString connection data)
+                                        :: cmds
+                                    )
 
-                        Discord.SendWebsocketDataWithDelay connection duration data ->
-                            ( model2
-                            , (Process.sleep duration
-                                |> Task.andThen (\() -> Websocket.sendString connection data)
-                                |> Task.attempt WebsocketSentData
-                              )
-                                :: cmds
-                            )
+                                Discord.SendWebsocketDataWithDelay connection duration data ->
+                                    ( model2
+                                    , (Process.sleep duration
+                                        |> Task.andThen (\() -> Websocket.sendString connection data)
+                                        |> Task.attempt WebsocketSentData
+                                      )
+                                        :: cmds
+                                    )
 
-                        Discord.UserCreatedMessage message ->
-                            let
-                                ( model3, cmd2 ) =
-                                    handleDiscordCreateMessage message model2
-                            in
-                            ( model3, cmd2 :: cmds )
+                                Discord.UserCreatedMessage message ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordCreateMessage message model2
+                                    in
+                                    ( model3, cmd2 :: cmds )
 
-                        Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
-                            let
-                                ( model3, cmd2 ) =
-                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
-                            in
-                            ( model3, cmd2 :: cmds )
+                                Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
+                                    in
+                                    ( model3, cmd2 :: cmds )
 
-                        Discord.UserEditedMessage messageUpdate ->
-                            let
-                                ( model3, cmd2 ) =
-                                    handleDiscordEditMessage messageUpdate model2
-                            in
-                            ( model3, cmd2 :: cmds )
+                                Discord.UserEditedMessage messageUpdate ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordEditMessage messageUpdate model2
+                                    in
+                                    ( model3, cmd2 :: cmds )
 
-                        Discord.FailedToParseWebsocketMessage error ->
-                            let
-                                _ =
-                                    Debug.log "gateway error" error
-                            in
-                            ( model2, cmds )
-                )
-                ( { model | discordModel = discordModel2 }, [] )
-                outMsgs
-                |> Tuple.mapSecond Command.batch
+                                Discord.FailedToParseWebsocketMessage error ->
+                                    let
+                                        _ =
+                                            Debug.log "gateway error" error
+                                    in
+                                    ( model2, cmds )
+                        )
+                        ( { model | discordModel = discordModel2 }, [] )
+                        outMsgs
+                        |> Tuple.mapSecond Command.batch
+
+                Nothing ->
+                    ( model, Command.none )
 
         GotDiscordGuilds time botUserId result ->
             case result of
@@ -360,9 +365,13 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        GotCurrentUserGuilds time result ->
+        GotCurrentUserGuilds time botToken result ->
             case result of
                 Ok ( botUser, guilds ) ->
+                    let
+                        botToken2 =
+                            botTokenToAuth botToken
+                    in
                     ( { model | discordBotId = Just botUser.id }
                     , List.map
                         (\partialGuild ->
@@ -370,15 +379,15 @@ update msg model =
                                 (\guild members channels ->
                                     ( guild.id, ( guild, members, channels ) )
                                 )
-                                (Discord.getGuild Env.botToken partialGuild.id)
+                                (Discord.getGuild botToken2 partialGuild.id)
                                 (Discord.listGuildMembers
-                                    Env.botToken
+                                    botToken2
                                     { guildId = partialGuild.id
                                     , limit = 100
                                     , after = Discord.Missing
                                     }
                                 )
-                                (Discord.getGuildChannels Env.botToken partialGuild.id)
+                                (Discord.getGuildChannels botToken2 partialGuild.id)
                         )
                         guilds
                         |> Task.sequence
@@ -1014,11 +1023,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 ( { model2 | discordNotConnected = False }
                 , Command.batch
                     [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                    , Task.map2
-                        Tuple.pair
-                        (Discord.getCurrentUser Env.botToken)
-                        (Discord.getCurrentUserGuilds Env.botToken)
-                        |> Task.attempt (GotCurrentUserGuilds time)
                     , cmd
                     ]
                 )
@@ -1602,11 +1606,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         case
                                                             ( channel.linkedId
                                                             , OneToOne.first messageIndex channel.linkedMessageIds
+                                                            , model2.botToken
                                                             )
                                                         of
-                                                            ( Just discordChannelId, Just discordMessageId ) ->
+                                                            ( Just discordChannelId, Just discordMessageId, Just botToken ) ->
                                                                 Discord.editMessage
-                                                                    Env.botToken
+                                                                    (botTokenToAuth botToken)
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
                                                                     , content = toDiscordContent model2 newContent
@@ -1663,10 +1668,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             model
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordDmId ->
-                                                                case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
-                                                                    Just discordMessageId ->
+                                                                case
+                                                                    ( OneToOne.first messageIndex dmChannel2.linkedMessageIds
+                                                                    , model2.botToken
+                                                                    )
+                                                                of
+                                                                    ( Just discordMessageId, Just botToken ) ->
                                                                         Discord.editMessage
-                                                                            Env.botToken
+                                                                            (botTokenToAuth botToken)
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
                                                                             , content = toDiscordContent model2 newContent
@@ -1823,11 +1832,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         case
                                                             ( channel.linkedId
                                                             , OneToOne.first messageIndex channel.linkedMessageIds
+                                                            , model2.botToken
                                                             )
                                                         of
-                                                            ( Just discordChannelId, Just discordMessageId ) ->
+                                                            ( Just discordChannelId, Just discordMessageId, Just botToken ) ->
                                                                 Discord.deleteMessage
-                                                                    Env.botToken
+                                                                    (botTokenToAuth botToken)
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
                                                                     }
@@ -1876,10 +1886,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             model
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordChannelId ->
-                                                                case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
-                                                                    Just discordMessageId ->
+                                                                case
+                                                                    ( OneToOne.first messageIndex dmChannel2.linkedMessageIds
+                                                                    , model2.botToken
+                                                                    )
+                                                                of
+                                                                    ( Just discordMessageId, Just botToken ) ->
                                                                         Discord.deleteMessage
-                                                                            Env.botToken
+                                                                            (botTokenToAuth botToken)
                                                                             { channelId = discordChannelId
                                                                             , messageId = discordMessageId
                                                                             }
@@ -1907,23 +1921,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (LocalChangeResponse changeId Local_Invalid)
                                             )
                                 )
-
-                Local_SetDiscordWebsocket isEnabled ->
-                    ( { model2 | websocketEnabled = isEnabled, discordModel = Discord.init }
-                    , Command.batch
-                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                        , broadcastToOtherAdmins clientId model2 (Server_SetWebsocketToggled isEnabled |> ServerChange)
-                        , case ( isEnabled, model2.discordModel.websocketHandle ) of
-                            ( IsDisabled, Just handle ) ->
-                                Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend False)
-
-                            ( IsDisabled, Nothing ) ->
-                                Command.none
-
-                            ( IsEnabled, _ ) ->
-                                Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                        ]
-                    )
 
                 Local_ViewChannel guildId channelId ->
                     asUser
@@ -2274,6 +2271,39 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
+        Pages.Admin.SetDiscordBotToken maybeBotToken ->
+            ( { model | botToken = maybeBotToken, discordModel = Discord.init }
+            , Command.batch
+                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                , case maybeBotToken of
+                    Just botToken ->
+                        Task.map2
+                            Tuple.pair
+                            (Discord.getCurrentUser (botTokenToAuth botToken))
+                            (Discord.getCurrentUserGuilds (botTokenToAuth botToken))
+                            |> Task.attempt (GotCurrentUserGuilds time botToken)
+
+                    Nothing ->
+                        Command.none
+                , case ( maybeBotToken, model.discordModel.websocketHandle ) of
+                    ( Nothing, Just handle ) ->
+                        Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend False)
+
+                    ( Nothing, Nothing ) ->
+                        Command.none
+
+                    ( Just _, _ ) ->
+                        Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+
+                --, broadcastToOtherAdmins clientId model (Server_SetWebsocketToggled isEnabled |> ServerChange)
+                ]
+            )
+
+
+botTokenToAuth : DiscordBotToken -> Discord.Authentication
+botTokenToAuth (DiscordBotToken botToken) =
+    Discord.botToken botToken
+
 
 sendDirectMessage :
     BackendModel
@@ -2329,17 +2359,21 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
             otherUserId
             (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo)
             model
-        , case OneToOne.first dmChannelId model.discordDms of
-            Just discordChannelId ->
+        , case
+            ( OneToOne.first dmChannelId model.discordDms
+            , model.botToken
+            )
+          of
+            ( Just discordChannelId, Just botToken ) ->
                 Discord.createMessage
-                    Env.botToken
+                    (botTokenToAuth botToken)
                     { channelId = discordChannelId
                     , content = toDiscordContent model text
                     , replyTo = Nothing
                     }
                     |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
 
-            Nothing ->
+            _ ->
                 Command.none
         ]
     )
@@ -2425,10 +2459,10 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                     guildId
                     (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text repliedTo |> ServerChange)
                     model
-                , case channel2.linkedId of
-                    Just discordChannelId ->
+                , case ( channel2.linkedId, model.botToken ) of
+                    ( Just discordChannelId, Just botToken ) ->
                         Discord.createMessage
-                            Env.botToken
+                            (botTokenToAuth botToken)
                             { channelId = discordChannelId
                             , content = toDiscordContent model text
                             , replyTo = Nothing
@@ -2441,7 +2475,7 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                                     }
                                 )
 
-                    Nothing ->
+                    _ ->
                         Command.none
                 ]
             )

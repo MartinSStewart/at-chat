@@ -202,7 +202,7 @@ updateFromBackend toFrontend model =
 
 view : Bool -> Time.Posix -> TwoFactorState -> Element Msg
 view isMobile time twoFactorStatus =
-    container
+    MyUi.container
         isMobile
         "Two-factor authentication"
         [ case twoFactorStatus of
@@ -343,44 +343,3 @@ setupView isMobile { qrCodeUrl, code, attempts } =
                 (Dom.id "userOverview_qrCodeError")
                 PressedCopy
                 "Something went wrong when setting up two factor authentication"
-
-
-container : Bool -> String -> List (Element msg) -> Element msg
-container isMobile label contents =
-    let
-        paddingX =
-            if isMobile then
-                8
-
-            else
-                16
-    in
-    Ui.el
-        [ Ui.paddingWith
-            { left = paddingX
-            , right = paddingX
-            , top = 10
-            , bottom = 0
-            }
-        , Ui.text label
-            |> Ui.el
-                [ Ui.Font.bold
-                , Ui.Font.size 14
-                , Ui.move
-                    { x = paddingX + 12
-                    , y = 0
-                    , z = 0
-                    }
-                , Ui.paddingXY 2 0
-                , Ui.width Ui.shrink
-                , Ui.background MyUi.background1
-                ]
-            |> Ui.inFront
-        ]
-        (Ui.column
-            [ Ui.border 1
-            , Ui.rounded 4
-            , Ui.padding 16
-            ]
-            contents
-        )

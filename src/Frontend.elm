@@ -267,7 +267,7 @@ loadedInitHelper time loginData loading =
                             { users = adminData.users
                             , emailNotificationsEnabled = adminData.emailNotificationsEnabled
                             , twoFactorAuthentication = adminData.twoFactorAuthentication
-                            , websocketEnabled = adminData.websocketEnabled
+                            , botToken = adminData.botToken
                             }
 
                     IsNotAdminLoginData ->
@@ -2203,6 +2203,7 @@ updateLoaded msg model =
                                     case messageMenu.mobileMode of
                                         MessageMenuOpening { offset, targetOffset } ->
                                             let
+                                                delta : Quantity Float CssPixels
                                                 delta =
                                                     Quantity.for elapsedTime MessageMenu.messageMenuSpeed
 
@@ -2254,23 +2255,18 @@ updateLoaded msg model =
 
         PressedShowUserOption ->
             updateLoggedIn
-                (\loggedIn -> ( { loggedIn | userOptions = Just { name = Editable.init } }, Command.none ))
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions = Just { name = Editable.init, botToken = Editable.init }
+                      }
+                    , Command.none
+                    )
+                )
                 model
 
         PressedCloseUserOptions ->
             updateLoggedIn
                 (\loggedIn -> ( { loggedIn | userOptions = Nothing }, Command.none ))
-                model
-
-        PressedSetDiscordWebsocket isEnabled ->
-            updateLoggedIn
-                (\loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_SetDiscordWebsocket isEnabled))
-                        loggedIn
-                        Command.none
-                )
                 model
 
         TwoFactorMsg twoFactorMsg ->
@@ -2309,6 +2305,29 @@ updateLoaded msg model =
                                         model.time
                                         (Just (Local_SetName value))
                                         { loggedIn | userOptions = Just { userOptions | name = Editable.init } }
+                                        Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        BotTokenEditableMsg editableMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case editableMsg of
+                                Editable.Edit editable ->
+                                    ( { loggedIn | userOptions = Just { userOptions | botToken = editable } }
+                                    , Command.none
+                                    )
+
+                                Editable.PressedAcceptEdit value ->
+                                    handleLocalChange
+                                        model.time
+                                        (Just (Local_Admin (Pages.Admin.SetDiscordBotToken value)))
+                                        { loggedIn | userOptions = Just { userOptions | botToken = Editable.init } }
                                         Command.none
 
                         Nothing ->
@@ -2787,17 +2806,6 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.userId guildOrDmId messageIndex local
 
-                Local_SetDiscordWebsocket isEnabled ->
-                    { local
-                        | adminData =
-                            case local.adminData of
-                                IsAdmin adminData ->
-                                    IsAdmin { adminData | websocketEnabled = isEnabled }
-
-                                IsNotAdmin ->
-                                    IsNotAdmin
-                    }
-
                 Local_ViewChannel guildId channelId ->
                     let
                         localUser =
@@ -3038,17 +3046,6 @@ changeUpdate localMsg local =
                                     }
                                 )
                                 local.guilds
-                    }
-
-                Server_SetWebsocketToggled isEnabled ->
-                    { local
-                        | adminData =
-                            case local.adminData of
-                                IsAdmin adminData ->
-                                    IsAdmin { adminData | websocketEnabled = isEnabled }
-
-                                IsNotAdmin ->
-                                    IsNotAdmin
                     }
 
                 Server_SetName userId name ->
@@ -3695,6 +3692,9 @@ pendingChangesText localChange =
                     else
                         "Disabled email notifications"
 
+                Pages.Admin.SetDiscordBotToken maybeDiscordBotToken ->
+                    "Set Discord bot token"
+
         Local_SendMessage _ _ _ _ ->
             "Sent a message"
 
@@ -3733,9 +3733,6 @@ pendingChangesText localChange =
 
         Local_DeleteMessage _ _ ->
             "Delete message"
-
-        Local_SetDiscordWebsocket _ ->
-            "Set discord websocket"
 
         Local_ViewChannel _ _ ->
             "View channel"

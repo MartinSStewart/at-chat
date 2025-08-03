@@ -58,7 +58,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, IsEnabled, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -154,7 +154,7 @@ type alias LoggedIn2 =
 
 
 type alias UserOptionsModel =
-    { name : Editable.Model }
+    { name : Editable.Model, botToken : Editable.Model }
 
 
 type ChannelSidebarMode
@@ -244,9 +244,9 @@ type alias BackendModel =
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
-    , websocketEnabled : IsEnabled
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
+    , botToken : Maybe DiscordBotToken
     }
 
 
@@ -363,10 +363,10 @@ type FrontendMsg
     | CheckMessageAltPress Time.Posix Int
     | PressedShowUserOption
     | PressedCloseUserOptions
-    | PressedSetDiscordWebsocket IsEnabled
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
+    | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
 
 
 type alias NewChannelForm =
@@ -406,7 +406,7 @@ type BackendMsg
     | WebsocketSentData (Result Websocket.SendError ())
     | WebsocketClosedByBackend Bool
     | DiscordWebsocketMsg Discord.Msg
-    | GotCurrentUserGuilds Time.Posix (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
+    | GotCurrentUserGuilds Time.Posix DiscordBotToken (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
     | GotDiscordGuilds
         Time.Posix
         (Discord.Id.Id Discord.Id.UserId)
@@ -486,7 +486,6 @@ type ServerChange
     | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmId Int
     | Server_DeleteMessage (Id UserId) GuildOrDmId Int
     | Server_DiscordDeleteMessage MessageId
-    | Server_SetWebsocketToggled IsEnabled
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText)
 
@@ -507,7 +506,6 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix GuildOrDmId Int
     | Local_SetLastViewed GuildOrDmId Int
     | Local_DeleteMessage GuildOrDmId Int
-    | Local_SetDiscordWebsocket IsEnabled
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
     | Local_SetName PersonName
 

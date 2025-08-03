@@ -52,7 +52,7 @@ view htmlId label validation msg value model =
                 |> Debug.log "a"
     in
     Ui.column
-        [ Ui.paddingXY 16 0, Ui.widthMax 400 ]
+        [ Ui.widthMax 400 ]
         [ Ui.row
             []
             [ label2.element

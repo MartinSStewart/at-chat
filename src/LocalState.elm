@@ -5,9 +5,9 @@ module LocalState exposing
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
+    , DiscordBotToken(..)
     , FrontendChannel
     , FrontendGuild
-    , IsEnabled(..)
     , JoinGuildError(..)
     , LocalState
     , LocalUser
@@ -44,6 +44,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import Discord
 import Discord.Id
 import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
@@ -210,13 +211,12 @@ type alias AdminData =
     { users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
-    , websocketEnabled : IsEnabled
+    , botToken : Maybe DiscordBotToken
     }
 
 
-type IsEnabled
-    = IsEnabled
-    | IsDisabled
+type DiscordBotToken
+    = DiscordBotToken String
 
 
 createNewUser : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser

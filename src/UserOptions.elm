@@ -1,9 +1,10 @@
 module UserOptions exposing (view)
 
+import Discord
 import Editable
 import Effect.Browser.Dom as Dom
 import Icons
-import LocalState exposing (AdminStatus(..), IsEnabled(..), LocalState)
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState)
 import MyUi
 import PersonName
 import Time
@@ -68,41 +69,52 @@ view isMobile time local loggedIn model =
             [ case local.adminData of
                 IsAdmin adminData2 ->
                     let
-                        label : { element : Element msg, id : Ui.Input.Label }
-                        label =
-                            Ui.Input.label "websocketEnabled" [] (Ui.text "Discord websocket enabled")
-                    in
-                    Ui.row
-                        [ Ui.spacing 8, Ui.paddingXY 16 0 ]
-                        [ Ui.Input.checkbox
-                            []
-                            { onChange =
-                                \isEnabled ->
-                                    PressedSetDiscordWebsocket
-                                        (if isEnabled then
-                                            IsEnabled
+                        botToken : String
+                        botToken =
+                            case adminData2.botToken of
+                                Just (DiscordBotToken a) ->
+                                    a
 
-                                         else
-                                            IsDisabled
-                                        )
-                            , icon = Nothing
-                            , checked = adminData2.websocketEnabled == IsEnabled
-                            , label = label.id
-                            }
-                        , label.element
+                                Nothing ->
+                                    ""
+                    in
+                    MyUi.container
+                        isMobile
+                        "Admin"
+                        [ Editable.view
+                            (Dom.id "userOptions_name")
+                            "Bot token"
+                            (\text ->
+                                let
+                                    text2 =
+                                        String.trim text
+                                in
+                                if text2 == "" then
+                                    Ok Nothing
+
+                                else
+                                    Just (DiscordBotToken text2) |> Ok
+                            )
+                            BotTokenEditableMsg
+                            botToken
+                            model.botToken
                         ]
 
                 IsNotAdmin ->
                     Ui.none
             , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
-            , Editable.view
-                (Dom.id "userOptions_name")
-                "Display Name"
-                PersonName.fromString
-                UserNameEditableMsg
-                (PersonName.toString local.localUser.user.name)
-                model.name
+            , MyUi.container
+                isMobile
+                "Appearance"
+                [ Editable.view
+                    (Dom.id "userOptions_name")
+                    "Display Name"
+                    PersonName.fromString
+                    UserNameEditableMsg
+                    (PersonName.toString local.localUser.user.name)
+                    model.name
+                ]
             , Ui.el
                 [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]
                 (MyUi.simpleButton

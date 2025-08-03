@@ -33,7 +33,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, IsEnabled, LocalState, LogWithTime)
+import LocalState exposing (AdminData, DiscordBotToken, LocalState, LogWithTime)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -120,7 +120,7 @@ type alias InitAdminData =
     , users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
-    , websocketEnabled : IsEnabled
+    , botToken : Maybe DiscordBotToken
     }
 
 
@@ -135,6 +135,7 @@ type AdminChange
     | CollapseSection AdminUiSection
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
+    | SetDiscordBotToken (Maybe DiscordBotToken)
 
 
 type alias EditedBackendUser =
@@ -214,6 +215,9 @@ updateAdmin changedBy change adminData =
 
         SetEmailNotificationsEnabled isEnabled ->
             { adminData | emailNotificationsEnabled = isEnabled }
+
+        SetDiscordBotToken botToken ->
+            { adminData | botToken = botToken }
 
 
 update :

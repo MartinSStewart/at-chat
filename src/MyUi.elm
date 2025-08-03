@@ -11,6 +11,7 @@ module MyUi exposing
     , buttonFontColor
     , cancelButtonBackground
     , column
+    , container
     , css
     , datestamp
     , deleteButton
@@ -463,6 +464,47 @@ hover animated =
 prewrap : Ui.Attribute msg
 prewrap =
     htmlStyle "white-space" "pre-wrap"
+
+
+container : Bool -> String -> List (Element msg) -> Element msg
+container isMobile2 label2 contents =
+    let
+        paddingX =
+            if isMobile2 then
+                8
+
+            else
+                16
+    in
+    Ui.el
+        [ Ui.paddingWith
+            { left = paddingX
+            , right = paddingX
+            , top = 10
+            , bottom = 0
+            }
+        , Ui.text label2
+            |> Ui.el
+                [ Ui.Font.bold
+                , Ui.Font.size 14
+                , Ui.move
+                    { x = paddingX + 12
+                    , y = 0
+                    , z = 0
+                    }
+                , Ui.paddingXY 2 0
+                , Ui.width Ui.shrink
+                , Ui.background background1
+                ]
+            |> Ui.inFront
+        ]
+        (Ui.column
+            [ Ui.border 1
+            , Ui.rounded 4
+            , Ui.padding 16
+            ]
+            contents
+        )
 
 
 primaryButton : HtmlId -> msg -> String -> Element msg
