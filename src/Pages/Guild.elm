@@ -313,7 +313,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
 
 dmChannelView : Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
-    case SeqDict.get otherUserId local.localUser.otherUsers of
+    case LocalState.getUser otherUserId local of
         Just otherUser ->
             SeqDict.get otherUserId local.dmChannels
                 |> Maybe.withDefault DmChannel.init
@@ -475,10 +475,18 @@ memberColumn local guild =
         ]
 
 
-memberLabel : LocalState -> Id UserId -> Element msg
+memberLabel : LocalState -> Id UserId -> Element FrontendMsg
 memberLabel local userId =
     Ui.row
-        [ Ui.spacing 8, Ui.paddingXY 4 4 ]
+        [ Ui.spacing 8
+        , Ui.paddingXY 4 4
+        , Ui.Input.button (PressedLink (DmRoute userId Nothing))
+        , MyUi.hover
+            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
+            , Ui.Anim.fontColor MyUi.font1
+            ]
+        , Ui.Font.color MyUi.font3
+        ]
         [ User.profileImage
         , case LocalState.getUser userId local of
             Just user ->
@@ -1067,17 +1075,28 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
         [ channelHeader
             (MyUi.isMobile model)
             (case messageId of
-                GuildOrDmId_Dm _ ->
+                GuildOrDmId_Dm otherUserId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1 ]
-                        [ Ui.el
-                            [ Ui.Font.color MyUi.font3
-                            , Ui.width Ui.shrink
-                            , MyUi.prewrap
+                        (if otherUserId == local.localUser.userId then
+                            [ Ui.el
+                                [ Ui.Font.color MyUi.font3
+                                , Ui.width Ui.shrink
+                                , MyUi.prewrap
+                                ]
+                                (Ui.text "Private chat with yourself")
                             ]
-                            (Ui.text "Private chat with ")
-                        , Ui.text name
-                        ]
+
+                         else
+                            [ Ui.el
+                                [ Ui.Font.color MyUi.font3
+                                , Ui.width Ui.shrink
+                                , MyUi.prewrap
+                                ]
+                                (Ui.text "Private chat with ")
+                            , Ui.text name
+                            ]
+                        )
 
                 GuildOrDmId_Guild guildId channelId ->
                     Ui.row
@@ -1111,8 +1130,16 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                         GuildOrDmId_Guild _ _ ->
                             Ui.text ("This is the start of #" ++ name)
 
-                        GuildOrDmId_Dm _ ->
-                            Ui.text ("This is the start of your conversation with " ++ name)
+                        GuildOrDmId_Dm otherUserId ->
+                            Ui.text
+                                ("This is the start of your conversation with "
+                                    ++ (if otherUserId == local.localUser.userId then
+                                            "yourself"
+
+                                        else
+                                            name
+                                       )
+                                )
                     )
                     :: conversationViewHelper
                         messageId
@@ -1151,8 +1178,14 @@ conversationView messageId maybeMessageHighlight loggedIn model local name chann
                     GuildOrDmId_Guild _ _ ->
                         "Write a message in #" ++ name
 
-                    GuildOrDmId_Dm _ ->
-                        "Write a message to " ++ name
+                    GuildOrDmId_Dm otherUserId ->
+                        "Write a message to "
+                            ++ (if otherUserId == local.localUser.userId then
+                                    "yourself"
+
+                                else
+                                    name
+                               )
                 )
                 (case SeqDict.get messageId loggedIn.drafts of
                     Just text ->
@@ -1935,7 +1968,7 @@ friendsColumn openedOtherUserId local =
             []
             (List.filterMap
                 (\( otherUserId, _ ) ->
-                    case SeqDict.get otherUserId local.localUser.otherUsers of
+                    case LocalState.getUser otherUserId local of
                         Just otherUser ->
                             let
                                 isSelected : Bool

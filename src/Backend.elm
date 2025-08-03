@@ -1486,16 +1486,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , broadcastToUser
-                                            (Just clientId)
+                                        , broadcastToDmChannel
+                                            clientId
                                             userId
-                                            (Server_AddReactionEmoji userId messageId messageIndex emoji |> ServerChange)
-                                            model2
-                                        , broadcastToUser
-                                            (Just clientId)
                                             otherUserId
-                                            (Server_AddReactionEmoji userId messageId messageIndex emoji |> ServerChange)
-                                            model2
+                                            (Server_AddReactionEmoji userId messageId messageIndex emoji)
+                                            model
                                         ]
                                     )
                                 )
@@ -1561,16 +1557,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                       }
                                     , Command.batch
                                         [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , broadcastToUser
-                                            (Just clientId)
+                                        , broadcastToDmChannel
+                                            clientId
                                             userId
-                                            (Server_RemoveReactionEmoji userId messageId messageIndex emoji |> ServerChange)
-                                            model2
-                                        , broadcastToUser
-                                            (Just clientId)
                                             otherUserId
-                                            (Server_RemoveReactionEmoji userId messageId messageIndex emoji |> ServerChange)
-                                            model2
+                                            (Server_RemoveReactionEmoji userId messageId messageIndex emoji)
+                                            model
                                         ]
                                     )
                                 )
@@ -1663,20 +1655,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         [ Local_SendEditMessage time messageId messageIndex newContent
                                                             |> LocalChangeResponse changeId
                                                             |> Lamdera.sendToFrontend clientId
-                                                        , broadcastToUser
-                                                            (Just clientId)
+                                                        , broadcastToDmChannel
+                                                            clientId
                                                             userId
-                                                            (Server_SendEditMessage time userId messageId messageIndex newContent
-                                                                |> ServerChange
-                                                            )
-                                                            model2
-                                                        , broadcastToUser
-                                                            (Just clientId)
                                                             otherUserId
-                                                            (Server_SendEditMessage time userId messageId messageIndex newContent
-                                                                |> ServerChange
-                                                            )
-                                                            model2
+                                                            (Server_SendEditMessage time userId messageId messageIndex newContent)
+                                                            model
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordDmId ->
                                                                 case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
@@ -1884,16 +1868,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         [ Lamdera.sendToFrontend
                                                             clientId
                                                             (LocalChangeResponse changeId localMsg)
-                                                        , broadcastToUser
-                                                            (Just clientId)
+                                                        , broadcastToDmChannel
+                                                            clientId
                                                             userId
-                                                            (Server_DeleteMessage userId messageId messageIndex |> ServerChange)
-                                                            model2
-                                                        , broadcastToUser
-                                                            (Just clientId)
                                                             otherUserId
-                                                            (Server_DeleteMessage userId messageId messageIndex |> ServerChange)
-                                                            model2
+                                                            (Server_DeleteMessage userId messageId messageIndex)
+                                                            model
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordChannelId ->
                                                                 case OneToOne.first messageIndex dmChannel2.linkedMessageIds of
@@ -2330,15 +2310,11 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
     , Command.batch
         [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo)
             |> Lamdera.sendToFrontend clientId
-        , broadcastToUser
-            (Just clientId)
+        , broadcastToDmChannel
+            clientId
             userId
-            (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo |> ServerChange)
-            model
-        , broadcastToUser
-            (Just clientId)
             otherUserId
-            (Server_SendMessage userId time (GuildOrDmId_Dm userId) text repliedTo |> ServerChange)
+            (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo)
             model
         , case OneToOne.first dmChannelId model.discordDms of
             Just discordChannelId ->
@@ -2354,6 +2330,29 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
                 Command.none
         ]
     )
+
+
+broadcastToDmChannel :
+    ClientId
+    -> Id UserId
+    -> Id UserId
+    -> ServerChange
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+broadcastToDmChannel clientId userId otherUserId serverMsg model =
+    let
+        localMsg : LocalMsg
+        localMsg =
+            ServerChange serverMsg
+    in
+    if userId == otherUserId then
+        broadcastToUser (Just clientId) userId localMsg model
+
+    else
+        Command.batch
+            [ broadcastToUser (Just clientId) userId localMsg model
+            , broadcastToUser (Just clientId) otherUserId localMsg model
+            ]
 
 
 sendGuildMessage :
