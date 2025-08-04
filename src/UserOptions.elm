@@ -1,6 +1,5 @@
 module UserOptions exposing (view)
 
-import Discord
 import Editable
 import Effect.Browser.Dom as Dom
 import Icons
@@ -11,7 +10,6 @@ import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
-import Ui.Anim
 import Ui.Font
 import Ui.Input
 

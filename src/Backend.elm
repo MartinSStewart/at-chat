@@ -1495,7 +1495,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             userId
                                             otherUserId
                                             (Server_AddReactionEmoji userId guildOrDmId messageIndex emoji)
-                                            model
+                                            model2
                                         ]
                                     )
                                 )
@@ -1566,7 +1566,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             userId
                                             otherUserId
                                             (Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji)
-                                            model
+                                            model2
                                         ]
                                     )
                                 )
@@ -1665,7 +1665,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             userId
                                                             otherUserId
                                                             (Server_SendEditMessage time userId guildOrDmId messageIndex newContent)
-                                                            model
+                                                            model2
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordDmId ->
                                                                 case
@@ -1883,7 +1883,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             userId
                                                             otherUserId
                                                             (Server_DeleteMessage userId guildOrDmId messageIndex)
-                                                            model
+                                                            model2
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordChannelId ->
                                                                 case
@@ -1951,7 +1951,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 , broadcastToEveryoneWhoCanSeeUser
                                     clientId
                                     userId
-                                    (LocalChange userId localMsg)
+                                    (ServerChange (Server_SetName userId name))
                                     model2
                                 ]
                             )

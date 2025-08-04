@@ -15,7 +15,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import ChannelName
 import Coord
-import DmChannel exposing (DmChannel, LastTypedAt)
+import DmChannel exposing (LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -1098,7 +1098,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                             ]
                         )
 
-                GuildOrDmId_Guild guildId channelId ->
+                GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
                         [ Ui.html Icons.hashtag, Ui.text name ]

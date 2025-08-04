@@ -3692,7 +3692,7 @@ pendingChangesText localChange =
                     else
                         "Disabled email notifications"
 
-                Pages.Admin.SetDiscordBotToken maybeDiscordBotToken ->
+                Pages.Admin.SetDiscordBotToken _ ->
                     "Set Discord bot token"
 
         Local_SendMessage _ _ _ _ ->

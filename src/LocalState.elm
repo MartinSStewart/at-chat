@@ -44,7 +44,6 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
-import Discord
 import Discord.Id
 import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration

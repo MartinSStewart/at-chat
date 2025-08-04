@@ -128,6 +128,7 @@ defaultIgnore rule =
         , "src/NonemptyDict.elm"
         , "src/NonemptySet.elm"
         , "src/LamderaRPC.elm"
+        , "src/OneToOne.elm"
         ]
         rule
         |> Review.Rule.ignoreErrorsForDirectories [ "vendored", "src/Evergreen" ]

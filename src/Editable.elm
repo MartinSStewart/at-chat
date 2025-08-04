@@ -42,14 +42,12 @@ view htmlId label validation msg value model =
 
         result : Maybe (Result String a)
         result =
-            (case model.editing of
+            case model.editing of
                 NotEditing ->
                     Nothing
 
                 Editing text ->
                     validation text |> Just
-            )
-                |> Debug.log "a"
     in
     Ui.column
         [ Ui.widthMax 400 ]
