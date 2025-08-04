@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, FrontendMsg(..), LocalStorage, PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, LocalStorage, Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -104,7 +104,7 @@ type SendMessageWith
     | SendWithShiftEnter
 
 
-type FrontendMsg
+type Msg
     = TypedMessage String
     | PressedSend
     | TypedChatHistory String
@@ -121,7 +121,7 @@ type FrontendMsg
     | CheckDebounce Int
     | GotLocalStorage String
     | EditedResponse ResponseId String
-    | NoOpFrontendMsg
+    | NoOp
     | GotAiModels (Result Http.Error (List String))
 
 
@@ -141,7 +141,7 @@ type ToFrontend
 -- PORTS
 
 
-init : ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+init : ( FrontendModel, Command FrontendOnly ToBackend Msg )
 init =
     ( { message = ""
       , chatHistory = ""
@@ -159,7 +159,65 @@ init =
     )
 
 
-getModels : Command restriction toFrontend FrontendMsg
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        TypedMessage string ->
+            False
+
+        PressedSend ->
+            True
+
+        TypedChatHistory string ->
+            False
+
+        PressedKeep responseId ->
+            True
+
+        PressedDelete responseId ->
+            True
+
+        PressedRetry responseId ->
+            True
+
+        PressedChatHistoryContainer ->
+            True
+
+        PressedClearChatHistory ->
+            True
+
+        PressedOptionsButton ->
+            True
+
+        SelectedAiModel string ->
+            False
+
+        SelectedSendMessageWith sendMessageWith ->
+            False
+
+        TypedUserPrefix string ->
+            False
+
+        TypedBotPrefix string ->
+            False
+
+        CheckDebounce int ->
+            False
+
+        GotLocalStorage string ->
+            False
+
+        EditedResponse responseId string ->
+            False
+
+        NoOp ->
+            False
+
+        GotAiModels result ->
+            False
+
+
+getModels : Command restriction toFrontend Msg
 getModels =
     Http.get
         { url = "https://openrouter.ai/api/v1/models"
@@ -182,7 +240,7 @@ decodeModels =
         )
 
 
-subscriptions : Subscription FrontendOnly FrontendMsg
+subscriptions : Subscription FrontendOnly Msg
 subscriptions =
     loadUserSettingsFromJs GotLocalStorage
 
@@ -277,14 +335,14 @@ sendMessageWithCodec =
         [ SendWithShiftEnter ]
 
 
-startDebounceSave : FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+startDebounceSave : FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )
 startDebounceSave model =
     ( { model | debounceCounter = model.debounceCounter + 1 }
     , Process.sleep (Duration.seconds 0.5) |> Task.perform (\_ -> CheckDebounce (model.debounceCounter + 1))
     )
 
 
-saveToLocalStorage : FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+saveToLocalStorage : FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )
 saveToLocalStorage model =
     ( model
     , modelToLocalStorage model |> Serialize.encodeToString localStorageCodec |> saveUserSettingsToJs
@@ -325,7 +383,7 @@ sendIcon =
     Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" ] [] ]
 
 
-update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+update : Msg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )
 update msg model =
     case msg of
         TypedMessage message ->
@@ -408,7 +466,7 @@ update msg model =
                     ( model, Command.none )
 
         PressedChatHistoryContainer ->
-            ( model, Dom.focus chatHistoryInputId |> Task.attempt (\_ -> NoOpFrontendMsg) )
+            ( model, Dom.focus chatHistoryInputId |> Task.attempt (\_ -> NoOp) )
 
         PressedClearChatHistory ->
             saveToLocalStorage { model | chatHistory = "" }
@@ -474,7 +532,7 @@ update msg model =
                             model.pendingResponses
                 }
 
-        NoOpFrontendMsg ->
+        NoOp ->
             ( model, Command.none )
 
         GotAiModels result ->
@@ -503,14 +561,14 @@ prefixWrapper prefix =
     "\n\n" ++ prefix ++ "\n"
 
 
-scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+scrollToBottom : Command FrontendOnly ToBackend Msg
 scrollToBottom =
-    Dom.setViewportOf chatHistoryId 0 999999 |> Task.attempt (\_ -> NoOpFrontendMsg)
+    Dom.setViewportOf chatHistoryId 0 999999 |> Task.attempt (\_ -> NoOp)
 
 
-scrollToTop : HtmlId -> Command FrontendOnly ToBackend FrontendMsg
+scrollToTop : HtmlId -> Command FrontendOnly ToBackend Msg
 scrollToTop id =
-    Dom.setViewportOf id 0 0 |> Task.attempt (\_ -> NoOpFrontendMsg)
+    Dom.setViewportOf id 0 0 |> Task.attempt (\_ -> NoOp)
 
 
 responseContainerId : ResponseId -> HtmlId
@@ -518,7 +576,7 @@ responseContainerId (RespondId responseId) =
     "responseContainer_" ++ String.fromInt responseId |> Dom.id
 
 
-updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
+updateFromBackend : ToFrontend -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )
 updateFromBackend msg model =
     case msg of
         AiMessageResponse responseId result ->
@@ -572,7 +630,7 @@ isMobile windowSize =
     Coord.xRaw windowSize < 800
 
 
-view : Coord CssPixels -> FrontendModel -> Element FrontendMsg
+view : Coord CssPixels -> FrontendModel -> Element Msg
 view windowSize model =
     let
         isMobile2 =
@@ -715,7 +773,7 @@ view windowSize model =
         ]
 
 
-responseView : Int -> Int -> ResponseId -> PendingResponse -> Element FrontendMsg
+responseView : Int -> Int -> ResponseId -> PendingResponse -> Element Msg
 responseView windowWidth responseCount responseId response =
     Ui.el
         [ min
@@ -829,7 +887,7 @@ responseButton msg color icon text =
         [ Ui.el [ Ui.width (Ui.px 20), Ui.centerY ] (Ui.html icon), Ui.text text ]
 
 
-showOptionsButton : Element FrontendMsg
+showOptionsButton : Element Msg
 showOptionsButton =
     Ui.el
         [ Ui.Input.button PressedOptionsButton
@@ -844,10 +902,10 @@ showOptionsButton =
         (Ui.html Icons.gearIcon)
 
 
-optionsView : FrontendModel -> Element FrontendMsg
+optionsView : FrontendModel -> Element Msg
 optionsView model =
     let
-        userPrefixLabel : { element : Element FrontendMsg, id : Ui.Input.Label }
+        userPrefixLabel : { element : Element Msg, id : Ui.Input.Label }
         userPrefixLabel =
             Ui.Input.label
                 "user-label"
@@ -857,7 +915,7 @@ optionsView model =
                 ]
                 (Ui.text "User's name")
 
-        botPrefixLabel : { element : Element FrontendMsg, id : Ui.Input.Label }
+        botPrefixLabel : { element : Element Msg, id : Ui.Input.Label }
         botPrefixLabel =
             Ui.Input.label
                 "bot-label"
@@ -976,7 +1034,7 @@ containerShadow =
     Ui.Shadow.shadows [ { x = 0, y = 2, blur = 8, size = 0, color = Ui.rgba 0 0 0 0.1 } ]
 
 
-userMessageView : FrontendModel -> Element FrontendMsg
+userMessageView : FrontendModel -> Element Msg
 userMessageView model =
     let
         message =
@@ -1040,7 +1098,7 @@ userMessageView model =
         ]
 
 
-aiModelDropdown : AiModelsStatus -> Maybe String -> Html FrontendMsg
+aiModelDropdown : AiModelsStatus -> Maybe String -> Html Msg
 aiModelDropdown status selected =
     case status of
         LoadedAiModels aiModels ->

@@ -9,6 +9,7 @@ module TwoFactorAuthentication exposing
     , TwoFactorState(..)
     , getCode
     , getConfig
+    , isPressMsg
     , isValidCode
     , update
     , updateFromBackend
@@ -343,3 +344,16 @@ setupView isMobile { qrCodeUrl, code, attempts } =
                 (Dom.id "userOverview_qrCodeError")
                 PressedCopy
                 "Something went wrong when setting up two factor authentication"
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        PressedStart2FaSetup ->
+            True
+
+        PressedCopy string ->
+            True
+
+        TypedTwoFactorCode string ->
+            False

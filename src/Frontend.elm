@@ -421,7 +421,12 @@ update msg model =
                     ( model, Command.none )
 
         Loaded loaded ->
-            updateLoaded msg loaded |> Tuple.mapFirst Loaded
+            case ( isPressMsg msg, loaded.dragPrevious ) of
+                ( True, Dragging _ ) ->
+                    ( model, Command.none )
+
+                _ ->
+                    updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
 
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -614,6 +619,265 @@ routeRequiresLogin route =
             True
 
 
+isPressMsg : FrontendMsg -> Bool
+isPressMsg msg =
+    case msg of
+        UrlClicked _ ->
+            False
+
+        UrlChanged url ->
+            False
+
+        GotTime posix ->
+            False
+
+        GotWindowSize _ _ ->
+            False
+
+        LoginFormMsg loginFormMsg ->
+            LoginForm.isPressMsg loginFormMsg
+
+        PressedShowLogin ->
+            True
+
+        AdminPageMsg _ ->
+            False
+
+        PressedLogOut ->
+            True
+
+        ElmUiMsg _ ->
+            False
+
+        ScrolledToLogSection ->
+            False
+
+        PressedLink route ->
+            True
+
+        TypedMessage guildOrDmId string ->
+            False
+
+        PressedSendMessage guildOrDmId ->
+            True
+
+        NewChannelFormChanged id newChannelForm ->
+            False
+
+        PressedSubmitNewChannel id newChannelForm ->
+            False
+
+        MouseEnteredChannelName id _ ->
+            False
+
+        MouseExitedChannelName id _ ->
+            False
+
+        EditChannelFormChanged id _ newChannelForm ->
+            False
+
+        PressedCancelEditChannelChanges id _ ->
+            True
+
+        PressedSubmitEditChannelChanges id _ newChannelForm ->
+            True
+
+        PressedDeleteChannel id _ ->
+            True
+
+        PressedCreateInviteLink id ->
+            True
+
+        FrontendNoOp ->
+            False
+
+        PressedCopyText string ->
+            True
+
+        PressedCreateGuild ->
+            True
+
+        NewGuildFormChanged newGuildForm ->
+            False
+
+        PressedSubmitNewGuild newGuildForm ->
+            True
+
+        PressedCancelNewGuild ->
+            True
+
+        DebouncedTyping ->
+            False
+
+        GotPingUserPosition result ->
+            False
+
+        PressedPingUser guildOrDmId int ->
+            True
+
+        SetFocus ->
+            False
+
+        RemoveFocus ->
+            False
+
+        PressedArrowInDropdown guildOrDmId int ->
+            True
+
+        TextInputGotFocus htmlId ->
+            False
+
+        TextInputLostFocus htmlId ->
+            False
+
+        KeyDown string ->
+            False
+
+        MouseEnteredMessage int ->
+            False
+
+        MouseExitedMessage int ->
+            False
+
+        AltPressedMessage int coord ->
+            False
+
+        MessageMenu_PressedShowReactionEmojiSelector int coord ->
+            True
+
+        MessageMenu_PressedEditMessage int ->
+            True
+
+        PressedEmojiSelectorEmoji emoji ->
+            True
+
+        PressedReactionEmoji_Add int emoji ->
+            True
+
+        PressedReactionEmoji_Remove int emoji ->
+            True
+
+        GotPingUserPositionForEditMessage result ->
+            False
+
+        TypedEditMessage guildOrDmId string ->
+            False
+
+        PressedSendEditMessage guildOrDmId ->
+            True
+
+        PressedArrowInDropdownForEditMessage guildOrDmId int ->
+            True
+
+        PressedPingUserForEditMessage guildOrDmId int ->
+            True
+
+        PressedArrowUpInEmptyInput guildOrDmId ->
+            True
+
+        MessageMenu_PressedReply int ->
+            True
+
+        PressedCloseReplyTo guildOrDmId ->
+            True
+
+        PressedSpoiler int _ ->
+            True
+
+        VisibilityChanged visibility ->
+            False
+
+        CheckedNotificationPermission notificationPermission ->
+            False
+
+        CheckedPwaStatus pwaStatus ->
+            False
+
+        TouchStart posix nonemptyDict ->
+            False
+
+        TouchMoved posix nonemptyDict ->
+            False
+
+        TouchEnd posix ->
+            False
+
+        TouchCancel posix ->
+            False
+
+        ChannelSidebarAnimated duration ->
+            False
+
+        MessageMenuAnimated duration ->
+            False
+
+        ScrolledToBottom ->
+            False
+
+        PressedChannelHeaderBackButton ->
+            True
+
+        UserScrolled record ->
+            False
+
+        PressedBody ->
+            True
+
+        PressedReactionEmojiContainer ->
+            True
+
+        MessageMenu_PressedShowFullMenu int coord ->
+            True
+
+        MessageMenu_PressedDeleteMessage guildOrDmId int ->
+            True
+
+        PressedReplyLink int ->
+            True
+
+        ScrolledToMessage ->
+            False
+
+        MessageMenu_PressedClose ->
+            True
+
+        MessageMenu_PressedContainer ->
+            True
+
+        PressedCancelMessageEdit guildOrDmId ->
+            True
+
+        PressedPingDropdownContainer ->
+            True
+
+        PressedEditMessagePingDropdownContainer ->
+            True
+
+        CheckMessageAltPress posix int ->
+            False
+
+        PressedShowUserOption ->
+            True
+
+        PressedCloseUserOptions ->
+            True
+
+        TwoFactorMsg twoFactorMsg ->
+            TwoFactorAuthentication.isPressMsg twoFactorMsg
+
+        AiChatMsg aiChatMsg ->
+            AiChat.isPressMsg aiChatMsg
+
+        UserNameEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
+
+        BotTokenEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
+
+        OneFrameAfterDragEnd ->
+            False
+
+
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
     case msg of
@@ -743,50 +1007,45 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            case model.dragPrevious of
-                Dragging _ ->
-                    ( model, Command.none )
+            let
+                notificationRequest : Command FrontendOnly toMsg msg
+                notificationRequest =
+                    case model.notificationPermission of
+                        Ports.NotAsked ->
+                            Ports.requestNotificationPermission
 
-                _ ->
-                    let
-                        notificationRequest : Command FrontendOnly toMsg msg
-                        notificationRequest =
-                            case model.notificationPermission of
-                                Ports.NotAsked ->
-                                    Ports.requestNotificationPermission
+                        _ ->
+                            Command.none
 
-                                _ ->
-                                    Command.none
-
-                        ( model2, cmd ) =
-                            updateLoggedIn
-                                (\loggedIn ->
-                                    handleLocalChange
-                                        model.time
-                                        (case routeToMessageId model.route of
-                                            Just guildOrDmId ->
-                                                case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
-                                                    Just messages ->
-                                                        Local_SetLastViewed
-                                                            guildOrDmId
-                                                            (Array.length messages - 1)
-                                                            |> Just
-
-                                                    Nothing ->
-                                                        Nothing
+                ( model2, cmd ) =
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (case routeToMessageId model.route of
+                                    Just guildOrDmId ->
+                                        case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
+                                            Just messages ->
+                                                Local_SetLastViewed
+                                                    guildOrDmId
+                                                    (Array.length messages - 1)
+                                                    |> Just
 
                                             Nothing ->
                                                 Nothing
-                                        )
-                                        loggedIn
-                                        Command.none
-                                )
-                                model
 
-                        ( model3, routeCmd ) =
-                            routePush model2 route
-                    in
-                    ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
+                                    Nothing ->
+                                        Nothing
+                                )
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                ( model3, routeCmd ) =
+                    routePush model2 route
+            in
+            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
 
         TypedMessage guildOrDmId text ->
             updateLoggedIn
@@ -2470,7 +2729,7 @@ handleTouchEnd time model =
 
                 MessageHover _ _ ->
                     loggedIn2
-            , Process.sleep Duration.millisecond |> Task.perform (\() -> OneFrameAfterDragEnd)
+            , Process.sleep (Duration.milliseconds 30) |> Task.perform (\() -> OneFrameAfterDragEnd)
             )
         )
         { model | drag = NoDrag, dragPrevious = model.drag }

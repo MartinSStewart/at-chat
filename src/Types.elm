@@ -366,7 +366,7 @@ type FrontendMsg
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
-    | AiChatMsg AiChat.FrontendMsg
+    | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd

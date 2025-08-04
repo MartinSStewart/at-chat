@@ -11,6 +11,7 @@ module LoginForm exposing
     , errorView
     , init
     , invalidCode
+    , isPressMsg
     , loginCodeInput
     , loginCodeInputId
     , loginCodeLength
@@ -55,6 +56,31 @@ type Msg
     | TypedTwoFactorCode String
     | TypedName String
     | PressedSubmitUserData
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        PressedSubmitEmail ->
+            True
+
+        PressedCancelLogin ->
+            True
+
+        TypedLoginFormEmail string ->
+            False
+
+        TypedLoginCode string ->
+            False
+
+        TypedTwoFactorCode string ->
+            False
+
+        TypedName string ->
+            False
+
+        PressedSubmitUserData ->
+            True
 
 
 {-| Opaque

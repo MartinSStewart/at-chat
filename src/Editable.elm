@@ -1,4 +1,4 @@
-module Editable exposing (Editing, Model, Msg(..), init, view)
+module Editable exposing (Editing, Model, Msg(..), init, isPressMsg, view)
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Icons
@@ -29,6 +29,16 @@ init =
     { editing = NotEditing
     , pressedSubmit = False
     }
+
+
+isPressMsg : Msg a -> Bool
+isPressMsg msg =
+    case msg of
+        Edit model ->
+            False
+
+        PressedAcceptEdit value ->
+            True
 
 
 view : HtmlId -> String -> (String -> Result String a) -> (Msg a -> msg) -> String -> Model -> Element msg
