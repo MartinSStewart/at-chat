@@ -1120,6 +1120,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 [ Ui.height Ui.fill
                 , Ui.paddingXY 0 16
                 , scrollable (canScroll model)
+                , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
                 , Ui.heightMin 0
