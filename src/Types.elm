@@ -117,6 +117,7 @@ type alias LoadedFrontend =
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , drag : Drag
+    , dragPrevious : Drag
     , scrolledToBottomOfChannel : Bool
     , aiChatModel : AiChat.FrontendModel
     }
@@ -368,6 +369,7 @@ type FrontendMsg
     | AiChatMsg AiChat.FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
+    | OneFrameAfterDragEnd
 
 
 type alias NewChannelForm =

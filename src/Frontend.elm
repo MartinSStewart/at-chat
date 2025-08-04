@@ -239,6 +239,7 @@ initLoadedFrontend loading time loginResult =
             , notificationPermission = loading.notificationPermission
             , pwaStatus = loading.pwaStatus
             , drag = NoDrag
+            , dragPrevious = NoDrag
             , scrolledToBottomOfChannel = True
             , aiChatModel = aiChatModel
             }
@@ -742,45 +743,50 @@ updateLoaded msg model =
             ( { model | elmUiState = Ui.Anim.update ElmUiMsg elmUiMsg model.elmUiState }, Command.none )
 
         PressedLink route ->
-            let
-                notificationRequest : Command FrontendOnly toMsg msg
-                notificationRequest =
-                    case model.notificationPermission of
-                        Ports.NotAsked ->
-                            Ports.requestNotificationPermission
+            case model.dragPrevious of
+                Dragging _ ->
+                    ( model, Command.none )
 
-                        _ ->
-                            Command.none
+                _ ->
+                    let
+                        notificationRequest : Command FrontendOnly toMsg msg
+                        notificationRequest =
+                            case model.notificationPermission of
+                                Ports.NotAsked ->
+                                    Ports.requestNotificationPermission
 
-                ( model2, cmd ) =
-                    updateLoggedIn
-                        (\loggedIn ->
-                            handleLocalChange
-                                model.time
-                                (case routeToMessageId model.route of
-                                    Just guildOrDmId ->
-                                        case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
-                                            Just messages ->
-                                                Local_SetLastViewed
-                                                    guildOrDmId
-                                                    (Array.length messages - 1)
-                                                    |> Just
+                                _ ->
+                                    Command.none
+
+                        ( model2, cmd ) =
+                            updateLoggedIn
+                                (\loggedIn ->
+                                    handleLocalChange
+                                        model.time
+                                        (case routeToMessageId model.route of
+                                            Just guildOrDmId ->
+                                                case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
+                                                    Just messages ->
+                                                        Local_SetLastViewed
+                                                            guildOrDmId
+                                                            (Array.length messages - 1)
+                                                            |> Just
+
+                                                    Nothing ->
+                                                        Nothing
 
                                             Nothing ->
                                                 Nothing
-
-                                    Nothing ->
-                                        Nothing
+                                        )
+                                        loggedIn
+                                        Command.none
                                 )
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                                model
 
-                ( model3, routeCmd ) =
-                    routePush model2 route
-            in
-            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
+                        ( model3, routeCmd ) =
+                            routePush model2 route
+                    in
+                    ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
 
         TypedMessage guildOrDmId text ->
             updateLoggedIn
@@ -1866,7 +1872,7 @@ updateLoaded msg model =
         TouchStart time touches ->
             case model.drag of
                 NoDrag ->
-                    ( { model | drag = DragStart time touches }
+                    ( { model | drag = DragStart time touches, dragPrevious = model.drag }
                     , case NonemptyDict.toList touches of
                         [ ( _, single ) ] ->
                             let
@@ -1964,7 +1970,7 @@ updateLoaded msg model =
                             , Command.none
                             )
                         )
-                        { model | drag = Dragging { dragging | touches = newTouches } }
+                        { model | drag = Dragging { dragging | touches = newTouches }, dragPrevious = model.drag }
 
                 NoDrag ->
                     ( model, Command.none )
@@ -2002,7 +2008,10 @@ updateLoaded msg model =
                             , Command.none
                             )
                         )
-                        { model | drag = Dragging { horizontalStart = horizontalStart, touches = startTouches } }
+                        { model
+                            | drag = Dragging { horizontalStart = horizontalStart, touches = startTouches }
+                            , dragPrevious = model.drag
+                        }
 
         TouchEnd time ->
             handleTouchEnd time model
@@ -2335,6 +2344,9 @@ updateLoaded msg model =
                 )
                 model
 
+        OneFrameAfterDragEnd ->
+            ( { model | dragPrevious = model.drag }, Command.none )
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -2458,10 +2470,10 @@ handleTouchEnd time model =
 
                 MessageHover _ _ ->
                     loggedIn2
-            , Command.none
+            , Process.sleep Duration.millisecond |> Task.perform (\() -> OneFrameAfterDragEnd)
             )
         )
-        { model | drag = NoDrag }
+        { model | drag = NoDrag, dragPrevious = model.drag }
 
 
 dragChannelSidebar : Time.Posix -> Float -> ChannelSidebarMode -> ChannelSidebarMode

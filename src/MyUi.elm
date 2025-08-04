@@ -646,6 +646,7 @@ html, body {
 body {
   overflow: hidden;
   height:100vh !important;
+  background-color:rgb(50,60,90);
 }
 """
             )
