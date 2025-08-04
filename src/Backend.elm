@@ -1992,6 +1992,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
             )
 
+        UploadImageRequest imageData ->
+            asUser
+                model2
+                sessionId
+                (\userId user ->
+                    ( model2, Command.none )
+                )
+
 
 broadcastToEveryoneWhoCanSeeUser :
     ClientId

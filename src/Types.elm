@@ -38,6 +38,7 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
+import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -394,6 +395,7 @@ type ToBackend
     | FinishUserCreationRequest PersonName
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest
+    | UploadImageRequest Bytes
 
 
 type BackendMsg
