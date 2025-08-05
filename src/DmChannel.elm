@@ -1,6 +1,6 @@
 module DmChannel exposing
     ( DmChannel
-    , DmChannelId
+    , DmChannelId(..)
     , LastTypedAt
     , channelIdFromUserIds
     , init
@@ -23,6 +23,8 @@ type alias DmChannel =
     }
 
 
+{-| OpaqueVariants
+-}
 type DmChannelId
     = DirectMessageChannelId (Id UserId) (Id UserId)
 

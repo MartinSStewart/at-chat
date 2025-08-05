@@ -1,5 +1,5 @@
 module RichText exposing
-    ( Language
+    ( Language(..)
     , RichText(..)
     , RichTextState
     , append

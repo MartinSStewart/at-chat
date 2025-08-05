@@ -6,7 +6,7 @@ module LoginForm exposing
     , EnterUserData2
     , LoginForm(..)
     , Msg(..)
-    , SubmitStatus
+    , SubmitStatus(..)
     , emailInputId
     , errorView
     , init
@@ -115,6 +115,8 @@ type alias EnterUserData2 =
     { name : String, pressedSubmit : SubmitStatus }
 
 
+{-| OpaqueVariants
+-}
 type SubmitStatus
     = NotSubmitted Bool
     | Submitting

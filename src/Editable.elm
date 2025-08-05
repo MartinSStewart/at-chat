@@ -14,6 +14,8 @@ type alias Model =
     }
 
 
+{-| OpaqueVariants
+-}
 type Editing
     = NotEditing
     | Editing String

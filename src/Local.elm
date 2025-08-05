@@ -10,6 +10,8 @@ import Ui.Prose
 import Ui.Shadow
 
 
+{-| OpaqueVariants
+-}
 type Local msg model
     = Local
         { localMsgs : Dict Int { createdAt : Time.Posix, msg : msg }
@@ -19,6 +21,8 @@ type Local msg model
         }
 
 
+{-| OpaqueVariants
+-}
 type ChangeId
     = ChangeId Int
 
