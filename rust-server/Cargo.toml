@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 axum = "0.8.4"
+fs = "0.0.5"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
