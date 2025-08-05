@@ -1,4 +1,4 @@
-module Local exposing (ChangeId, Local, init, model, networkError, update, updateFromBackend)
+module Local exposing (ChangeId(..), Local(..), init, model, networkError, update, updateFromBackend)
 
 import Dict exposing (Dict)
 import Duration
