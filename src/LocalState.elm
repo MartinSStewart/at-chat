@@ -255,13 +255,13 @@ getMessages guildOrDmId local =
                     Nothing
 
 
-getUser : Id UserId -> LocalState -> Maybe FrontendUser
-getUser userId local =
-    if local.localUser.userId == userId then
-        User.backendToFrontend local.localUser.user |> Just
+getUser : Id UserId -> LocalUser -> Maybe FrontendUser
+getUser userId localUser =
+    if localUser.userId == userId then
+        User.backendToFrontend localUser.user |> Just
 
     else
-        SeqDict.get userId local.localUser.otherUsers
+        SeqDict.get userId localUser.otherUsers
 
 
 createMessage :

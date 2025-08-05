@@ -50,6 +50,7 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
+import Effect.File exposing (File)
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
@@ -152,6 +153,7 @@ type alias LoggedIn2 =
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
+    , filesToUpload : List File
     }
 
 
@@ -298,6 +300,8 @@ type FrontendMsg
     | PressedLink Route
     | TypedMessage GuildOrDmId String
     | PressedSendMessage GuildOrDmId
+    | PressedAttachFiles GuildOrDmId
+    | SelectedFilesToAttach File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
@@ -370,6 +374,8 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
+    | TimeToUploadFile Time.Posix
+    | GotAttachmentContents Bytes
 
 
 type alias NewChannelForm =
@@ -397,7 +403,7 @@ type ToBackend
     | FinishUserCreationRequest PersonName
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest
-    | UploadImageRequest Bytes
+    | UploadFileRequest Bytes
 
 
 type BackendMsg

@@ -56,6 +56,7 @@ type alias MsgConfig msg =
     , pressedArrowUpInEmptyInput : msg
     , pressedPingUser : Int -> msg
     , pressedPingDropdownContainer : msg
+    , pressedUploadFile : msg
     , target : MentionUserTarget
     }
 
@@ -188,7 +189,22 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
             , Ui.background MyUi.background2
             ]
         |> Ui.el
-            [ Ui.paddingWith { left = 0, right = 36, top = 0, bottom = 0 }
+            [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.alignLeft
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 6 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.move { x = 2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
+                    , Ui.Input.button msgConfig.pressedUploadFile
+                    ]
+                    (Ui.html Icons.attachment)
+                )
             , Ui.inFront
                 (Ui.el
                     [ Ui.Input.button msgConfig.pressedSendMessage

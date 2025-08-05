@@ -313,7 +313,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
 
 dmChannelView : Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
-    case LocalState.getUser otherUserId local of
+    case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
             SeqDict.get otherUserId local.dmChannels
                 |> Maybe.withDefault DmChannel.init
@@ -433,7 +433,7 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , memberColumn local guild
+                            , Ui.Lazy.lazy3 memberColumn local.localUser guild.owner guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -445,8 +445,12 @@ guildView model guildId channelRoute loggedIn local =
                     homePageLoggedInView Nothing Nothing model loggedIn local
 
 
-memberColumn : LocalState -> FrontendGuild -> Element FrontendMsg
-memberColumn local guild =
+memberColumn : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumn localUser guildOwner guildMembers =
+    let
+        _ =
+            Debug.log "rerendered memberColumn" ()
+    in
     Ui.column
         [ Ui.height Ui.fill
         , Ui.alignRight
@@ -458,7 +462,7 @@ memberColumn local guild =
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
             [ Ui.text "Owner"
-            , memberLabel local guild.owner
+            , memberLabel localUser guildOwner
             ]
         , Ui.column
             [ Ui.paddingXY 4 4 ]
@@ -467,16 +471,16 @@ memberColumn local guild =
                 [ Ui.height Ui.fill ]
                 (List.map
                     (\( userId, _ ) ->
-                        memberLabel local userId
+                        memberLabel localUser userId
                     )
-                    (SeqDict.toList guild.members)
+                    (SeqDict.toList guildMembers)
                 )
             ]
         ]
 
 
-memberLabel : LocalState -> Id UserId -> Element FrontendMsg
-memberLabel local userId =
+memberLabel : LocalUser -> Id UserId -> Element FrontendMsg
+memberLabel localUser userId =
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
@@ -488,7 +492,7 @@ memberLabel local userId =
         , Ui.Font.color MyUi.font3
         ]
         [ User.profileImage
-        , case LocalState.getUser userId local of
+        , case LocalState.getUser userId localUser of
             Just user ->
                 Ui.text (PersonName.toString user.name)
 
@@ -1026,6 +1030,7 @@ messageInputConfig guildOrDmId =
     , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput guildOrDmId
     , pressedPingUser = PressedPingUser guildOrDmId
     , pressedPingDropdownContainer = PressedPingDropdownContainer
+    , pressedUploadFile = PressedAttachFiles guildOrDmId
     , target = MessageInput.NewMessage
     }
 
@@ -1969,32 +1974,9 @@ friendsColumn openedOtherUserId local =
             []
             (List.filterMap
                 (\( otherUserId, _ ) ->
-                    case LocalState.getUser otherUserId local of
+                    case LocalState.getUser otherUserId local.localUser of
                         Just otherUser ->
-                            let
-                                isSelected : Bool
-                                isSelected =
-                                    Just otherUserId == openedOtherUserId
-                            in
-                            Ui.row
-                                [ Ui.clipWithEllipsis
-                                , Ui.spacing 8
-                                , Ui.padding 4
-                                , Ui.Input.button (PressedLink (Route.DmRoute otherUserId Nothing))
-                                , Ui.Font.color
-                                    (if isSelected then
-                                        MyUi.font1
-
-                                     else
-                                        MyUi.font3
-                                    )
-                                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
-                                , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                                ]
-                                [ User.profileImage
-                                , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
-                                ]
-                                |> Just
+                            Ui.Lazy.lazy3 friendLabel openedOtherUserId otherUserId otherUser |> Just
 
                         Nothing ->
                             Nothing
@@ -2002,6 +1984,36 @@ friendsColumn openedOtherUserId local =
                 (SeqDict.toList local.dmChannels)
             )
         )
+
+
+friendLabel : Maybe (Id UserId) -> Id UserId -> FrontendUser -> Element FrontendMsg
+friendLabel openedOtherUserId otherUserId otherUser =
+    let
+        isSelected : Bool
+        isSelected =
+            Just otherUserId == openedOtherUserId
+
+        _ =
+            Debug.log "rerender friendLabel" ()
+    in
+    Ui.row
+        [ Ui.clipWithEllipsis
+        , Ui.spacing 8
+        , Ui.padding 4
+        , Ui.Input.button (PressedLink (Route.DmRoute otherUserId Nothing))
+        , Ui.Font.color
+            (if isSelected then
+                MyUi.font1
+
+             else
+                MyUi.font3
+            )
+        , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        ]
+        [ User.profileImage
+        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+        ]
 
 
 newChannelFormInit : NewChannelForm

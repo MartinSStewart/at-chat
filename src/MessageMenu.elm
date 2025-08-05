@@ -249,6 +249,7 @@ editMessageTextInputConfig guildOrDmId =
     , pressedArrowUpInEmptyInput = FrontendNoOp
     , pressedPingUser = PressedPingUserForEditMessage guildOrDmId
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
+    , pressedUploadFile = FrontendNoOp
     , target = MessageInput.EditMessage
     }
 

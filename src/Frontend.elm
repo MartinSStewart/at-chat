@@ -16,6 +16,8 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File
+import Effect.File.Select
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -157,6 +159,12 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
+                                , case loggedIn.filesToUpload of
+                                    [] ->
+                                        Subscription.none
+
+                                    _ ->
+                                        Time.every (Duration.milliseconds 50) TimeToUploadFile
                                 ]
 
                         NotLoggedIn _ ->
@@ -343,6 +351,7 @@ loadedInitHelper time loginData loading =
 
                     Nothing ->
                         TwoFactorNotStarted
+            , filesToUpload = []
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -877,6 +886,18 @@ isPressMsg msg =
         OneFrameAfterDragEnd ->
             False
 
+        PressedAttachFiles guildOrDmId ->
+            True
+
+        SelectedFilesToAttach file files ->
+            False
+
+        TimeToUploadFile posix ->
+            False
+
+        GotAttachmentContents bytes ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1125,6 +1146,18 @@ updateLoaded msg model =
 
                         Nothing ->
                             ( loggedIn, Command.none )
+                )
+                model
+
+        PressedAttachFiles guildOrDmId ->
+            ( model, Effect.File.Select.files [] SelectedFilesToAttach )
+
+        SelectedFilesToAttach file files ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | filesToUpload = file :: files ++ loggedIn.filesToUpload }
+                    , Command.none
+                    )
                 )
                 model
 
@@ -2605,6 +2638,23 @@ updateLoaded msg model =
 
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
+
+        TimeToUploadFile time ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.filesToUpload of
+                        [] ->
+                            ( loggedIn, Command.none )
+
+                        next :: rest ->
+                            ( { loggedIn | filesToUpload = rest }
+                            , File.toBytes next |> Task.perform GotAttachmentContents
+                            )
+                )
+                model
+
+        GotAttachmentContents bytes ->
+            ( model, Lamdera.sendToBackend (UploadFileRequest bytes) )
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
