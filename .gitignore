@@ -7,3 +7,4 @@ pack.zip
 elm-pkg-js/test-gen.js
 endpoint.json
 rust-server/target/
+rust-server/var/

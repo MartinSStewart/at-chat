@@ -30,7 +30,7 @@ async fn handler(Path(path): Path<String>) -> (StatusCode, Vec<u8>) {
 
     if is_valid_filename {
         let data: Result<Vec<u8>, std::io::Error> =
-            fs::read(String::from("/var/lib/atchat/") + &path);
+            fs::read(String::from("./var/lib/atchat/") + &path);
         match data {
             Result::Ok(data) => (StatusCode::OK, data),
             Result::Err(_) => (StatusCode::NOT_FOUND, b"File not Found".to_vec()),
