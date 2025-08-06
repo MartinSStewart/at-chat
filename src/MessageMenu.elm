@@ -2,6 +2,7 @@ module MessageMenu exposing
     ( close
     , editMessageTextInputConfig
     , editMessageTextInputId
+    , menuHeight
     , messageMenuSpeed
     , miniView
     , mobileMenuMaxHeight
@@ -114,6 +115,20 @@ mobileMenuOpeningOffset guildOrDmId messageIndex local model =
 messageMenuSpeed : Quantity Float (Rate CssPixels Seconds)
 messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
+
+
+menuHeight :
+    { a | guildOrDmId : GuildOrDmId, messageIndex : Int, position : Coord CssPixels }
+    -> LocalState
+    -> LoadedFrontend
+    -> Int
+menuHeight extraOptions local model =
+    let
+        itemCount =
+            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model
+                |> List.length
+    in
+    itemCount * buttonHeight False + 2
 
 
 topPadding : number

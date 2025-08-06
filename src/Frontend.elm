@@ -1562,7 +1562,12 @@ updateLoaded msg model =
                                 ( loggedIn, Command.none )
 
                             ( Just guildOrDmId, _ ) ->
-                                ( { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
+                                ( case loggedIn.messageHover of
+                                    MessageMenu _ ->
+                                        loggedIn
+
+                                    _ ->
+                                        { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
                                 , Command.none
                                 )
 
@@ -1704,7 +1709,8 @@ updateLoaded msg model =
                                         MessageMenu extraOptions ->
                                             { extraOptions
                                                 | mobileMode =
-                                                    { offset = Types.messageMenuMobileOffset extraOptions.mobileMode
+                                                    { offset =
+                                                        Types.messageMenuMobileOffset extraOptions.mobileMode
                                                     , targetOffset =
                                                         MessageMenu.mobileMenuMaxHeight
                                                             extraOptions
@@ -2390,13 +2396,35 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case routeToMessageId model.route of
                         Just guildOrDmId ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+
+                                menuHeight : Int
+                                menuHeight =
+                                    MessageMenu.menuHeight
+                                        { guildOrDmId = guildOrDmId
+                                        , messageIndex = messageIndex
+                                        , position = clickedAt
+                                        }
+                                        local
+                                        model
+                            in
                             ( { loggedIn
                                 | messageHover =
                                     MessageMenu
                                         { position =
-                                            Coord.plus
-                                                (Coord.xy (-MessageMenu.width - 8) -8)
-                                                clickedAt
+                                            -- Move the menu up if it's too close to the bottom of the screen
+                                            if Coord.yRaw clickedAt + menuHeight + 60 > Coord.yRaw model.windowSize then
+                                                Coord.plus
+                                                    (Coord.xy (-MessageMenu.width - 8) (-8 - menuHeight))
+                                                    clickedAt
+
+                                            else
+                                                Coord.plus
+                                                    (Coord.xy (-MessageMenu.width - 8) -8)
+                                                    clickedAt
                                         , guildOrDmId = guildOrDmId
                                         , messageIndex = messageIndex
                                         , mobileMode =
@@ -2406,7 +2434,7 @@ updateLoaded msg model =
                                                     MessageMenu.mobileMenuOpeningOffset
                                                         guildOrDmId
                                                         messageIndex
-                                                        (Local.model loggedIn.localState)
+                                                        local
                                                         model
                                                 }
                                         }
