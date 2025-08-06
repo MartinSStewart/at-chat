@@ -1900,11 +1900,16 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                                 , bottom = 0
                                 }
                             , Ui.el
-                                [ channelHasNotifications
-                                    currentUserId
-                                    currentUser
-                                    (GuildOrDmId_Guild guildId channelId)
-                                    channel
+                                [ (if isSelected then
+                                    NoNotification
+
+                                   else
+                                    channelHasNotifications
+                                        currentUserId
+                                        currentUser
+                                        (GuildOrDmId_Guild guildId channelId)
+                                        channel
+                                  )
                                     |> GuildIcon.notificationView MyUi.background2
                                 , Ui.width (Ui.px 20)
                                 , Ui.move { x = 4, y = 0, z = 0 }
