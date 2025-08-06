@@ -154,8 +154,8 @@ canScroll model =
             True
 
 
-guildColumn : Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Bool -> Element FrontendMsg
-guildColumn route currentUserId currentUser guilds canScroll2 =
+guildColumn : Bool -> Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Bool -> Element FrontendMsg
+guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
     Ui.el
         [ Ui.inFront
             (Ui.el
@@ -181,6 +181,7 @@ guildColumn route currentUserId currentUser guilds canScroll2 =
             , scrollable canScroll2
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
             , MyUi.htmlStyle "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
+            , bounceScroll isMobile
             ]
             (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
@@ -274,8 +275,9 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                         ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy5
+                            [ Ui.Lazy.lazy6
                                 guildColumn
+                                True
                                 model.route
                                 local.localUser.userId
                                 local.localUser.user
@@ -296,8 +298,9 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                         [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy5
+                            [ Ui.Lazy.lazy6
                                 guildColumn
+                                False
                                 model.route
                                 local.localUser.userId
                                 local.localUser.user
@@ -381,8 +384,9 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ Ui.Lazy.lazy5
+                                [ Ui.Lazy.lazy6
                                     guildColumn
+                                    True
                                     model.route
                                     local.localUser.userId
                                     local.localUser.user
@@ -414,8 +418,9 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ Ui.Lazy.lazy5
+                                    [ Ui.Lazy.lazy6
                                         guildColumn
+                                        False
                                         model.route
                                         local.localUser.userId
                                         local.localUser.user
@@ -1083,13 +1088,17 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
         replyTo : Maybe Int
         replyTo =
             SeqDict.get guildOrDmId loggedIn.replyTo
+
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile model
     in
     Ui.column
         [ Ui.height Ui.fill
         , Ui.heightMin 0
         ]
         [ channelHeader
-            (MyUi.isMobile model)
+            isMobile
             (case guildOrDmId of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
@@ -1140,6 +1149,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
                 , Ui.heightMin 0
+                , bounceScroll isMobile
                 ]
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
@@ -1833,6 +1843,13 @@ channelColumnContainer header content =
         )
 
 
+bounceScroll : Bool -> Ui.Attribute msg
+bounceScroll isMobile =
+    Ui.attrIf
+        isMobile
+        (Ui.inFront (Ui.el [ Ui.height (Ui.px 1), Ui.alignBottom, Ui.move { x = 0, y = 1, z = 0 } ] Ui.none))
+
+
 channelColumn :
     Bool
     -> Id UserId
@@ -1867,9 +1884,7 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
             , Ui.heightMin 0
             , Ui.paddingXY 0 8
             , Ui.attrIf isMobile (Ui.height Ui.fill)
-            , Ui.attrIf
-                isMobile
-                (Ui.inFront (Ui.el [ Ui.height (Ui.px 1), Ui.alignBottom, Ui.move { x = 0, y = 1, z = 0 } ] Ui.none))
+            , bounceScroll isMobile
             ]
             (List.map
                 (\( channelId, channel ) ->
