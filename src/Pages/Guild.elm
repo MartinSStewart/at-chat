@@ -344,11 +344,11 @@ guildView model guildId channelRoute loggedIn local =
         Nothing ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    let
-                        canScroll2 =
-                            canScroll model
-                    in
                     if MyUi.isMobile model then
+                        let
+                            canScroll2 =
+                                canScroll model
+                        in
                         Ui.column
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
@@ -374,10 +374,10 @@ guildView model guildId channelRoute loggedIn local =
                                     canScroll2
                                 , Ui.Lazy.lazy6
                                     (if canScroll2 then
-                                        channelColumnCanScroll
+                                        channelColumnCanScrollMobile
 
                                      else
-                                        channelColumnCannotScroll
+                                        channelColumnCannotScrollMobile
                                     )
                                     local.localUser.userId
                                     local.localUser.user
@@ -404,14 +404,9 @@ guildView model guildId channelRoute loggedIn local =
                                         local.localUser.userId
                                         local.localUser.user
                                         local.guilds
-                                        canScroll2
+                                        True
                                     , Ui.Lazy.lazy6
-                                        (if canScroll2 then
-                                            channelColumnCanScroll
-
-                                         else
-                                            channelColumnCannotScroll
-                                        )
+                                        channelColumnNotMobile
                                         local.localUser.userId
                                         local.localUser.user
                                         guildId
@@ -1779,14 +1774,19 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
         (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
-channelColumnCanScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
-channelColumnCanScroll currentUserId currentUser guildId guild channelRoute channelNameHover =
-    channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover True
+channelColumnNotMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnNotMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
+    channelColumn False currentUserId currentUser guildId guild channelRoute channelNameHover True
 
 
-channelColumnCannotScroll : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
-channelColumnCannotScroll currentUserId currentUser guildId guild channelRoute channelNameHover =
-    channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover False
+channelColumnCanScrollMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCanScrollMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
+    channelColumn True currentUserId currentUser guildId guild channelRoute channelNameHover True
+
+
+channelColumnCannotScrollMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCannotScrollMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
+    channelColumn True currentUserId currentUser guildId guild channelRoute channelNameHover False
 
 
 channelColumnContainer : List (Element msg) -> Element msg -> Element msg
@@ -1818,7 +1818,8 @@ channelColumnContainer header content =
 
 
 channelColumn :
-    Id UserId
+    Bool
+    -> Id UserId
     -> BackendUser
     -> Id GuildId
     -> FrontendGuild
@@ -1826,7 +1827,7 @@ channelColumn :
     -> Maybe ( Id GuildId, Id ChannelId )
     -> Bool
     -> Element FrontendMsg
-channelColumn currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
+channelColumn isMobile currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
     let
         guildName =
             GuildName.toString guild.name
@@ -1846,7 +1847,14 @@ channelColumn currentUserId currentUser guildId guild channelRoute channelNameHo
             (Ui.html Icons.inviteUserIcon)
         ]
         (Ui.column
-            [ Ui.paddingXY 0 8, scrollable canScroll2 ]
+            [ scrollable canScroll2
+            , Ui.heightMin 0
+            , Ui.paddingXY 0 8
+            , Ui.attrIf isMobile (Ui.height Ui.fill)
+            , Ui.attrIf
+                isMobile
+                (Ui.inFront (Ui.el [ Ui.height (Ui.px 1), Ui.alignBottom, Ui.move { x = 0, y = 1, z = 0 } ] Ui.none))
+            ]
             (List.map
                 (\( channelId, channel ) ->
                     let

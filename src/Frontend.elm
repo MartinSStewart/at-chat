@@ -269,27 +269,7 @@ loadedInitHelper time loginData loading =
     let
         localState : LocalState
         localState =
-            { adminData =
-                case loginData.adminData of
-                    IsAdminLoginData adminData ->
-                        IsAdmin
-                            { users = adminData.users
-                            , emailNotificationsEnabled = adminData.emailNotificationsEnabled
-                            , twoFactorAuthentication = adminData.twoFactorAuthentication
-                            , botToken = adminData.botToken
-                            }
-
-                    IsNotAdminLoginData ->
-                        IsNotAdmin
-            , guilds = loginData.guilds
-            , dmChannels = loginData.dmChannels
-            , joinGuildError = Nothing
-            , localUser =
-                { userId = loginData.userId
-                , user = loginData.user
-                , otherUsers = loginData.otherUsers
-                }
-            }
+            loginDataToLocalState loginData
 
         localStateContainer : Local LocalMsg LocalState
         localStateContainer =
@@ -389,6 +369,31 @@ loadedInitHelper time loginData loading =
         )
         loggedIn
         cmds
+
+
+loginDataToLocalState : LoginData -> LocalState
+loginDataToLocalState loginData =
+    { adminData =
+        case loginData.adminData of
+            IsAdminLoginData adminData ->
+                IsAdmin
+                    { users = adminData.users
+                    , emailNotificationsEnabled = adminData.emailNotificationsEnabled
+                    , twoFactorAuthentication = adminData.twoFactorAuthentication
+                    , botToken = adminData.botToken
+                    }
+
+            IsNotAdminLoginData ->
+                IsNotAdmin
+    , guilds = loginData.guilds
+    , dmChannels = loginData.dmChannels
+    , joinGuildError = Nothing
+    , localUser =
+        { userId = loginData.userId
+        , user = loginData.user
+        , otherUsers = loginData.otherUsers
+        }
+    }
 
 
 tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -3944,11 +3949,13 @@ updateLoadedFromBackend msg model =
         ReloadDataResponse reloadData ->
             case reloadData of
                 Ok loginData ->
-                    let
-                        ( loggedIn, cmd ) =
-                            loadedInitHelper model.time loginData model
-                    in
-                    ( { model | loginStatus = LoggedIn loggedIn }, cmd )
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | localState = loginDataToLocalState loginData |> Local.init }
+                            , Command.none
+                            )
+                        )
+                        model
 
                 Err () ->
                     logout model
