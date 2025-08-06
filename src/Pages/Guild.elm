@@ -255,6 +255,26 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                     ]
                     [ Ui.column
                         [ Ui.height Ui.fill
+                        , case maybeOtherUserId of
+                            Just otherUserId ->
+                                dmChannelView otherUserId maybeMessageHighlight loggedIn local model
+                                    |> Ui.el
+                                        [ Ui.height Ui.fill
+                                        , Ui.background MyUi.background3
+                                        , Ui.heightMin 0
+                                        , Ui.borderColor MyUi.border1
+                                        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                        ]
+                                    |> Ui.el
+                                        [ Ui.height Ui.fill
+                                        , Ui.background MyUi.background3
+                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                        , sidebarOffsetAttr loggedIn model
+                                        ]
+                                    |> Ui.inFront
+
+                            Nothing ->
+                                Ui.noAttr
                         ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]

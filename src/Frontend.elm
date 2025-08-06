@@ -271,10 +271,6 @@ loadedInitHelper time loginData loading =
         localState =
             loginDataToLocalState loginData
 
-        localStateContainer : Local LocalMsg LocalState
-        localStateContainer =
-            Local.init localState
-
         maybeAdmin : Maybe ( Pages.Admin.Model, Maybe Pages.Admin.AdminChange, Command FrontendOnly ToBackend msg )
         maybeAdmin =
             case loginData.adminData of
@@ -308,7 +304,7 @@ loadedInitHelper time loginData loading =
 
         loggedIn : LoggedIn2
         loggedIn =
-            { localState = localStateContainer
+            { localState = Local.init localState
             , admin = Maybe.map (\( a, _, _ ) -> a) maybeAdmin
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
@@ -611,7 +607,9 @@ routeRequest previousRoute newRoute model =
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
         DmRoute _ _ ->
-            ( model2, Command.none )
+            updateLoggedIn
+                (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none ))
+                model2
 
 
 routeRequiresLogin : Route -> Bool
