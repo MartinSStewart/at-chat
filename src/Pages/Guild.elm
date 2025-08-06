@@ -1119,7 +1119,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 EmojiSelectorForMessage ->
                     Ui.inFront emojiSelector
             , Ui.heightMin 0
-            , Ui.height Ui.fill
+            , Ui.alignBottom
             ]
             (Ui.column
                 [ Ui.height Ui.fill

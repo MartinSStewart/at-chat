@@ -11,3 +11,13 @@ A text chat app similar to Discord
 5. You're logged in!
 
 After you've finished a feature, make sure to run elm-review and elm-test!
+
+## How do I run the rust server locally? (for file hosting)
+
+Run `cargo run` in the rust-server folder
+
+## How do I deploy the rust server?
+
+1. Push your changes to master
+2. In the lamdera/runtime repo in the nixos folder run `nix flake lock --update-input at-chat`
+3. In the lamdera/runtime repo in the scripts folder run `DEBUG=1 ./lxelm.sh updateServerEnterprise martin-s`
