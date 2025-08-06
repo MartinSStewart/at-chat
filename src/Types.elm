@@ -51,6 +51,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.File exposing (File)
+import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
@@ -376,6 +377,7 @@ type FrontendMsg
     | OneFrameAfterDragEnd
     | TimeToUploadFile Time.Posix
     | GotAttachmentContents Bytes
+    | GotFileHashName (Result Http.Error String)
 
 
 type alias NewChannelForm =

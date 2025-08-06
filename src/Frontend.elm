@@ -18,6 +18,7 @@ import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File
 import Effect.File.Select
+import Effect.Http as Http exposing (Response(..))
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -901,6 +902,9 @@ isPressMsg msg =
         GotAttachmentContents bytes ->
             False
 
+        GotFileHashName _ ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1158,8 +1162,22 @@ updateLoaded msg model =
         SelectedFilesToAttach file files ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | filesToUpload = file :: files ++ loggedIn.filesToUpload }
-                    , Command.none
+                    ( { loggedIn | filesToUpload = [] }
+                      --file :: files ++ loggedIn.filesToUpload }
+                    , List.map
+                        (\file2 ->
+                            Http.request
+                                { method = "POST"
+                                , headers = []
+                                , url = "http://localhost:3000/file/upload"
+                                , body = Http.fileBody file2
+                                , expect = Http.expectString GotFileHashName
+                                , timeout = Nothing
+                                , tracker = Nothing
+                                }
+                        )
+                        (file :: files)
+                        |> Command.batch
                     )
                 )
                 model
@@ -2686,6 +2704,14 @@ updateLoaded msg model =
 
         GotAttachmentContents bytes ->
             ( model, Lamdera.sendToBackend (UploadFileRequest bytes) )
+
+        GotFileHashName result ->
+            case Debug.log "GotFileHashName" result of
+                Ok fileHashName ->
+                    ( model, Command.none )
+
+                Err _ ->
+                    ( model, Command.none )
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
