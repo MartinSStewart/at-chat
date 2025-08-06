@@ -1139,7 +1139,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 EmojiSelectorForMessage ->
                     Ui.inFront emojiSelector
             , Ui.heightMin 0
-            , Ui.alignBottom
+            , Ui.height Ui.fill
             ]
             (Ui.column
                 [ Ui.height Ui.fill
@@ -1152,7 +1152,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 , bounceScroll isMobile
                 ]
                 (Ui.el
-                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4 ]
+                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom ]
                     (case guildOrDmId of
                         GuildOrDmId_Guild _ _ ->
                             Ui.text ("This is the start of #" ++ name)
