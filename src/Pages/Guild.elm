@@ -261,15 +261,11 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
+                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                        , sidebarOffsetAttr loggedIn model
                                         , Ui.heightMin 0
                                         , Ui.borderColor MyUi.border1
                                         , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        ]
-                                    |> Ui.el
-                                        [ Ui.height Ui.fill
-                                        , Ui.background MyUi.background3
-                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                        , sidebarOffsetAttr loggedIn model
                                         ]
                                     |> Ui.inFront
 
