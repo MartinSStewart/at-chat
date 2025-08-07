@@ -160,12 +160,6 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
-                                , case loggedIn.filesToUpload of
-                                    [] ->
-                                        Subscription.none
-
-                                    _ ->
-                                        Time.every (Duration.milliseconds 50) TimeToUploadFile
                                 ]
 
                         NotLoggedIn _ ->
@@ -894,12 +888,6 @@ isPressMsg msg =
             True
 
         SelectedFilesToAttach file files ->
-            False
-
-        TimeToUploadFile posix ->
-            False
-
-        GotAttachmentContents bytes ->
             False
 
         GotFileHashName _ ->
@@ -2687,23 +2675,6 @@ updateLoaded msg model =
 
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
-
-        TimeToUploadFile time ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.filesToUpload of
-                        [] ->
-                            ( loggedIn, Command.none )
-
-                        next :: rest ->
-                            ( { loggedIn | filesToUpload = rest }
-                            , File.toBytes next |> Task.perform GotAttachmentContents
-                            )
-                )
-                model
-
-        GotAttachmentContents bytes ->
-            ( model, Lamdera.sendToBackend (UploadFileRequest bytes) )
 
         GotFileHashName result ->
             case Debug.log "GotFileHashName" result of

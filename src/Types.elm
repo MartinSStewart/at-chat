@@ -375,8 +375,6 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | TimeToUploadFile Time.Posix
-    | GotAttachmentContents Bytes
     | GotFileHashName (Result Http.Error String)
 
 
