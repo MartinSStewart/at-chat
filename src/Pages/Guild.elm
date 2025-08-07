@@ -20,6 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
+import FileStatus exposing (FileStatus)
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -28,6 +29,7 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
+import List.Nonempty exposing (Nonempty)
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..))
@@ -929,6 +931,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     revealedSpoilers
                                     editing
                                     loggedIn.pingUser
+                                    (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                                     local
 
                         Nothing ->
@@ -1222,6 +1225,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                         ""
                 )
                 loggedIn.pingUser
+                (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                 local
             , (case
                 SeqDict.filter
@@ -1369,9 +1373,10 @@ messageEditingView :
     -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
+    -> Maybe (Nonempty FileStatus)
     -> LocalState
     -> Element FrontendMsg
-messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser local =
+messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser filesToUpload local =
     case message of
         UserTextMessage data ->
             let
@@ -1411,6 +1416,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                         ""
                         editing.text
                         pingUser
+                        filesToUpload
                         local
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row

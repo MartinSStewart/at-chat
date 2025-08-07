@@ -13,6 +13,7 @@ import Diff
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task
+import FileStatus exposing (FileStatus)
 import Html
 import Html.Attributes
 import Html.Events
@@ -20,6 +21,7 @@ import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
 import List.Extra
+import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
 import PersonName
@@ -69,9 +71,10 @@ view :
     -> String
     -> String
     -> Maybe MentionUserDropdown
+    -> Maybe (Nonempty FileStatus)
     -> LocalState
     -> Element msg
-view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
+view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser filesToUpload local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"

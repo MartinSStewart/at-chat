@@ -3,6 +3,7 @@ module Backend exposing
     , app
     , app_
     , emailToNotifyWhenErrorsAreLogged
+    , getUserFromSessionId
     , loginEmailContent
     , loginEmailSubject
     )
@@ -161,6 +162,7 @@ init =
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
       , botToken = Nothing
+      , files = SeqSet.empty
       }
     , Command.none
     )
@@ -836,6 +838,7 @@ handleDiscordCreateMessage message model =
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
                                             , repliedTo = Nothing
+                                            , embeddedFiles = SeqDict.empty
                                             }
                                         )
                                     |> Just
@@ -902,6 +905,7 @@ handleDiscordCreateMessage message model =
                                                         , reactions = SeqDict.empty
                                                         , editedAt = Nothing
                                                         , repliedTo = Nothing
+                                                        , embeddedFiles = SeqDict.empty
                                                         }
                                                     )
                                                     { channel
@@ -946,8 +950,8 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-getLoginData : Id UserId -> BackendUser -> BackendModel -> LoginData
-getLoginData userId user model =
+getLoginData : SessionId -> Id UserId -> BackendUser -> BackendModel -> LoginData
+getLoginData sessionId userId user model =
     { userId = userId
     , adminData =
         if user.isAdmin then
@@ -982,6 +986,7 @@ getLoginData userId user model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
+    , sessionId = sessionId
     }
 
 
@@ -1011,7 +1016,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 cmd =
                     case getUserFromSessionId sessionId model2 of
                         Just ( userId, user ) ->
-                            getLoginData userId user model2
+                            getLoginData sessionId userId user model2
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -1066,7 +1071,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , getLoginData userId newUser model3
+                        , getLoginData sessionId userId newUser model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -1093,7 +1098,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | sessions = SeqDict.insert sessionId pendingLogin.userId model2.sessions
                                         , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
                                       }
-                                    , getLoginData pendingLogin.userId user model2
+                                    , getLoginData sessionId pendingLogin.userId user model2
                                         |> LoginSuccess
                                         |> LoginWithTokenResponse
                                         |> Lamdera.sendToFrontends sessionId
@@ -1983,7 +1988,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             ( model2
             , case getUserFromSessionId sessionId model2 of
                 Just ( userId, user ) ->
-                    getLoginData userId user model2
+                    getLoginData sessionId userId user model2
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
@@ -2342,6 +2347,7 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
                         , reactions = SeqDict.empty
                         , editedAt = Nothing
                         , repliedTo = repliedTo
+                        , embeddedFiles = SeqDict.empty
                         }
                     )
 
@@ -2437,6 +2443,7 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                             , reactions = SeqDict.empty
                             , editedAt = Nothing
                             , repliedTo = repliedTo
+                            , embeddedFiles = SeqDict.empty
                             }
                         )
                         channel
@@ -2861,7 +2868,7 @@ loginWithToken time sessionId clientId loginCode model =
                                 | sessions = SeqDict.insert sessionId pendingLogin.userId model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
-                            , getLoginData pendingLogin.userId user model
+                            , getLoginData sessionId pendingLogin.userId user model
                                 |> LoginSuccess
                                 |> LoginWithTokenResponse
                                 |> Lamdera.sendToFrontends sessionId

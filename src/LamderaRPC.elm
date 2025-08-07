@@ -1,5 +1,6 @@
 module LamderaRPC exposing (..)
 
+import Dict exposing (Dict)
 import Env
 import Http exposing (..)
 import Json.Decode as D
@@ -10,114 +11,182 @@ import Task exposing (Task)
 import Types exposing (BackendModel)
 
 
-type RPC a
-    = Response a
-    | ResponseJson Json.Value
-    | ResponseString String
-    | Failure Http.Error
 
-
-fail string =
-    Err <| Http.BadBody string
+-- The Lamdera HTTP RPC abstraction
 
 
 type RPCResult
     = ResultBytes (List Int)
     | ResultJson Json.Value
     | ResultString String
-    | ResultFailure Http.Error
+    | ResultRaw Int String (List HttpHeader) HttpBody
 
 
-type Body
-    = Bytes (List Int)
-    | JSON Json.Value
-    | Raw String
+type alias RPCFailure =
+    RPCResult
 
 
-bodyTypeToString : Body -> String
+{-| Create a raw response with a `StatusCode`
+-}
+resultWith : StatusCode -> List HttpHeader -> HttpBody -> RPCResult
+resultWith statusCode body =
+    ResultRaw (statusToInt statusCode) (statusToString statusCode) body
+
+
+failWith : StatusCode -> String -> RPCFailure
+failWith statusCode stringBody =
+    ResultRaw (statusToInt statusCode) (statusToString statusCode) [] (BodyString stringBody)
+
+
+type alias Headers =
+    Dict String String
+
+
+type HttpBody
+    = BodyBytes (List Int)
+    | BodyJson Json.Value
+    | BodyString String
+
+
+bodyTypeToString : HttpBody -> String
 bodyTypeToString body =
     case body of
-        Bytes _ ->
+        BodyBytes _ ->
             "Bytes"
 
-        JSON _ ->
+        BodyJson _ ->
             "JSON"
 
-        Raw _ ->
+        BodyString _ ->
             "Raw"
 
 
-type alias RPCArgs =
+{-| Currently the only supported method is POST
+
+The request URL can be inferred from the `endpoint` field in the request body, i.e. (hostname + "/\_r/" ++ req.endpoint)
+
+-}
+type alias HttpRequest =
     { sessionId : String
     , endpoint : String
     , requestId : String
-    , body : Body
+    , headers : Dict String String
+    , body : HttpBody
     }
 
 
-argsDecoder : D.Decoder RPCArgs
-argsDecoder =
-    D.map4 RPCArgs
+
+-- @TODO future
+-- type alias HttpResponse =
+--     { version : String -- HTTP/1.1, HTTP/2, etc.
+--     , statusCode : Int -- 200, 404, etc.
+--     , statusText : String -- "OK", "Not Found", etc.
+--     , headers : List HttpHeader -- List of (header, value) pairs, e.g. [ ("Content-Type", "application/json") ]
+--     , body : Maybe HttpBody
+--     }
+
+
+type alias HttpHeader =
+    ( String, String )
+
+
+requestDecoder : D.Decoder HttpRequest
+requestDecoder =
+    D.map5 HttpRequest
         (Json.field "s" Json.decoderString)
         (Json.field "e" Json.decoderString)
         (Json.field "r" Json.decoderString)
+        (Json.field "h" <| D.dict Json.decoderString)
         (D.oneOf
-            [ Json.field "i" (Json.decoderList Json.decoderInt |> D.map Bytes)
-            , Json.field "j" (Json.decoderValue |> D.map JSON)
-            , Json.field "st" (Json.decoderString |> D.map Raw)
+            [ Json.field "i" (Json.decoderList Json.decoderInt |> D.map BodyBytes)
+            , Json.field "j" (Json.decoderValue |> D.map BodyJson)
+            , Json.field "st" (Json.decoderString |> D.map BodyString)
             ]
         )
+
+
+rawBody : Json.Value -> HttpBody
+rawBody rawReq =
+    case Json.decodeValue rawBodyDecoder rawReq of
+        Ok body ->
+            body
+
+        Err err ->
+            BodyString ""
+
+
+rawBodyDecoder : D.Decoder HttpBody
+rawBodyDecoder =
+    -- Unlike the requestDecoder which optimistically tries to decode the body as JSON, this decoder
+    -- will always decode to a raw string, unless we've got bytes.
+    D.oneOf
+        [ Json.field "i" (Json.decoderList Json.decoderInt |> D.map BodyBytes)
+        , Json.field "j" (Json.decoderString |> D.map BodyString)
+        , Json.field "st" (Json.decoderString |> D.map BodyString)
+        ]
 
 
 process :
     (String -> String -> Cmd msg)
     -> (Json.Value -> Cmd msg)
     -> Json.Value
-    -> (RPCArgs -> Types.BackendModel -> ( RPCResult, Types.BackendModel, Cmd msg ))
+    -> (Json.Value -> HttpRequest -> Types.BackendModel -> ( RPCResult, Types.BackendModel, Cmd msg ))
     -> { a | userModel : BackendModel }
     -> ( { a | userModel : BackendModel }, Cmd msg )
-process log rpcOut rpcArgsJson handler model =
-    case Json.decodeValue argsDecoder rpcArgsJson of
-        Ok rpcArgs ->
+process log rpcOut rawReq handler model =
+    case Json.decodeValue requestDecoder rawReq of
+        Ok request ->
             let
                 ( result, newUserModel, newCmds ) =
-                    handler rpcArgs model.userModel
+                    handler rawReq request model.userModel
 
-                resolveRpc value =
+                resolveRpc statusCodeInt statusText headers body =
                     rpcOut
                         (Json.object
                             [ ( "t", Json.string "qr" )
-                            , ( "r", Json.string rpcArgs.requestId )
-                            , value
+                            , ( "r", Json.string request.requestId )
+                            , ( "c", Json.int statusCodeInt )
+                            , ( "ct", Json.string statusText )
+                            , ( "h", headers |> List.map (\( key, val ) -> ( key, Json.string val )) |> Json.object )
+                            , body
                             ]
                         )
             in
             case result of
                 ResultBytes intList ->
                     ( { model | userModel = newUserModel }
-                    , Cmd.batch [ resolveRpc ( "i", Json.list Json.int <| intList ), newCmds ]
+                    , Cmd.batch [ resolveRpc 200 "OK" [] ( "i", Json.list Json.int <| intList ), newCmds ]
                     )
 
                 ResultJson value ->
                     ( { model | userModel = newUserModel }
-                    , Cmd.batch [ resolveRpc ( "v", value ), newCmds ]
+                    , Cmd.batch [ resolveRpc 200 "OK" [] ( "v", value ), newCmds ]
                     )
 
                 ResultString value ->
                     ( { model | userModel = newUserModel }
-                    , Cmd.batch [ resolveRpc ( "vs", Json.string value ), newCmds ]
+                    , Cmd.batch [ resolveRpc 200 "OK" [] ( "vs", Json.string value ), newCmds ]
                     )
 
-                ResultFailure err ->
+                ResultRaw statusCode statusText headers httpBody ->
+                    let
+                        body =
+                            case httpBody of
+                                BodyBytes intList ->
+                                    ( "i", Json.list Json.int <| intList )
+
+                                BodyJson value ->
+                                    ( "v", value )
+
+                                BodyString value ->
+                                    ( "vs", Json.string value )
+                    in
                     ( model
-                    , Cmd.batch
-                        [ resolveRpc ( "v", Json.object [ ( "error", Json.string <| httpErrorToString err ) ] )
-                        , newCmds
-                        ]
+                    , Cmd.batch [ resolveRpc statusCode statusText headers body, newCmds ]
                     )
 
         Err err ->
-            ( model, log "rpcIn failed to decode rpcArgsJson" "" )
+            ( model, log "rpcIn failed to decode requestJson" "" )
 
 
 asTask :
@@ -214,80 +283,113 @@ customResolver fn response =
             fn metadata text
 
 
-handleEndpoint :
-    (SessionId -> BackendModel -> input -> ( Result Http.Error output, BackendModel, Cmd msg ))
+handleEndpointBytes :
+    (SessionId -> BackendModel -> Headers -> input -> ( Result Http.Error output, BackendModel, Cmd msg ))
     -> Wire3.Decoder input
     -> (output -> Wire3.Encoder)
-    -> RPCArgs
+    -> HttpRequest
     -> BackendModel
     -> ( RPCResult, BackendModel, Cmd msg )
-handleEndpoint fn decoder encoder args model =
+handleEndpointBytes fn decoder encoder args model =
     case args.body of
-        Bytes intList ->
+        BodyBytes intList ->
             case Wire3.bytesDecode decoder (Wire3.intListToBytes intList) of
                 Just arg ->
-                    case fn args.sessionId model arg of
+                    case fn args.sessionId model args.headers arg of
                         ( response, newModel, newCmds ) ->
                             case response of
                                 Ok value ->
                                     ( ResultBytes <| Wire3.intListFromBytes <| Wire3.bytesEncode <| encoder value, newModel, newCmds )
 
                                 Err httpErr ->
-                                    ( ResultFailure httpErr, newModel, newCmds )
+                                    ( failWith StatusBadRequest <| httpErrorToString httpErr, newModel, newCmds )
 
                 Nothing ->
-                    ( ResultFailure <| BadBody <| "Failed to decode arg for " ++ args.endpoint, model, Cmd.none )
+                    ( failWith StatusBadRequest <| "Failed to decode arg for " ++ args.endpoint, model, Cmd.none )
 
         _ ->
-            ( ResultFailure <| BadBody <| "Bytes endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
+            ( failWith StatusBadRequest <| "Bytes endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
             , model
             , Cmd.none
             )
 
 
+handleEndpoint :
+    (SessionId -> BackendModel -> HttpRequest -> ( RPCResult, BackendModel, Cmd msg ))
+    -> HttpRequest
+    -> BackendModel
+    -> ( RPCResult, BackendModel, Cmd msg )
+handleEndpoint fn args model =
+    fn args.sessionId model args
+
+
 handleEndpointJson :
-    (SessionId -> BackendModel -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd msg ))
-    -> RPCArgs
+    (SessionId -> BackendModel -> Headers -> Json.Value -> ( Result Http.Error Json.Value, BackendModel, Cmd msg ))
+    -> HttpRequest
     -> BackendModel
     -> ( RPCResult, BackendModel, Cmd msg )
 handleEndpointJson fn args model =
     case args.body of
-        JSON json ->
-            case fn args.sessionId model json of
+        BodyJson json ->
+            case fn args.sessionId model args.headers json of
                 ( response, newModel, newCmds ) ->
                     case response of
                         Ok value ->
                             ( ResultJson value, newModel, newCmds )
 
                         Err httpErr ->
-                            ( ResultFailure httpErr, newModel, newCmds )
+                            ( failWith StatusBadRequest <| httpErrorToString httpErr, newModel, newCmds )
 
         _ ->
-            ( ResultFailure <| BadBody <| "JSON endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
+            ( failWith StatusBadRequest <| "JSON endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
+            , model
+            , Cmd.none
+            )
+
+
+handleEndpointJsonRaw :
+    (SessionId -> BackendModel -> Headers -> Json.Value -> ( Result RPCResult Json.Value, BackendModel, Cmd msg ))
+    -> HttpRequest
+    -> BackendModel
+    -> ( RPCResult, BackendModel, Cmd msg )
+handleEndpointJsonRaw fn args model =
+    case args.body of
+        BodyJson json ->
+            case fn args.sessionId model args.headers json of
+                ( response, newModel, newCmds ) ->
+                    case response of
+                        Ok value ->
+                            ( ResultJson value, newModel, newCmds )
+
+                        Err failResult ->
+                            ( failResult, newModel, newCmds )
+
+        _ ->
+            ( failWith StatusBadRequest <| "JSON endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
             , model
             , Cmd.none
             )
 
 
 handleEndpointString :
-    (SessionId -> BackendModel -> String -> ( Result Http.Error String, BackendModel, Cmd msg ))
-    -> RPCArgs
+    (SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg ))
+    -> HttpRequest
     -> BackendModel
     -> ( RPCResult, BackendModel, Cmd msg )
 handleEndpointString fn args model =
     case args.body of
-        Raw string ->
-            case fn args.sessionId model string of
+        BodyString string ->
+            case fn args.sessionId model args.headers string of
                 ( response, newModel, newCmds ) ->
                     case response of
                         Ok value ->
                             ( ResultString value, newModel, newCmds )
 
                         Err httpErr ->
-                            ( ResultFailure httpErr, newModel, newCmds )
+                            ( failWith StatusBadRequest <| httpErrorToString httpErr, newModel, newCmds )
 
         _ ->
-            ( ResultFailure <| BadBody <| "String endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
+            ( failWith StatusBadRequest <| "String endpoint '" ++ args.endpoint ++ "' was given body type " ++ bodyTypeToString args.body
             , model
             , Cmd.none
             )
@@ -310,3 +412,492 @@ httpErrorToString err =
 
         BadBody text ->
             "Unexpected HTTP response: " ++ text
+
+
+{-| Custom type representing all http methods
+-}
+type Method
+    = GET
+    | HEAD
+    | POST
+    | PUT
+    | DELETE
+    | CONNECT
+    | OPTIONS
+    | TRACE
+    | PATCH
+
+
+{-| Returns http `Method` as String
+-}
+methodString : Method -> String
+methodString method =
+    case method of
+        GET ->
+            "GET"
+
+        HEAD ->
+            "HEAD"
+
+        POST ->
+            "POST"
+
+        PUT ->
+            "PUT"
+
+        DELETE ->
+            "DELETE"
+
+        CONNECT ->
+            "CONNECT"
+
+        OPTIONS ->
+            "OPTIONS"
+
+        TRACE ->
+            "TRACE"
+
+        PATCH ->
+            "PATCH"
+
+
+{-| Custom type representing all http `StatusCode`
+-}
+type StatusCode
+    = StatusContinue
+    | StatusSwitchingProtocols
+    | StatusProcessing
+    | StatusEarlyHints
+    | StatusOK
+    | StatusCreated
+    | StatusAccepted
+    | StatusNonAuthoritativeInformation
+    | StatusNoContent
+    | StatusResetContent
+    | StatusPartialContent
+    | StatusMultiStatus
+    | StatusAlreadyReported
+    | StatusIMUsed
+    | StatusMultipleChoices
+    | StatusMovedPermanently
+    | StatusFound
+    | StatusSeeOther
+    | StatusNotModified
+    | StatusUseProxy
+    | StatusTemporaryRedirect
+    | StatusPermanentRedirect
+    | StatusBadRequest
+    | StatusUnauthorized
+    | StatusPaymentRequired
+    | StatusForbidden
+    | StatusNotFound
+    | StatusMethodNotAllowed
+    | StatusNotAcceptable
+    | StatusProxyAuthenticationRequired
+    | StatusRequestTimeout
+    | StatusConflict
+    | StatusGone
+    | StatusLengthRequired
+    | StatusPreconditionFailed
+    | StatusPayloadTooLarge
+    | StatusURITooLong
+    | StatusUnsupportedMediaType
+    | StatusRangeNotSatisfiable
+    | StatusExpectationFailed
+    | StatusMisdirectedRequest
+    | StatusUnprocessableEntity
+    | StatusLocked
+    | StatusFailedDependency
+    | StatusTooEarly
+    | StatusUpgradeRequired
+    | StatusPreconditionRequired
+    | StatusTooManyRequests
+    | StatusRequestHeaderFieldsTooLarge
+    | StatusUnavailableForLegalReasons
+    | StatusInternalServerError
+    | StatusNotImplemented
+    | StatusBadGateway
+    | StatusServiceUnavailable
+    | StatusGatewayTimeout
+    | StatusHTTPVersionNotSupported
+    | StatusVariantAlsoNegotiates
+    | StatusInsufficientStorage
+    | StatusLoopDetected
+    | StatusNotExtended
+    | StatusNetworkAuthenticationRequired
+
+
+{-| Returns http StatusCode as integer
+-}
+statusToInt : StatusCode -> Int
+statusToInt code =
+    case code of
+        StatusContinue ->
+            100
+
+        StatusSwitchingProtocols ->
+            101
+
+        StatusProcessing ->
+            102
+
+        StatusEarlyHints ->
+            103
+
+        StatusOK ->
+            200
+
+        StatusCreated ->
+            201
+
+        StatusAccepted ->
+            202
+
+        StatusNonAuthoritativeInformation ->
+            203
+
+        StatusNoContent ->
+            204
+
+        StatusResetContent ->
+            205
+
+        StatusPartialContent ->
+            206
+
+        StatusMultiStatus ->
+            207
+
+        StatusAlreadyReported ->
+            208
+
+        StatusIMUsed ->
+            226
+
+        StatusMultipleChoices ->
+            300
+
+        StatusMovedPermanently ->
+            301
+
+        StatusFound ->
+            302
+
+        StatusSeeOther ->
+            303
+
+        StatusNotModified ->
+            304
+
+        StatusUseProxy ->
+            305
+
+        StatusTemporaryRedirect ->
+            307
+
+        StatusPermanentRedirect ->
+            308
+
+        StatusBadRequest ->
+            400
+
+        StatusUnauthorized ->
+            401
+
+        StatusPaymentRequired ->
+            402
+
+        StatusForbidden ->
+            403
+
+        StatusNotFound ->
+            404
+
+        StatusMethodNotAllowed ->
+            405
+
+        StatusNotAcceptable ->
+            406
+
+        StatusProxyAuthenticationRequired ->
+            407
+
+        StatusRequestTimeout ->
+            408
+
+        StatusConflict ->
+            409
+
+        StatusGone ->
+            410
+
+        StatusLengthRequired ->
+            411
+
+        StatusPreconditionFailed ->
+            412
+
+        StatusPayloadTooLarge ->
+            413
+
+        StatusURITooLong ->
+            414
+
+        StatusUnsupportedMediaType ->
+            415
+
+        StatusRangeNotSatisfiable ->
+            416
+
+        StatusExpectationFailed ->
+            417
+
+        StatusMisdirectedRequest ->
+            421
+
+        StatusUnprocessableEntity ->
+            422
+
+        StatusLocked ->
+            423
+
+        StatusFailedDependency ->
+            424
+
+        StatusTooEarly ->
+            425
+
+        StatusUpgradeRequired ->
+            426
+
+        StatusPreconditionRequired ->
+            428
+
+        StatusTooManyRequests ->
+            429
+
+        StatusRequestHeaderFieldsTooLarge ->
+            431
+
+        StatusUnavailableForLegalReasons ->
+            451
+
+        StatusInternalServerError ->
+            500
+
+        StatusNotImplemented ->
+            501
+
+        StatusBadGateway ->
+            502
+
+        StatusServiceUnavailable ->
+            503
+
+        StatusGatewayTimeout ->
+            504
+
+        StatusHTTPVersionNotSupported ->
+            505
+
+        StatusVariantAlsoNegotiates ->
+            506
+
+        StatusInsufficientStorage ->
+            507
+
+        StatusLoopDetected ->
+            508
+
+        StatusNotExtended ->
+            510
+
+        StatusNetworkAuthenticationRequired ->
+            511
+
+
+statusToString : StatusCode -> String
+statusToString statusCode =
+    case statusCode of
+        StatusContinue ->
+            "Continue"
+
+        StatusSwitchingProtocols ->
+            "Switching Protocols"
+
+        StatusProcessing ->
+            "Processing"
+
+        StatusEarlyHints ->
+            "Early Hints"
+
+        StatusOK ->
+            "OK"
+
+        StatusCreated ->
+            "Created"
+
+        StatusAccepted ->
+            "Accepted"
+
+        StatusNonAuthoritativeInformation ->
+            "Non-Authoritative Information"
+
+        StatusNoContent ->
+            "No Content"
+
+        StatusResetContent ->
+            "Reset Content"
+
+        StatusPartialContent ->
+            "Partial Content"
+
+        StatusMultiStatus ->
+            "Multi-Status"
+
+        StatusAlreadyReported ->
+            "Already Reported"
+
+        StatusIMUsed ->
+            "IM Used"
+
+        StatusMultipleChoices ->
+            "Multiple Choices"
+
+        StatusMovedPermanently ->
+            "Moved Permanently"
+
+        StatusFound ->
+            "Found"
+
+        StatusSeeOther ->
+            "See Other"
+
+        StatusNotModified ->
+            "Not Modified"
+
+        StatusUseProxy ->
+            "Use Proxy"
+
+        StatusTemporaryRedirect ->
+            "Temporary Redirect"
+
+        StatusPermanentRedirect ->
+            "Permanent Redirect"
+
+        StatusBadRequest ->
+            "Bad Request"
+
+        StatusUnauthorized ->
+            "Unauthorized"
+
+        StatusPaymentRequired ->
+            "Payment Required"
+
+        StatusForbidden ->
+            "Forbidden"
+
+        StatusNotFound ->
+            "Not Found"
+
+        StatusMethodNotAllowed ->
+            "Method Not Allowed"
+
+        StatusNotAcceptable ->
+            "Not Acceptable"
+
+        StatusProxyAuthenticationRequired ->
+            "Proxy Authentication Required"
+
+        StatusRequestTimeout ->
+            "Request Timeout"
+
+        StatusConflict ->
+            "Conflict"
+
+        StatusGone ->
+            "Gone"
+
+        StatusLengthRequired ->
+            "Length Required"
+
+        StatusPreconditionFailed ->
+            "Precondition Failed"
+
+        StatusPayloadTooLarge ->
+            "Payload Too Large"
+
+        StatusURITooLong ->
+            "URI Too Long"
+
+        StatusUnsupportedMediaType ->
+            "Unsupported Media Type"
+
+        StatusRangeNotSatisfiable ->
+            "Range Not Satisfiable"
+
+        StatusExpectationFailed ->
+            "Expectation Failed"
+
+        StatusMisdirectedRequest ->
+            "Misdirected Request"
+
+        StatusUnprocessableEntity ->
+            "Unprocessable Entity"
+
+        StatusLocked ->
+            "Locked"
+
+        StatusFailedDependency ->
+            "Failed Dependency"
+
+        StatusTooEarly ->
+            "Too Early"
+
+        StatusUpgradeRequired ->
+            "Upgrade Required"
+
+        StatusPreconditionRequired ->
+            "Precondition Required"
+
+        StatusTooManyRequests ->
+            "Too Many Requests"
+
+        StatusRequestHeaderFieldsTooLarge ->
+            "Request Header Fields Too Large"
+
+        StatusUnavailableForLegalReasons ->
+            "Unavailable For Legal Reasons"
+
+        StatusInternalServerError ->
+            "Internal Server Error"
+
+        StatusNotImplemented ->
+            "Not Implemented"
+
+        StatusBadGateway ->
+            "Bad Gateway"
+
+        StatusServiceUnavailable ->
+            "Service Unavailable"
+
+        StatusGatewayTimeout ->
+            "Gateway Timeout"
+
+        StatusHTTPVersionNotSupported ->
+            "HTTP Version Not Supported"
+
+        StatusVariantAlsoNegotiates ->
+            "Variant Also Negotiates"
+
+        StatusInsufficientStorage ->
+            "Insufficient Storage"
+
+        StatusLoopDetected ->
+            "Loop Detected"
+
+        StatusNotExtended ->
+            "Not Extended"
+
+        StatusNetworkAuthenticationRequired ->
+            "Network Authentication Required"

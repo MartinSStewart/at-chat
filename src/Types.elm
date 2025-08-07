@@ -57,6 +57,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileHash, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -77,6 +78,7 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
@@ -154,7 +156,9 @@ type alias LoggedIn2 =
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : List File
+    , filesToUpload : SeqDict GuildOrDmId (Nonempty FileStatus)
+    , -- Only should be use for making requests to the Rust server
+      sessionId : SessionId
     }
 
 
@@ -252,6 +256,7 @@ type alias BackendModel =
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
+    , files : SeqSet FileHash
     }
 
 
@@ -302,7 +307,7 @@ type FrontendMsg
     | TypedMessage GuildOrDmId String
     | PressedSendMessage GuildOrDmId
     | PressedAttachFiles GuildOrDmId
-    | SelectedFilesToAttach File (List File)
+    | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
@@ -460,6 +465,7 @@ type alias LoginData =
     , dmChannels : SeqDict (Id UserId) DmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , sessionId : SessionId
     }
 
 

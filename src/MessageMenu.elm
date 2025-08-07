@@ -218,6 +218,7 @@ view model extraOptions local loggedIn =
                                     ""
                                     edit
                                     loggedIn.pingUser
+                                    (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                                     local
                                 ]
 

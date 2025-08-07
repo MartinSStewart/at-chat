@@ -27,6 +27,7 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
+import FileStatus exposing (FileStatus(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -35,7 +36,7 @@ import Id exposing (ChannelId, Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
-import List.Nonempty exposing (Nonempty)
+import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
@@ -322,7 +323,8 @@ loadedInitHelper time loginData loading =
 
                     Nothing ->
                         TwoFactorNotStarted
-            , filesToUpload = []
+            , filesToUpload = SeqDict.empty
+            , sessionId = loginData.sessionId
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -887,7 +889,7 @@ isPressMsg msg =
         PressedAttachFiles guildOrDmId ->
             True
 
-        SelectedFilesToAttach file files ->
+        SelectedFilesToAttach _ file files ->
             False
 
         GotFileHashName _ ->
@@ -1145,18 +1147,37 @@ updateLoaded msg model =
                 model
 
         PressedAttachFiles guildOrDmId ->
-            ( model, Effect.File.Select.files [] SelectedFilesToAttach )
+            ( model, Effect.File.Select.files [] (SelectedFilesToAttach guildOrDmId) )
 
-        SelectedFilesToAttach file files ->
+        SelectedFilesToAttach guildOrDmId file files ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | filesToUpload = [] }
-                      --file :: files ++ loggedIn.filesToUpload }
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    let
+                                        newFiles : Nonempty FileStatus
+                                        newFiles =
+                                            Nonempty file files
+                                                |> List.Nonempty.map
+                                                    (\a -> File.mime a |> FileStatus.contentType |> FileUploading)
+                                    in
+                                    case maybe of
+                                        Just list ->
+                                            List.Nonempty.append list newFiles |> Just
+
+                                        Nothing ->
+                                            Just newFiles
+                                )
+                                loggedIn.filesToUpload
+                      }
                     , List.map
                         (\file2 ->
                             Http.request
                                 { method = "POST"
-                                , headers = []
+                                , headers = [ Http.header "sid" (Lamdera.sessionIdToString loggedIn.sessionId) ]
                                 , url = "http://localhost:3000/file/upload"
                                 , body = Http.fileBody file2
                                 , expect = Http.expectString GotFileHashName
@@ -3000,6 +3021,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
+                                                                    , embeddedFiles = SeqDict.empty
                                                                     }
                                                                 )
                                                                 channel
@@ -3043,6 +3065,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
+                                                , embeddedFiles = SeqDict.empty
                                                 }
                                             )
                             in
@@ -3204,6 +3227,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
+                                                                    , embeddedFiles = SeqDict.empty
                                                                     }
                                                                 )
                                                                 channel
@@ -3253,6 +3277,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
+                                                , embeddedFiles = SeqDict.empty
                                                 }
                                             )
                             in
@@ -3426,6 +3451,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = Nothing
+                                                , embeddedFiles = SeqDict.empty
                                                 }
                                             )
                                         |> Just

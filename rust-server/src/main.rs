@@ -2,9 +2,9 @@ use axum::RequestExt;
 use axum::response::Response;
 use axum::{
     Router,
-    body::{Body, Bytes},
-    extract::{Path, Request, DefaultBodyLimit},
-    http::{StatusCode, Uri, header::CONTENT_TYPE},
+    body::Bytes,
+    extract::{DefaultBodyLimit, Path, Request},
+    http::{StatusCode, Uri},
     routing::get,
     routing::post,
 };
@@ -13,12 +13,10 @@ use std::fs;
 
 #[tokio::main]
 async fn main() {
-    println!("Server started!");
-
     let app = Router::new()
         .route(
             "/file/upload",
-            post(upload_file_endpoint).options(upload_file_options_endpoint),
+            post(upload_endpoint).options(options_endpoint),
         )
         .route("/file/{filename}", get(get_file_endpoint))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
@@ -28,108 +26,102 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn upload_file_options_endpoint(request: Request) -> Response {
-    println!("upload_file_options_endpoint {:#?}", request.method());
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("Access-Control-Allow-Origin", "*")
-        .header("Access-Control-Allow-Headers", "*")
-        .body(Body::from("OK"))
-        .unwrap()
+async fn options_endpoint() -> Response<String> {
+    response_with_headers(StatusCode::OK, String::from("OK"))
 }
 
-async fn upload_file_endpoint(request: Request) -> Response<String> {
+fn filepath(hash: String) -> String {
+    String::from("./var/lib/atchat/") + &hash
+}
+
+async fn upload_endpoint(request: Request) -> Response<String> {
     println!("upload_file_endpoint {:#?}", request.method());
 
-    let headers = request.headers(); //.iter().map(|header| header.0).collect();
-    println!("Headers: {:#?}", headers);
+    let session_id: Option<String> = match request.headers().get("sid") {
+        Some(header_value) => match header_value.to_str() {
+            Ok(s) => Some(s.to_string()),
+            Err(_) => None,
+        },
+        None => None,
+    };
 
-    //     let content_type =
-    //         match request.headers().get(CONTENT_TYPE) {
-    //             Some(header) => {
-    //                 match header.to_str() {
-    //                     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
-    //                     Ok("application/json") => Some("json"),
-    //                     Ok("application/pdf") => Some("pdf"),
-    //                     Ok("application/vnd.ms-powerpoint") => Some("ppt"),
-    //                     Ok("application/vnd.openxmlformats-officedocument.presentationml.presentation") => Some("pptx"),
-    //                     Ok("application/vnd.rar") => Some("rar"),
-    //                     Ok("application/x-tar") => Some("tar"),
-    //                     Ok("application/x-7z-compressed") => Some("7z"),
-    //                     Ok("application/xml") => Some("xml"),
-    //                     Ok("application/zip") => Some("zip"),
-    //                     Ok("audio/mpeg") => Some("mp3"),
-    //                     Ok("audio/ogg") => Some("oga"),
-    //                     Ok("audio/wav") => Some("wav"),
-    //                     Ok("audio/webm") => Some("weba"),
-    //                     Ok("image/apng") => Some("apng"),
-    //                     Ok("image/gif") => Some("gif"),
-    //                     Ok("image/jpeg") => Some("jpg"),
-    //                     Ok("image/png") => Some("png"),
-    //                     Ok("image/svg+xml") => Some("svg"),
-    //                     Ok("image/tiff") => Some("tif"),
-    //                     Ok("image/webp") => Some("webp"),
-    //                     Ok("text/css") => Some("css"),
-    //                     Ok("text/csv") => Some("csv"),
-    //                     Ok("text/html") => Some("html"),
-    //                     Ok("text/plain") => Some("txt"),
-    //                     Ok("text/xml") => Some("xml"),
-    //                     Ok("video/mp4") => Some("mp4"),
-    //                     Ok("video/mpeg") => Some("mpeg"),
-    //                     Ok("video/webm") => Some("webm"),
-    //                     Ok(_) => Some(""),
-    //                     Err(_) => None,
-    //                 }
-    //             },
-    //             None => None,
-    //         };
+    match (session_id, request.extract::<Bytes, _>().await) {
+        (Some(session_id2), Ok(bytes)) => {
+            let hash: String = hash_bytes(&bytes);
 
-    match request.extract::<Bytes, _>().await {
-        Ok(bytes) => {
-            //println!("Bytes: {:#?}", bytes);
-            let hash: String = Sha256::digest(bytes)
-                .to_vec()
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
+            match reqwest::Client::new()
+                .post("http://localhost:8000/_r/is-file-upload-allowed")
+                .body(hash.clone() + "," + &session_id2)
+                .send()
+                .await
+            {
+                Ok(response) => match response.text().await {
+                    Ok(text) => {
+                        let path: String = filepath(hash.clone());
+                        println!("{}", text);
+                        if text == "valid" {
+                            match fs::exists(&path) {
+                                Ok(true) => response_with_headers(StatusCode::OK, hash),
 
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Headers", "*")
-                .body(hash)
-                .unwrap()
+                                _ => match fs::write(path, bytes) {
+                                    Ok(()) => response_with_headers(StatusCode::OK, hash),
+                                    Err(_) => response_with_headers(
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        String::from("Internal error"),
+                                    ),
+                                },
+                            }
+                        } else {
+                            response_with_headers(
+                                StatusCode::UNAUTHORIZED,
+                                String::from("Invalid permissions"),
+                            )
+                        }
+                    }
+
+                    _ => response_with_headers(
+                        StatusCode::UNAUTHORIZED,
+                        String::from("Invalid permissions"),
+                    ),
+                },
+
+                Err(_) => response_with_headers(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("Invalid permissions"),
+                ),
+            }
         }
-        Err(_) => Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .header("Access-Control-Allow-Origin", "*")
-            .header("Access-Control-Allow-Headers", "*")
-            .body(String::from("Failed to load request body"))
-            .unwrap(),
+        _ => response_with_headers(
+            StatusCode::UNAUTHORIZED,
+            String::from("Invalid permissions"),
+        ),
     }
 }
 
+fn response_with_headers(status_code: StatusCode, body: String) -> Response<String> {
+    Response::builder()
+        .status(status_code)
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Headers", "*")
+        .body(body)
+        .unwrap()
+}
+
+fn hash_bytes(bytes: &Bytes) -> String {
+    Sha256::digest(&bytes)
+        .to_vec()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
+}
+
 async fn get_file_endpoint(Path(path): Path<String>) -> (StatusCode, Vec<u8>) {
-    let is_valid_filename = match path.split('.').collect::<Vec<_>>().as_slice() {
-        [hash, filetype] => {
-            hash.chars()
-                .all(|x| x.is_ascii_hexdigit() && x.is_lowercase())
-                && filetype
-                    .chars()
-                    .all(|x| x.is_alphabetic() && x.is_lowercase())
-        }
-
-        [hash] => hash
-            .chars()
-            .all(|x| x.is_ascii_hexdigit() && x.is_lowercase()),
-
-        _ => false,
-    };
+    let is_valid_filename = path
+        .chars()
+        .all(|x| x.is_ascii_hexdigit() && x.is_lowercase());
 
     if is_valid_filename {
-        let data: Result<Vec<u8>, std::io::Error> =
-            fs::read(String::from("./var/lib/atchat/") + &path);
+        let data: Result<Vec<u8>, std::io::Error> = fs::read(filepath(path));
         match data {
             Result::Ok(data) => (StatusCode::OK, data),
             Result::Err(_) => (StatusCode::NOT_FOUND, b"File not Found".to_vec()),
