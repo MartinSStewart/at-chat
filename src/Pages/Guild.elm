@@ -1931,7 +1931,7 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                                 , bottom = 0
                                 }
                             , Ui.el
-                                [ (if isSelected then
+                                [ (if isSelected && not isMobile then
                                     NoNotification
 
                                    else
