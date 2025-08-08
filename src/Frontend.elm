@@ -325,6 +325,7 @@ loadedInitHelper time loginData loading =
                         TwoFactorNotStarted
             , filesToUpload = SeqDict.empty
             , sessionId = loginData.sessionId
+            , isReloading = False
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -3960,19 +3961,21 @@ updateLoadedFromBackend msg model =
             ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
 
         YouConnected ->
-            case model.loginStatus of
-                LoggedIn _ ->
-                    ( model, Lamdera.sendToBackend ReloadDataRequest )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | isReloading = True }, Lamdera.sendToBackend ReloadDataRequest )
+                )
+                model
 
         ReloadDataResponse reloadData ->
             case reloadData of
                 Ok loginData ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( { loggedIn | localState = loginDataToLocalState loginData |> Local.init }
+                            ( { loggedIn
+                                | localState = loginDataToLocalState loginData |> Local.init
+                                , isReloading = False
+                              }
                             , Command.none
                             )
                         )
@@ -4299,6 +4302,19 @@ view model =
 
                                         Nothing ->
                                             Ui.noAttr
+                                    , if loggedIn.isReloading then
+                                        Ui.el
+                                            [ Ui.background MyUi.background1
+                                            , Ui.padding 8
+                                            , Ui.width Ui.shrink
+                                            , Ui.border 1
+                                            , Ui.borderColor MyUi.border1
+                                            ]
+                                            (Ui.text "Reloading...")
+                                            |> Ui.inFront
+
+                                      else
+                                        Ui.noAttr
                                     ]
                                     (page loggedIn local)
 

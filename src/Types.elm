@@ -159,6 +159,7 @@ type alias LoggedIn2 =
     , filesToUpload : SeqDict GuildOrDmId (Nonempty FileStatus)
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
+    , isReloading : Bool
     }
 
 
