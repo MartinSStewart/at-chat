@@ -57,7 +57,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileHash, FileStatus)
+import FileStatus exposing (FileHash, FileStatus, FileStatusId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -156,7 +156,7 @@ type alias LoggedIn2 =
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : SeqDict GuildOrDmId (Nonempty FileStatus)
+    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileStatusId) FileStatus)
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
     , isReloading : Bool
@@ -381,7 +381,7 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | GotFileHashName (Result Http.Error String)
+    | GotFileHashName GuildOrDmId (Id FileStatusId) (Result Http.Error String)
 
 
 type alias NewChannelForm =

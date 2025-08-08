@@ -1,4 +1,5 @@
 use axum::RequestExt;
+use axum::body::Body;
 use axum::response::Response;
 use axum::{
     Router,
@@ -18,7 +19,7 @@ async fn main() {
             "/file/upload",
             post(upload_endpoint).options(options_endpoint),
         )
-        .route("/file/{filename}", get(get_file_endpoint))
+        .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .fallback(fallback);
 
@@ -115,19 +116,37 @@ fn hash_bytes(bytes: &Bytes) -> String {
         .collect()
 }
 
-async fn get_file_endpoint(Path(path): Path<String>) -> (StatusCode, Vec<u8>) {
-    let is_valid_filename = path
+async fn get_file_endpoint(
+    Path((content_type, hash)): Path<(String, String)>,
+) -> http::Response<Body> {
+    println!("{}", hash);
+    let is_valid_hash: bool = hash
         .chars()
-        .all(|x| x.is_ascii_hexdigit() && x.is_lowercase());
+        .all(|x| x.is_ascii_hexdigit() && !x.is_uppercase());
 
-    if is_valid_filename {
-        let data: Result<Vec<u8>, std::io::Error> = fs::read(filepath(path));
+    if is_valid_hash {
+        let data: Result<Vec<u8>, std::io::Error> = fs::read(filepath(hash));
         match data {
-            Result::Ok(data) => (StatusCode::OK, data),
-            Result::Err(_) => (StatusCode::NOT_FOUND, b"File not Found".to_vec()),
+            Result::Ok(data) => {
+                let content_type2: String = urlencoding::decode(&content_type)
+                    .expect("UTF-8")
+                    .to_string();
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", content_type2)
+                    .body(Body::from(data))
+                    .unwrap()
+            }
+            Result::Err(_) => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("File not found"))
+                .unwrap(),
         }
     } else {
-        (StatusCode::BAD_REQUEST, b"Invalid filename".to_vec())
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Invalid filename"))
+            .unwrap()
     }
 }
 

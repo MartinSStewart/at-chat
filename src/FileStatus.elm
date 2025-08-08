@@ -2,12 +2,16 @@ module FileStatus exposing
     ( ContentType
     , FileHash
     , FileStatus(..)
+    , FileStatusId
     , contentType
     , contentTypeToString
     , fileHash
+    , fileUrl
     )
 
 import Effect.Http as Http
+import Env
+import Url
 
 
 type FileStatus
@@ -16,8 +20,26 @@ type FileStatus
     | FileError Http.Error
 
 
+type FileStatusId
+    = FileStatusId Never
+
+
 type FileHash
     = FileHash String
+
+
+fileUrl : ContentType -> FileHash -> String
+fileUrl (ContentType contentType2) (FileHash fileHash2) =
+    (if Env.isProduction then
+        "/"
+
+     else
+        "http://localhost:3000/"
+    )
+        ++ "file/"
+        ++ Url.percentEncode contentType2
+        ++ "/"
+        ++ fileHash2
 
 
 fileHash : String -> FileHash

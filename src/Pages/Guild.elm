@@ -20,7 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileStatus)
+import FileStatus exposing (FileStatus, FileStatusId)
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -36,7 +36,7 @@ import Message exposing (Message(..))
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
@@ -1373,7 +1373,7 @@ messageEditingView :
     -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
-    -> Maybe (Nonempty FileStatus)
+    -> Maybe (NonemptyDict (Id FileStatusId) FileStatus)
     -> LocalState
     -> Element FrontendMsg
 messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser filesToUpload local =

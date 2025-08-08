@@ -13,7 +13,7 @@ import Diff
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task
-import FileStatus exposing (FileStatus)
+import FileStatus exposing (FileStatus(..), FileStatusId)
 import Html
 import Html.Attributes
 import Html.Events
@@ -24,6 +24,7 @@ import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
+import NonemptyDict exposing (NonemptyDict)
 import PersonName
 import RichText
 import SeqDict exposing (SeqDict)
@@ -71,7 +72,7 @@ view :
     -> String
     -> String
     -> Maybe MentionUserDropdown
-    -> Maybe (Nonempty FileStatus)
+    -> Maybe (NonemptyDict (Id FileStatusId) FileStatus)
     -> LocalState
     -> Element msg
 view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser filesToUpload local =
@@ -223,6 +224,51 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
                     ]
                     (Ui.html Icons.sendMessage)
                 )
+            , case filesToUpload of
+                Just filesToUpload2 ->
+                    Ui.inFront
+                        (Ui.row
+                            [ Ui.move { x = 0, y = -108, z = 0 } ]
+                            (List.map
+                                (\( fileStatusId, fileStatus ) ->
+                                    case fileStatus of
+                                        FileUploading _ ->
+                                            Ui.el
+                                                [ Ui.width (Ui.px 100)
+                                                , Ui.height (Ui.px 100)
+                                                , Ui.background MyUi.background1
+                                                , Ui.rounded 8
+                                                ]
+                                                Ui.none
+
+                                        FileUploaded contentType fileHash ->
+                                            Ui.image
+                                                [ Ui.width (Ui.px 100)
+                                                , Ui.height (Ui.px 100)
+                                                , Ui.background MyUi.background1
+                                                , Ui.rounded 8
+                                                , Ui.clip
+                                                ]
+                                                { source = FileStatus.fileUrl contentType fileHash
+                                                , description = "A file upload"
+                                                , onLoad = Nothing
+                                                }
+
+                                        FileError error ->
+                                            Ui.el
+                                                [ Ui.width (Ui.px 100)
+                                                , Ui.height (Ui.px 100)
+                                                , Ui.background MyUi.errorColor
+                                                , Ui.rounded 8
+                                                ]
+                                                Ui.none
+                                )
+                                (NonemptyDict.toList filesToUpload2)
+                            )
+                        )
+
+                Nothing ->
+                    Ui.noAttr
             ]
 
 

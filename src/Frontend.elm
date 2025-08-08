@@ -27,7 +27,7 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileStatus(..))
+import FileStatus exposing (FileStatus(..), FileStatusId)
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -893,7 +893,7 @@ isPressMsg msg =
         SelectedFilesToAttach _ file files ->
             False
 
-        GotFileHashName _ ->
+        GotFileHashName _ _ _ ->
             False
 
 
@@ -1153,41 +1153,53 @@ updateLoaded msg model =
         SelectedFilesToAttach guildOrDmId file files ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | filesToUpload =
-                            SeqDict.update
-                                guildOrDmId
-                                (\maybe ->
-                                    let
-                                        newFiles : Nonempty FileStatus
-                                        newFiles =
-                                            Nonempty file files
-                                                |> List.Nonempty.map
-                                                    (\a -> File.mime a |> FileStatus.contentType |> FileUploading)
-                                    in
-                                    case maybe of
-                                        Just list ->
-                                            List.Nonempty.append list newFiles |> Just
-
-                                        Nothing ->
-                                            Just newFiles
-                                )
-                                loggedIn.filesToUpload
-                      }
-                    , List.map
-                        (\file2 ->
+                    let
+                        toRequest id file2 =
                             Http.request
                                 { method = "POST"
                                 , headers = [ Http.header "sid" (Lamdera.sessionIdToString loggedIn.sessionId) ]
                                 , url = "http://localhost:3000/file/upload"
                                 , body = Http.fileBody file2
-                                , expect = Http.expectString GotFileHashName
+                                , expect = Http.expectString (GotFileHashName guildOrDmId id)
                                 , timeout = Nothing
                                 , tracker = Nothing
                                 }
-                        )
-                        (file :: files)
-                        |> Command.batch
+
+                        ( cmds, dict ) =
+                            case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                Just dict2 ->
+                                    List.foldl
+                                        (\file2 ( cmds2, dict3 ) ->
+                                            let
+                                                id =
+                                                    Id.nextId (NonemptyDict.toSeqDict dict3)
+                                            in
+                                            ( toRequest id file2 :: cmds2
+                                            , NonemptyDict.insert
+                                                id
+                                                (File.mime file2 |> FileStatus.contentType |> FileUploading)
+                                                dict3
+                                            )
+                                        )
+                                        ( [], dict2 )
+                                        (file :: files)
+
+                                Nothing ->
+                                    ( List.indexedMap
+                                        (\index file2 -> toRequest (Id.fromInt index) file2)
+                                        (file :: files)
+                                    , List.Nonempty.indexedMap
+                                        (\index file2 ->
+                                            ( Id.fromInt index
+                                            , File.mime file2 |> FileStatus.contentType |> FileUploading
+                                            )
+                                        )
+                                        (Nonempty file files)
+                                        |> NonemptyDict.fromNonemptyList
+                                    )
+                    in
+                    ( { loggedIn | filesToUpload = SeqDict.insert guildOrDmId dict loggedIn.filesToUpload }
+                    , Command.batch cmds
                     )
                 )
                 model
@@ -2698,13 +2710,38 @@ updateLoaded msg model =
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
-        GotFileHashName result ->
-            case Debug.log "GotFileHashName" result of
-                Ok fileHashName ->
-                    ( model, Command.none )
+        GotFileHashName guildOrDmId fileStatusId result ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (NonemptyDict.updateIfExists
+                                    fileStatusId
+                                    (\fileStatus ->
+                                        case fileStatus of
+                                            FileUploading contentType ->
+                                                case result of
+                                                    Ok fileHash ->
+                                                        FileUploaded contentType (FileStatus.fileHash fileHash)
 
-                Err _ ->
-                    ( model, Command.none )
+                                                    Err error ->
+                                                        FileError error
+
+                                            FileUploaded contentType fileHash ->
+                                                fileStatus
+
+                                            FileError error ->
+                                                fileStatus
+                                    )
+                                )
+                                loggedIn.filesToUpload
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
