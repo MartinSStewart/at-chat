@@ -67,6 +67,11 @@ test =
                             )
                             []
                         )
+        , Test.test "[!0]" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '[' "!0]")
+                    |> Expect.equal
+                        (Nonempty (AttachedFile (Id.fromInt 0)) [])
         , Test.test "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '👨' "\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_")
@@ -132,6 +137,10 @@ markdownStringFuzzer =
             , "_"
             , "__"
             , "~~"
+            , "["
+            , "!"
+            , "]"
+            , "0"
             , "👨\u{200D}👩\u{200D}👧\u{200D}👦"
             ]
         )
