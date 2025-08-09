@@ -25,7 +25,7 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import Url exposing (Protocol(..))
 
 
@@ -224,23 +224,23 @@ type Modifiers
     | IsSpoilered
 
 
-modifierToSymbol : Modifiers -> String
+modifierToSymbol : Modifiers -> NonemptyString
 modifierToSymbol modifier =
     case modifier of
         IsBold ->
-            "*"
+            NonemptyString '*' ""
 
         IsItalic ->
-            "_"
+            NonemptyString '_' ""
 
         IsUnderlined ->
-            "__"
+            NonemptyString '_' "_"
 
         IsStrikethrough ->
-            "~~"
+            NonemptyString '~' "~"
 
         IsSpoilered ->
-            "||"
+            NonemptyString '|' "|"
 
 
 type alias LoopState =
@@ -252,135 +252,143 @@ parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
-            --let
-            --    _ =
-            --        Debug.log "state" ( modifiers, state )
-            --in
-            getRemainingText
-                |> Parser.andThen
-                    (\_ ->
-                        --let
-                        --    _ =
-                        --        Debug.log "remaining" remainingText
-                        --in
-                        Parser.oneOf
-                            [ Parser.succeed identity
-                                |. Parser.symbol "@"
-                                |= Parser.oneOf
-                                    (List.map
-                                        (\( userId, user ) ->
-                                            Parser.succeed
-                                                (Loop
-                                                    { current = Array.empty
-                                                    , rest =
-                                                        Array.append
-                                                            state.rest
-                                                            (Array.push (UserMention userId) (parserHelper state))
-                                                    }
-                                                )
-                                                |. Parser.symbol (PersonName.toString user.name)
-                                        )
-                                        (SeqDict.toList users)
-                                        ++ [ Parser.succeed
-                                                (Loop
-                                                    { current = Array.push "@" state.current
-                                                    , rest = state.rest
-                                                    }
-                                                )
-                                           ]
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. Parser.symbol "@"
+                    |= Parser.oneOf
+                        (List.map
+                            (\( userId, user ) ->
+                                Parser.succeed
+                                    (Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (UserMention userId) (parserHelper state))
+                                        }
                                     )
-                            , modifierHelper users True IsBold Bold state modifiers
-                            , modifierHelper users False IsUnderlined Underline state modifiers
-                            , modifierHelper users False IsItalic Italic state modifiers
-                            , modifierHelper users False IsStrikethrough Strikethrough state modifiers
-                            , modifierHelper users False IsSpoilered Spoiler state modifiers
-                            , Parser.succeed
-                                (\( language, text ) ->
-                                    case String.Nonempty.fromString text of
-                                        Just _ ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push
-                                                            (CodeBlock language text)
-                                                            (parserHelper state)
-                                                        )
-                                                }
-
-                                        Nothing ->
-                                            Loop
-                                                { current = Array.push "``````" state.current
-                                                , rest = state.rest
-                                                }
-                                )
-                                |= codeBlockParser
-                                |> Parser.backtrackable
-                            , Parser.succeed
-                                (\text ->
-                                    case String.Nonempty.fromString text of
-                                        Just a ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push
-                                                            (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
-                                                            (parserHelper state)
-                                                        )
-                                                }
-
-                                        Nothing ->
-                                            Loop
-                                                { current = Array.push "``" state.current
-                                                , rest = state.rest
-                                                }
-                                )
-                                |. Parser.symbol "`"
-                                |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
-                                |. Parser.symbol "`"
-                                |> Parser.backtrackable
-                            , Parser.succeed Tuple.pair
-                                |= Parser.oneOf
-                                    [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
-                                    , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
-                                    ]
-                                |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
-                                        |> Parser.getChompedString
-                                   )
-                                |> Parser.map
-                                    (\( protocol, rest ) ->
-                                        (case Url.fromString ("https://" ++ rest) of
-                                            Just _ ->
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push (Hyperlink protocol rest) (parserHelper state))
-                                                }
-
-                                            Nothing ->
-                                                { current = Array.push (hyperlinkToString protocol rest) state.current
-                                                , rest = state.rest
-                                                }
-                                        )
-                                            |> Loop
+                                    |. Parser.symbol (PersonName.toString user.name)
+                            )
+                            (SeqDict.toList users)
+                            ++ [ Parser.succeed
+                                    (Loop
+                                        { current = Array.push "@" state.current
+                                        , rest = state.rest
+                                        }
                                     )
-                            , Parser.chompIf (\_ -> True)
-                                |> Parser.getChompedString
-                                |> Parser.map
-                                    (\a ->
-                                        Loop
-                                            { current = Array.push a state.current
-                                            , rest = state.rest
-                                            }
-                                    )
-                            , Parser.map (\() -> bailOut state modifiers) Parser.end
-                            ]
+                               ]
+                        )
+                , modifierHelper users True IsBold Bold state modifiers
+                , modifierHelper users False IsUnderlined Underline state modifiers
+                , modifierHelper users False IsItalic Italic state modifiers
+                , modifierHelper users False IsStrikethrough Strikethrough state modifiers
+                , modifierHelper users False IsSpoilered Spoiler state modifiers
+                , Parser.succeed
+                    (\( language, text ) ->
+                        case String.Nonempty.fromString text of
+                            Just _ ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (CodeBlock language text)
+                                                (parserHelper state)
+                                            )
+                                    }
+
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``````" state.current
+                                    , rest = state.rest
+                                    }
                     )
+                    |= codeBlockParser
+                    |> Parser.backtrackable
+                , Parser.succeed
+                    (\text ->
+                        case String.Nonempty.fromString text of
+                            Just a ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
+                                                (parserHelper state)
+                                            )
+                                    }
+
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``" state.current
+                                    , rest = state.rest
+                                    }
+                    )
+                    |. Parser.symbol "`"
+                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                    |. Parser.symbol "`"
+                    |> Parser.backtrackable
+                , Parser.succeed Tuple.pair
+                    |= Parser.oneOf
+                        [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
+                        , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
+                        ]
+                    |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
+                            |> Parser.getChompedString
+                       )
+                    |> Parser.map
+                        (\( protocol, rest ) ->
+                            (case Url.fromString ("https://" ++ rest) of
+                                Just _ ->
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                    }
+
+                                Nothing ->
+                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    , rest = state.rest
+                                    }
+                            )
+                                |> Loop
+                        )
+                , Parser.chompIf (\_ -> True)
+                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
+                    |> Parser.getChompedString
+                    |> Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.push a state.current
+                                , rest = state.rest
+                                }
+                        )
+                , Parser.map (\() -> bailOut state modifiers) Parser.end
+                ]
         )
+
+
+allModifiers : List Modifiers
+allModifiers =
+    [ IsBold
+    , IsItalic
+    , IsUnderlined
+    , IsStrikethrough
+    , IsSpoilered
+    ]
+
+
+stopOnChar : SeqSet Char
+stopOnChar =
+    [ '@', 'h', '`' ]
+        ++ List.map
+            (\modifier -> modifierToSymbol modifier |> String.Nonempty.head)
+            allModifiers
+        |> SeqSet.fromList
 
 
 codeBlockParser : Parser ( Language, String )
@@ -466,9 +474,12 @@ modifierHelper :
     -> Parser (Step LoopState (Array RichText))
 modifierHelper users noTrailingWhitespace modifier container state modifiers =
     let
-        symbol : String
+        symbol : NonemptyString
         symbol =
             modifierToSymbol modifier
+
+        symbolText =
+            String.Nonempty.toString symbol
     in
     if List.head modifiers == Just modifier then
         Parser.map
@@ -482,33 +493,18 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
                         Done (Array.fromList [ container nonempty ])
 
                     Nothing ->
-                        (case modifier of
-                            IsBold ->
-                                NormalText '*' "*"
-
-                            IsItalic ->
-                                NormalText '_' "_"
-
-                            IsUnderlined ->
-                                NormalText '_' "___"
-
-                            IsStrikethrough ->
-                                NormalText '~' "~~~"
-
-                            IsSpoilered ->
-                                NormalText '|' "|||"
-                        )
+                        NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol)
                             |> List.singleton
                             |> Array.fromList
                             |> Done
             )
-            (Parser.symbol symbol)
+            (Parser.symbol symbolText)
 
     else if List.member modifier modifiers then
         getRemainingText
             |> Parser.andThen
                 (\remainingText ->
-                    if String.startsWith symbol remainingText then
+                    if String.startsWith symbolText remainingText then
                         bailOut state modifiers |> Parser.succeed
 
                     else
@@ -517,14 +513,14 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
 
     else
         Parser.succeed identity
-            |. Parser.symbol symbol
+            |. Parser.symbol symbolText
             |= Parser.oneOf
                 [ if noTrailingWhitespace then
                     getRemainingText
                         |> Parser.andThen
                             (\remainingText ->
                                 if
-                                    String.startsWith symbol remainingText
+                                    String.startsWith symbolText remainingText
                                         || String.startsWith " " remainingText
                                 then
                                     Parser.backtrackable (Parser.problem "")
@@ -549,7 +545,7 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
                                 }
                         )
                         (parser users (modifier :: modifiers))
-                , Loop { current = Array.push symbol state.current, rest = state.rest }
+                , Loop { current = Array.push symbolText state.current, rest = state.rest }
                     |> Parser.succeed
                 ]
 
