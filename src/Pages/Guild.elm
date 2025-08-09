@@ -20,7 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileStatus, FileStatusId)
+import FileStatus exposing (FileStatus(..), FileStatusId)
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -1181,7 +1181,17 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 )
             )
         , Ui.column
-            [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
+            [ Ui.paddingXY 2 0
+            , Ui.heightMin 0
+            , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    FileStatus.fileUploadPreview (PressedDeletePendingUpload guildOrDmId) filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
+            ]
             [ case replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
@@ -1225,7 +1235,6 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                         ""
                 )
                 loggedIn.pingUser
-                (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                 local
             , (case
                 SeqDict.filter
@@ -1416,7 +1425,6 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                         ""
                         editing.text
                         pingUser
-                        filesToUpload
                         local
                         |> Ui.el [ Ui.paddingXY 5 0 ]
                     , Ui.row
@@ -1587,6 +1595,30 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                                    )
                             )
                             |> Ui.html
+                        , Ui.column
+                            [ Ui.spacing 8 ]
+                            (List.map
+                                (\( fileHash, contentType ) ->
+                                    let
+                                        url =
+                                            FileStatus.fileUrl contentType fileHash
+                                    in
+                                    if FileStatus.isImage contentType then
+                                        Ui.image
+                                            [ Ui.widthMax 500
+                                            , Ui.heightMax 500
+                                            , Ui.linkNewTab url
+                                            ]
+                                            { source = url
+                                            , description = ""
+                                            , onLoad = Nothing
+                                            }
+
+                                    else
+                                        Ui.none
+                                )
+                                message2.attachedFiles
+                            )
                         ]
                     ]
                 )

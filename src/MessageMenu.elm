@@ -218,7 +218,6 @@ view model extraOptions local loggedIn =
                                     ""
                                     edit
                                     loggedIn.pingUser
-                                    (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                                     local
                                 ]
 
@@ -384,7 +383,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                             [ Ui.Font.color MyUi.errorColor ]
                             (button
                                 isMobile
-                                Icons.delete
+                                (Icons.delete 24)
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
                             )

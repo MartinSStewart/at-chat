@@ -57,7 +57,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileHash, FileStatus, FileStatusId)
+import FileStatus exposing (ContentType, FileHash, FileStatus, FileStatusId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -382,6 +382,7 @@ type FrontendMsg
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileStatusId) (Result Http.Error String)
+    | PressedDeletePendingUpload GuildOrDmId (Id FileStatusId)
 
 
 type alias NewChannelForm =
@@ -481,7 +482,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (List ( FileHash, ContentType ))
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -510,7 +511,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int)
+    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (List ( FileHash, ContentType ))
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)

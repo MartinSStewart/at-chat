@@ -28,6 +28,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
+import FileStatus exposing (ContentType, FileHash)
 import GuildName
 import Hex
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -838,7 +839,7 @@ handleDiscordCreateMessage message model =
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
                                             , repliedTo = Nothing
-                                            , embeddedFiles = SeqDict.empty
+                                            , attachedFiles = []
                                             }
                                         )
                                     |> Just
@@ -905,7 +906,7 @@ handleDiscordCreateMessage message model =
                                                         , reactions = SeqDict.empty
                                                         , editedAt = Nothing
                                                         , repliedTo = Nothing
-                                                        , embeddedFiles = SeqDict.empty
+                                                        , attachedFiles = []
                                                         }
                                                     )
                                                     { channel
@@ -928,6 +929,7 @@ handleDiscordCreateMessage message model =
                                 (GuildOrDmId_Guild guildId channelId)
                                 richText
                                 Nothing
+                                []
                                 |> ServerChange
                             )
                             model
@@ -1223,20 +1225,30 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         (adminChangeUpdate clientId changeId adminChange model2 time)
 
-                Local_SendMessage _ guildOrDmId text repliedTo ->
+                Local_SendMessage _ guildOrDmId text repliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             asGuildMember
                                 model2
                                 sessionId
                                 guildId
-                                (sendGuildMessage model2 time clientId changeId guildId channelId text repliedTo)
+                                (sendGuildMessage
+                                    model2
+                                    time
+                                    clientId
+                                    changeId
+                                    guildId
+                                    channelId
+                                    text
+                                    repliedTo
+                                    attachedFiles
+                                )
 
                         GuildOrDmId_Dm otherUserId ->
                             asUser
                                 model2
                                 sessionId
-                                (sendDirectMessage model2 time clientId changeId otherUserId text repliedTo)
+                                (sendDirectMessage model2 time clientId changeId otherUserId text repliedTo attachedFiles)
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
@@ -2326,10 +2338,11 @@ sendDirectMessage :
     -> Id UserId
     -> Nonempty RichText
     -> Maybe Int
+    -> List ( FileHash, ContentType )
     -> Id UserId
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDirectMessage model time clientId changeId otherUserId text repliedTo userId user =
+sendDirectMessage model time clientId changeId otherUserId text repliedTo attachedFiles userId user =
     let
         dmChannelId : DmChannelId
         dmChannelId =
@@ -2347,7 +2360,7 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
                         , reactions = SeqDict.empty
                         , editedAt = Nothing
                         , repliedTo = repliedTo
-                        , embeddedFiles = SeqDict.empty
+                        , attachedFiles = attachedFiles
                         }
                     )
 
@@ -2365,13 +2378,13 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo userId
                 model.users
       }
     , Command.batch
-        [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo)
+        [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo attachedFiles)
             |> Lamdera.sendToFrontend clientId
         , broadcastToDmChannel
             clientId
             userId
             otherUserId
-            (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo)
+            (Server_SendMessage userId time (GuildOrDmId_Dm otherUserId) text repliedTo attachedFiles)
             model
         , case
             ( OneToOne.first dmChannelId model.discordDms
@@ -2425,11 +2438,12 @@ sendGuildMessage :
     -> Id ChannelId
     -> Nonempty RichText
     -> Maybe Int
+    -> List ( FileHash, ContentType )
     -> Id UserId
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId text repliedTo userId user guild =
+sendGuildMessage model time clientId changeId guildId channelId text repliedTo attachedFiles userId user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
@@ -2443,7 +2457,7 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                             , reactions = SeqDict.empty
                             , editedAt = Nothing
                             , repliedTo = repliedTo
-                            , embeddedFiles = SeqDict.empty
+                            , attachedFiles = attachedFiles
                             }
                         )
                         channel
@@ -2467,12 +2481,16 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo u
                         model.users
               }
             , Command.batch
-                [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Guild guildId channelId) text repliedTo)
+                [ LocalChangeResponse
+                    changeId
+                    (Local_SendMessage time (GuildOrDmId_Guild guildId channelId) text repliedTo attachedFiles)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuildExcludingOne
                     clientId
                     guildId
-                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text repliedTo |> ServerChange)
+                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text repliedTo attachedFiles
+                        |> ServerChange
+                    )
                     model
                 , case ( channel2.linkedId, model.botToken ) of
                     ( Just discordChannelId, Just botToken ) ->

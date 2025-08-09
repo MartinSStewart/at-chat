@@ -72,10 +72,9 @@ view :
     -> String
     -> String
     -> Maybe MentionUserDropdown
-    -> Maybe (NonemptyDict (Id FileStatusId) FileStatus)
     -> LocalState
     -> Element msg
-view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser filesToUpload local =
+view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -224,51 +223,6 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
                     ]
                     (Ui.html Icons.sendMessage)
                 )
-            , case filesToUpload of
-                Just filesToUpload2 ->
-                    Ui.inFront
-                        (Ui.row
-                            [ Ui.move { x = 0, y = -108, z = 0 } ]
-                            (List.map
-                                (\( fileStatusId, fileStatus ) ->
-                                    case fileStatus of
-                                        FileUploading _ ->
-                                            Ui.el
-                                                [ Ui.width (Ui.px 100)
-                                                , Ui.height (Ui.px 100)
-                                                , Ui.background MyUi.background1
-                                                , Ui.rounded 8
-                                                ]
-                                                Ui.none
-
-                                        FileUploaded contentType fileHash ->
-                                            Ui.image
-                                                [ Ui.width (Ui.px 100)
-                                                , Ui.height (Ui.px 100)
-                                                , Ui.background MyUi.background1
-                                                , Ui.rounded 8
-                                                , Ui.clip
-                                                ]
-                                                { source = FileStatus.fileUrl contentType fileHash
-                                                , description = "A file upload"
-                                                , onLoad = Nothing
-                                                }
-
-                                        FileError error ->
-                                            Ui.el
-                                                [ Ui.width (Ui.px 100)
-                                                , Ui.height (Ui.px 100)
-                                                , Ui.background MyUi.errorColor
-                                                , Ui.rounded 8
-                                                ]
-                                                Ui.none
-                                )
-                                (NonemptyDict.toList filesToUpload2)
-                            )
-                        )
-
-                Nothing ->
-                    Ui.noAttr
             ]
 
 

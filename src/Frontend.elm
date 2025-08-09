@@ -896,6 +896,9 @@ isPressMsg msg =
         GotFileHashName _ _ _ ->
             False
 
+        PressedDeletePendingUpload _ _ ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1134,11 +1137,31 @@ updateLoaded msg model =
                                     guildOrDmId
                                     (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
                                     (SeqDict.get guildOrDmId loggedIn.replyTo)
+                                    (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                        Just dict ->
+                                            NonemptyDict.toList dict
+                                                |> List.filterMap
+                                                    (\( _, status ) ->
+                                                        case status of
+                                                            FileUploading _ ->
+                                                                Nothing
+
+                                                            FileUploaded contentType fileHash ->
+                                                                Just ( fileHash, contentType )
+
+                                                            FileError _ ->
+                                                                Nothing
+                                                    )
+
+                                        Nothing ->
+                                            []
+                                    )
                                     |> Just
                                 )
                                 { loggedIn
                                     | drafts = SeqDict.remove guildOrDmId loggedIn.drafts
                                     , replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo
+                                    , filesToUpload = SeqDict.remove guildOrDmId loggedIn.filesToUpload
                                 }
                                 scrollToBottomOfChannel
 
@@ -2743,6 +2766,30 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDeletePendingUpload guildOrDmId fileStatusId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just dict ->
+                                            NonemptyDict.toSeqDict dict
+                                                |> SeqDict.remove fileStatusId
+                                                |> NonemptyDict.fromSeqDict
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                loggedIn.filesToUpload
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
@@ -3031,7 +3078,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text repliedTo ->
+                Local_SendMessage createdAt guildOrDmId text repliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -3059,7 +3106,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
-                                                                    , embeddedFiles = SeqDict.empty
+                                                                    , attachedFiles = attachedFiles
                                                                     }
                                                                 )
                                                                 channel
@@ -3103,7 +3150,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
-                                                , embeddedFiles = SeqDict.empty
+                                                , attachedFiles = attachedFiles
                                                 }
                                             )
                             in
@@ -3235,7 +3282,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt guildOrDmId text repliedTo ->
+                Server_SendMessage userId createdAt guildOrDmId text repliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -3265,7 +3312,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
-                                                                    , embeddedFiles = SeqDict.empty
+                                                                    , attachedFiles = attachedFiles
                                                                     }
                                                                 )
                                                                 channel
@@ -3315,7 +3362,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
-                                                , embeddedFiles = SeqDict.empty
+                                                , attachedFiles = attachedFiles
                                                 }
                                             )
                             in
@@ -3489,7 +3536,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = Nothing
-                                                , embeddedFiles = SeqDict.empty
+                                                , attachedFiles = []
                                                 }
                                             )
                                         |> Just
@@ -3947,7 +3994,7 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     Command.none
 
-                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo) ->
+                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _) ->
                             case guildOrDmId of
                                 GuildOrDmId_Guild guildId channelId ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
@@ -4046,7 +4093,7 @@ logout model =
 
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 scrollToBottomOfChannel =
-    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999 |> Task.attempt (\_ -> ScrolledToBottom)
+    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> ScrolledToBottom)
 
 
 playNotificationSound :
@@ -4112,7 +4159,7 @@ pendingChangesText localChange =
                 Pages.Admin.SetDiscordBotToken _ ->
                     "Set Discord bot token"
 
-        Local_SendMessage _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
         Local_NewChannel _ _ _ ->
