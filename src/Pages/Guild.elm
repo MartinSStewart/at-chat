@@ -20,7 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileStatus(..), FileStatusId)
+import FileStatus exposing (FileId, FileStatus(..))
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -1382,7 +1382,7 @@ messageEditingView :
     -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
-    -> Maybe (NonemptyDict (Id FileStatusId) FileStatus)
+    -> Maybe (NonemptyDict (Id FileId) FileStatus)
     -> LocalState
     -> Element FrontendMsg
 messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser filesToUpload local =
@@ -1570,6 +1570,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                                         SeqSet.empty
                                 )
                                 allUsers
+                                message2.attachedFiles
                                 message2.content
                                 ++ (if isBeingEdited then
                                         [ Html.span
@@ -1595,30 +1596,6 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                                    )
                             )
                             |> Ui.html
-                        , Ui.column
-                            [ Ui.spacing 8 ]
-                            (List.map
-                                (\( fileHash, contentType ) ->
-                                    let
-                                        url =
-                                            FileStatus.fileUrl contentType fileHash
-                                    in
-                                    if FileStatus.isImage contentType then
-                                        Ui.image
-                                            [ Ui.widthMax 500
-                                            , Ui.heightMax 500
-                                            , Ui.linkNewTab url
-                                            ]
-                                            { source = url
-                                            , description = ""
-                                            , onLoad = Nothing
-                                            }
-
-                                    else
-                                        Ui.none
-                                )
-                                message2.attachedFiles
-                            )
                         ]
                     ]
                 )
@@ -1686,6 +1663,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                                     SeqSet.empty
                             )
                             allUsers
+                            repliedToData.attachedFiles
                             repliedToData.content
                     )
                     |> Ui.html

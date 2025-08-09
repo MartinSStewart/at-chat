@@ -1,8 +1,8 @@
 module FileStatus exposing
     ( ContentType
     , FileHash
+    , FileId
     , FileStatus(..)
-    , FileStatusId
     , contentType
     , contentTypeToString
     , fileHash
@@ -30,7 +30,7 @@ type FileStatus
     | FileError Http.Error
 
 
-type FileStatusId
+type FileId
     = FileStatusId Never
 
 
@@ -81,7 +81,7 @@ contentTypeToString (ContentType a) =
     a
 
 
-fileUploadPreview : (Id FileStatusId -> msg) -> NonemptyDict.NonemptyDict (Id FileStatusId) FileStatus -> Ui.Element msg
+fileUploadPreview : (Id FileId -> msg) -> NonemptyDict.NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
 fileUploadPreview onPressDelete filesToUpload2 =
     Ui.row
         [ Ui.spacing 2, Ui.move { x = 0, y = -100, z = 0 }, Ui.width Ui.shrink ]

@@ -3,6 +3,7 @@ module RichText exposing
     , RichText(..)
     , RichTextState
     , append
+    , attachedFilePrefix
     , fromNonemptyString
     , mentionsUser
     , textInputView
@@ -14,9 +15,11 @@ module RichText exposing
 import Array exposing (Array)
 import Discord.Id
 import Discord.Markdown
+import FileStatus exposing (ContentType, FileHash, FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -40,6 +43,7 @@ type RichText
     | Hyperlink Protocol String
     | InlineCode Char String
     | CodeBlock Language String
+    | AttachedFile (Id FileId)
 
 
 type Language
@@ -110,6 +114,9 @@ toString users nonempty =
                            )
                         ++ string
                         ++ "```"
+
+                AttachedFile fileId ->
+                    attachedFilePrefix ++ Id.toString fileId ++ "]"
         )
         nonempty
         |> List.Nonempty.toList
@@ -177,6 +184,9 @@ normalize nonempty =
 
                 CodeBlock language string ->
                     List.Nonempty.cons (CodeBlock language string) nonempty2
+
+                AttachedFile fileId ->
+                    List.Nonempty.cons (AttachedFile fileId) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -209,6 +219,9 @@ normalize nonempty =
 
                 CodeBlock language string ->
                     CodeBlock language string
+
+                AttachedFile fileId ->
+                    AttachedFile fileId
             )
             []
         )
@@ -357,6 +370,21 @@ parser users modifiers =
                             )
                                 |> Loop
                         )
+                , Parser.succeed identity
+                    |. Parser.symbol attachedFilePrefix
+                    |= Parser.int
+                    |. Parser.symbol "]"
+                    |> Parser.backtrackable
+                    |> Parser.map
+                        (\int ->
+                            { current = Array.empty
+                            , rest =
+                                Array.append
+                                    state.rest
+                                    (Array.push (AttachedFile (Id.fromInt int)) (parserHelper state))
+                            }
+                                |> Loop
+                        )
                 , Parser.chompIf (\_ -> True)
                     |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
                     |> Parser.getChompedString
@@ -372,6 +400,11 @@ parser users modifiers =
         )
 
 
+attachedFilePrefix : String
+attachedFilePrefix =
+    "[!"
+
+
 allModifiers : List Modifiers
 allModifiers =
     [ IsBold
@@ -384,7 +417,7 @@ allModifiers =
 
 stopOnChar : SeqSet Char
 stopOnChar =
-    [ '@', 'h', '`' ]
+    [ '[', '@', 'h', '`' ]
         ++ List.map
             (\modifier -> modifierToSymbol modifier |> String.Nonempty.head)
             allModifiers
@@ -594,6 +627,9 @@ mentionsUser userId nonempty =
 
                 CodeBlock _ _ ->
                     False
+
+                AttachedFile _ ->
+                    False
         )
         nonempty
 
@@ -602,15 +638,17 @@ view :
     (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) ( ContentType, FileHash )
     -> Nonempty RichText
     -> List (Html msg)
-view pressedSpoiler revealedSpoilers users nonempty =
+view pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
         pressedSpoiler
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
+        attachedFiles
         nonempty
         |> Tuple.second
 
@@ -621,9 +659,10 @@ viewHelper :
     -> RichTextState
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) ( ContentType, FileHash )
     -> Nonempty RichText
     -> ( Int, List (Html msg) )
-viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
+viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -653,6 +692,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | italic = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -666,6 +706,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | underline = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -679,6 +720,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | bold = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -692,6 +734,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | strikethrough = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -714,6 +757,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 )
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
@@ -799,6 +843,42 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 ]
                                 [ Html.text text ]
                            ]
+                    )
+
+                AttachedFile fileId ->
+                    ( spoilerIndex2
+                    , case SeqDict.get fileId attachedFiles of
+                        Just ( contentType, fileHash ) ->
+                            let
+                                fileUrl =
+                                    FileStatus.fileUrl contentType fileHash
+                            in
+                            currentList
+                                ++ [ if FileStatus.isImage contentType then
+                                        Html.img
+                                            [ Html.Attributes.src fileUrl
+                                            , Html.Attributes.style "max-width" "500px"
+                                            , Html.Attributes.style "max-height" "500px"
+                                            , Html.Attributes.style "width" "100%"
+                                            , Html.Attributes.style "display" "block"
+                                            ]
+                                            []
+
+                                     else
+                                        Html.a
+                                            [ Html.Attributes.style "width" "100px"
+                                            , Html.Attributes.style "height" "100px"
+                                            , Html.Attributes.style "background-color" "rgb(100,100,100)"
+                                            , Html.Attributes.style "border-radius" "8px"
+                                            , Html.Attributes.style "display" "block"
+                                            , Html.Attributes.href fileUrl
+                                            , Html.Attributes.target "_blank"
+                                            ]
+                                            [ Icons.download ]
+                                   ]
+
+                        Nothing ->
+                            currentList
                     )
         )
         ( spoilerIndex, [] )
@@ -921,6 +1001,9 @@ textInputViewHelper state allUsers nonempty =
                     , Html.text string
                     , formatText "```"
                     ]
+
+                AttachedFile fileId ->
+                    [ formatText (attachedFilePrefix ++ Id.toString fileId ++ "]") ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -942,8 +1025,12 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-toDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> Nonempty RichText -> List (Discord.Markdown.Markdown a)
-toDiscord mapping content =
+toDiscord :
+    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> Nonempty RichText
+    -> List (Discord.Markdown.Markdown a)
+toDiscord mapping attachedFiles content =
     List.map
         (\item ->
             case item of
@@ -959,19 +1046,19 @@ toDiscord mapping content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord mapping nonempty)
+                    Discord.Markdown.spoiler (toDiscord mapping attachedFiles nonempty)
 
                 Hyperlink protocol string ->
                     Discord.Markdown.text (hyperlinkToString protocol string)
@@ -989,5 +1076,13 @@ toDiscord mapping content =
                                 Nothing
                         )
                         string
+
+                AttachedFile fileId ->
+                    case SeqDict.get fileId attachedFiles of
+                        Just ( contentType, fileHash ) ->
+                            Discord.Markdown.text (FileStatus.fileUrl contentType fileHash)
+
+                        Nothing ->
+                            Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)

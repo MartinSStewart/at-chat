@@ -57,7 +57,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (ContentType, FileHash, FileStatus, FileStatusId)
+import FileStatus exposing (ContentType, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -156,7 +156,7 @@ type alias LoggedIn2 =
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileStatusId) FileStatus)
+    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
     , isReloading : Bool
@@ -381,8 +381,8 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | GotFileHashName GuildOrDmId (Id FileStatusId) (Result Http.Error String)
-    | PressedDeletePendingUpload GuildOrDmId (Id FileStatusId)
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error String)
+    | PressedDeletePendingUpload GuildOrDmId (Id FileId)
 
 
 type alias NewChannelForm =
@@ -482,7 +482,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (List ( FileHash, ContentType ))
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (SeqDict (Id FileId) ( ContentType, FileHash ))
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -511,7 +511,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (List ( FileHash, ContentType ))
+    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (SeqDict (Id FileId) ( ContentType, FileHash ))
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)

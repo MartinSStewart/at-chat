@@ -28,7 +28,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
-import FileStatus exposing (ContentType, FileHash)
+import FileStatus exposing (ContentType, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -513,7 +513,7 @@ handleDiscordEditMessage edit model =
                                     RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) edit.content
                             in
                             case LocalState.editMessage userId edit.timestamp richText channelId messageIndex guild of
-                                Ok guild2 ->
+                                Ok ( _, guild2 ) ->
                                     ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
                                     , broadcastToGuild
                                         guildId
@@ -839,7 +839,7 @@ handleDiscordCreateMessage message model =
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
                                             , repliedTo = Nothing
-                                            , attachedFiles = []
+                                            , attachedFiles = SeqDict.empty
                                             }
                                         )
                                     |> Just
@@ -906,7 +906,7 @@ handleDiscordCreateMessage message model =
                                                         , reactions = SeqDict.empty
                                                         , editedAt = Nothing
                                                         , repliedTo = Nothing
-                                                        , attachedFiles = []
+                                                        , attachedFiles = SeqDict.empty
                                                         }
                                                     )
                                                     { channel
@@ -929,7 +929,7 @@ handleDiscordCreateMessage message model =
                                 (GuildOrDmId_Guild guildId channelId)
                                 richText
                                 Nothing
-                                []
+                                SeqDict.empty
                                 |> ServerChange
                             )
                             model
@@ -1605,7 +1605,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             messageIndex
                                             guild
                                     of
-                                        Ok guild2 ->
+                                        Ok ( newMessage, guild2 ) ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
                                                 [ Local_SendEditMessage time guildOrDmId messageIndex newContent
@@ -1631,7 +1631,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     (botTokenToAuth botToken)
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
-                                                                    , content = toDiscordContent model2 newContent
+                                                                    , content =
+                                                                        toDiscordContent
+                                                                            model2
+                                                                            newMessage.attachedFiles
+                                                                            newMessage.content
                                                                     }
                                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
@@ -1668,7 +1672,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     messageIndex
                                                     dmChannel
                                             of
-                                                Ok dmChannel2 ->
+                                                Ok ( newMessage, dmChannel2 ) ->
                                                     ( { model2
                                                         | dmChannels =
                                                             SeqDict.insert dmChannelId dmChannel2 model2.dmChannels
@@ -1695,7 +1699,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                             (botTokenToAuth botToken)
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
-                                                                            , content = toDiscordContent model2 newContent
+                                                                            , content = toDiscordContent model2 newMessage.attachedFiles newMessage.content
                                                                             }
                                                                             |> Task.attempt (\_ -> EditedDiscordMessage)
 
@@ -2039,9 +2043,9 @@ broadcastToEveryoneWhoCanSeeUser clientId userId change model =
         |> Command.batch
 
 
-toDiscordContent : BackendModel -> Nonempty RichText -> String
-toDiscordContent model content =
-    Discord.Markdown.toString (RichText.toDiscord model.discordUsers content)
+toDiscordContent : BackendModel -> SeqDict (Id FileId) ( ContentType, FileHash ) -> Nonempty RichText -> String
+toDiscordContent model attachedFiles content =
+    Discord.Markdown.toString (RichText.toDiscord model.discordUsers attachedFiles content)
 
 
 joinGuildByInvite :
@@ -2338,7 +2342,7 @@ sendDirectMessage :
     -> Id UserId
     -> Nonempty RichText
     -> Maybe Int
-    -> List ( FileHash, ContentType )
+    -> SeqDict (Id FileId) ( ContentType, FileHash )
     -> Id UserId
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -2395,7 +2399,7 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo attach
                 Discord.createMessage
                     (botTokenToAuth botToken)
                     { channelId = discordChannelId
-                    , content = toDiscordContent model text
+                    , content = toDiscordContent model attachedFiles text
                     , replyTo = Nothing
                     }
                     |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
@@ -2438,7 +2442,7 @@ sendGuildMessage :
     -> Id ChannelId
     -> Nonempty RichText
     -> Maybe Int
-    -> List ( FileHash, ContentType )
+    -> SeqDict (Id FileId) ( ContentType, FileHash )
     -> Id UserId
     -> BackendUser
     -> BackendGuild
@@ -2497,7 +2501,7 @@ sendGuildMessage model time clientId changeId guildId channelId text repliedTo a
                         Discord.createMessage
                             (botTokenToAuth botToken)
                             { channelId = discordChannelId
-                            , content = toDiscordContent model text
+                            , content = toDiscordContent model attachedFiles text
                             , replyTo = Nothing
                             }
                             |> Task.attempt

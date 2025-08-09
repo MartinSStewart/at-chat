@@ -13,7 +13,7 @@ import Diff
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Task as Task
-import FileStatus exposing (FileStatus(..), FileStatusId)
+import FileStatus exposing (FileId, FileStatus(..))
 import Html
 import Html.Attributes
 import Html.Events

@@ -16,7 +16,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File
+import Effect.File as File exposing (File)
 import Effect.File.Select
 import Effect.Http as Http exposing (Response(..))
 import Effect.Lamdera as Lamdera
@@ -27,7 +27,7 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileStatus(..), FileStatusId)
+import FileStatus exposing (FileId, FileStatus(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -1139,22 +1139,22 @@ updateLoaded msg model =
                                     (SeqDict.get guildOrDmId loggedIn.replyTo)
                                     (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                                         Just dict ->
-                                            NonemptyDict.toList dict
-                                                |> List.filterMap
-                                                    (\( _, status ) ->
+                                            NonemptyDict.toSeqDict dict
+                                                |> SeqDict.filterMap
+                                                    (\_ status ->
                                                         case status of
                                                             FileUploading _ ->
                                                                 Nothing
 
                                                             FileUploaded contentType fileHash ->
-                                                                Just ( fileHash, contentType )
+                                                                Just ( contentType, fileHash )
 
                                                             FileError _ ->
                                                                 Nothing
                                                     )
 
                                         Nothing ->
-                                            []
+                                            SeqDict.empty
                                     )
                                     |> Just
                                 )
@@ -1177,6 +1177,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
+                        toRequest : Id FileId -> File -> Command restriction toFrontend FrontendMsg
                         toRequest id file2 =
                             Http.request
                                 { method = "POST"
@@ -1188,27 +1189,36 @@ updateLoaded msg model =
                                 , tracker = Nothing
                                 }
 
-                        ( cmds, dict ) =
+                        ( fileText, cmds, dict ) =
                             case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                                 Just dict2 ->
                                     List.foldl
-                                        (\file2 ( cmds2, dict3 ) ->
+                                        (\file2 ( fileText2, cmds2, dict3 ) ->
                                             let
                                                 id =
                                                     Id.nextId (NonemptyDict.toSeqDict dict3)
                                             in
-                                            ( toRequest id file2 :: cmds2
+                                            ( fileText2
+                                                ++ [ " "
+                                                        ++ RichText.attachedFilePrefix
+                                                        ++ Id.toString id
+                                                        ++ "]"
+                                                   ]
+                                            , toRequest id file2 :: cmds2
                                             , NonemptyDict.insert
                                                 id
                                                 (File.mime file2 |> FileStatus.contentType |> FileUploading)
                                                 dict3
                                             )
                                         )
-                                        ( [], dict2 )
+                                        ( [], [], dict2 )
                                         (file :: files)
 
                                 Nothing ->
                                     ( List.indexedMap
+                                        (\index _ -> " [!" ++ Id.toString (Id.fromInt index) ++ "]")
+                                        (file :: files)
+                                    , List.indexedMap
                                         (\index file2 -> toRequest (Id.fromInt index) file2)
                                         (file :: files)
                                     , List.Nonempty.indexedMap
@@ -1221,7 +1231,28 @@ updateLoaded msg model =
                                         |> NonemptyDict.fromNonemptyList
                                     )
                     in
-                    ( { loggedIn | filesToUpload = SeqDict.insert guildOrDmId dict loggedIn.filesToUpload }
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.insert guildOrDmId dict loggedIn.filesToUpload
+                        , drafts =
+                            case String.concat fileText |> String.Nonempty.fromString of
+                                Just fileText2 ->
+                                    SeqDict.update
+                                        guildOrDmId
+                                        (\maybe ->
+                                            case maybe of
+                                                Just draft ->
+                                                    String.Nonempty.append_ draft (String.Nonempty.toString fileText2)
+                                                        |> Just
+
+                                                Nothing ->
+                                                    Just fileText2
+                                        )
+                                        loggedIn.drafts
+
+                                Nothing ->
+                                    loggedIn.drafts
+                      }
                     , Command.batch cmds
                     )
                 )
@@ -3536,7 +3567,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = Nothing
-                                                , attachedFiles = []
+                                                , attachedFiles = SeqDict.empty
                                                 }
                                             )
                                         |> Just
@@ -3669,14 +3700,12 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            LocalState.editMessage
-                                userId
-                                time
-                                newContent
-                                channelId
-                                messageIndex
-                                guild
-                                |> Result.withDefault guild
+                            case LocalState.editMessage userId time newContent channelId messageIndex guild of
+                                Ok ( _, guild2 ) ->
+                                    guild2
+
+                                Err _ ->
+                                    guild
                         )
                         local.guilds
             }
@@ -3687,13 +3716,12 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.editMessageHelper
-                                time
-                                userId
-                                newContent
-                                messageIndex
-                                dmChannel
-                                |> Result.withDefault dmChannel
+                            case LocalState.editMessageHelper time userId newContent messageIndex dmChannel of
+                                Ok ( _, dmChannel2 ) ->
+                                    dmChannel2
+
+                                Err _ ->
+                                    dmChannel
                         )
                         local.dmChannels
             }
