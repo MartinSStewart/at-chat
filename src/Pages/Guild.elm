@@ -937,30 +937,8 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                         Nothing ->
                             case messageHover of
                                 IsNotHovered ->
-                                    case highlight of
-                                        NoHighlight ->
-                                            case maybeRepliedTo of
-                                                Just _ ->
-                                                    messageView
-                                                        revealedSpoilers
-                                                        highlight
-                                                        messageHover
-                                                        otherUserIsEditing
-                                                        local.localUser
-                                                        maybeRepliedTo
-                                                        index
-                                                        message
-
-                                                Nothing ->
-                                                    Ui.Lazy.lazy5
-                                                        messageViewNotHovered
-                                                        otherUserIsEditing
-                                                        revealedSpoilers
-                                                        local.localUser
-                                                        index
-                                                        message
-
-                                        _ ->
+                                    case maybeRepliedTo of
+                                        Just _ ->
                                             messageView
                                                 revealedSpoilers
                                                 highlight
@@ -971,16 +949,38 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 index
                                                 message
 
+                                        Nothing ->
+                                            Ui.Lazy.lazy6
+                                                messageViewNotHovered
+                                                otherUserIsEditing
+                                                revealedSpoilers
+                                                highlight
+                                                local.localUser
+                                                index
+                                                message
+
                                 _ ->
-                                    messageView
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover
-                                        otherUserIsEditing
-                                        local.localUser
-                                        maybeRepliedTo
-                                        index
-                                        message
+                                    case maybeRepliedTo of
+                                        Just _ ->
+                                            messageView
+                                                revealedSpoilers
+                                                highlight
+                                                messageHover
+                                                otherUserIsEditing
+                                                local.localUser
+                                                maybeRepliedTo
+                                                index
+                                                message
+
+                                        Nothing ->
+                                            Ui.Lazy.lazy6
+                                                messageViewHovered
+                                                otherUserIsEditing
+                                                revealedSpoilers
+                                                highlight
+                                                local.localUser
+                                                index
+                                                message
                    )
                 :: list
             )
@@ -1459,20 +1459,25 @@ type IsHovered
 messageViewNotHovered :
     Bool
     -> SeqDict Int (NonemptySet Int)
+    -> HighlightMessage
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered isEditing revealedSpoilers localUser messageIndex message =
-    messageView
-        revealedSpoilers
-        NoHighlight
-        IsNotHovered
-        isEditing
-        localUser
-        Nothing
-        messageIndex
-        message
+messageViewNotHovered isEditing revealedSpoilers highlight localUser messageIndex message =
+    messageView revealedSpoilers highlight IsNotHovered isEditing localUser Nothing messageIndex message
+
+
+messageViewHovered :
+    Bool
+    -> SeqDict Int (NonemptySet Int)
+    -> HighlightMessage
+    -> LocalUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewHovered isEditing revealedSpoilers highlight localUser messageIndex message =
+    messageView revealedSpoilers highlight IsHovered isEditing localUser Nothing messageIndex message
 
 
 type HighlightMessage
