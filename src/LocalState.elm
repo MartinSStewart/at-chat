@@ -49,6 +49,7 @@ import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileData, FileId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
@@ -598,6 +599,7 @@ editMessage :
     Id UserId
     -> Time.Posix
     -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
     -> Id ChannelId
     -> Int
     ->
@@ -618,10 +620,10 @@ editMessage :
                         { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
               }
             )
-editMessage editedBy time newContent channelId messageIndex guild =
+editMessage editedBy time newContent attachedFiles channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case editMessageHelper time editedBy newContent messageIndex channel of
+            case editMessageHelper time editedBy newContent attachedFiles messageIndex channel of
                 Ok ( newMessage, channel2 ) ->
                     Ok ( newMessage, { guild | channels = SeqDict.insert channelId channel2 guild.channels } )
 
@@ -636,17 +638,18 @@ editMessageHelper :
     Time.Posix
     -> Id UserId
     -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
     -> Int
     -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
     -> Result () ( UserTextMessageData, { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } )
-editMessageHelper time editedBy newContent messageIndex channel =
+editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
     case Array.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy then
                 let
                     data2 : UserTextMessageData
                     data2 =
-                        { data | editedAt = Just time, content = newContent }
+                        { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
                 in
                 ( data2
                 , { channel

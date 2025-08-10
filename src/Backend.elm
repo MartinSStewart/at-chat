@@ -512,7 +512,16 @@ handleDiscordEditMessage edit model =
                                 richText =
                                     RichText.fromNonemptyString (NonemptyDict.toSeqDict model.users) edit.content
                             in
-                            case LocalState.editMessage userId edit.timestamp richText channelId messageIndex guild of
+                            case
+                                LocalState.editMessage
+                                    userId
+                                    edit.timestamp
+                                    richText
+                                    SeqDict.empty
+                                    channelId
+                                    messageIndex
+                                    guild
+                            of
                                 Ok ( _, guild2 ) ->
                                     ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
                                     , broadcastToGuild
@@ -523,6 +532,7 @@ handleDiscordEditMessage edit model =
                                             (GuildOrDmId_Guild guildId channelId)
                                             messageIndex
                                             richText
+                                            SeqDict.empty
                                             |> ServerChange
                                         )
                                         model
@@ -1597,7 +1607,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                Local_SendEditMessage _ guildOrDmId messageIndex newContent ->
+                Local_SendEditMessage _ guildOrDmId messageIndex newContent attachedFiles ->
+                    let
+                        attachedFiles2 =
+                            validateAttachedFiles model.files attachedFiles
+                    in
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             asGuildMember
@@ -1610,20 +1624,32 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             userId
                                             time
                                             newContent
+                                            attachedFiles2
                                             channelId
                                             messageIndex
                                             guild
                                     of
-                                        Ok ( newMessage, guild2 ) ->
+                                        Ok ( _, guild2 ) ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
-                                                [ Local_SendEditMessage time guildOrDmId messageIndex newContent
+                                                [ Local_SendEditMessage
+                                                    time
+                                                    guildOrDmId
+                                                    messageIndex
+                                                    newContent
+                                                    attachedFiles2
                                                     |> LocalChangeResponse changeId
                                                     |> Lamdera.sendToFrontend clientId
                                                 , broadcastToGuildExcludingOne
                                                     clientId
                                                     guildId
-                                                    (Server_SendEditMessage time userId guildOrDmId messageIndex newContent
+                                                    (Server_SendEditMessage
+                                                        time
+                                                        userId
+                                                        guildOrDmId
+                                                        messageIndex
+                                                        newContent
+                                                        attachedFiles2
                                                         |> ServerChange
                                                     )
                                                     model2
@@ -1643,8 +1669,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     , content =
                                                                         toDiscordContent
                                                                             model2
-                                                                            newMessage.attachedFiles
-                                                                            newMessage.content
+                                                                            attachedFiles2
+                                                                            newContent
                                                                     }
                                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
@@ -1678,23 +1704,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     time
                                                     userId
                                                     newContent
+                                                    attachedFiles
                                                     messageIndex
                                                     dmChannel
                                             of
-                                                Ok ( newMessage, dmChannel2 ) ->
+                                                Ok ( _, dmChannel2 ) ->
                                                     ( { model2
                                                         | dmChannels =
                                                             SeqDict.insert dmChannelId dmChannel2 model2.dmChannels
                                                       }
                                                     , Command.batch
-                                                        [ Local_SendEditMessage time guildOrDmId messageIndex newContent
+                                                        [ Local_SendEditMessage
+                                                            time
+                                                            guildOrDmId
+                                                            messageIndex
+                                                            newContent
+                                                            attachedFiles2
                                                             |> LocalChangeResponse changeId
                                                             |> Lamdera.sendToFrontend clientId
                                                         , broadcastToDmChannel
                                                             clientId
                                                             userId
                                                             otherUserId
-                                                            (Server_SendEditMessage time userId guildOrDmId messageIndex newContent)
+                                                            (Server_SendEditMessage
+                                                                time
+                                                                userId
+                                                                guildOrDmId
+                                                                messageIndex
+                                                                newContent
+                                                                attachedFiles2
+                                                            )
                                                             model2
                                                         , case OneToOne.first dmChannelId model2.discordDms of
                                                             Just discordDmId ->
@@ -1708,7 +1747,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                             (botTokenToAuth botToken)
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
-                                                                            , content = toDiscordContent model2 newMessage.attachedFiles newMessage.content
+                                                                            , content = toDiscordContent model2 attachedFiles2 newContent
                                                                             }
                                                                             |> Task.attempt (\_ -> EditedDiscordMessage)
 

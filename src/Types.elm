@@ -223,7 +223,7 @@ type alias RevealedSpoilers =
 
 
 type alias EditMessage =
-    { messageIndex : Int, text : String }
+    { messageIndex : Int, text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
 type EmojiSelector
@@ -382,7 +382,11 @@ type FrontendMsg
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error String)
-    | PressedDeletePendingUpload GuildOrDmId (Id FileId)
+    | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedAttachFiles GuildOrDmId
+    | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
+    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error String)
 
 
 type alias NewChannelForm =
@@ -500,7 +504,7 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId Int Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId Int Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText)
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmId Int
     | Server_DeleteMessage (Id UserId) GuildOrDmId Int
     | Server_DiscordDeleteMessage MessageId
@@ -520,7 +524,7 @@ type LocalChange
     | Local_MemberTyping Time.Posix GuildOrDmId
     | Local_AddReactionEmoji GuildOrDmId Int Emoji
     | Local_RemoveReactionEmoji GuildOrDmId Int Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText)
+    | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix GuildOrDmId Int
     | Local_SetLastViewed GuildOrDmId Int
     | Local_DeleteMessage GuildOrDmId Int

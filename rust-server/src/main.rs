@@ -9,7 +9,7 @@ use axum::{
     routing::get,
     routing::post,
 };
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha224};
 use std::fs;
 
 #[tokio::main]
@@ -109,7 +109,7 @@ fn response_with_headers(status_code: StatusCode, body: String) -> Response<Stri
 }
 
 fn hash_bytes(bytes: &Bytes) -> String {
-    base64_encode(Sha256::digest(&bytes).to_vec())
+    base64_encode(Sha224::digest(&bytes).to_vec())
 }
 
 async fn get_file_endpoint(

@@ -931,7 +931,6 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     revealedSpoilers
                                     editing
                                     loggedIn.pingUser
-                                    (SeqDict.get guildOrDmId loggedIn.filesToUpload)
                                     local
 
                         Nothing ->
@@ -1186,7 +1185,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview (PressedDeletePendingUpload guildOrDmId) filesToUpload2
+                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
                         |> Ui.inFront
 
                 Nothing ->
@@ -1382,10 +1381,9 @@ messageEditingView :
     -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
-    -> Maybe (NonemptyDict (Id FileId) FileStatus)
     -> LocalState
     -> Element FrontendMsg
-messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser filesToUpload local =
+messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1416,7 +1414,16 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , Ui.column
-                    []
+                    [ case NonemptyDict.fromSeqDict editing.attachedFiles of
+                        Just filesToUpload ->
+                            FileStatus.fileUploadPreview
+                                (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                filesToUpload
+                                |> Ui.inFront
+
+                        Nothing ->
+                            Ui.noAttr
+                    ]
                     [ MessageInput.view
                         True
                         False

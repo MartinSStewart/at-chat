@@ -28,7 +28,7 @@ import EmailAddress
 import Emoji exposing (Emoji)
 import Env
 import FileName
-import FileStatus exposing (FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileId, FileStatus(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -41,7 +41,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..))
+import Message exposing (Message(..), UserTextMessageData)
 import MessageInput
 import MessageMenu
 import MyUi
@@ -55,7 +55,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
-import SeqDict
+import SeqDict exposing (SeqDict)
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -897,8 +897,20 @@ isPressMsg msg =
         GotFileHashName _ _ _ ->
             False
 
-        PressedDeletePendingUpload _ _ ->
+        PressedDeleteAttachedFile _ _ ->
             True
+
+        EditMessage_PressedDeleteAttachedFile _ _ ->
+            True
+
+        EditMessage_PressedAttachFiles guildOrDmId ->
+            True
+
+        EditMessage_SelectedFilesToAttach guildOrDmId file files ->
+            False
+
+        EditMessage_GotFileHashName guildOrDmId int id result ->
+            False
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -1140,19 +1152,7 @@ updateLoaded msg model =
                                     (SeqDict.get guildOrDmId loggedIn.replyTo)
                                     (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                                         Just dict ->
-                                            NonemptyDict.toSeqDict dict
-                                                |> SeqDict.filterMap
-                                                    (\_ status ->
-                                                        case status of
-                                                            FileUploading _ _ _ ->
-                                                                Nothing
-
-                                                            FileUploaded fileData ->
-                                                                Just fileData
-
-                                                            FileError _ ->
-                                                                Nothing
-                                                    )
+                                            NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
                                         Nothing ->
                                             SeqDict.empty
@@ -1178,18 +1178,6 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        toRequest : Id FileId -> File -> Command restriction toFrontend FrontendMsg
-                        toRequest id file2 =
-                            Http.request
-                                { method = "POST"
-                                , headers = [ Http.header "sid" (Lamdera.sessionIdToString loggedIn.sessionId) ]
-                                , url = "http://localhost:3000/file/upload"
-                                , body = Http.fileBody file2
-                                , expect = Http.expectString (GotFileHashName guildOrDmId id)
-                                , timeout = Nothing
-                                , tracker = Nothing
-                                }
-
                         ( fileText, cmds, dict ) =
                             case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                                 Just dict2 ->
@@ -1205,7 +1193,11 @@ updateLoaded msg model =
                                                         ++ Id.toString id
                                                         ++ "]"
                                                    ]
-                                            , toRequest id file2 :: cmds2
+                                            , FileStatus.upload
+                                                (GotFileHashName guildOrDmId id)
+                                                loggedIn.sessionId
+                                                file2
+                                                :: cmds2
                                             , NonemptyDict.insert
                                                 id
                                                 (FileUploading
@@ -1224,7 +1216,12 @@ updateLoaded msg model =
                                         (\index _ -> " [!" ++ Id.toString (Id.fromInt (index + 1)) ++ "]")
                                         (file :: files)
                                     , List.indexedMap
-                                        (\index file2 -> toRequest (Id.fromInt (index + 1)) file2)
+                                        (\index file2 ->
+                                            FileStatus.upload
+                                                (GotFileHashName guildOrDmId (Id.fromInt (index + 1)))
+                                                loggedIn.sessionId
+                                                file2
+                                        )
                                         (file :: files)
                                     , List.Nonempty.indexedMap
                                         (\index file2 ->
@@ -1716,15 +1713,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | showEmojiSelector =
-                            case model.route of
-                                GuildRoute guildId (ChannelRoute channelId _) ->
-                                    EmojiSelectorForReaction (GuildOrDmId_Guild guildId channelId) messageIndex
+                            case loggedIn.showEmojiSelector of
+                                EmojiSelectorHidden ->
+                                    case model.route of
+                                        GuildRoute guildId (ChannelRoute channelId _) ->
+                                            EmojiSelectorForReaction (GuildOrDmId_Guild guildId channelId) messageIndex
 
-                                DmRoute otherUserId _ ->
-                                    EmojiSelectorForReaction (GuildOrDmId_Dm otherUserId) messageIndex
+                                        DmRoute otherUserId _ ->
+                                            EmojiSelectorForReaction (GuildOrDmId_Dm otherUserId) messageIndex
 
-                                _ ->
-                                    loggedIn.showEmojiSelector
+                                        _ ->
+                                            loggedIn.showEmojiSelector
+
+                                EmojiSelectorForReaction guildOrDmId int ->
+                                    EmojiSelectorHidden
+
+                                EmojiSelectorForMessage ->
+                                    EmojiSelectorHidden
                         , messageHover =
                             case loggedIn.messageHover of
                                 NoMessageHover ->
@@ -1798,6 +1803,8 @@ updateLoaded msg model =
                                                 { messageIndex = messageIndex
                                                 , text =
                                                     RichText.toString (LocalState.allUsers local) message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                     }
@@ -2022,14 +2029,14 @@ updateLoaded msg model =
                                                 guildOrDmId
                                                 edit.messageIndex
                                                 richText
+                                                (FileStatus.onlyUploadedFiles edit.attachedFiles)
                                                 |> Just
 
                                     _ ->
                                         Nothing
                                 )
                                 { loggedIn
-                                    | editMessage =
-                                        SeqDict.remove guildOrDmId loggedIn.editMessage
+                                    | editMessage = SeqDict.remove guildOrDmId loggedIn.editMessage
                                     , messageHover = NoMessageHover
                                 }
                                 (setFocus model Pages.Guild.channelTextInputId)
@@ -2111,7 +2118,7 @@ updateLoaded msg model =
                                 messageCount =
                                     Array.length messages
 
-                                mostRecentMessage : Maybe ( Int, Nonempty RichText )
+                                mostRecentMessage : Maybe ( Int, UserTextMessageData )
                                 mostRecentMessage =
                                     (if messageCount < 5 then
                                         Array.toList messages |> List.indexedMap Tuple.pair
@@ -2130,7 +2137,7 @@ updateLoaded msg model =
                                                 case message of
                                                     UserTextMessage data ->
                                                         if local.localUser.userId == data.createdBy then
-                                                            Just ( index, data.content )
+                                                            Just ( index, data )
 
                                                         else
                                                             Nothing
@@ -2150,7 +2157,9 @@ updateLoaded msg model =
                                                 guildOrDmId
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString (LocalState.allUsers local) message
+                                                    RichText.toString (LocalState.allUsers local) message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -2779,30 +2788,7 @@ updateLoaded msg model =
                         | filesToUpload =
                             SeqDict.updateIfExists
                                 guildOrDmId
-                                (NonemptyDict.updateIfExists
-                                    fileStatusId
-                                    (\fileStatus ->
-                                        case fileStatus of
-                                            FileUploading fileName fileSize contentType ->
-                                                case result of
-                                                    Ok fileHash ->
-                                                        FileUploaded
-                                                            { fileName = fileName
-                                                            , fileSize = fileSize
-                                                            , contentType = contentType
-                                                            , fileHash = FileStatus.fileHash fileHash
-                                                            }
-
-                                                    Err error ->
-                                                        FileError error
-
-                                            FileUploaded _ ->
-                                                fileStatus
-
-                                            FileError error ->
-                                                fileStatus
-                                    )
-                                )
+                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash result))
                                 loggedIn.filesToUpload
                       }
                     , Command.none
@@ -2810,7 +2796,7 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedDeletePendingUpload guildOrDmId fileId ->
+        PressedDeleteAttachedFile guildOrDmId fileId ->
             updateLoggedIn
                 (\loggedIn ->
                     let
@@ -2856,6 +2842,132 @@ updateLoaded msg model =
                                             Nothing
                                 )
                                 loggedIn.drafts
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedDeleteAttachedFile guildOrDmId fileId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        allUsers =
+                            LocalState.allUsers local
+                    in
+                    ( case SeqDict.get guildOrDmId loggedIn.editMessage of
+                        Just edit ->
+                            { loggedIn
+                                | editMessage =
+                                    SeqDict.insert
+                                        guildOrDmId
+                                        { edit
+                                            | text =
+                                                case String.Nonempty.fromString edit.text of
+                                                    Just nonempty ->
+                                                        case
+                                                            RichText.fromNonemptyString allUsers nonempty
+                                                                |> RichText.removeAttachedFile fileId
+                                                        of
+                                                            Just richText ->
+                                                                RichText.toString allUsers richText
+
+                                                            Nothing ->
+                                                                edit.text
+
+                                                    Nothing ->
+                                                        edit.text
+                                            , attachedFiles = SeqDict.remove fileId edit.attachedFiles
+                                        }
+                                        loggedIn.editMessage
+                            }
+
+                        Nothing ->
+                            loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedAttachFiles guildOrDmId ->
+            ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach guildOrDmId) )
+
+        EditMessage_SelectedFilesToAttach guildOrDmId file files ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case SeqDict.get guildOrDmId loggedIn.editMessage of
+                        Just edit ->
+                            let
+                                ( fileText, cmds, dict ) =
+                                    List.foldl
+                                        (\file2 ( fileText2, cmds2, dict3 ) ->
+                                            let
+                                                id =
+                                                    Id.nextId dict3
+                                            in
+                                            ( fileText2
+                                                ++ [ " "
+                                                        ++ RichText.attachedFilePrefix
+                                                        ++ Id.toString id
+                                                        ++ "]"
+                                                   ]
+                                            , FileStatus.upload
+                                                (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
+                                                loggedIn.sessionId
+                                                file2
+                                                :: cmds2
+                                            , SeqDict.insert
+                                                id
+                                                (FileUploading
+                                                    (File.name file2 |> FileName.fromString)
+                                                    (File.size file2)
+                                                    (File.mime file2 |> FileStatus.contentType)
+                                                )
+                                                dict3
+                                            )
+                                        )
+                                        ( [], [], edit.attachedFiles )
+                                        (file :: files)
+                            in
+                            ( { loggedIn
+                                | editMessage =
+                                    SeqDict.insert
+                                        guildOrDmId
+                                        { edit
+                                            | text = edit.text ++ String.concat fileText
+                                            , attachedFiles = dict
+                                        }
+                                        loggedIn.editMessage
+                              }
+                            , Command.batch cmds
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        EditMessage_GotFileHashName guildOrDmId messageIndex fileId result ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\edit ->
+                                    if edit.messageIndex == messageIndex then
+                                        { edit
+                                            | attachedFiles =
+                                                SeqDict.updateIfExists fileId (FileStatus.addFileHash result) edit.attachedFiles
+                                        }
+
+                                    else
+                                        edit
+                                )
+                                loggedIn.editMessage
                       }
                     , Command.none
                     )
@@ -3307,8 +3419,8 @@ changeUpdate localMsg local =
                 Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
                     removeReactionEmoji local.localUser.userId guildOrDmId messageIndex emoji local
 
-                Local_SendEditMessage time guildOrDmId messageIndex newContent ->
-                    editMessage time local.localUser.userId guildOrDmId newContent messageIndex local
+                Local_SendEditMessage time guildOrDmId messageIndex newContent attachedFiles ->
+                    editMessage time local.localUser.userId guildOrDmId newContent attachedFiles messageIndex local
 
                 Local_MemberEditTyping time guildOrDmId messageIndex ->
                     memberEditTyping time local.localUser.userId guildOrDmId messageIndex local
@@ -3545,8 +3657,8 @@ changeUpdate localMsg local =
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId guildOrDmId messageIndex emoji local
 
-                Server_SendEditMessage time userId guildOrDmId messageIndex newContent ->
-                    editMessage time userId guildOrDmId newContent messageIndex local
+                Server_SendEditMessage time userId guildOrDmId messageIndex newContent attachedFiles ->
+                    editMessage time userId guildOrDmId newContent attachedFiles messageIndex local
 
                 Server_MemberEditTyping time userId guildOrDmId messageIndex ->
                     memberEditTyping time userId guildOrDmId messageIndex local
@@ -3732,8 +3844,16 @@ memberEditTyping time userId guildOrDmId messageIndex local =
             }
 
 
-editMessage : Time.Posix -> Id UserId -> GuildOrDmId -> Nonempty RichText -> Int -> LocalState -> LocalState
-editMessage time userId guildOrDmId newContent messageIndex local =
+editMessage :
+    Time.Posix
+    -> Id UserId
+    -> GuildOrDmId
+    -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
+    -> Int
+    -> LocalState
+    -> LocalState
+editMessage time userId guildOrDmId newContent attachedFiles messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
@@ -3741,7 +3861,7 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            case LocalState.editMessage userId time newContent channelId messageIndex guild of
+                            case LocalState.editMessage userId time newContent attachedFiles channelId messageIndex guild of
                                 Ok ( _, guild2 ) ->
                                     guild2
 
@@ -3757,7 +3877,7 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            case LocalState.editMessageHelper time userId newContent messageIndex dmChannel of
+                            case LocalState.editMessageHelper time userId newContent attachedFiles messageIndex dmChannel of
                                 Ok ( _, dmChannel2 ) ->
                                     dmChannel2
 
@@ -4255,7 +4375,7 @@ pendingChangesText localChange =
         Local_RemoveReactionEmoji _ _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage _ _ _ _ ->
+        Local_SendEditMessage _ _ _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->

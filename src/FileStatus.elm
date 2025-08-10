@@ -4,23 +4,30 @@ module FileStatus exposing
     , FileHash
     , FileId
     , FileStatus(..)
+    , addFileHash
     , contentType
     , fileHash
     , fileUploadPreview
     , fileUrl
     , isImage
     , isText
+    , onlyUploadedFiles
     , sizeToString
+    , upload
     )
 
+import Effect.Command exposing (Command)
+import Effect.File exposing (File)
 import Effect.Http as Http
+import Effect.Lamdera as Lamdera exposing (SessionId)
 import Env
 import FileName exposing (FileName)
 import Icons
 import Id exposing (Id)
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import Round
+import SeqDict exposing (SeqDict)
 import StringExtra
 import Ui
 import Ui.Font
@@ -97,15 +104,45 @@ contentType =
     ContentType
 
 
-fileUploadPreview : (Id FileId -> msg) -> NonemptyDict.NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
+upload : (Result Http.Error String -> msg) -> SessionId -> File -> Command restriction toFrontend msg
+upload onResult sessionId file2 =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
+        , url =
+            if Env.isProduction then
+                Env.domain ++ "/file/upload"
+
+            else
+                "http://localhost:3000/file/upload"
+        , body = Http.fileBody file2
+        , expect = Http.expectString onResult
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
 fileUploadPreview onPressDelete filesToUpload2 =
     Ui.row
-        [ Ui.spacing 2, Ui.move { x = 0, y = -100, z = 0 }, Ui.width Ui.shrink ]
+        [ Ui.spacing 2
+        , Ui.move { x = 0, y = -100, z = 0 }
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 8 0
+        ]
         (List.map
             (\( fileStatusId, fileStatus ) ->
                 Ui.el
                     [ Ui.width (Ui.px 100)
                     , Ui.height (Ui.px 100)
+                    , Ui.Shadow.shadows
+                        [ { x = 0
+                          , y = -2
+                          , size = 0
+                          , blur = 8
+                          , color = Ui.rgba 0 0 0 0.5
+                          }
+                        ]
                     , Ui.background MyUi.background1
                     , Ui.borderColor MyUi.background1
                     , Ui.border 1
@@ -192,3 +229,43 @@ fileUploadPreview onPressDelete filesToUpload2 =
             )
             (NonemptyDict.toList filesToUpload2)
         )
+
+
+addFileHash : Result Http.Error String -> FileStatus -> FileStatus
+addFileHash result fileStatus =
+    case fileStatus of
+        FileUploading fileName fileSize contentType2 ->
+            case result of
+                Ok fileHash2 ->
+                    FileUploaded
+                        { fileName = fileName
+                        , fileSize = fileSize
+                        , contentType = contentType2
+                        , fileHash = fileHash fileHash2
+                        }
+
+                Err error ->
+                    FileError error
+
+        FileUploaded _ ->
+            fileStatus
+
+        FileError error ->
+            fileStatus
+
+
+onlyUploadedFiles : SeqDict (Id FileId) FileStatus -> SeqDict (Id FileId) FileData
+onlyUploadedFiles dict =
+    SeqDict.filterMap
+        (\_ status ->
+            case status of
+                FileUploading _ _ _ ->
+                    Nothing
+
+                FileUploaded fileData ->
+                    Just fileData
+
+                FileError _ ->
+                    Nothing
+        )
+        dict
