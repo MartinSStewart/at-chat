@@ -913,22 +913,22 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                                             [ Html.Attributes.href fileUrl
                                             , Html.Attributes.target "_blank"
                                             , Html.Attributes.rel "noreferrer"
-                                            , Html.Attributes.style "max-width" "min(500px, 100%)"
-                                            , Html.Attributes.style "max-height" "min(500px, 100%)"
+                                            , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                            , Html.Attributes.style "max-height" "400px"
                                             , Html.Attributes.style "object-fit" "contain"
                                             ]
                                             [ Html.img
                                                 [ Html.Attributes.src fileUrl
                                                 , Html.Attributes.style "display" "block"
-                                                , Html.Attributes.style "max-width" "min(500px, 100%)"
-                                                , Html.Attributes.style "max-height" "min(500px, 100%)"
+                                                , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                                , Html.Attributes.style "max-height" "400px"
                                                 ]
                                                 []
                                             ]
 
                                      else
                                         Html.a
-                                            [ Html.Attributes.style "max-width" "292px"
+                                            [ Html.Attributes.style "max-width" "284px"
                                             , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
                                             , Html.Attributes.style "border-radius" "4px"
                                             , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
