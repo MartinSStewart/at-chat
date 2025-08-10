@@ -20,7 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileId, FileStatus(..))
+import FileStatus
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -29,14 +29,13 @@ import Icons
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
 import List.Extra
-import List.Nonempty exposing (Nonempty)
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..))
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MyUi
-import NonemptyDict exposing (NonemptyDict)
+import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity

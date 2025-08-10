@@ -36,10 +36,10 @@ init =
 isPressMsg : Msg a -> Bool
 isPressMsg msg =
     case msg of
-        Edit model ->
+        Edit _ ->
             False
 
-        PressedAcceptEdit value ->
+        PressedAcceptEdit _ ->
             True
 
 

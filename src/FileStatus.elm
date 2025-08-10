@@ -10,7 +10,6 @@ module FileStatus exposing
     , fileUploadPreview
     , fileUrl
     , isImage
-    , isText
     , onlyUploadedFiles
     , sizeToString
     , upload
@@ -26,7 +25,6 @@ import Icons
 import Id exposing (Id)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import Round
 import SeqDict exposing (SeqDict)
 import StringExtra
 import Ui
@@ -218,7 +216,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                     ]
                                     (Ui.text "0110\n0001")
 
-                        FileError error ->
+                        FileError _ ->
                             Ui.el
                                 [ Ui.centerX
                                 , Ui.centerY
@@ -250,7 +248,7 @@ addFileHash result fileStatus =
         FileUploaded _ ->
             fileStatus
 
-        FileError error ->
+        FileError _ ->
             fileStatus
 
 

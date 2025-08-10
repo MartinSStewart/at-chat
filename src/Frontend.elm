@@ -16,9 +16,8 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File exposing (File)
+import Effect.File as File
 import Effect.File.Select
-import Effect.Http as Http exposing (Response(..))
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -636,10 +635,10 @@ isPressMsg msg =
         UrlClicked _ ->
             False
 
-        UrlChanged url ->
+        UrlChanged _ ->
             False
 
-        GotTime posix ->
+        GotTime _ ->
             False
 
         GotWindowSize _ _ ->
@@ -663,55 +662,55 @@ isPressMsg msg =
         ScrolledToLogSection ->
             False
 
-        PressedLink route ->
+        PressedLink _ ->
             True
 
-        TypedMessage guildOrDmId string ->
+        TypedMessage _ _ ->
             False
 
-        PressedSendMessage guildOrDmId ->
+        PressedSendMessage _ ->
             True
 
-        NewChannelFormChanged id newChannelForm ->
+        NewChannelFormChanged _ _ ->
             False
 
-        PressedSubmitNewChannel id newChannelForm ->
+        PressedSubmitNewChannel _ _ ->
             False
 
-        MouseEnteredChannelName id _ ->
+        MouseEnteredChannelName _ _ ->
             False
 
-        MouseExitedChannelName id _ ->
+        MouseExitedChannelName _ _ ->
             False
 
-        EditChannelFormChanged id _ newChannelForm ->
+        EditChannelFormChanged _ _ _ ->
             False
 
-        PressedCancelEditChannelChanges id _ ->
+        PressedCancelEditChannelChanges _ _ ->
             True
 
-        PressedSubmitEditChannelChanges id _ newChannelForm ->
+        PressedSubmitEditChannelChanges _ _ _ ->
             True
 
-        PressedDeleteChannel id _ ->
+        PressedDeleteChannel _ _ ->
             True
 
-        PressedCreateInviteLink id ->
+        PressedCreateInviteLink _ ->
             True
 
         FrontendNoOp ->
             False
 
-        PressedCopyText string ->
+        PressedCopyText _ ->
             True
 
         PressedCreateGuild ->
             True
 
-        NewGuildFormChanged newGuildForm ->
+        NewGuildFormChanged _ ->
             False
 
-        PressedSubmitNewGuild newGuildForm ->
+        PressedSubmitNewGuild _ ->
             True
 
         PressedCancelNewGuild ->
@@ -720,10 +719,10 @@ isPressMsg msg =
         DebouncedTyping ->
             False
 
-        GotPingUserPosition result ->
+        GotPingUserPosition _ ->
             False
 
-        PressedPingUser guildOrDmId int ->
+        PressedPingUser _ _ ->
             True
 
         SetFocus ->
@@ -732,94 +731,94 @@ isPressMsg msg =
         RemoveFocus ->
             False
 
-        PressedArrowInDropdown guildOrDmId int ->
+        PressedArrowInDropdown _ _ ->
             True
 
-        TextInputGotFocus htmlId ->
+        TextInputGotFocus _ ->
             False
 
-        TextInputLostFocus htmlId ->
+        TextInputLostFocus _ ->
             False
 
-        KeyDown string ->
+        KeyDown _ ->
             False
 
-        MouseEnteredMessage int ->
+        MouseEnteredMessage _ ->
             False
 
-        MouseExitedMessage int ->
+        MouseExitedMessage _ ->
             False
 
-        AltPressedMessage int coord ->
+        AltPressedMessage _ _ ->
             False
 
-        MessageMenu_PressedShowReactionEmojiSelector int coord ->
+        MessageMenu_PressedShowReactionEmojiSelector _ _ ->
             True
 
-        MessageMenu_PressedEditMessage int ->
+        MessageMenu_PressedEditMessage _ ->
             True
 
-        PressedEmojiSelectorEmoji emoji ->
+        PressedEmojiSelectorEmoji _ ->
             True
 
-        PressedReactionEmoji_Add int emoji ->
+        PressedReactionEmoji_Add _ _ ->
             True
 
-        PressedReactionEmoji_Remove int emoji ->
+        PressedReactionEmoji_Remove _ _ ->
             True
 
-        GotPingUserPositionForEditMessage result ->
+        GotPingUserPositionForEditMessage _ ->
             False
 
-        TypedEditMessage guildOrDmId string ->
+        TypedEditMessage _ _ ->
             False
 
-        PressedSendEditMessage guildOrDmId ->
+        PressedSendEditMessage _ ->
             True
 
-        PressedArrowInDropdownForEditMessage guildOrDmId int ->
+        PressedArrowInDropdownForEditMessage _ _ ->
             True
 
-        PressedPingUserForEditMessage guildOrDmId int ->
+        PressedPingUserForEditMessage _ _ ->
             True
 
-        PressedArrowUpInEmptyInput guildOrDmId ->
+        PressedArrowUpInEmptyInput _ ->
             True
 
-        MessageMenu_PressedReply int ->
+        MessageMenu_PressedReply _ ->
             True
 
-        PressedCloseReplyTo guildOrDmId ->
+        PressedCloseReplyTo _ ->
             True
 
-        PressedSpoiler int _ ->
+        PressedSpoiler _ _ ->
             True
 
-        VisibilityChanged visibility ->
+        VisibilityChanged _ ->
             False
 
-        CheckedNotificationPermission notificationPermission ->
+        CheckedNotificationPermission _ ->
             False
 
-        CheckedPwaStatus pwaStatus ->
+        CheckedPwaStatus _ ->
             False
 
-        TouchStart posix nonemptyDict ->
+        TouchStart _ _ ->
             False
 
-        TouchMoved posix nonemptyDict ->
+        TouchMoved _ _ ->
             False
 
-        TouchEnd posix ->
+        TouchEnd _ ->
             False
 
-        TouchCancel posix ->
+        TouchCancel _ ->
             False
 
-        ChannelSidebarAnimated duration ->
+        ChannelSidebarAnimated _ ->
             False
 
-        MessageMenuAnimated duration ->
+        MessageMenuAnimated _ ->
             False
 
         ScrolledToBottom ->
@@ -828,7 +827,7 @@ isPressMsg msg =
         PressedChannelHeaderBackButton ->
             True
 
-        UserScrolled record ->
+        UserScrolled _ ->
             False
 
         PressedBody ->
@@ -837,13 +836,13 @@ isPressMsg msg =
         PressedReactionEmojiContainer ->
             True
 
-        MessageMenu_PressedShowFullMenu int coord ->
+        MessageMenu_PressedShowFullMenu _ _ ->
             True
 
-        MessageMenu_PressedDeleteMessage guildOrDmId int ->
+        MessageMenu_PressedDeleteMessage _ _ ->
             True
 
-        PressedReplyLink int ->
+        PressedReplyLink _ ->
             True
 
         ScrolledToMessage ->
@@ -855,7 +854,7 @@ isPressMsg msg =
         MessageMenu_PressedContainer ->
             True
 
-        PressedCancelMessageEdit guildOrDmId ->
+        PressedCancelMessageEdit _ ->
             True
 
         PressedPingDropdownContainer ->
@@ -864,7 +863,7 @@ isPressMsg msg =
         PressedEditMessagePingDropdownContainer ->
             True
 
-        CheckMessageAltPress posix int ->
+        CheckMessageAltPress _ _ ->
             False
 
         PressedShowUserOption ->
@@ -888,10 +887,10 @@ isPressMsg msg =
         OneFrameAfterDragEnd ->
             False
 
-        PressedAttachFiles guildOrDmId ->
+        PressedAttachFiles _ ->
             True
 
-        SelectedFilesToAttach _ file files ->
+        SelectedFilesToAttach _ _ _ ->
             False
 
         GotFileHashName _ _ _ ->
@@ -903,13 +902,13 @@ isPressMsg msg =
         EditMessage_PressedDeleteAttachedFile _ _ ->
             True
 
-        EditMessage_PressedAttachFiles guildOrDmId ->
+        EditMessage_PressedAttachFiles _ ->
             True
 
-        EditMessage_SelectedFilesToAttach guildOrDmId file files ->
+        EditMessage_SelectedFilesToAttach _ _ _ ->
             False
 
-        EditMessage_GotFileHashName guildOrDmId int id result ->
+        EditMessage_GotFileHashName _ _ _ _ ->
             False
 
 
@@ -1728,7 +1727,7 @@ updateLoaded msg model =
                                         _ ->
                                             loggedIn.showEmojiSelector
 
-                                EmojiSelectorForReaction guildOrDmId int ->
+                                EmojiSelectorForReaction _ _ ->
                                     EmojiSelectorHidden
 
                                 EmojiSelectorForMessage ->
@@ -1753,7 +1752,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        maybeMessageAndId : Maybe ( GuildOrDmId, Message.UserTextMessageData )
+                        maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
                         maybeMessageAndId =
                             case model.route of
                                 GuildRoute guildId (ChannelRoute channelId _) ->
@@ -4710,7 +4709,7 @@ view model =
     }
 
 
-messageIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe Message.UserTextMessageData
+messageIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe UserTextMessageData
 messageIdToMessage guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->

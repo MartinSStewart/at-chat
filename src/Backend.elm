@@ -28,7 +28,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
-import FileStatus exposing (ContentType, FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -2060,14 +2060,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Nothing ->
                     Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
             )
-
-        UploadFileRequest imageData ->
-            asUser
-                model2
-                sessionId
-                (\userId user ->
-                    ( model2, Command.none )
-                )
 
 
 broadcastToEveryoneWhoCanSeeUser :

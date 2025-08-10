@@ -1,4 +1,4 @@
-module RPC exposing (..)
+module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import Backend
 import Effect.Lamdera as Lamdera
@@ -6,7 +6,7 @@ import FileStatus
 import Http
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
-import LamderaRPC exposing (..)
+import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SeqDict
 import Types exposing (BackendModel, BackendMsg)
 
@@ -32,7 +32,7 @@ checkFileUpload _ model headers text =
             ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
 
-lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( LamderaRPC.RPCResult, BackendModel, Cmd BackendMsg )
+lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
 lamdera_handleEndpoints reqRaw req model =
     case req.endpoint of
         "is-file-upload-allowed" ->

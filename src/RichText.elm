@@ -18,7 +18,7 @@ import Array exposing (Array)
 import Discord.Id
 import Discord.Markdown
 import FileName
-import FileStatus exposing (ContentType, FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -77,7 +77,7 @@ removeAttachedFile fileId list =
                 NormalText _ _ ->
                     Just richText
 
-                UserMention id ->
+                UserMention _ ->
                     Just richText
 
                 Bold nonempty ->
@@ -95,13 +95,13 @@ removeAttachedFile fileId list =
                 Spoiler nonempty ->
                     removeAttachedFile fileId nonempty |> Maybe.map Spoiler
 
-                Hyperlink protocol string ->
+                Hyperlink _ _ ->
                     Just richText
 
-                InlineCode char string ->
+                InlineCode _ _ ->
                     Just richText
 
-                CodeBlock language string ->
+                CodeBlock _ _ ->
                     Just richText
 
                 AttachedFile id ->

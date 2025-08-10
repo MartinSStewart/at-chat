@@ -57,7 +57,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (ContentType, FileData, FileHash, FileId, FileStatus)
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -78,7 +78,6 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
@@ -414,7 +413,6 @@ type ToBackend
     | FinishUserCreationRequest PersonName
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest
-    | UploadFileRequest Bytes
 
 
 type BackendMsg

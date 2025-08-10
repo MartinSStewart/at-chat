@@ -67,16 +67,16 @@ isPressMsg msg =
         PressedCancelLogin ->
             True
 
-        TypedLoginFormEmail string ->
+        TypedLoginFormEmail _ ->
             False
 
-        TypedLoginCode string ->
+        TypedLoginCode _ ->
             False
 
-        TypedTwoFactorCode string ->
+        TypedTwoFactorCode _ ->
             False
 
-        TypedName string ->
+        TypedName _ ->
             False
 
         PressedSubmitUserData ->

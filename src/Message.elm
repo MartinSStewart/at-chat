@@ -1,7 +1,7 @@
 module Message exposing (Message(..), UserTextMessageData, addReactionEmoji, removeReactionEmoji)
 
 import Emoji exposing (Emoji)
-import FileStatus exposing (ContentType, FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
