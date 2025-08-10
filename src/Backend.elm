@@ -28,7 +28,7 @@ import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
-import FileStatus exposing (ContentType, FileHash, FileId)
+import FileStatus exposing (ContentType, FileData, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
@@ -163,7 +163,7 @@ init =
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
       , botToken = Nothing
-      , files = SeqSet.empty
+      , files = SeqDict.empty
       }
     , Command.none
     )
@@ -1241,14 +1241,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     channelId
                                     text
                                     repliedTo
-                                    attachedFiles
+                                    (validateAttachedFiles model2.files attachedFiles)
                                 )
 
                         GuildOrDmId_Dm otherUserId ->
                             asUser
                                 model2
                                 sessionId
-                                (sendDirectMessage model2 time clientId changeId otherUserId text repliedTo attachedFiles)
+                                (sendDirectMessage
+                                    model2
+                                    time
+                                    clientId
+                                    changeId
+                                    otherUserId
+                                    text
+                                    repliedTo
+                                    (validateAttachedFiles model2.files attachedFiles)
+                                )
 
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
@@ -2043,7 +2052,7 @@ broadcastToEveryoneWhoCanSeeUser clientId userId change model =
         |> Command.batch
 
 
-toDiscordContent : BackendModel -> SeqDict (Id FileId) ( ContentType, FileHash ) -> Nonempty RichText -> String
+toDiscordContent : BackendModel -> SeqDict (Id FileId) FileData -> Nonempty RichText -> String
 toDiscordContent model attachedFiles content =
     Discord.Markdown.toString (RichText.toDiscord model.discordUsers attachedFiles content)
 
@@ -2342,7 +2351,7 @@ sendDirectMessage :
     -> Id UserId
     -> Nonempty RichText
     -> Maybe Int
-    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -2382,7 +2391,9 @@ sendDirectMessage model time clientId changeId otherUserId text repliedTo attach
                 model.users
       }
     , Command.batch
-        [ LocalChangeResponse changeId (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo attachedFiles)
+        [ LocalChangeResponse
+            changeId
+            (Local_SendMessage time (GuildOrDmId_Dm otherUserId) text repliedTo attachedFiles)
             |> Lamdera.sendToFrontend clientId
         , broadcastToDmChannel
             clientId
@@ -2433,6 +2444,24 @@ broadcastToDmChannel clientId userId otherUserId serverMsg model =
             ]
 
 
+validateAttachedFiles : SeqDict FileHash { fileSize : Int } -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
+validateAttachedFiles uploadedFiles dict =
+    SeqDict.filterMap
+        (\id fileData ->
+            if Id.toInt id < 1 then
+                Nothing
+
+            else
+                case SeqDict.get fileData.fileHash uploadedFiles of
+                    Just { fileSize } ->
+                        Just { fileData | fileSize = fileSize }
+
+                    Nothing ->
+                        Nothing
+        )
+        dict
+
+
 sendGuildMessage :
     BackendModel
     -> Time.Posix
@@ -2442,7 +2471,7 @@ sendGuildMessage :
     -> Id ChannelId
     -> Nonempty RichText
     -> Maybe Int
-    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
     -> BackendGuild

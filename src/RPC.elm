@@ -7,22 +7,25 @@ import Http
 import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (..)
-import SeqSet
+import SeqDict
 import Types exposing (BackendModel, BackendMsg)
 
 
 checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg )
 checkFileUpload _ model headers text =
     case String.split "," text of
-        [ fileHash, sessionId ] ->
-            case Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model of
-                Just _ ->
+        [ fileHash, fileSize, sessionId ] ->
+            case ( Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model, String.toInt fileSize ) of
+                ( Just _, Just fileSize2 ) ->
                     ( Ok "valid"
-                    , { model | files = SeqSet.insert (FileStatus.fileHash fileHash) model.files }
+                    , { model
+                        | files =
+                            SeqDict.insert (FileStatus.fileHash fileHash) { fileSize = fileSize2 } model.files
+                      }
                     , Cmd.none
                     )
 
-                Nothing ->
+                _ ->
                     ( Err (Http.BadBody "Invalid request"), model, Cmd.none )
 
         _ ->

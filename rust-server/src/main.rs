@@ -52,7 +52,7 @@ async fn upload_endpoint(request: Request) -> Response<String> {
 
             match reqwest::Client::new()
                 .post("http://localhost:8000/_r/is-file-upload-allowed")
-                .body(hash.clone() + "," + &session_id2)
+                .body(hash.clone() + "," + &(bytes.len().to_string()) + "," + &session_id2)
                 .send()
                 .await
             {
@@ -109,11 +109,7 @@ fn response_with_headers(status_code: StatusCode, body: String) -> Response<Stri
 }
 
 fn hash_bytes(bytes: &Bytes) -> String {
-    Sha256::digest(&bytes)
-        .to_vec()
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect()
+    base64_encode(Sha256::digest(&bytes).to_vec())
 }
 
 async fn get_file_endpoint(
@@ -122,7 +118,7 @@ async fn get_file_endpoint(
     println!("{}", hash);
     let is_valid_hash: bool = hash
         .chars()
-        .all(|x| x.is_ascii_hexdigit() && !x.is_uppercase());
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
 
     if is_valid_hash {
         let data: Result<Vec<u8>, std::io::Error> = fs::read(filepath(hash));
@@ -153,4 +149,50 @@ async fn get_file_endpoint(
 async fn fallback(uri: Uri) -> (StatusCode, String) {
     println!("Fallback endpoint");
     (StatusCode::NOT_FOUND, format!("No route for {uri}"))
+}
+
+/// Generated with Claude 4 Sonnet. Intentionally doesn't include padding = characters. Is url and filename safe.
+fn base64_encode(data: Vec<u8>) -> String {
+    const CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+    let mut result: String = String::new();
+    let mut i: usize = 0;
+
+    while i + 2 < data.len() {
+        let b1 = data[i] as u32;
+        let b2 = data[i + 1] as u32;
+        let b3 = data[i + 2] as u32;
+
+        let combined = (b1 << 16) | (b2 << 8) | b3;
+
+        result.push(CHARS[((combined >> 18) & 0x3f) as usize] as char);
+        result.push(CHARS[((combined >> 12) & 0x3f) as usize] as char);
+        result.push(CHARS[((combined >> 6) & 0x3f) as usize] as char);
+        result.push(CHARS[(combined & 0x3f) as usize] as char);
+
+        i += 3;
+    }
+
+    match data.len() - i {
+        1 => {
+            let b1 = data[i] as u32;
+            let combined = b1 << 16;
+            result.push(CHARS[((combined >> 18) & 0x3f) as usize] as char);
+            result.push(CHARS[((combined >> 12) & 0x3f) as usize] as char);
+            // result.push('=');
+            // result.push('=');
+        }
+        2 => {
+            let b1 = data[i] as u32;
+            let b2 = data[i + 1] as u32;
+            let combined = (b1 << 16) | (b2 << 8);
+            result.push(CHARS[((combined >> 18) & 0x3f) as usize] as char);
+            result.push(CHARS[((combined >> 12) & 0x3f) as usize] as char);
+            result.push(CHARS[((combined >> 6) & 0x3f) as usize] as char);
+            // result.push('=');
+        }
+        _ => {} // No remaining bytes
+    }
+
+    result
 }

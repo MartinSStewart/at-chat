@@ -1,5 +1,6 @@
 module FileStatus exposing
     ( ContentType
+    , FileData
     , FileHash
     , FileId
     , FileStatus(..)
@@ -10,23 +11,31 @@ module FileStatus exposing
     , fileUrl
     , isImage
     , isText
+    , sizeToString
     )
 
 import Effect.Http as Http
 import Env
+import FileName exposing (FileName)
 import Icons
 import Id exposing (Id)
 import MyUi
 import NonemptyDict
+import Round
+import StringExtra
 import Ui
 import Ui.Font
 import Ui.Input
 import Url
 
 
+type alias FileData =
+    { fileName : FileName, fileSize : Int, contentType : ContentType, fileHash : FileHash }
+
+
 type FileStatus
-    = FileUploading ContentType
-    | FileUploaded ContentType FileHash
+    = FileUploading FileName Int ContentType
+    | FileUploaded FileData
     | FileError Http.Error
 
 
@@ -36,6 +45,18 @@ type FileId
 
 type FileHash
     = FileHash String
+
+
+sizeToString : Int -> String
+sizeToString int =
+    if int < 1024 then
+        String.fromInt int ++ " bytes"
+
+    else if int < 1024 * 1024 then
+        StringExtra.removeTrailing0s 1 (toFloat int / 1024) ++ "kb"
+
+    else
+        StringExtra.removeTrailing0s 1 (toFloat int / (1024 * 1024)) ++ "mb"
 
 
 fileUrl : ContentType -> FileHash -> String
@@ -114,11 +135,11 @@ fileUploadPreview onPressDelete filesToUpload2 =
                         |> Ui.inFront
                     ]
                     (case fileStatus of
-                        FileUploading _ ->
+                        FileUploading _ _ _ ->
                             Ui.none
 
-                        FileUploaded contentType2 fileHash2 ->
-                            if isImage contentType2 then
+                        FileUploaded fileData ->
+                            if isImage fileData.contentType then
                                 Ui.image
                                     [ Ui.width (Ui.px 98)
                                     , Ui.height (Ui.px 98)
@@ -127,12 +148,12 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                     , Ui.centerX
                                     , Ui.centerY
                                     ]
-                                    { source = fileUrl contentType2 fileHash2
+                                    { source = fileUrl fileData.contentType fileData.fileHash
                                     , description = ""
                                     , onLoad = Nothing
                                     }
 
-                            else if isText contentType2 then
+                            else if isText fileData.contentType then
                                 Ui.el
                                     [ Ui.width (Ui.px 42)
                                     , Ui.centerX

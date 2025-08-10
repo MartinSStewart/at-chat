@@ -8,6 +8,7 @@ module Id exposing
     , fromInt
     , fromString
     , nextId
+    , toInt
     , toString
     )
 
@@ -52,6 +53,11 @@ nextId dict =
 fromInt : Int -> Id a
 fromInt =
     Id
+
+
+toInt : Id a -> Int
+toInt (Id int) =
+    int
 
 
 fromString : String -> Maybe (Id a)

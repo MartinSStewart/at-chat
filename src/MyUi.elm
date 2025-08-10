@@ -10,6 +10,7 @@ module MyUi exposing
     , buttonBorder
     , buttonFontColor
     , cancelButtonBackground
+    , colorToStyle
     , column
     , container
     , css
@@ -60,6 +61,7 @@ module MyUi exposing
     , widthAttr
     )
 
+import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
@@ -731,6 +733,26 @@ isMobile model =
 noShrinking : Ui.Attribute msg
 noShrinking =
     htmlStyle "flex-shrink" "0"
+
+
+colorToStyle : Ui.Color -> String
+colorToStyle color =
+    let
+        { red, green, blue, alpha } =
+            Color.toRgba color
+
+        floatToInt value =
+            round (value * 255) |> String.fromInt
+    in
+    "rgba("
+        ++ floatToInt red
+        ++ ","
+        ++ floatToInt green
+        ++ ","
+        ++ floatToInt blue
+        ++ ","
+        ++ String.fromFloat alpha
+        ++ ")"
 
 
 background1 : Ui.Color

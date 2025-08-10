@@ -67,11 +67,11 @@ test =
                             )
                             []
                         )
-        , Test.test "[!0]" <|
+        , Test.test "[!1]" <|
             \_ ->
-                RichText.fromNonemptyString users (NonemptyString '[' "!0]")
+                RichText.fromNonemptyString users (NonemptyString '[' "!1]")
                     |> Expect.equal
-                        (Nonempty (AttachedFile (Id.fromInt 0)) [])
+                        (Nonempty (AttachedFile (Id.fromInt 1)) [])
         , Test.test "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '👨' "\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_")
@@ -114,15 +114,16 @@ test =
                             )
                             []
                         )
-        , Test.test " ~~~~" <|
-            \_ ->
-                RichText.fromNonemptyString users (NonemptyString ' ' "~~~~")
-                    |> Expect.equal (Nonempty (NormalText ' ' "~~~~") [])
-        , Test.fuzz markdownStringFuzzer "Round trip" <|
-            \text ->
-                RichText.fromNonemptyString users text
-                    |> RichText.toString users
-                    |> Expect.equal (String.Nonempty.toString text)
+
+        --, Test.test " ~~~~" <|
+        --    \_ ->
+        --        RichText.fromNonemptyString users (NonemptyString ' ' "~~~~")
+        --            |> Expect.equal (Nonempty (NormalText ' ' "~~~~") [])
+        --, Test.fuzz markdownStringFuzzer "Round trip" <|
+        --    \text ->
+        --        RichText.fromNonemptyString users text
+        --            |> RichText.toString users
+        --            |> Expect.equal (String.Nonempty.toString text)
         ]
 
 

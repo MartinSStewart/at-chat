@@ -15,7 +15,8 @@ module RichText exposing
 import Array exposing (Array)
 import Discord.Id
 import Discord.Markdown
-import FileStatus exposing (ContentType, FileHash, FileId)
+import FileName
+import FileStatus exposing (ContentType, FileData, FileHash, FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -638,7 +639,7 @@ view :
     (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
-    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Html msg)
 view pressedSpoiler revealedSpoilers users attachedFiles nonempty =
@@ -659,7 +660,7 @@ viewHelper :
     -> RichTextState
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
-    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> ( Int, List (Html msg) )
 viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
@@ -848,13 +849,13 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                 AttachedFile fileId ->
                     ( spoilerIndex2
                     , case SeqDict.get fileId attachedFiles of
-                        Just ( contentType, fileHash ) ->
+                        Just fileData ->
                             let
                                 fileUrl =
-                                    FileStatus.fileUrl contentType fileHash
+                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
                             in
                             currentList
-                                ++ [ if FileStatus.isImage contentType then
+                                ++ [ if FileStatus.isImage fileData.contentType then
                                         Html.img
                                             [ Html.Attributes.src fileUrl
                                             , Html.Attributes.style "max-width" "500px"
@@ -866,15 +867,24 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
 
                                      else
                                         Html.a
-                                            [ Html.Attributes.style "width" "100px"
-                                            , Html.Attributes.style "height" "100px"
-                                            , Html.Attributes.style "background-color" "rgb(100,100,100)"
-                                            , Html.Attributes.style "border-radius" "8px"
+                                            [ Html.Attributes.style "max-width" "292px"
+                                            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+                                            , Html.Attributes.style "border-radius" "4px"
+                                            , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
                                             , Html.Attributes.style "display" "block"
                                             , Html.Attributes.href fileUrl
                                             , Html.Attributes.target "_blank"
+                                            , Html.Attributes.style "font-size" "14px"
+                                            , Html.Attributes.style "padding" "4px 8px 4px 8px"
                                             ]
-                                            [ Icons.download ]
+                                            [ Html.text (FileName.toString fileData.fileName)
+                                            , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
+                                            , Html.div
+                                                [ Html.Attributes.style "display" "inline-block"
+                                                , Html.Attributes.style "transform" "translateY(4px)"
+                                                ]
+                                                [ Icons.download ]
+                                            ]
                                    ]
 
                         Nothing ->
@@ -1027,7 +1037,7 @@ formatText text =
 
 toDiscord :
     OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
-    -> SeqDict (Id FileId) ( ContentType, FileHash )
+    -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Discord.Markdown.Markdown a)
 toDiscord mapping attachedFiles content =
@@ -1079,8 +1089,8 @@ toDiscord mapping attachedFiles content =
 
                 AttachedFile fileId ->
                     case SeqDict.get fileId attachedFiles of
-                        Just ( contentType, fileHash ) ->
-                            Discord.Markdown.text (FileStatus.fileUrl contentType fileHash)
+                        Just fileData ->
+                            Discord.Markdown.text (FileStatus.fileUrl fileData.contentType fileData.fileHash)
 
                         Nothing ->
                             Discord.Markdown.text ""

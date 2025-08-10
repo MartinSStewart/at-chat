@@ -27,6 +27,7 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
+import FileName
 import FileStatus exposing (FileId, FileStatus(..))
 import GuildName
 import Html exposing (Html)
@@ -1143,11 +1144,11 @@ updateLoaded msg model =
                                                 |> SeqDict.filterMap
                                                     (\_ status ->
                                                         case status of
-                                                            FileUploading _ ->
+                                                            FileUploading _ _ _ ->
                                                                 Nothing
 
-                                                            FileUploaded contentType fileHash ->
-                                                                Just ( contentType, fileHash )
+                                                            FileUploaded fileData ->
+                                                                Just fileData
 
                                                             FileError _ ->
                                                                 Nothing
@@ -1207,7 +1208,11 @@ updateLoaded msg model =
                                             , toRequest id file2 :: cmds2
                                             , NonemptyDict.insert
                                                 id
-                                                (File.mime file2 |> FileStatus.contentType |> FileUploading)
+                                                (FileUploading
+                                                    (File.name file2 |> FileName.fromString)
+                                                    (File.size file2)
+                                                    (File.mime file2 |> FileStatus.contentType)
+                                                )
                                                 dict3
                                             )
                                         )
@@ -1216,15 +1221,18 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     ( List.indexedMap
-                                        (\index _ -> " [!" ++ Id.toString (Id.fromInt index) ++ "]")
+                                        (\index _ -> " [!" ++ Id.toString (Id.fromInt (index + 1)) ++ "]")
                                         (file :: files)
                                     , List.indexedMap
-                                        (\index file2 -> toRequest (Id.fromInt index) file2)
+                                        (\index file2 -> toRequest (Id.fromInt (index + 1)) file2)
                                         (file :: files)
                                     , List.Nonempty.indexedMap
                                         (\index file2 ->
-                                            ( Id.fromInt index
-                                            , File.mime file2 |> FileStatus.contentType |> FileUploading
+                                            ( Id.fromInt (index + 1)
+                                            , FileUploading
+                                                (File.name file2 |> FileName.fromString)
+                                                (File.size file2)
+                                                (File.mime file2 |> FileStatus.contentType)
                                             )
                                         )
                                         (Nonempty file files)
@@ -2775,15 +2783,20 @@ updateLoaded msg model =
                                     fileStatusId
                                     (\fileStatus ->
                                         case fileStatus of
-                                            FileUploading contentType ->
+                                            FileUploading fileName fileSize contentType ->
                                                 case result of
                                                     Ok fileHash ->
-                                                        FileUploaded contentType (FileStatus.fileHash fileHash)
+                                                        FileUploaded
+                                                            { fileName = fileName
+                                                            , fileSize = fileSize
+                                                            , contentType = contentType
+                                                            , fileHash = FileStatus.fileHash fileHash
+                                                            }
 
                                                     Err error ->
                                                         FileError error
 
-                                            FileUploaded contentType fileHash ->
+                                            FileUploaded _ ->
                                                 fileStatus
 
                                             FileError error ->
