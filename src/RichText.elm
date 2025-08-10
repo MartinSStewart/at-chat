@@ -903,14 +903,20 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                             in
                             currentList
                                 ++ [ if FileStatus.isImage fileData.contentType then
-                                        Html.img
-                                            [ Html.Attributes.src fileUrl
-                                            , Html.Attributes.style "max-width" "500px"
-                                            , Html.Attributes.style "max-height" "500px"
-                                            , Html.Attributes.style "width" "100%"
-                                            , Html.Attributes.style "display" "block"
+                                        Html.a
+                                            [ Html.Attributes.href fileUrl
+                                            , Html.Attributes.target "_blank"
+                                            , Html.Attributes.rel "noreferrer"
                                             ]
-                                            []
+                                            [ Html.img
+                                                [ Html.Attributes.src fileUrl
+                                                , Html.Attributes.style "max-width" "min(500px, 100%)"
+                                                , Html.Attributes.style "max-height" "min(500px, 100%)"
+                                                , Html.Attributes.style "display" "block"
+                                                , Html.Attributes.style "object-fit" "contain"
+                                                ]
+                                                []
+                                            ]
 
                                      else
                                         Html.a
@@ -921,6 +927,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                                             , Html.Attributes.style "display" "block"
                                             , Html.Attributes.href fileUrl
                                             , Html.Attributes.target "_blank"
+                                            , Html.Attributes.rel "noreferrer"
                                             , Html.Attributes.style "font-size" "14px"
                                             , Html.Attributes.style "padding" "4px 8px 4px 8px"
                                             ]
