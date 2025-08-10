@@ -1049,6 +1049,7 @@ messageInputConfig guildOrDmId =
     , pressedPingDropdownContainer = PressedPingDropdownContainer
     , pressedUploadFile = PressedAttachFiles guildOrDmId
     , target = MessageInput.NewMessage
+    , onPasteFiles = PastedFiles guildOrDmId
     }
 
 

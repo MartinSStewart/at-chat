@@ -266,6 +266,7 @@ editMessageTextInputConfig guildOrDmId =
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
     , pressedUploadFile = EditMessage_PressedAttachFiles guildOrDmId
     , target = MessageInput.EditMessage
+    , onPasteFiles = EditMessage_PastedFiles guildOrDmId
     }
 
 

@@ -386,6 +386,8 @@ type FrontendMsg
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
     | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error String)
+    | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
+    | PastedFiles GuildOrDmId (Nonempty File)
 
 
 type alias NewChannelForm =

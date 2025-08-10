@@ -16,7 +16,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File
+import Effect.File as File exposing (File)
 import Effect.File.Select
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
@@ -911,6 +911,12 @@ isPressMsg msg =
         EditMessage_GotFileHashName _ _ _ _ ->
             False
 
+        EditMessage_PastedFiles guildOrDmId nonempty ->
+            False
+
+        PastedFiles guildOrDmId nonempty ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1174,96 +1180,7 @@ updateLoaded msg model =
             ( model, Effect.File.Select.files [] (SelectedFilesToAttach guildOrDmId) )
 
         SelectedFilesToAttach guildOrDmId file files ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        ( fileText, cmds, dict ) =
-                            case SeqDict.get guildOrDmId loggedIn.filesToUpload of
-                                Just dict2 ->
-                                    List.foldl
-                                        (\file2 ( fileText2, cmds2, dict3 ) ->
-                                            let
-                                                id =
-                                                    Id.nextId (NonemptyDict.toSeqDict dict3)
-                                            in
-                                            ( fileText2
-                                                ++ [ RichText.attachedFilePrefix
-                                                        ++ Id.toString id
-                                                        ++ RichText.attachedFileSuffix
-                                                   ]
-                                            , FileStatus.upload
-                                                (GotFileHashName guildOrDmId id)
-                                                loggedIn.sessionId
-                                                file2
-                                                :: cmds2
-                                            , NonemptyDict.insert
-                                                id
-                                                (FileUploading
-                                                    (File.name file2 |> FileName.fromString)
-                                                    (File.size file2)
-                                                    (File.mime file2 |> FileStatus.contentType)
-                                                )
-                                                dict3
-                                            )
-                                        )
-                                        ( [], [], dict2 )
-                                        (file :: files)
-
-                                Nothing ->
-                                    ( List.indexedMap
-                                        (\index _ ->
-                                            RichText.attachedFilePrefix
-                                                ++ Id.toString (Id.fromInt (index + 1))
-                                                ++ RichText.attachedFileSuffix
-                                        )
-                                        (file :: files)
-                                    , List.indexedMap
-                                        (\index file2 ->
-                                            FileStatus.upload
-                                                (GotFileHashName guildOrDmId (Id.fromInt (index + 1)))
-                                                loggedIn.sessionId
-                                                file2
-                                        )
-                                        (file :: files)
-                                    , List.Nonempty.indexedMap
-                                        (\index file2 ->
-                                            ( Id.fromInt (index + 1)
-                                            , FileUploading
-                                                (File.name file2 |> FileName.fromString)
-                                                (File.size file2)
-                                                (File.mime file2 |> FileStatus.contentType)
-                                            )
-                                        )
-                                        (Nonempty file files)
-                                        |> NonemptyDict.fromNonemptyList
-                                    )
-                    in
-                    ( { loggedIn
-                        | filesToUpload =
-                            SeqDict.insert guildOrDmId dict loggedIn.filesToUpload
-                        , drafts =
-                            case String.join " " fileText |> String.Nonempty.fromString of
-                                Just fileText2 ->
-                                    SeqDict.update
-                                        guildOrDmId
-                                        (\maybe ->
-                                            case maybe of
-                                                Just draft ->
-                                                    String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
-                                                        |> Just
-
-                                                Nothing ->
-                                                    Just fileText2
-                                        )
-                                        loggedIn.drafts
-
-                                Nothing ->
-                                    loggedIn.drafts
-                      }
-                    , Command.batch cmds
-                    )
-                )
-                model
+            gotFiles guildOrDmId (Nonempty file files) model
 
         NewChannelFormChanged guildId newChannelForm ->
             updateLoggedIn
@@ -2898,59 +2815,7 @@ updateLoaded msg model =
             ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach guildOrDmId) )
 
         EditMessage_SelectedFilesToAttach guildOrDmId file files ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case SeqDict.get guildOrDmId loggedIn.editMessage of
-                        Just edit ->
-                            let
-                                ( fileText, cmds, dict ) =
-                                    List.foldl
-                                        (\file2 ( fileText2, cmds2, dict3 ) ->
-                                            let
-                                                id =
-                                                    Id.nextId dict3
-                                            in
-                                            ( fileText2
-                                                ++ [ " "
-                                                        ++ RichText.attachedFilePrefix
-                                                        ++ Id.toString id
-                                                        ++ RichText.attachedFileSuffix
-                                                   ]
-                                            , FileStatus.upload
-                                                (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
-                                                loggedIn.sessionId
-                                                file2
-                                                :: cmds2
-                                            , SeqDict.insert
-                                                id
-                                                (FileUploading
-                                                    (File.name file2 |> FileName.fromString)
-                                                    (File.size file2)
-                                                    (File.mime file2 |> FileStatus.contentType)
-                                                )
-                                                dict3
-                                            )
-                                        )
-                                        ( [], [], edit.attachedFiles )
-                                        (file :: files)
-                            in
-                            ( { loggedIn
-                                | editMessage =
-                                    SeqDict.insert
-                                        guildOrDmId
-                                        { edit
-                                            | text = edit.text ++ String.concat fileText
-                                            , attachedFiles = dict
-                                        }
-                                        loggedIn.editMessage
-                              }
-                            , Command.batch cmds
-                            )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
+            editMessage_gotFiles guildOrDmId (Nonempty file files) model
 
         EditMessage_GotFileHashName guildOrDmId messageIndex fileId result ->
             updateLoggedIn
@@ -2975,6 +2840,167 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        EditMessage_PastedFiles guildOrDmId files ->
+            editMessage_gotFiles guildOrDmId files model
+
+        PastedFiles guildOrDmId files ->
+            gotFiles guildOrDmId files model
+
+
+gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                ( fileText, cmds, dict ) =
+                    case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                        Just dict2 ->
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId (NonemptyDict.toSeqDict dict3)
+                                    in
+                                    ( fileText2
+                                        ++ [ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.upload
+                                        (GotFileHashName guildOrDmId id)
+                                        loggedIn.sessionId
+                                        file2
+                                        :: cmds2
+                                    , NonemptyDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            (File.size file2)
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], dict2 )
+                                files
+
+                        Nothing ->
+                            ( List.indexedMap
+                                (\index _ ->
+                                    RichText.attachedFilePrefix
+                                        ++ Id.toString (Id.fromInt (index + 1))
+                                        ++ RichText.attachedFileSuffix
+                                )
+                                (List.Nonempty.toList files)
+                            , List.indexedMap
+                                (\index file2 ->
+                                    FileStatus.upload
+                                        (GotFileHashName guildOrDmId (Id.fromInt (index + 1)))
+                                        loggedIn.sessionId
+                                        file2
+                                )
+                                (List.Nonempty.toList files)
+                            , List.Nonempty.indexedMap
+                                (\index file2 ->
+                                    ( Id.fromInt (index + 1)
+                                    , FileUploading
+                                        (File.name file2 |> FileName.fromString)
+                                        (File.size file2)
+                                        (File.mime file2 |> FileStatus.contentType)
+                                    )
+                                )
+                                files
+                                |> NonemptyDict.fromNonemptyList
+                            )
+            in
+            ( { loggedIn
+                | filesToUpload =
+                    SeqDict.insert guildOrDmId dict loggedIn.filesToUpload
+                , drafts =
+                    case String.join " " fileText |> String.Nonempty.fromString of
+                        Just fileText2 ->
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
+                                                |> Just
+
+                                        Nothing ->
+                                            Just fileText2
+                                )
+                                loggedIn.drafts
+
+                        Nothing ->
+                            loggedIn.drafts
+              }
+            , Command.batch cmds
+            )
+        )
+        model
+
+
+editMessage_gotFiles :
+    GuildOrDmId
+    -> Nonempty File.File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+editMessage_gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            case SeqDict.get guildOrDmId loggedIn.editMessage of
+                Just edit ->
+                    let
+                        ( fileText, cmds, dict ) =
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId dict3
+                                    in
+                                    ( fileText2
+                                        ++ [ " "
+                                                ++ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.upload
+                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
+                                        loggedIn.sessionId
+                                        file2
+                                        :: cmds2
+                                    , SeqDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            (File.size file2)
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], edit.attachedFiles )
+                                files
+                    in
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.insert
+                                guildOrDmId
+                                { edit
+                                    | text = edit.text ++ String.concat fileText
+                                    , attachedFiles = dict
+                                }
+                                loggedIn.editMessage
+                      }
+                    , Command.batch cmds
+                    )
+
+                Nothing ->
+                    ( loggedIn, Command.none )
+        )
+        model
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
