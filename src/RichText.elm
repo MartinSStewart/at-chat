@@ -4,6 +4,7 @@ module RichText exposing
     , RichTextState
     , append
     , attachedFilePrefix
+    , attachedFileSuffix
     , fromNonemptyString
     , mentionsUser
     , removeAttachedFile
@@ -164,7 +165,7 @@ toString users nonempty =
                         ++ "```"
 
                 AttachedFile fileId ->
-                    attachedFilePrefix ++ Id.toString fileId ++ "]"
+                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
         )
         nonempty
         |> List.Nonempty.toList
@@ -421,7 +422,7 @@ parser users modifiers =
                 , Parser.succeed identity
                     |. Parser.symbol attachedFilePrefix
                     |= Parser.int
-                    |. Parser.symbol "]"
+                    |. Parser.symbol attachedFileSuffix
                     |> Parser.backtrackable
                     |> Parser.map
                         (\int ->
@@ -451,6 +452,11 @@ parser users modifiers =
 attachedFilePrefix : String
 attachedFilePrefix =
     "[!"
+
+
+attachedFileSuffix : String
+attachedFileSuffix =
+    "]"
 
 
 allModifiers : List Modifiers
@@ -907,13 +913,15 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                                             [ Html.Attributes.href fileUrl
                                             , Html.Attributes.target "_blank"
                                             , Html.Attributes.rel "noreferrer"
+                                            , Html.Attributes.style "max-width" "min(500px, 100%)"
+                                            , Html.Attributes.style "max-height" "min(500px, 100%)"
+                                            , Html.Attributes.style "object-fit" "contain"
                                             ]
                                             [ Html.img
                                                 [ Html.Attributes.src fileUrl
+                                                , Html.Attributes.style "display" "block"
                                                 , Html.Attributes.style "max-width" "min(500px, 100%)"
                                                 , Html.Attributes.style "max-height" "min(500px, 100%)"
-                                                , Html.Attributes.style "display" "block"
-                                                , Html.Attributes.style "object-fit" "contain"
                                                 ]
                                                 []
                                             ]
@@ -1067,7 +1075,7 @@ textInputViewHelper state allUsers nonempty =
                     ]
 
                 AttachedFile fileId ->
-                    [ formatText (attachedFilePrefix ++ Id.toString fileId ++ "]") ]
+                    [ formatText (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) ]
         )
         (List.Nonempty.toList nonempty)
 

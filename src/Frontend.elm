@@ -1188,10 +1188,9 @@ updateLoaded msg model =
                                                     Id.nextId (NonemptyDict.toSeqDict dict3)
                                             in
                                             ( fileText2
-                                                ++ [ " "
-                                                        ++ RichText.attachedFilePrefix
+                                                ++ [ RichText.attachedFilePrefix
                                                         ++ Id.toString id
-                                                        ++ "]"
+                                                        ++ RichText.attachedFileSuffix
                                                    ]
                                             , FileStatus.upload
                                                 (GotFileHashName guildOrDmId id)
@@ -1213,7 +1212,11 @@ updateLoaded msg model =
 
                                 Nothing ->
                                     ( List.indexedMap
-                                        (\index _ -> " [!" ++ Id.toString (Id.fromInt (index + 1)) ++ "]")
+                                        (\index _ ->
+                                            RichText.attachedFilePrefix
+                                                ++ Id.toString (Id.fromInt (index + 1))
+                                                ++ RichText.attachedFileSuffix
+                                        )
                                         (file :: files)
                                     , List.indexedMap
                                         (\index file2 ->
@@ -1240,14 +1243,14 @@ updateLoaded msg model =
                         | filesToUpload =
                             SeqDict.insert guildOrDmId dict loggedIn.filesToUpload
                         , drafts =
-                            case String.concat fileText |> String.Nonempty.fromString of
+                            case String.join " " fileText |> String.Nonempty.fromString of
                                 Just fileText2 ->
                                     SeqDict.update
                                         guildOrDmId
                                         (\maybe ->
                                             case maybe of
                                                 Just draft ->
-                                                    String.Nonempty.append_ draft (String.Nonempty.toString fileText2)
+                                                    String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
                                                         |> Just
 
                                                 Nothing ->
@@ -2912,7 +2915,7 @@ updateLoaded msg model =
                                                 ++ [ " "
                                                         ++ RichText.attachedFilePrefix
                                                         ++ Id.toString id
-                                                        ++ "]"
+                                                        ++ RichText.attachedFileSuffix
                                                    ]
                                             , FileStatus.upload
                                                 (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
