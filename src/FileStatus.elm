@@ -5,7 +5,6 @@ module FileStatus exposing
     , FileId
     , FileStatus(..)
     , contentType
-    , contentTypeToString
     , fileHash
     , fileUploadPreview
     , fileUrl
@@ -26,6 +25,7 @@ import StringExtra
 import Ui
 import Ui.Font
 import Ui.Input
+import Ui.Shadow
 import Url
 
 
@@ -97,11 +97,6 @@ contentType =
     ContentType
 
 
-contentTypeToString : ContentType -> String
-contentTypeToString (ContentType a) =
-    a
-
-
 fileUploadPreview : (Id FileId -> msg) -> NonemptyDict.NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
 fileUploadPreview onPressDelete filesToUpload2 =
     Ui.row
@@ -133,6 +128,18 @@ fileUploadPreview onPressDelete filesToUpload2 =
                             (Ui.html (Icons.delete 19))
                         )
                         |> Ui.inFront
+                    , Ui.el
+                        [ Ui.alignBottom
+                        , Ui.padding 4
+                        , Ui.Font.bold
+                        , Ui.Shadow.font
+                            { offset = ( 0, 0 )
+                            , blur = 2
+                            , color = Ui.rgb 0 0 0
+                            }
+                        ]
+                        (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
+                        |> Ui.inFront
                     ]
                     (case fileStatus of
                         FileUploading _ _ _ ->
@@ -158,6 +165,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                     [ Ui.width (Ui.px 42)
                                     , Ui.centerX
                                     , Ui.centerY
+                                    , Ui.Font.color MyUi.font3
                                     ]
                                     (Ui.html Icons.document)
 
@@ -169,6 +177,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                     , Ui.centerX
                                     , Ui.centerY
                                     , MyUi.prewrap
+                                    , Ui.Font.color MyUi.font3
                                     ]
                                     (Ui.text "0110\n0001")
 

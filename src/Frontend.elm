@@ -2810,9 +2810,16 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedDeletePendingUpload guildOrDmId fileStatusId ->
+        PressedDeletePendingUpload guildOrDmId fileId ->
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        allUsers =
+                            LocalState.allUsers local
+                    in
                     ( { loggedIn
                         | filesToUpload =
                             SeqDict.update
@@ -2821,13 +2828,34 @@ updateLoaded msg model =
                                     case maybe of
                                         Just dict ->
                                             NonemptyDict.toSeqDict dict
-                                                |> SeqDict.remove fileStatusId
+                                                |> SeqDict.remove fileId
                                                 |> NonemptyDict.fromSeqDict
 
                                         Nothing ->
                                             Nothing
                                 )
                                 loggedIn.filesToUpload
+                        , drafts =
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            case
+                                                RichText.fromNonemptyString allUsers draft
+                                                    |> RichText.removeAttachedFile fileId
+                                            of
+                                                Just richText ->
+                                                    RichText.toString allUsers richText
+                                                        |> String.Nonempty.fromString
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                loggedIn.drafts
                       }
                     , Command.none
                     )

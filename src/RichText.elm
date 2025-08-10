@@ -6,6 +6,7 @@ module RichText exposing
     , attachedFilePrefix
     , fromNonemptyString
     , mentionsUser
+    , removeAttachedFile
     , textInputView
     , toDiscord
     , toString
@@ -65,6 +66,52 @@ normalTextFromString text =
 normalTextFromNonempty : NonemptyString -> RichText
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
+
+
+removeAttachedFile : Id FileId -> Nonempty RichText -> Maybe (Nonempty RichText)
+removeAttachedFile fileId list =
+    List.filterMap
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    Just richText
+
+                UserMention id ->
+                    Just richText
+
+                Bold nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Bold
+
+                Italic nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Italic
+
+                Underline nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Underline
+
+                Strikethrough nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Strikethrough
+
+                Spoiler nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Spoiler
+
+                Hyperlink protocol string ->
+                    Just richText
+
+                InlineCode char string ->
+                    Just richText
+
+                CodeBlock language string ->
+                    Just richText
+
+                AttachedFile id ->
+                    if id == fileId then
+                        Nothing
+
+                    else
+                        Just richText
+        )
+        (List.Nonempty.toList list)
+        |> List.Nonempty.fromList
 
 
 toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
