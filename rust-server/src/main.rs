@@ -76,7 +76,7 @@ async fn upload_endpoint(request: Request) -> Response<String> {
                         } else {
                             response_with_headers(
                                 StatusCode::UNAUTHORIZED,
-                                String::from("Invalid permissions 4"),
+                                String::from("Invalid permissions 4: ") + &text,
                             )
                         }
                     }
