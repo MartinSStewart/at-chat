@@ -264,8 +264,9 @@ editMessageTextInputConfig guildOrDmId =
     , pressedArrowUpInEmptyInput = FrontendNoOp
     , pressedPingUser = PressedPingUserForEditMessage guildOrDmId
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
-    , pressedUploadFile = FrontendNoOp
+    , pressedUploadFile = EditMessage_PressedAttachFiles guildOrDmId
     , target = MessageInput.EditMessage
+    , onPasteFiles = EditMessage_PastedFiles guildOrDmId
     }
 
 
@@ -383,7 +384,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                             [ Ui.Font.color MyUi.errorColor ]
                             (button
                                 isMobile
-                                Icons.delete
+                                (Icons.delete 24)
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
                             )

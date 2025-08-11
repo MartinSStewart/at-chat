@@ -162,22 +162,22 @@ init =
 isPressMsg : Msg -> Bool
 isPressMsg msg =
     case msg of
-        TypedMessage string ->
+        TypedMessage _ ->
             False
 
         PressedSend ->
             True
 
-        TypedChatHistory string ->
+        TypedChatHistory _ ->
             False
 
-        PressedKeep responseId ->
+        PressedKeep _ ->
             True
 
-        PressedDelete responseId ->
+        PressedDelete _ ->
             True
 
-        PressedRetry responseId ->
+        PressedRetry _ ->
             True
 
         PressedChatHistoryContainer ->
@@ -189,31 +189,31 @@ isPressMsg msg =
         PressedOptionsButton ->
             True
 
-        SelectedAiModel string ->
+        SelectedAiModel _ ->
             False
 
-        SelectedSendMessageWith sendMessageWith ->
+        SelectedSendMessageWith _ ->
             False
 
-        TypedUserPrefix string ->
+        TypedUserPrefix _ ->
             False
 
-        TypedBotPrefix string ->
+        TypedBotPrefix _ ->
             False
 
-        CheckDebounce int ->
+        CheckDebounce _ ->
             False
 
-        GotLocalStorage string ->
+        GotLocalStorage _ ->
             False
 
-        EditedResponse responseId string ->
+        EditedResponse _ _ ->
             False
 
         NoOp ->
             False
 
-        GotAiModels result ->
+        GotAiModels _ ->
             False
 
 

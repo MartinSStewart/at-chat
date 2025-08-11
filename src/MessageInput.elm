@@ -12,6 +12,7 @@ module MessageInput exposing
 import Diff
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File exposing (File)
 import Effect.Task as Task
 import Html
 import Html.Attributes
@@ -19,7 +20,9 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
+import Json.Decode.Extra
 import List.Extra
+import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
 import PersonName
@@ -58,6 +61,7 @@ type alias MsgConfig msg =
     , pressedPingDropdownContainer : msg
     , pressedUploadFile : msg
     , target : MentionUserTarget
+    , onPasteFiles : Nonempty File -> msg
     }
 
 
@@ -94,6 +98,21 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "outline" "none"
+            , Html.Events.preventDefaultOn
+                "paste"
+                (Json.Decode.at
+                    [ "clipboardData", "files" ]
+                    (Json.Decode.Extra.collection File.decoder)
+                    |> Json.Decode.andThen
+                        (\list ->
+                            case List.Nonempty.fromList list of
+                                Just nonempty ->
+                                    Json.Decode.succeed ( msgConfig.onPasteFiles nonempty, True )
+
+                                Nothing ->
+                                    Json.Decode.fail ""
+                        )
+                )
             , Html.Events.onFocus (msgConfig.textInputGotFocus channelTextInputId)
             , Html.Events.onBlur (msgConfig.textInputLostFocus channelTextInputId)
             , case pingUser of

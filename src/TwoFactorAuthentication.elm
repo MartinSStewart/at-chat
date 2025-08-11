@@ -352,8 +352,8 @@ isPressMsg msg =
         PressedStart2FaSetup ->
             True
 
-        PressedCopy string ->
+        PressedCopy _ ->
             True
 
-        TypedTwoFactorCode string ->
+        TypedTwoFactorCode _ ->
             False

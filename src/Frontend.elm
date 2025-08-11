@@ -16,7 +16,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
-import Effect.File as File
+import Effect.File as File exposing (File)
 import Effect.File.Select
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
@@ -26,6 +26,8 @@ import Effect.Time as Time
 import EmailAddress
 import Emoji exposing (Emoji)
 import Env
+import FileName
+import FileStatus exposing (FileData, FileId, FileStatus(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -34,11 +36,11 @@ import Id exposing (ChannelId, Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
-import List.Nonempty exposing (Nonempty)
+import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..))
+import Message exposing (Message(..), UserTextMessageData)
 import MessageInput
 import MessageMenu
 import MyUi
@@ -52,7 +54,7 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
-import SeqDict
+import SeqDict exposing (SeqDict)
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -159,12 +161,6 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
-                                , case loggedIn.filesToUpload of
-                                    [] ->
-                                        Subscription.none
-
-                                    _ ->
-                                        Time.every (Duration.milliseconds 50) TimeToUploadFile
                                 ]
 
                         NotLoggedIn _ ->
@@ -327,7 +323,9 @@ loadedInitHelper time loginData loading =
 
                     Nothing ->
                         TwoFactorNotStarted
-            , filesToUpload = []
+            , filesToUpload = SeqDict.empty
+            , sessionId = loginData.sessionId
+            , isReloading = False
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -637,10 +635,10 @@ isPressMsg msg =
         UrlClicked _ ->
             False
 
-        UrlChanged url ->
+        UrlChanged _ ->
             False
 
-        GotTime posix ->
+        GotTime _ ->
             False
 
         GotWindowSize _ _ ->
@@ -664,55 +662,55 @@ isPressMsg msg =
         ScrolledToLogSection ->
             False
 
-        PressedLink route ->
+        PressedLink _ ->
             True
 
-        TypedMessage guildOrDmId string ->
+        TypedMessage _ _ ->
             False
 
-        PressedSendMessage guildOrDmId ->
+        PressedSendMessage _ ->
             True
 
-        NewChannelFormChanged id newChannelForm ->
+        NewChannelFormChanged _ _ ->
             False
 
-        PressedSubmitNewChannel id newChannelForm ->
+        PressedSubmitNewChannel _ _ ->
             False
 
-        MouseEnteredChannelName id _ ->
+        MouseEnteredChannelName _ _ ->
             False
 
-        MouseExitedChannelName id _ ->
+        MouseExitedChannelName _ _ ->
             False
 
-        EditChannelFormChanged id _ newChannelForm ->
+        EditChannelFormChanged _ _ _ ->
             False
 
-        PressedCancelEditChannelChanges id _ ->
+        PressedCancelEditChannelChanges _ _ ->
             True
 
-        PressedSubmitEditChannelChanges id _ newChannelForm ->
+        PressedSubmitEditChannelChanges _ _ _ ->
             True
 
-        PressedDeleteChannel id _ ->
+        PressedDeleteChannel _ _ ->
             True
 
-        PressedCreateInviteLink id ->
+        PressedCreateInviteLink _ ->
             True
 
         FrontendNoOp ->
             False
 
-        PressedCopyText string ->
+        PressedCopyText _ ->
             True
 
         PressedCreateGuild ->
             True
 
-        NewGuildFormChanged newGuildForm ->
+        NewGuildFormChanged _ ->
             False
 
-        PressedSubmitNewGuild newGuildForm ->
+        PressedSubmitNewGuild _ ->
             True
 
         PressedCancelNewGuild ->
@@ -721,10 +719,10 @@ isPressMsg msg =
         DebouncedTyping ->
             False
 
-        GotPingUserPosition result ->
+        GotPingUserPosition _ ->
             False
 
-        PressedPingUser guildOrDmId int ->
+        PressedPingUser _ _ ->
             True
 
         SetFocus ->
@@ -733,94 +731,94 @@ isPressMsg msg =
         RemoveFocus ->
             False
 
-        PressedArrowInDropdown guildOrDmId int ->
+        PressedArrowInDropdown _ _ ->
             True
 
-        TextInputGotFocus htmlId ->
+        TextInputGotFocus _ ->
             False
 
-        TextInputLostFocus htmlId ->
+        TextInputLostFocus _ ->
             False
 
-        KeyDown string ->
+        KeyDown _ ->
             False
 
-        MouseEnteredMessage int ->
+        MouseEnteredMessage _ ->
             False
 
-        MouseExitedMessage int ->
+        MouseExitedMessage _ ->
             False
 
-        AltPressedMessage int coord ->
+        AltPressedMessage _ _ ->
             False
 
-        MessageMenu_PressedShowReactionEmojiSelector int coord ->
+        MessageMenu_PressedShowReactionEmojiSelector _ _ ->
             True
 
-        MessageMenu_PressedEditMessage int ->
+        MessageMenu_PressedEditMessage _ ->
             True
 
-        PressedEmojiSelectorEmoji emoji ->
+        PressedEmojiSelectorEmoji _ ->
             True
 
-        PressedReactionEmoji_Add int emoji ->
+        PressedReactionEmoji_Add _ _ ->
             True
 
-        PressedReactionEmoji_Remove int emoji ->
+        PressedReactionEmoji_Remove _ _ ->
             True
 
-        GotPingUserPositionForEditMessage result ->
+        GotPingUserPositionForEditMessage _ ->
             False
 
-        TypedEditMessage guildOrDmId string ->
+        TypedEditMessage _ _ ->
             False
 
-        PressedSendEditMessage guildOrDmId ->
+        PressedSendEditMessage _ ->
             True
 
-        PressedArrowInDropdownForEditMessage guildOrDmId int ->
+        PressedArrowInDropdownForEditMessage _ _ ->
             True
 
-        PressedPingUserForEditMessage guildOrDmId int ->
+        PressedPingUserForEditMessage _ _ ->
             True
 
-        PressedArrowUpInEmptyInput guildOrDmId ->
+        PressedArrowUpInEmptyInput _ ->
             True
 
-        MessageMenu_PressedReply int ->
+        MessageMenu_PressedReply _ ->
             True
 
-        PressedCloseReplyTo guildOrDmId ->
+        PressedCloseReplyTo _ ->
             True
 
-        PressedSpoiler int _ ->
+        PressedSpoiler _ _ ->
             True
 
-        VisibilityChanged visibility ->
+        VisibilityChanged _ ->
             False
 
-        CheckedNotificationPermission notificationPermission ->
+        CheckedNotificationPermission _ ->
             False
 
-        CheckedPwaStatus pwaStatus ->
+        CheckedPwaStatus _ ->
             False
 
-        TouchStart posix nonemptyDict ->
+        TouchStart _ _ ->
             False
 
-        TouchMoved posix nonemptyDict ->
+        TouchMoved _ _ ->
             False
 
-        TouchEnd posix ->
+        TouchEnd _ ->
             False
 
-        TouchCancel posix ->
+        TouchCancel _ ->
             False
 
-        ChannelSidebarAnimated duration ->
+        ChannelSidebarAnimated _ ->
             False
 
-        MessageMenuAnimated duration ->
+        MessageMenuAnimated _ ->
             False
 
         ScrolledToBottom ->
@@ -829,7 +827,7 @@ isPressMsg msg =
         PressedChannelHeaderBackButton ->
             True
 
-        UserScrolled record ->
+        UserScrolled _ ->
             False
 
         PressedBody ->
@@ -838,13 +836,13 @@ isPressMsg msg =
         PressedReactionEmojiContainer ->
             True
 
-        MessageMenu_PressedShowFullMenu int coord ->
+        MessageMenu_PressedShowFullMenu _ _ ->
             True
 
-        MessageMenu_PressedDeleteMessage guildOrDmId int ->
+        MessageMenu_PressedDeleteMessage _ _ ->
             True
 
-        PressedReplyLink int ->
+        PressedReplyLink _ ->
             True
 
         ScrolledToMessage ->
@@ -856,7 +854,7 @@ isPressMsg msg =
         MessageMenu_PressedContainer ->
             True
 
-        PressedCancelMessageEdit guildOrDmId ->
+        PressedCancelMessageEdit _ ->
             True
 
         PressedPingDropdownContainer ->
@@ -865,7 +863,7 @@ isPressMsg msg =
         PressedEditMessagePingDropdownContainer ->
             True
 
-        CheckMessageAltPress posix int ->
+        CheckMessageAltPress _ _ ->
             False
 
         PressedShowUserOption ->
@@ -889,16 +887,34 @@ isPressMsg msg =
         OneFrameAfterDragEnd ->
             False
 
-        PressedAttachFiles guildOrDmId ->
+        PressedAttachFiles _ ->
             True
 
-        SelectedFilesToAttach file files ->
+        SelectedFilesToAttach _ _ _ ->
             False
 
-        TimeToUploadFile posix ->
+        GotFileHashName _ _ _ ->
             False
 
-        GotAttachmentContents bytes ->
+        PressedDeleteAttachedFile _ _ ->
+            True
+
+        EditMessage_PressedDeleteAttachedFile _ _ ->
+            True
+
+        EditMessage_PressedAttachFiles _ ->
+            True
+
+        EditMessage_SelectedFilesToAttach _ _ _ ->
+            False
+
+        EditMessage_GotFileHashName _ _ _ _ ->
+            False
+
+        EditMessage_PastedFiles guildOrDmId nonempty ->
+            False
+
+        PastedFiles guildOrDmId nonempty ->
             False
 
 
@@ -1046,9 +1062,9 @@ updateLoaded msg model =
                         (\loggedIn ->
                             handleLocalChange
                                 model.time
-                                (case routeToMessageId model.route of
+                                (case routeToGuildOrDmId model.route of
                                     Just guildOrDmId ->
-                                        case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
+                                        case guildOrDmIdToMessages guildOrDmId (Local.model loggedIn.localState) of
                                             Just messages ->
                                                 Local_SetLastViewed
                                                     guildOrDmId
@@ -1139,11 +1155,19 @@ updateLoaded msg model =
                                     guildOrDmId
                                     (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
                                     (SeqDict.get guildOrDmId loggedIn.replyTo)
+                                    (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                        Just dict ->
+                                            NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+
+                                        Nothing ->
+                                            SeqDict.empty
+                                    )
                                     |> Just
                                 )
                                 { loggedIn
                                     | drafts = SeqDict.remove guildOrDmId loggedIn.drafts
                                     , replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo
+                                    , filesToUpload = SeqDict.remove guildOrDmId loggedIn.filesToUpload
                                 }
                                 scrollToBottomOfChannel
 
@@ -1153,16 +1177,10 @@ updateLoaded msg model =
                 model
 
         PressedAttachFiles guildOrDmId ->
-            ( model, Effect.File.Select.files [] SelectedFilesToAttach )
+            ( model, Effect.File.Select.files [] (SelectedFilesToAttach guildOrDmId) )
 
-        SelectedFilesToAttach file files ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn | filesToUpload = file :: files ++ loggedIn.filesToUpload }
-                    , Command.none
-                    )
-                )
-                model
+        SelectedFilesToAttach guildOrDmId file files ->
+            gotFiles guildOrDmId (Nonempty file files) model
 
         NewChannelFormChanged guildId newChannelForm ->
             updateLoggedIn
@@ -1510,12 +1528,12 @@ updateLoaded msg model =
                                 Nothing ->
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
-                                            case routeToMessageId model.route of
+                                            case routeToGuildOrDmId model.route of
                                                 Just guildOrDmId ->
                                                     handleLocalChange
                                                         model.time
                                                         (case
-                                                            messageIdToMessages
+                                                            guildOrDmIdToMessages
                                                                 guildOrDmId
                                                                 (Local.model loggedIn2.localState)
                                                          of
@@ -1560,7 +1578,7 @@ updateLoaded msg model =
             else
                 updateLoggedIn
                     (\loggedIn ->
-                        case ( routeToMessageId model.route, loggedIn.messageHover ) of
+                        case ( routeToGuildOrDmId model.route, loggedIn.messageHover ) of
                             ( Nothing, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
@@ -1584,7 +1602,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | messageHover =
-                            case routeToMessageId model.route of
+                            case routeToGuildOrDmId model.route of
                                 Just guildOrDmId ->
                                     if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
                                         NoMessageHover
@@ -1614,15 +1632,23 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | showEmojiSelector =
-                            case model.route of
-                                GuildRoute guildId (ChannelRoute channelId _) ->
-                                    EmojiSelectorForReaction (GuildOrDmId_Guild guildId channelId) messageIndex
+                            case loggedIn.showEmojiSelector of
+                                EmojiSelectorHidden ->
+                                    case model.route of
+                                        GuildRoute guildId (ChannelRoute channelId _) ->
+                                            EmojiSelectorForReaction (GuildOrDmId_Guild guildId channelId) messageIndex
 
-                                DmRoute otherUserId _ ->
-                                    EmojiSelectorForReaction (GuildOrDmId_Dm otherUserId) messageIndex
+                                        DmRoute otherUserId _ ->
+                                            EmojiSelectorForReaction (GuildOrDmId_Dm otherUserId) messageIndex
 
-                                _ ->
-                                    loggedIn.showEmojiSelector
+                                        _ ->
+                                            loggedIn.showEmojiSelector
+
+                                EmojiSelectorForReaction _ _ ->
+                                    EmojiSelectorHidden
+
+                                EmojiSelectorForMessage ->
+                                    EmojiSelectorHidden
                         , messageHover =
                             case loggedIn.messageHover of
                                 NoMessageHover ->
@@ -1643,7 +1669,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        maybeMessageAndId : Maybe ( GuildOrDmId, Message.UserTextMessageData )
+                        maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
                         maybeMessageAndId =
                             case model.route of
                                 GuildRoute guildId (ChannelRoute channelId _) ->
@@ -1696,6 +1722,8 @@ updateLoaded msg model =
                                                 { messageIndex = messageIndex
                                                 , text =
                                                     RichText.toString (LocalState.allUsers local) message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                     }
@@ -1788,7 +1816,7 @@ updateLoaded msg model =
         PressedReactionEmoji_Remove messageIndex emoji ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             handleLocalChange
                                 model.time
@@ -1900,7 +1928,7 @@ updateLoaded msg model =
                                 model.time
                                 (case
                                     ( String.Nonempty.fromString edit.text
-                                    , messageIdToMessage guildOrDmId edit.messageIndex local
+                                    , guildOrDmIdToMessage guildOrDmId edit.messageIndex local
                                     )
                                  of
                                     ( Just nonempty, Just message ) ->
@@ -1920,14 +1948,14 @@ updateLoaded msg model =
                                                 guildOrDmId
                                                 edit.messageIndex
                                                 richText
+                                                (FileStatus.onlyUploadedFiles edit.attachedFiles)
                                                 |> Just
 
                                     _ ->
                                         Nothing
                                 )
                                 { loggedIn
-                                    | editMessage =
-                                        SeqDict.remove guildOrDmId loggedIn.editMessage
+                                    | editMessage = SeqDict.remove guildOrDmId loggedIn.editMessage
                                     , messageHover = NoMessageHover
                                 }
                                 (setFocus model Pages.Guild.channelTextInputId)
@@ -2000,7 +2028,7 @@ updateLoaded msg model =
 
                         maybeMessages : Maybe (Array Message)
                         maybeMessages =
-                            messageIdToMessages guildOrDmId local
+                            guildOrDmIdToMessages guildOrDmId local
                     in
                     case maybeMessages of
                         Just messages ->
@@ -2009,7 +2037,7 @@ updateLoaded msg model =
                                 messageCount =
                                     Array.length messages
 
-                                mostRecentMessage : Maybe ( Int, Nonempty RichText )
+                                mostRecentMessage : Maybe ( Int, UserTextMessageData )
                                 mostRecentMessage =
                                     (if messageCount < 5 then
                                         Array.toList messages |> List.indexedMap Tuple.pair
@@ -2028,7 +2056,7 @@ updateLoaded msg model =
                                                 case message of
                                                     UserTextMessage data ->
                                                         if local.localUser.userId == data.createdBy then
-                                                            Just ( index, data.content )
+                                                            Just ( index, data )
 
                                                         else
                                                             Nothing
@@ -2048,7 +2076,9 @@ updateLoaded msg model =
                                                 guildOrDmId
                                                 { messageIndex = index
                                                 , text =
-                                                    RichText.toString (LocalState.allUsers local) message
+                                                    RichText.toString (LocalState.allUsers local) message.content
+                                                , attachedFiles =
+                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
                                                 }
                                                 loggedIn.editMessage
                                       }
@@ -2107,7 +2137,7 @@ updateLoaded msg model =
         PressedSpoiler messageIndex spoilerIndex ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             let
                                 revealedSpoilers : RevealedSpoilers
@@ -2397,7 +2427,7 @@ updateLoaded msg model =
         MessageMenu_PressedShowFullMenu messageIndex clickedAt ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             let
                                 local : LocalState
@@ -2450,12 +2480,12 @@ updateLoaded msg model =
                 )
                 model
 
-        MessageMenu_PressedDeleteMessage messageId messageIndex ->
+        MessageMenu_PressedDeleteMessage guildOrDmId messageIndex ->
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (Just (Local_DeleteMessage messageId messageIndex))
+                        (Just (Local_DeleteMessage guildOrDmId messageIndex))
                         (MessageMenu.close model loggedIn)
                         Command.none
                 )
@@ -2670,27 +2700,312 @@ updateLoaded msg model =
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
-        TimeToUploadFile time ->
+        GotFileHashName guildOrDmId fileStatusId result ->
             updateLoggedIn
                 (\loggedIn ->
-                    case loggedIn.filesToUpload of
-                        [] ->
-                            ( loggedIn, Command.none )
-
-                        next :: rest ->
-                            ( { loggedIn | filesToUpload = rest }
-                            , File.toBytes next |> Task.perform GotAttachmentContents
-                            )
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (NonemptyDict.updateIfExists fileStatusId (FileStatus.addFileHash result))
+                                loggedIn.filesToUpload
+                      }
+                    , Command.none
+                    )
                 )
                 model
 
-        GotAttachmentContents bytes ->
-            ( model, Lamdera.sendToBackend (UploadFileRequest bytes) )
+        PressedDeleteAttachedFile guildOrDmId fileId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        allUsers =
+                            LocalState.allUsers local
+                    in
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just dict ->
+                                            NonemptyDict.toSeqDict dict
+                                                |> SeqDict.remove fileId
+                                                |> NonemptyDict.fromSeqDict
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                loggedIn.filesToUpload
+                        , drafts =
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            case
+                                                RichText.fromNonemptyString allUsers draft
+                                                    |> RichText.removeAttachedFile fileId
+                                            of
+                                                Just richText ->
+                                                    RichText.toString allUsers richText
+                                                        |> String.Nonempty.fromString
+
+                                                Nothing ->
+                                                    Nothing
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                loggedIn.drafts
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedDeleteAttachedFile guildOrDmId fileId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        allUsers =
+                            LocalState.allUsers local
+                    in
+                    ( case SeqDict.get guildOrDmId loggedIn.editMessage of
+                        Just edit ->
+                            { loggedIn
+                                | editMessage =
+                                    SeqDict.insert
+                                        guildOrDmId
+                                        { edit
+                                            | text =
+                                                case String.Nonempty.fromString edit.text of
+                                                    Just nonempty ->
+                                                        case
+                                                            RichText.fromNonemptyString allUsers nonempty
+                                                                |> RichText.removeAttachedFile fileId
+                                                        of
+                                                            Just richText ->
+                                                                RichText.toString allUsers richText
+
+                                                            Nothing ->
+                                                                edit.text
+
+                                                    Nothing ->
+                                                        edit.text
+                                            , attachedFiles = SeqDict.remove fileId edit.attachedFiles
+                                        }
+                                        loggedIn.editMessage
+                            }
+
+                        Nothing ->
+                            loggedIn
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PressedAttachFiles guildOrDmId ->
+            ( model, Effect.File.Select.files [] (EditMessage_SelectedFilesToAttach guildOrDmId) )
+
+        EditMessage_SelectedFilesToAttach guildOrDmId file files ->
+            editMessage_gotFiles guildOrDmId (Nonempty file files) model
+
+        EditMessage_GotFileHashName guildOrDmId messageIndex fileId result ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (\edit ->
+                                    if edit.messageIndex == messageIndex then
+                                        { edit
+                                            | attachedFiles =
+                                                SeqDict.updateIfExists fileId (FileStatus.addFileHash result) edit.attachedFiles
+                                        }
+
+                                    else
+                                        edit
+                                )
+                                loggedIn.editMessage
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        EditMessage_PastedFiles guildOrDmId files ->
+            editMessage_gotFiles guildOrDmId files model
+
+        PastedFiles guildOrDmId files ->
+            gotFiles guildOrDmId files model
+
+
+gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                ( fileText, cmds, dict ) =
+                    case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                        Just dict2 ->
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId (NonemptyDict.toSeqDict dict3)
+                                    in
+                                    ( fileText2
+                                        ++ [ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.upload
+                                        (GotFileHashName guildOrDmId id)
+                                        loggedIn.sessionId
+                                        file2
+                                        :: cmds2
+                                    , NonemptyDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            (File.size file2)
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], dict2 )
+                                files
+
+                        Nothing ->
+                            ( List.indexedMap
+                                (\index _ ->
+                                    RichText.attachedFilePrefix
+                                        ++ Id.toString (Id.fromInt (index + 1))
+                                        ++ RichText.attachedFileSuffix
+                                )
+                                (List.Nonempty.toList files)
+                            , List.indexedMap
+                                (\index file2 ->
+                                    FileStatus.upload
+                                        (GotFileHashName guildOrDmId (Id.fromInt (index + 1)))
+                                        loggedIn.sessionId
+                                        file2
+                                )
+                                (List.Nonempty.toList files)
+                            , List.Nonempty.indexedMap
+                                (\index file2 ->
+                                    ( Id.fromInt (index + 1)
+                                    , FileUploading
+                                        (File.name file2 |> FileName.fromString)
+                                        (File.size file2)
+                                        (File.mime file2 |> FileStatus.contentType)
+                                    )
+                                )
+                                files
+                                |> NonemptyDict.fromNonemptyList
+                            )
+            in
+            ( { loggedIn
+                | filesToUpload =
+                    SeqDict.insert guildOrDmId dict loggedIn.filesToUpload
+                , drafts =
+                    case String.join " " fileText |> String.Nonempty.fromString of
+                        Just fileText2 ->
+                            SeqDict.update
+                                guildOrDmId
+                                (\maybe ->
+                                    case maybe of
+                                        Just draft ->
+                                            String.Nonempty.append_ draft (" " ++ String.Nonempty.toString fileText2)
+                                                |> Just
+
+                                        Nothing ->
+                                            Just fileText2
+                                )
+                                loggedIn.drafts
+
+                        Nothing ->
+                            loggedIn.drafts
+              }
+            , Command.batch cmds
+            )
+        )
+        model
+
+
+editMessage_gotFiles :
+    GuildOrDmId
+    -> Nonempty File.File
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+editMessage_gotFiles guildOrDmId files model =
+    updateLoggedIn
+        (\loggedIn ->
+            case SeqDict.get guildOrDmId loggedIn.editMessage of
+                Just edit ->
+                    let
+                        ( fileText, cmds, dict ) =
+                            List.Nonempty.foldl
+                                (\file2 ( fileText2, cmds2, dict3 ) ->
+                                    let
+                                        id =
+                                            Id.nextId dict3
+                                    in
+                                    ( fileText2
+                                        ++ [ " "
+                                                ++ RichText.attachedFilePrefix
+                                                ++ Id.toString id
+                                                ++ RichText.attachedFileSuffix
+                                           ]
+                                    , FileStatus.upload
+                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
+                                        loggedIn.sessionId
+                                        file2
+                                        :: cmds2
+                                    , SeqDict.insert
+                                        id
+                                        (FileUploading
+                                            (File.name file2 |> FileName.fromString)
+                                            (File.size file2)
+                                            (File.mime file2 |> FileStatus.contentType)
+                                        )
+                                        dict3
+                                    )
+                                )
+                                ( [], [], edit.attachedFiles )
+                                files
+                    in
+                    ( { loggedIn
+                        | editMessage =
+                            SeqDict.insert
+                                guildOrDmId
+                                { edit
+                                    | text = edit.text ++ String.concat fileText
+                                    , attachedFiles = dict
+                                }
+                                loggedIn.editMessage
+                      }
+                    , Command.batch cmds
+                    )
+
+                Nothing ->
+                    ( loggedIn, Command.none )
+        )
+        model
 
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
-    case routeToMessageId model.route of
+    case routeToGuildOrDmId model.route of
         Just guildOrDmId ->
             { loggedIn
                 | messageHover =
@@ -2975,7 +3290,7 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text repliedTo ->
+                Local_SendMessage createdAt guildOrDmId text repliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -3003,6 +3318,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
+                                                                    , attachedFiles = attachedFiles
                                                                     }
                                                                 )
                                                                 channel
@@ -3046,6 +3362,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
+                                                , attachedFiles = attachedFiles
                                                 }
                                             )
                             in
@@ -3130,8 +3447,8 @@ changeUpdate localMsg local =
                 Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
                     removeReactionEmoji local.localUser.userId guildOrDmId messageIndex emoji local
 
-                Local_SendEditMessage time guildOrDmId messageIndex newContent ->
-                    editMessage time local.localUser.userId guildOrDmId newContent messageIndex local
+                Local_SendEditMessage time guildOrDmId messageIndex newContent attachedFiles ->
+                    editMessage time local.localUser.userId guildOrDmId newContent attachedFiles messageIndex local
 
                 Local_MemberEditTyping time guildOrDmId messageIndex ->
                     memberEditTyping time local.localUser.userId guildOrDmId messageIndex local
@@ -3177,7 +3494,7 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt guildOrDmId text repliedTo ->
+                Server_SendMessage userId createdAt guildOrDmId text repliedTo attachedFiles ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
@@ -3207,6 +3524,7 @@ changeUpdate localMsg local =
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
                                                                     , repliedTo = repliedTo
+                                                                    , attachedFiles = attachedFiles
                                                                     }
                                                                 )
                                                                 channel
@@ -3256,6 +3574,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = repliedTo
+                                                , attachedFiles = attachedFiles
                                                 }
                                             )
                             in
@@ -3366,8 +3685,8 @@ changeUpdate localMsg local =
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId guildOrDmId messageIndex emoji local
 
-                Server_SendEditMessage time userId guildOrDmId messageIndex newContent ->
-                    editMessage time userId guildOrDmId newContent messageIndex local
+                Server_SendEditMessage time userId guildOrDmId messageIndex newContent attachedFiles ->
+                    editMessage time userId guildOrDmId newContent attachedFiles messageIndex local
 
                 Server_MemberEditTyping time userId guildOrDmId messageIndex ->
                     memberEditTyping time userId guildOrDmId messageIndex local
@@ -3429,6 +3748,7 @@ changeUpdate localMsg local =
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
                                                 , repliedTo = Nothing
+                                                , attachedFiles = SeqDict.empty
                                                 }
                                             )
                                         |> Just
@@ -3552,8 +3872,16 @@ memberEditTyping time userId guildOrDmId messageIndex local =
             }
 
 
-editMessage : Time.Posix -> Id UserId -> GuildOrDmId -> Nonempty RichText -> Int -> LocalState -> LocalState
-editMessage time userId guildOrDmId newContent messageIndex local =
+editMessage :
+    Time.Posix
+    -> Id UserId
+    -> GuildOrDmId
+    -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
+    -> Int
+    -> LocalState
+    -> LocalState
+editMessage time userId guildOrDmId newContent attachedFiles messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             { local
@@ -3561,14 +3889,12 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            LocalState.editMessage
-                                userId
-                                time
-                                newContent
-                                channelId
-                                messageIndex
-                                guild
-                                |> Result.withDefault guild
+                            case LocalState.editMessage userId time newContent attachedFiles channelId messageIndex guild of
+                                Ok ( _, guild2 ) ->
+                                    guild2
+
+                                Err _ ->
+                                    guild
                         )
                         local.guilds
             }
@@ -3579,13 +3905,12 @@ editMessage time userId guildOrDmId newContent messageIndex local =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.editMessageHelper
-                                time
-                                userId
-                                newContent
-                                messageIndex
-                                dmChannel
-                                |> Result.withDefault dmChannel
+                            case LocalState.editMessageHelper time userId newContent attachedFiles messageIndex dmChannel of
+                                Ok ( _, dmChannel2 ) ->
+                                    dmChannel2
+
+                                Err _ ->
+                                    dmChannel
                         )
                         local.dmChannels
             }
@@ -3886,7 +4211,7 @@ updateLoadedFromBackend msg model =
                                 _ ->
                                     Command.none
 
-                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo) ->
+                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _) ->
                             case guildOrDmId of
                                 GuildOrDmId_Guild guildId channelId ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
@@ -3937,19 +4262,21 @@ updateLoadedFromBackend msg model =
             ( { model | aiChatModel = newAiChatModel }, Command.map AiChatToBackend AiChatMsg cmd )
 
         YouConnected ->
-            case model.loginStatus of
-                LoggedIn _ ->
-                    ( model, Lamdera.sendToBackend ReloadDataRequest )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | isReloading = True }, Lamdera.sendToBackend ReloadDataRequest )
+                )
+                model
 
         ReloadDataResponse reloadData ->
             case reloadData of
                 Ok loginData ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( { loggedIn | localState = loginDataToLocalState loginData |> Local.init }
+                            ( { loggedIn
+                                | localState = loginDataToLocalState loginData |> Local.init
+                                , isReloading = False
+                              }
                             , Command.none
                             )
                         )
@@ -3983,7 +4310,7 @@ logout model =
 
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 scrollToBottomOfChannel =
-    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999 |> Task.attempt (\_ -> ScrolledToBottom)
+    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> ScrolledToBottom)
 
 
 playNotificationSound :
@@ -4049,7 +4376,7 @@ pendingChangesText localChange =
                 Pages.Admin.SetDiscordBotToken _ ->
                     "Set Discord bot token"
 
-        Local_SendMessage _ _ _ _ ->
+        Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
         Local_NewChannel _ _ _ ->
@@ -4076,7 +4403,7 @@ pendingChangesText localChange =
         Local_RemoveReactionEmoji _ _ _ ->
             "Removed reaction emoji"
 
-        Local_SendEditMessage _ _ _ _ ->
+        Local_SendEditMessage _ _ _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->
@@ -4110,7 +4437,7 @@ layout model attributes child =
                         Local.model loggedIn.localState
 
                     maybeMessageId =
-                        routeToMessageId model.route
+                        routeToGuildOrDmId model.route
                 in
                 [ Local.networkError
                     (\change ->
@@ -4276,6 +4603,19 @@ view model =
 
                                         Nothing ->
                                             Ui.noAttr
+                                    , if loggedIn.isReloading then
+                                        Ui.el
+                                            [ Ui.background MyUi.background1
+                                            , Ui.padding 8
+                                            , Ui.width Ui.shrink
+                                            , Ui.border 1
+                                            , Ui.borderColor MyUi.border1
+                                            ]
+                                            (Ui.text "Reloading...")
+                                            |> Ui.inFront
+
+                                      else
+                                        Ui.noAttr
                                     ]
                                     (page loggedIn local)
 
@@ -4395,8 +4735,8 @@ view model =
     }
 
 
-messageIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe Message.UserTextMessageData
-messageIdToMessage guildOrDmId messageIndex local =
+guildOrDmIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe UserTextMessageData
+guildOrDmIdToMessage guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
@@ -4425,8 +4765,8 @@ messageIdToMessage guildOrDmId messageIndex local =
                     Nothing
 
 
-messageIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
-messageIdToMessages guildOrDmId local =
+guildOrDmIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
+guildOrDmIdToMessages guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
@@ -4445,8 +4785,8 @@ messageIdToMessages guildOrDmId local =
                     Nothing
 
 
-routeToMessageId : Route -> Maybe GuildOrDmId
-routeToMessageId route =
+routeToGuildOrDmId : Route -> Maybe GuildOrDmId
+routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId _) ->
             GuildOrDmId_Guild guildId channelId |> Just

@@ -20,6 +20,7 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
+import FileStatus
 import GuildIcon exposing (NotificationType(..))
 import GuildName
 import Html
@@ -934,30 +935,8 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                         Nothing ->
                             case messageHover of
                                 IsNotHovered ->
-                                    case highlight of
-                                        NoHighlight ->
-                                            case maybeRepliedTo of
-                                                Just _ ->
-                                                    messageView
-                                                        revealedSpoilers
-                                                        highlight
-                                                        messageHover
-                                                        otherUserIsEditing
-                                                        local.localUser
-                                                        maybeRepliedTo
-                                                        index
-                                                        message
-
-                                                Nothing ->
-                                                    Ui.Lazy.lazy5
-                                                        messageViewNotHovered
-                                                        otherUserIsEditing
-                                                        revealedSpoilers
-                                                        local.localUser
-                                                        index
-                                                        message
-
-                                        _ ->
+                                    case maybeRepliedTo of
+                                        Just _ ->
                                             messageView
                                                 revealedSpoilers
                                                 highlight
@@ -968,16 +947,38 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 index
                                                 message
 
+                                        Nothing ->
+                                            Ui.Lazy.lazy6
+                                                messageViewNotHovered
+                                                otherUserIsEditing
+                                                revealedSpoilers
+                                                highlight
+                                                local.localUser
+                                                index
+                                                message
+
                                 _ ->
-                                    messageView
-                                        revealedSpoilers
-                                        highlight
-                                        messageHover
-                                        otherUserIsEditing
-                                        local.localUser
-                                        maybeRepliedTo
-                                        index
-                                        message
+                                    case maybeRepliedTo of
+                                        Just _ ->
+                                            messageView
+                                                revealedSpoilers
+                                                highlight
+                                                messageHover
+                                                otherUserIsEditing
+                                                local.localUser
+                                                maybeRepliedTo
+                                                index
+                                                message
+
+                                        Nothing ->
+                                            Ui.Lazy.lazy6
+                                                messageViewHovered
+                                                otherUserIsEditing
+                                                revealedSpoilers
+                                                highlight
+                                                local.localUser
+                                                index
+                                                message
                    )
                 :: list
             )
@@ -1048,6 +1049,7 @@ messageInputConfig guildOrDmId =
     , pressedPingDropdownContainer = PressedPingDropdownContainer
     , pressedUploadFile = PressedAttachFiles guildOrDmId
     , target = MessageInput.NewMessage
+    , onPasteFiles = PastedFiles guildOrDmId
     }
 
 
@@ -1178,7 +1180,17 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 )
             )
         , Ui.column
-            [ Ui.paddingXY 2 0, Ui.heightMin 0, MyUi.noShrinking ]
+            [ Ui.paddingXY 2 0
+            , Ui.heightMin 0
+            , MyUi.noShrinking
+            , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                Just filesToUpload2 ->
+                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
+                        |> Ui.inFront
+
+                Nothing ->
+                    Ui.noAttr
+            ]
             [ case replyTo of
                 Just messageIndex ->
                     case Array.get messageIndex channel.messages of
@@ -1402,7 +1414,16 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold, Ui.paddingXY 8 0 ]
                 , Ui.column
-                    []
+                    [ case NonemptyDict.fromSeqDict editing.attachedFiles of
+                        Just filesToUpload ->
+                            FileStatus.fileUploadPreview
+                                (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                filesToUpload
+                                |> Ui.inFront
+
+                        Nothing ->
+                            Ui.noAttr
+                    ]
                     [ MessageInput.view
                         True
                         False
@@ -1453,20 +1474,25 @@ type IsHovered
 messageViewNotHovered :
     Bool
     -> SeqDict Int (NonemptySet Int)
+    -> HighlightMessage
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered isEditing revealedSpoilers localUser messageIndex message =
-    messageView
-        revealedSpoilers
-        NoHighlight
-        IsNotHovered
-        isEditing
-        localUser
-        Nothing
-        messageIndex
-        message
+messageViewNotHovered isEditing revealedSpoilers highlight localUser messageIndex message =
+    messageView revealedSpoilers highlight IsNotHovered isEditing localUser Nothing messageIndex message
+
+
+messageViewHovered :
+    Bool
+    -> SeqDict Int (NonemptySet Int)
+    -> HighlightMessage
+    -> LocalUser
+    -> Int
+    -> Message
+    -> Element FrontendMsg
+messageViewHovered isEditing revealedSpoilers highlight localUser messageIndex message =
+    messageView revealedSpoilers highlight IsHovered isEditing localUser Nothing messageIndex message
 
 
 type HighlightMessage
@@ -1551,6 +1577,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                                         SeqSet.empty
                                 )
                                 allUsers
+                                message2.attachedFiles
                                 message2.content
                                 ++ (if isBeingEdited then
                                         [ Html.span
@@ -1643,6 +1670,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                                     SeqSet.empty
                             )
                             allUsers
+                            repliedToData.attachedFiles
                             repliedToData.content
                     )
                     |> Ui.html

@@ -36,10 +36,10 @@ init =
 isPressMsg : Msg a -> Bool
 isPressMsg msg =
     case msg of
-        Edit model ->
+        Edit _ ->
             False
 
-        PressedAcceptEdit value ->
+        PressedAcceptEdit _ ->
             True
 
 
@@ -148,7 +148,7 @@ view htmlId label validation msg value model =
                                 , Ui.Font.color MyUi.deleteButtonFont
                                 , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
                                 ]
-                                (Ui.html Icons.delete)
+                                (Ui.html (Icons.delete 24))
                             ]
 
                         Nothing ->

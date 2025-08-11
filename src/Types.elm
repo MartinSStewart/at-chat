@@ -51,11 +51,13 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
 import Effect.File exposing (File)
+import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -153,7 +155,10 @@ type alias LoggedIn2 =
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : List File
+    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
+    , -- Only should be use for making requests to the Rust server
+      sessionId : SessionId
+    , isReloading : Bool
     }
 
 
@@ -217,7 +222,7 @@ type alias RevealedSpoilers =
 
 
 type alias EditMessage =
-    { messageIndex : Int, text : String }
+    { messageIndex : Int, text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
 type EmojiSelector
@@ -251,6 +256,7 @@ type alias BackendModel =
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
+    , files : SeqDict FileHash { fileSize : Int }
     }
 
 
@@ -301,7 +307,7 @@ type FrontendMsg
     | TypedMessage GuildOrDmId String
     | PressedSendMessage GuildOrDmId
     | PressedAttachFiles GuildOrDmId
-    | SelectedFilesToAttach File (List File)
+    | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
@@ -374,8 +380,14 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | TimeToUploadFile Time.Posix
-    | GotAttachmentContents Bytes
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error String)
+    | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedAttachFiles GuildOrDmId
+    | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
+    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error String)
+    | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
+    | PastedFiles GuildOrDmId (Nonempty File)
 
 
 type alias NewChannelForm =
@@ -403,7 +415,6 @@ type ToBackend
     | FinishUserCreationRequest PersonName
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest
-    | UploadFileRequest Bytes
 
 
 type BackendMsg
@@ -460,6 +471,7 @@ type alias LoginData =
     , dmChannels : SeqDict (Id UserId) DmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , sessionId : SessionId
     }
 
 
@@ -474,7 +486,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (SeqDict (Id FileId) FileData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -492,7 +504,7 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId Int Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId Int Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText)
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId Int (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmId Int
     | Server_DeleteMessage (Id UserId) GuildOrDmId Int
     | Server_DiscordDeleteMessage MessageId
@@ -503,7 +515,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int)
+    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe Int) (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -512,7 +524,7 @@ type LocalChange
     | Local_MemberTyping Time.Posix GuildOrDmId
     | Local_AddReactionEmoji GuildOrDmId Int Emoji
     | Local_RemoveReactionEmoji GuildOrDmId Int Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText)
+    | Local_SendEditMessage Time.Posix GuildOrDmId Int (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix GuildOrDmId Int
     | Local_SetLastViewed GuildOrDmId Int
     | Local_DeleteMessage GuildOrDmId Int

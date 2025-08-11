@@ -49,12 +49,13 @@ import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileData, FileId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
-import Message exposing (Message(..))
+import Message exposing (Message(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
@@ -598,6 +599,7 @@ editMessage :
     Id UserId
     -> Time.Posix
     -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
     -> Id ChannelId
     -> Int
     ->
@@ -610,18 +612,20 @@ editMessage :
     ->
         Result
             ()
-            { a
+            ( UserTextMessageData
+            , { a
                 | channels :
                     SeqDict
                         (Id ChannelId)
                         { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-            }
-editMessage editedBy time newContent channelId messageIndex guild =
+              }
+            )
+editMessage editedBy time newContent attachedFiles channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case editMessageHelper time editedBy newContent messageIndex channel of
-                Ok channel2 ->
-                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+            case editMessageHelper time editedBy newContent attachedFiles messageIndex channel of
+                Ok ( newMessage, channel2 ) ->
+                    Ok ( newMessage, { guild | channels = SeqDict.insert channelId channel2 guild.channels } )
 
                 _ ->
                     Err ()
@@ -634,21 +638,22 @@ editMessageHelper :
     Time.Posix
     -> Id UserId
     -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
     -> Int
     -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-    -> Result () { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-editMessageHelper time editedBy newContent messageIndex channel =
+    -> Result () ( UserTextMessageData, { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } )
+editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
     case Array.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy then
-                { channel
-                    | messages =
-                        Array.set
-                            messageIndex
-                            ({ data | editedAt = Just time, content = newContent }
-                                |> UserTextMessage
-                            )
-                            channel.messages
+                let
+                    data2 : UserTextMessageData
+                    data2 =
+                        { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
+                in
+                ( data2
+                , { channel
+                    | messages = Array.set messageIndex (UserTextMessage data2) channel.messages
                     , lastTypedAt =
                         SeqDict.update
                             editedBy
@@ -665,7 +670,8 @@ editMessageHelper time editedBy newContent messageIndex channel =
                                         Nothing
                             )
                             channel.lastTypedAt
-                }
+                  }
+                )
                     |> Ok
 
             else

@@ -3,8 +3,11 @@ module RichText exposing
     , RichText(..)
     , RichTextState
     , append
+    , attachedFilePrefix
+    , attachedFileSuffix
     , fromNonemptyString
     , mentionsUser
+    , removeAttachedFile
     , textInputView
     , toDiscord
     , toString
@@ -14,9 +17,12 @@ module RichText exposing
 import Array exposing (Array)
 import Discord.Id
 import Discord.Markdown
+import FileName
+import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Icons
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
@@ -25,7 +31,7 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import Url exposing (Protocol(..))
 
 
@@ -40,6 +46,7 @@ type RichText
     | Hyperlink Protocol String
     | InlineCode Char String
     | CodeBlock Language String
+    | AttachedFile (Id FileId)
 
 
 type Language
@@ -60,6 +67,52 @@ normalTextFromString text =
 normalTextFromNonempty : NonemptyString -> RichText
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
+
+
+removeAttachedFile : Id FileId -> Nonempty RichText -> Maybe (Nonempty RichText)
+removeAttachedFile fileId list =
+    List.filterMap
+        (\richText ->
+            case richText of
+                NormalText _ _ ->
+                    Just richText
+
+                UserMention _ ->
+                    Just richText
+
+                Bold nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Bold
+
+                Italic nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Italic
+
+                Underline nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Underline
+
+                Strikethrough nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Strikethrough
+
+                Spoiler nonempty ->
+                    removeAttachedFile fileId nonempty |> Maybe.map Spoiler
+
+                Hyperlink _ _ ->
+                    Just richText
+
+                InlineCode _ _ ->
+                    Just richText
+
+                CodeBlock _ _ ->
+                    Just richText
+
+                AttachedFile id ->
+                    if id == fileId then
+                        Nothing
+
+                    else
+                        Just richText
+        )
+        (List.Nonempty.toList list)
+        |> List.Nonempty.fromList
 
 
 toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
@@ -110,6 +163,9 @@ toString users nonempty =
                            )
                         ++ string
                         ++ "```"
+
+                AttachedFile fileId ->
+                    attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
         )
         nonempty
         |> List.Nonempty.toList
@@ -177,6 +233,9 @@ normalize nonempty =
 
                 CodeBlock language string ->
                     List.Nonempty.cons (CodeBlock language string) nonempty2
+
+                AttachedFile fileId ->
+                    List.Nonempty.cons (AttachedFile fileId) nonempty2
         )
         (Nonempty
             (case List.Nonempty.head nonempty of
@@ -209,6 +268,9 @@ normalize nonempty =
 
                 CodeBlock language string ->
                     CodeBlock language string
+
+                AttachedFile fileId ->
+                    AttachedFile fileId
             )
             []
         )
@@ -224,23 +286,23 @@ type Modifiers
     | IsSpoilered
 
 
-modifierToSymbol : Modifiers -> String
+modifierToSymbol : Modifiers -> NonemptyString
 modifierToSymbol modifier =
     case modifier of
         IsBold ->
-            "*"
+            NonemptyString '*' ""
 
         IsItalic ->
-            "_"
+            NonemptyString '_' ""
 
         IsUnderlined ->
-            "__"
+            NonemptyString '_' "_"
 
         IsStrikethrough ->
-            "~~"
+            NonemptyString '~' "~"
 
         IsSpoilered ->
-            "||"
+            NonemptyString '|' "|"
 
 
 type alias LoopState =
@@ -252,135 +314,168 @@ parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
-            --let
-            --    _ =
-            --        Debug.log "state" ( modifiers, state )
-            --in
-            getRemainingText
-                |> Parser.andThen
-                    (\_ ->
-                        --let
-                        --    _ =
-                        --        Debug.log "remaining" remainingText
-                        --in
-                        Parser.oneOf
-                            [ Parser.succeed identity
-                                |. Parser.symbol "@"
-                                |= Parser.oneOf
-                                    (List.map
-                                        (\( userId, user ) ->
-                                            Parser.succeed
-                                                (Loop
-                                                    { current = Array.empty
-                                                    , rest =
-                                                        Array.append
-                                                            state.rest
-                                                            (Array.push (UserMention userId) (parserHelper state))
-                                                    }
-                                                )
-                                                |. Parser.symbol (PersonName.toString user.name)
-                                        )
-                                        (SeqDict.toList users)
-                                        ++ [ Parser.succeed
-                                                (Loop
-                                                    { current = Array.push "@" state.current
-                                                    , rest = state.rest
-                                                    }
-                                                )
-                                           ]
+            Parser.oneOf
+                [ Parser.succeed identity
+                    |. Parser.symbol "@"
+                    |= Parser.oneOf
+                        (List.map
+                            (\( userId, user ) ->
+                                Parser.succeed
+                                    (Loop
+                                        { current = Array.empty
+                                        , rest =
+                                            Array.append
+                                                state.rest
+                                                (Array.push (UserMention userId) (parserHelper state))
+                                        }
                                     )
-                            , modifierHelper users True IsBold Bold state modifiers
-                            , modifierHelper users False IsUnderlined Underline state modifiers
-                            , modifierHelper users False IsItalic Italic state modifiers
-                            , modifierHelper users False IsStrikethrough Strikethrough state modifiers
-                            , modifierHelper users False IsSpoilered Spoiler state modifiers
-                            , Parser.succeed
-                                (\( language, text ) ->
-                                    case String.Nonempty.fromString text of
-                                        Just _ ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push
-                                                            (CodeBlock language text)
-                                                            (parserHelper state)
-                                                        )
-                                                }
-
-                                        Nothing ->
-                                            Loop
-                                                { current = Array.push "``````" state.current
-                                                , rest = state.rest
-                                                }
-                                )
-                                |= codeBlockParser
-                                |> Parser.backtrackable
-                            , Parser.succeed
-                                (\text ->
-                                    case String.Nonempty.fromString text of
-                                        Just a ->
-                                            Loop
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push
-                                                            (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
-                                                            (parserHelper state)
-                                                        )
-                                                }
-
-                                        Nothing ->
-                                            Loop
-                                                { current = Array.push "``" state.current
-                                                , rest = state.rest
-                                                }
-                                )
-                                |. Parser.symbol "`"
-                                |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
-                                |. Parser.symbol "`"
-                                |> Parser.backtrackable
-                            , Parser.succeed Tuple.pair
-                                |= Parser.oneOf
-                                    [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
-                                    , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
-                                    ]
-                                |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
-                                        |> Parser.getChompedString
-                                   )
-                                |> Parser.map
-                                    (\( protocol, rest ) ->
-                                        (case Url.fromString ("https://" ++ rest) of
-                                            Just _ ->
-                                                { current = Array.empty
-                                                , rest =
-                                                    Array.append
-                                                        state.rest
-                                                        (Array.push (Hyperlink protocol rest) (parserHelper state))
-                                                }
-
-                                            Nothing ->
-                                                { current = Array.push (hyperlinkToString protocol rest) state.current
-                                                , rest = state.rest
-                                                }
-                                        )
-                                            |> Loop
+                                    |. Parser.symbol (PersonName.toString user.name)
+                            )
+                            (SeqDict.toList users)
+                            ++ [ Parser.succeed
+                                    (Loop
+                                        { current = Array.push "@" state.current
+                                        , rest = state.rest
+                                        }
                                     )
-                            , Parser.chompIf (\_ -> True)
-                                |> Parser.getChompedString
-                                |> Parser.map
-                                    (\a ->
-                                        Loop
-                                            { current = Array.push a state.current
-                                            , rest = state.rest
-                                            }
-                                    )
-                            , Parser.map (\() -> bailOut state modifiers) Parser.end
-                            ]
+                               ]
+                        )
+                , modifierHelper users True IsBold Bold state modifiers
+                , modifierHelper users False IsUnderlined Underline state modifiers
+                , modifierHelper users False IsItalic Italic state modifiers
+                , modifierHelper users False IsStrikethrough Strikethrough state modifiers
+                , modifierHelper users False IsSpoilered Spoiler state modifiers
+                , Parser.succeed
+                    (\( language, text ) ->
+                        case String.Nonempty.fromString text of
+                            Just _ ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (CodeBlock language text)
+                                                (parserHelper state)
+                                            )
+                                    }
+
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``````" state.current
+                                    , rest = state.rest
+                                    }
                     )
+                    |= codeBlockParser
+                    |> Parser.backtrackable
+                , Parser.succeed
+                    (\text ->
+                        case String.Nonempty.fromString text of
+                            Just a ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
+                                                (parserHelper state)
+                                            )
+                                    }
+
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``" state.current
+                                    , rest = state.rest
+                                    }
+                    )
+                    |. Parser.symbol "`"
+                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                    |. Parser.symbol "`"
+                    |> Parser.backtrackable
+                , Parser.succeed Tuple.pair
+                    |= Parser.oneOf
+                        [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
+                        , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
+                        ]
+                    |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
+                            |> Parser.getChompedString
+                       )
+                    |> Parser.map
+                        (\( protocol, rest ) ->
+                            (case Url.fromString ("https://" ++ rest) of
+                                Just _ ->
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                    }
+
+                                Nothing ->
+                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    , rest = state.rest
+                                    }
+                            )
+                                |> Loop
+                        )
+                , Parser.succeed identity
+                    |. Parser.symbol attachedFilePrefix
+                    |= Parser.int
+                    |. Parser.symbol attachedFileSuffix
+                    |> Parser.backtrackable
+                    |> Parser.map
+                        (\int ->
+                            { current = Array.empty
+                            , rest =
+                                Array.append
+                                    state.rest
+                                    (Array.push (AttachedFile (Id.fromInt int)) (parserHelper state))
+                            }
+                                |> Loop
+                        )
+                , Parser.chompIf (\_ -> True)
+                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
+                    |> Parser.getChompedString
+                    |> Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.push a state.current
+                                , rest = state.rest
+                                }
+                        )
+                , Parser.map (\() -> bailOut state modifiers) Parser.end
+                ]
         )
+
+
+attachedFilePrefix : String
+attachedFilePrefix =
+    "[!"
+
+
+attachedFileSuffix : String
+attachedFileSuffix =
+    "]"
+
+
+allModifiers : List Modifiers
+allModifiers =
+    [ IsBold
+    , IsItalic
+    , IsUnderlined
+    , IsStrikethrough
+    , IsSpoilered
+    ]
+
+
+stopOnChar : SeqSet Char
+stopOnChar =
+    [ '[', '@', 'h', '`' ]
+        ++ List.map
+            (\modifier -> modifierToSymbol modifier |> String.Nonempty.head)
+            allModifiers
+        |> SeqSet.fromList
 
 
 codeBlockParser : Parser ( Language, String )
@@ -466,9 +561,12 @@ modifierHelper :
     -> Parser (Step LoopState (Array RichText))
 modifierHelper users noTrailingWhitespace modifier container state modifiers =
     let
-        symbol : String
+        symbol : NonemptyString
         symbol =
             modifierToSymbol modifier
+
+        symbolText =
+            String.Nonempty.toString symbol
     in
     if List.head modifiers == Just modifier then
         Parser.map
@@ -482,33 +580,18 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
                         Done (Array.fromList [ container nonempty ])
 
                     Nothing ->
-                        (case modifier of
-                            IsBold ->
-                                NormalText '*' "*"
-
-                            IsItalic ->
-                                NormalText '_' "_"
-
-                            IsUnderlined ->
-                                NormalText '_' "___"
-
-                            IsStrikethrough ->
-                                NormalText '~' "~~~"
-
-                            IsSpoilered ->
-                                NormalText '|' "|||"
-                        )
+                        NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol)
                             |> List.singleton
                             |> Array.fromList
                             |> Done
             )
-            (Parser.symbol symbol)
+            (Parser.symbol symbolText)
 
     else if List.member modifier modifiers then
         getRemainingText
             |> Parser.andThen
                 (\remainingText ->
-                    if String.startsWith symbol remainingText then
+                    if String.startsWith symbolText remainingText then
                         bailOut state modifiers |> Parser.succeed
 
                     else
@@ -517,14 +600,14 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
 
     else
         Parser.succeed identity
-            |. Parser.symbol symbol
+            |. Parser.symbol symbolText
             |= Parser.oneOf
                 [ if noTrailingWhitespace then
                     getRemainingText
                         |> Parser.andThen
                             (\remainingText ->
                                 if
-                                    String.startsWith symbol remainingText
+                                    String.startsWith symbolText remainingText
                                         || String.startsWith " " remainingText
                                 then
                                     Parser.backtrackable (Parser.problem "")
@@ -549,7 +632,7 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
                                 }
                         )
                         (parser users (modifier :: modifiers))
-                , Loop { current = Array.push symbol state.current, rest = state.rest }
+                , Loop { current = Array.push symbolText state.current, rest = state.rest }
                     |> Parser.succeed
                 ]
 
@@ -598,6 +681,9 @@ mentionsUser userId nonempty =
 
                 CodeBlock _ _ ->
                     False
+
+                AttachedFile _ ->
+                    False
         )
         nonempty
 
@@ -606,15 +692,17 @@ view :
     (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Html msg)
-view pressedSpoiler revealedSpoilers users nonempty =
+view pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
         pressedSpoiler
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
+        attachedFiles
         nonempty
         |> Tuple.second
 
@@ -625,9 +713,10 @@ viewHelper :
     -> RichTextState
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> ( Int, List (Html msg) )
-viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty =
+viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -657,6 +746,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | italic = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -670,6 +760,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | underline = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -683,6 +774,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | bold = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -696,6 +788,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 { state | strikethrough = True }
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex3, currentList ++ list )
@@ -718,6 +811,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 )
                                 revealedSpoilers
                                 allUsers
+                                attachedFiles
                                 nonempty2
                     in
                     ( spoilerIndex2 + 1
@@ -803,6 +897,60 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers nonempty 
                                 ]
                                 [ Html.text text ]
                            ]
+                    )
+
+                AttachedFile fileId ->
+                    ( spoilerIndex2
+                    , case SeqDict.get fileId attachedFiles of
+                        Just fileData ->
+                            let
+                                fileUrl =
+                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
+                            in
+                            currentList
+                                ++ [ if FileStatus.isImage fileData.contentType then
+                                        Html.a
+                                            [ Html.Attributes.href fileUrl
+                                            , Html.Attributes.target "_blank"
+                                            , Html.Attributes.rel "noreferrer"
+                                            , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                            , Html.Attributes.style "max-height" "400px"
+                                            , Html.Attributes.style "object-fit" "contain"
+                                            ]
+                                            [ Html.img
+                                                [ Html.Attributes.src fileUrl
+                                                , Html.Attributes.style "display" "block"
+                                                , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                                , Html.Attributes.style "max-height" "400px"
+                                                ]
+                                                []
+                                            ]
+
+                                     else
+                                        Html.a
+                                            [ Html.Attributes.style "max-width" "284px"
+                                            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+                                            , Html.Attributes.style "border-radius" "4px"
+                                            , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+                                            , Html.Attributes.style "display" "block"
+                                            , Html.Attributes.href fileUrl
+                                            , Html.Attributes.target "_blank"
+                                            , Html.Attributes.rel "noreferrer"
+                                            , Html.Attributes.style "font-size" "14px"
+                                            , Html.Attributes.style "padding" "4px 8px 4px 8px"
+                                            ]
+                                            [ Html.text (FileName.toString fileData.fileName)
+                                            , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
+                                            , Html.div
+                                                [ Html.Attributes.style "display" "inline-block"
+                                                , Html.Attributes.style "transform" "translateY(4px)"
+                                                ]
+                                                [ Icons.download ]
+                                            ]
+                                   ]
+
+                        Nothing ->
+                            currentList
                     )
         )
         ( spoilerIndex, [] )
@@ -925,6 +1073,9 @@ textInputViewHelper state allUsers nonempty =
                     , Html.text string
                     , formatText "```"
                     ]
+
+                AttachedFile fileId ->
+                    [ formatText (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) ]
         )
         (List.Nonempty.toList nonempty)
 
@@ -946,8 +1097,12 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-toDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> Nonempty RichText -> List (Discord.Markdown.Markdown a)
-toDiscord mapping content =
+toDiscord :
+    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    -> SeqDict (Id FileId) FileData
+    -> Nonempty RichText
+    -> List (Discord.Markdown.Markdown a)
+toDiscord mapping attachedFiles content =
     List.map
         (\item ->
             case item of
@@ -963,19 +1118,19 @@ toDiscord mapping content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping attachedFiles nonempty)
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord mapping nonempty)
+                    Discord.Markdown.spoiler (toDiscord mapping attachedFiles nonempty)
 
                 Hyperlink protocol string ->
                     Discord.Markdown.text (hyperlinkToString protocol string)
@@ -993,5 +1148,13 @@ toDiscord mapping content =
                                 Nothing
                         )
                         string
+
+                AttachedFile fileId ->
+                    case SeqDict.get fileId attachedFiles of
+                        Just fileData ->
+                            Discord.Markdown.text (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+
+                        Nothing ->
+                            Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)

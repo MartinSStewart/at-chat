@@ -1,6 +1,7 @@
 module Message exposing (Message(..), UserTextMessageData, addReactionEmoji, removeReactionEmoji)
 
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileData, FileId)
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
@@ -23,6 +24,7 @@ type alias UserTextMessageData =
     , reactions : SeqDict Emoji (NonemptySet (Id UserId))
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe Int
+    , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
