@@ -76,26 +76,26 @@ async fn upload_endpoint(request: Request) -> Response<String> {
                         } else {
                             response_with_headers(
                                 StatusCode::UNAUTHORIZED,
-                                String::from("Invalid permissions"),
+                                String::from("Invalid permissions 4"),
                             )
                         }
                     }
 
                     _ => response_with_headers(
                         StatusCode::UNAUTHORIZED,
-                        String::from("Invalid permissions"),
+                        String::from("Invalid permissions 3"),
                     ),
                 },
 
                 Err(_) => response_with_headers(
                     StatusCode::UNAUTHORIZED,
-                    String::from("Invalid permissions"),
+                    String::from("Invalid permissions 2"),
                 ),
             }
         }
         _ => response_with_headers(
             StatusCode::UNAUTHORIZED,
-            String::from("Invalid permissions"),
+            String::from("Invalid permissions 1"),
         ),
     }
 }
