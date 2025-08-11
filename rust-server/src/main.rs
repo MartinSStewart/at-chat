@@ -52,7 +52,7 @@ async fn upload_endpoint(request: Request) -> Response<String> {
                 .post(if cfg!(debug_assertions) {
                     "http://localhost:8000/_r/is-file-upload-allowed"
                 } else {
-                    "http://127.0.0.1:9229/_r/is-file-upload-allowed"
+                    "https://at-chat.app/_r/is-file-upload-allowed"
                 })
                 .body(hash.clone() + "," + &(bytes.len().to_string()) + "," + &session_id2)
                 .send()
