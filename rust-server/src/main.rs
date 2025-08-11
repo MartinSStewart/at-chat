@@ -54,6 +54,7 @@ async fn upload_endpoint(request: Request) -> Response<String> {
                 } else {
                     "https://at-chat.app/_r/is-file-upload-allowed"
                 })
+                .header("Content-Type", "text/plain")
                 .body(hash.clone() + "," + &(bytes.len().to_string()) + "," + &session_id2)
                 .send()
                 .await
