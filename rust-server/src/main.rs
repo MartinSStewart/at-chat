@@ -141,7 +141,7 @@ async fn get_file_endpoint(
     } else {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from("Invalid filename"))
+            .body(Body::from(hash + " is an invalid filename"))
             .unwrap()
     }
 }
