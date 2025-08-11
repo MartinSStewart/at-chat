@@ -36,8 +36,6 @@ fn filepath(hash: String) -> String {
 }
 
 async fn upload_endpoint(request: Request) -> Response<String> {
-    println!("upload_file_endpoint {:#?}", request.method());
-
     let session_id: Option<String> = match request.headers().get("sid") {
         Some(header_value) => match header_value.to_str() {
             Ok(s) => Some(s.to_string()),
@@ -51,7 +49,11 @@ async fn upload_endpoint(request: Request) -> Response<String> {
             let hash: String = hash_bytes(&bytes);
 
             match reqwest::Client::new()
-                .post("http://localhost:8000/_r/is-file-upload-allowed")
+                .post(if cfg!(debug_assertions) {
+                    "http://localhost:8000/_r/is-file-upload-allowed"
+                } else {
+                    "http://127.0.0.1:9229/_r/is-file-upload-allowed"
+                })
                 .body(hash.clone() + "," + &(bytes.len().to_string()) + "," + &session_id2)
                 .send()
                 .await
@@ -59,7 +61,6 @@ async fn upload_endpoint(request: Request) -> Response<String> {
                 Ok(response) => match response.text().await {
                     Ok(text) => {
                         let path: String = filepath(hash.clone());
-                        println!("{}", text);
                         if text == "valid" {
                             match fs::exists(&path) {
                                 Ok(true) => response_with_headers(StatusCode::OK, hash),
@@ -115,7 +116,6 @@ fn hash_bytes(bytes: &Bytes) -> String {
 async fn get_file_endpoint(
     Path((content_type, hash)): Path<(String, String)>,
 ) -> http::Response<Body> {
-    println!("{}", hash);
     let is_valid_hash: bool = hash
         .chars()
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
@@ -147,7 +147,6 @@ async fn get_file_endpoint(
 }
 
 async fn fallback(uri: Uri) -> (StatusCode, String) {
-    println!("Fallback endpoint");
     (StatusCode::NOT_FOUND, format!("No route for {uri}"))
 }
 

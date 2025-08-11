@@ -1062,9 +1062,9 @@ updateLoaded msg model =
                         (\loggedIn ->
                             handleLocalChange
                                 model.time
-                                (case routeToMessageId model.route of
+                                (case routeToGuildOrDmId model.route of
                                     Just guildOrDmId ->
-                                        case messageIdToMessages guildOrDmId (Local.model loggedIn.localState) of
+                                        case guildOrDmIdToMessages guildOrDmId (Local.model loggedIn.localState) of
                                             Just messages ->
                                                 Local_SetLastViewed
                                                     guildOrDmId
@@ -1528,12 +1528,12 @@ updateLoaded msg model =
                                 Nothing ->
                                     case loggedIn2.showEmojiSelector of
                                         EmojiSelectorHidden ->
-                                            case routeToMessageId model.route of
+                                            case routeToGuildOrDmId model.route of
                                                 Just guildOrDmId ->
                                                     handleLocalChange
                                                         model.time
                                                         (case
-                                                            messageIdToMessages
+                                                            guildOrDmIdToMessages
                                                                 guildOrDmId
                                                                 (Local.model loggedIn2.localState)
                                                          of
@@ -1578,7 +1578,7 @@ updateLoaded msg model =
             else
                 updateLoggedIn
                     (\loggedIn ->
-                        case ( routeToMessageId model.route, loggedIn.messageHover ) of
+                        case ( routeToGuildOrDmId model.route, loggedIn.messageHover ) of
                             ( Nothing, MessageMenu _ ) ->
                                 ( loggedIn, Command.none )
 
@@ -1602,7 +1602,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | messageHover =
-                            case routeToMessageId model.route of
+                            case routeToGuildOrDmId model.route of
                                 Just guildOrDmId ->
                                     if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
                                         NoMessageHover
@@ -1816,7 +1816,7 @@ updateLoaded msg model =
         PressedReactionEmoji_Remove messageIndex emoji ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             handleLocalChange
                                 model.time
@@ -1928,7 +1928,7 @@ updateLoaded msg model =
                                 model.time
                                 (case
                                     ( String.Nonempty.fromString edit.text
-                                    , messageIdToMessage guildOrDmId edit.messageIndex local
+                                    , guildOrDmIdToMessage guildOrDmId edit.messageIndex local
                                     )
                                  of
                                     ( Just nonempty, Just message ) ->
@@ -2028,7 +2028,7 @@ updateLoaded msg model =
 
                         maybeMessages : Maybe (Array Message)
                         maybeMessages =
-                            messageIdToMessages guildOrDmId local
+                            guildOrDmIdToMessages guildOrDmId local
                     in
                     case maybeMessages of
                         Just messages ->
@@ -2137,7 +2137,7 @@ updateLoaded msg model =
         PressedSpoiler messageIndex spoilerIndex ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             let
                                 revealedSpoilers : RevealedSpoilers
@@ -2427,7 +2427,7 @@ updateLoaded msg model =
         MessageMenu_PressedShowFullMenu messageIndex clickedAt ->
             updateLoggedIn
                 (\loggedIn ->
-                    case routeToMessageId model.route of
+                    case routeToGuildOrDmId model.route of
                         Just guildOrDmId ->
                             let
                                 local : LocalState
@@ -2480,12 +2480,12 @@ updateLoaded msg model =
                 )
                 model
 
-        MessageMenu_PressedDeleteMessage messageId messageIndex ->
+        MessageMenu_PressedDeleteMessage guildOrDmId messageIndex ->
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
                         model.time
-                        (Just (Local_DeleteMessage messageId messageIndex))
+                        (Just (Local_DeleteMessage guildOrDmId messageIndex))
                         (MessageMenu.close model loggedIn)
                         Command.none
                 )
@@ -3005,7 +3005,7 @@ editMessage_gotFiles guildOrDmId files model =
 
 handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage messageIndex clickedAt loggedIn local model =
-    case routeToMessageId model.route of
+    case routeToGuildOrDmId model.route of
         Just guildOrDmId ->
             { loggedIn
                 | messageHover =
@@ -4437,7 +4437,7 @@ layout model attributes child =
                         Local.model loggedIn.localState
 
                     maybeMessageId =
-                        routeToMessageId model.route
+                        routeToGuildOrDmId model.route
                 in
                 [ Local.networkError
                     (\change ->
@@ -4735,8 +4735,8 @@ view model =
     }
 
 
-messageIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe UserTextMessageData
-messageIdToMessage guildOrDmId messageIndex local =
+guildOrDmIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe UserTextMessageData
+guildOrDmIdToMessage guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
@@ -4765,8 +4765,8 @@ messageIdToMessage guildOrDmId messageIndex local =
                     Nothing
 
 
-messageIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
-messageIdToMessages guildOrDmId local =
+guildOrDmIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
+guildOrDmIdToMessages guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
             case LocalState.getGuildAndChannel guildId channelId local of
@@ -4785,8 +4785,8 @@ messageIdToMessages guildOrDmId local =
                     Nothing
 
 
-routeToMessageId : Route -> Maybe GuildOrDmId
-routeToMessageId route =
+routeToGuildOrDmId : Route -> Maybe GuildOrDmId
+routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId _) ->
             GuildOrDmId_Guild guildId channelId |> Just

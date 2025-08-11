@@ -66,16 +66,7 @@ sizeToString int =
 
 fileUrl : ContentType -> FileHash -> String
 fileUrl (ContentType contentType2) (FileHash fileHash2) =
-    (if Env.isProduction then
-        "/"
-
-     else
-        "http://localhost:3000/"
-    )
-        ++ "file/"
-        ++ Url.percentEncode contentType2
-        ++ "/"
-        ++ fileHash2
+    domain ++ "file/" ++ Url.percentEncode contentType2 ++ "/" ++ fileHash2
 
 
 isImage : ContentType -> Bool
@@ -107,17 +98,21 @@ upload onResult sessionId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
-        , url =
-            if Env.isProduction then
-                Env.domain ++ "/file/upload"
-
-            else
-                "http://localhost:3000/file/upload"
+        , url = domain ++ "file/upload"
         , body = Http.fileBody file2
         , expect = Http.expectString onResult
         , timeout = Nothing
         , tracker = Nothing
         }
+
+
+domain : String
+domain =
+    if Env.isProduction then
+        "/"
+
+    else
+        "http://localhost:3000/"
 
 
 fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
