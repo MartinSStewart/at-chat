@@ -824,7 +824,7 @@ addDiscordGuilds time guilds model =
                             { createdAt = time
                             , createdBy = ownerId
                             , name = GuildName.fromStringLossy data.guild.name
-                            , icon = Nothing
+                            , icon = data.icon
                             , channels = channels
                             , members =
                                 List.filterMap

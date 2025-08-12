@@ -12,6 +12,7 @@ module FileStatus exposing
     , fileUploadPreview
     , fileUrl
     , onlyUploadedFiles
+    , pngContent
     , sizeToString
     , upload
     , uploadBytes
@@ -94,6 +95,11 @@ contentTypeType contentType2 =
 
         Nothing ->
             Other
+
+
+pngContent : ContentType
+pngContent =
+    contentType "image/png"
 
 
 type ContentTypeType

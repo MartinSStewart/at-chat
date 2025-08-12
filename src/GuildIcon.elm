@@ -1,5 +1,13 @@
-module GuildIcon exposing (Mode(..), NotificationType(..), addGuildButton, notificationView, showFriendsButton, view)
+module GuildIcon exposing
+    ( Mode(..)
+    , NotificationType(..)
+    , addGuildButton
+    , notificationView
+    , showFriendsButton
+    , view
+    )
 
+import FileStatus
 import GuildName
 import Icons
 import Image
@@ -100,7 +108,7 @@ view mode guild =
                     , Ui.borderColor MyUi.secondaryGrayBorder
                     , MyUi.hoverText name
                     ]
-                    { source = Image.url icon
+                    { source = FileStatus.fileUrl FileStatus.pngContent icon
                     , description = name
                     , onLoad = Nothing
                     }

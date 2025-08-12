@@ -49,10 +49,9 @@ import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileData, FileId)
+import FileStatus exposing (ContentType, FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
-import Image exposing (Image)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), UserTextMessageData)
@@ -93,7 +92,7 @@ type alias BackendGuild =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : GuildName
-    , icon : Maybe Image
+    , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
@@ -106,7 +105,7 @@ type alias FrontendGuild =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : GuildName
-    , icon : Maybe Image
+    , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) FrontendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
