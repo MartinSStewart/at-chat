@@ -908,45 +908,46 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                                     FileStatus.fileUrl fileData.contentType fileData.fileHash
                             in
                             currentList
-                                ++ [ if FileStatus.isImage fileData.contentType then
-                                        Html.a
-                                            [ Html.Attributes.href fileUrl
-                                            , Html.Attributes.target "_blank"
-                                            , Html.Attributes.rel "noreferrer"
-                                            , Html.Attributes.style "max-width" "min(300px, 100%)"
-                                            , Html.Attributes.style "max-height" "400px"
-                                            , Html.Attributes.style "object-fit" "contain"
-                                            ]
-                                            [ Html.img
-                                                [ Html.Attributes.src fileUrl
-                                                , Html.Attributes.style "display" "block"
+                                ++ [ case FileStatus.contentTypeType fileData.contentType of
+                                        FileStatus.Image ->
+                                            Html.a
+                                                [ Html.Attributes.href fileUrl
+                                                , Html.Attributes.target "_blank"
+                                                , Html.Attributes.rel "noreferrer"
                                                 , Html.Attributes.style "max-width" "min(300px, 100%)"
                                                 , Html.Attributes.style "max-height" "400px"
+                                                , Html.Attributes.style "object-fit" "contain"
                                                 ]
-                                                []
-                                            ]
+                                                [ Html.img
+                                                    [ Html.Attributes.src fileUrl
+                                                    , Html.Attributes.style "display" "block"
+                                                    , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                                    , Html.Attributes.style "max-height" "400px"
+                                                    ]
+                                                    []
+                                                ]
 
-                                     else
-                                        Html.a
-                                            [ Html.Attributes.style "max-width" "284px"
-                                            , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
-                                            , Html.Attributes.style "border-radius" "4px"
-                                            , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
-                                            , Html.Attributes.style "display" "block"
-                                            , Html.Attributes.href fileUrl
-                                            , Html.Attributes.target "_blank"
-                                            , Html.Attributes.rel "noreferrer"
-                                            , Html.Attributes.style "font-size" "14px"
-                                            , Html.Attributes.style "padding" "4px 8px 4px 8px"
-                                            ]
-                                            [ Html.text (FileName.toString fileData.fileName)
-                                            , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
-                                            , Html.div
-                                                [ Html.Attributes.style "display" "inline-block"
-                                                , Html.Attributes.style "transform" "translateY(4px)"
+                                        _ ->
+                                            Html.a
+                                                [ Html.Attributes.style "max-width" "284px"
+                                                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+                                                , Html.Attributes.style "border-radius" "4px"
+                                                , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+                                                , Html.Attributes.style "display" "block"
+                                                , Html.Attributes.href fileUrl
+                                                , Html.Attributes.target "_blank"
+                                                , Html.Attributes.rel "noreferrer"
+                                                , Html.Attributes.style "font-size" "14px"
+                                                , Html.Attributes.style "padding" "4px 8px 4px 8px"
                                                 ]
-                                                [ Icons.download ]
-                                            ]
+                                                [ Html.text (FileName.toString fileData.fileName)
+                                                , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
+                                                , Html.div
+                                                    [ Html.Attributes.style "display" "inline-block"
+                                                    , Html.Attributes.style "transform" "translateY(4px)"
+                                                    ]
+                                                    [ Icons.download ]
+                                                ]
                                    ]
 
                         Nothing ->
