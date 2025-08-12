@@ -144,8 +144,7 @@ view htmlId isSecret label validation msg value model =
                 :: (if isSecret then
                         [ Ui.el
                             [ Ui.Input.button (Edit { model | showSecret = not model.showSecret } |> msg)
-                            , -- Is a little wider than the check button because it seems too skinny otherwise
-                              Ui.width (Ui.px 42)
+                            , Ui.width (Ui.px 40)
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.height Ui.fill

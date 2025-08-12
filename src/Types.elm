@@ -304,6 +304,7 @@ type FrontendMsg
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
+    | PressedTextInput
     | TypedMessage GuildOrDmId String
     | PressedSendMessage GuildOrDmId
     | PressedAttachFiles GuildOrDmId

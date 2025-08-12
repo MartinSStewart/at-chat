@@ -918,6 +918,9 @@ isPressMsg msg =
         PastedFiles _ _ ->
             False
 
+        PressedTextInput ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -964,25 +967,7 @@ updateLoaded msg model =
             ( { model | time = time }, Command.none )
 
         GotWindowSize width height ->
-            let
-                delta : Int
-                delta =
-                    Coord.yRaw model.windowSize - height
-            in
-            ( { model
-                | windowSize = Coord.xy width height
-                , virtualKeyboardOpen =
-                    if delta > 10 then
-                        True
-
-                    else if delta < -10 then
-                        False
-
-                    else
-                        model.virtualKeyboardOpen
-              }
-            , Command.none
-            )
+            ( { model | windowSize = Coord.xy width height }, Command.none )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -1525,6 +1510,7 @@ updateLoaded msg model =
 
                         else
                             model.textInputFocus
+                    , virtualKeyboardOpen = False
                 }
 
         KeyDown key ->
@@ -2863,6 +2849,9 @@ updateLoaded msg model =
 
         PastedFiles guildOrDmId files ->
             gotFiles guildOrDmId files model
+
+        PressedTextInput ->
+            ( { model | virtualKeyboardOpen = True }, Command.none )
 
 
 gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

@@ -259,6 +259,7 @@ editMessageTextInputConfig guildOrDmId =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
+    , pressedTextInput = PressedTextInput
     , typedMessage = TypedEditMessage guildOrDmId
     , pressedSendMessage = PressedSendEditMessage guildOrDmId
     , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId

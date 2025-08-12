@@ -54,6 +54,7 @@ type alias MsgConfig msg =
     { gotPingUserPosition : Result Dom.Error MentionUserDropdown -> msg
     , textInputGotFocus : HtmlId -> msg
     , textInputLostFocus : HtmlId -> msg
+    , pressedTextInput : msg
     , typedMessage : String -> msg
     , pressedSendMessage : msg
     , pressedArrowInDropdown : Int -> msg

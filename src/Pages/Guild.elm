@@ -1047,6 +1047,7 @@ messageInputConfig guildOrDmId =
     { gotPingUserPosition = GotPingUserPosition
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
+    , pressedTextInput = PressedTextInput
     , typedMessage = TypedMessage guildOrDmId
     , pressedSendMessage = PressedSendMessage guildOrDmId
     , pressedArrowInDropdown = PressedArrowInDropdown guildOrDmId
