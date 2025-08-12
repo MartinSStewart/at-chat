@@ -176,7 +176,7 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
         ]
         (Ui.column
             [ Ui.spacing 4
-            , Ui.width Ui.shrink
+            , Ui.width (Ui.px GuildIcon.fullWidth)
             , Ui.height Ui.fill
             , Ui.background MyUi.background1
             , scrollable canScroll2
