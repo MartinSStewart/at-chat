@@ -81,6 +81,7 @@ view isMobile time local loggedIn model =
                         "Admin"
                         [ Editable.view
                             (Dom.id "userOptions_name")
+                            True
                             "Bot token"
                             (\text ->
                                 let
@@ -107,6 +108,7 @@ view isMobile time local loggedIn model =
                 "Appearance"
                 [ Editable.view
                     (Dom.id "userOptions_name")
+                    False
                     "Display Name"
                     PersonName.fromString
                     UserNameEditableMsg

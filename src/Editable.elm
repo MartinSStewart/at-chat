@@ -11,6 +11,7 @@ import Ui.Input
 type alias Model =
     { editing : Editing
     , pressedSubmit : Bool
+    , showSecret : Bool
     }
 
 
@@ -30,6 +31,7 @@ init : Model
 init =
     { editing = NotEditing
     , pressedSubmit = False
+    , showSecret = False
     }
 
 
@@ -43,8 +45,16 @@ isPressMsg msg =
             True
 
 
-view : HtmlId -> String -> (String -> Result String a) -> (Msg a -> msg) -> String -> Model -> Element msg
-view htmlId label validation msg value model =
+view :
+    HtmlId
+    -> Bool
+    -> String
+    -> (String -> Result String a)
+    -> (Msg a -> msg)
+    -> String
+    -> Model
+    -> Element msg
+view htmlId isSecret label validation msg value model =
     let
         label2 =
             Ui.Input.label
@@ -83,31 +93,85 @@ view htmlId label validation msg value model =
         , Ui.row
             [ Ui.height (Ui.px 40)
             ]
-            (Ui.Input.text
-                [ Ui.border 1
-                , Ui.height Ui.fill
-                , Ui.borderColor MyUi.inputBorder
-                , Ui.background MyUi.inputBackground
-                , case model.editing of
-                    NotEditing ->
-                        Ui.rounded 4
+            ((if isSecret then
+                Ui.Input.newPassword
+                    [ Ui.border 1
+                    , Ui.height Ui.fill
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                    , Ui.paddingXY 8 0
+                    ]
+                    { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
+                    , text =
+                        case model.editing of
+                            NotEditing ->
+                                value
 
-                    Editing _ ->
-                        Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
-                , Ui.paddingXY 8 0
-                ]
-                { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
-                , text =
-                    case model.editing of
+                            Editing text ->
+                                text
+                    , placeholder = Nothing
+                    , label = label2.id
+                    , show = model.showSecret
+                    }
+
+              else
+                Ui.Input.text
+                    [ Ui.border 1
+                    , Ui.height Ui.fill
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , case model.editing of
                         NotEditing ->
-                            value
+                            Ui.rounded 4
 
-                        Editing text ->
-                            text
-                , placeholder = Nothing
-                , label = label2.id
-                }
-                :: (case result of
+                        Editing _ ->
+                            Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                    , Ui.paddingXY 8 0
+                    ]
+                    { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
+                    , text =
+                        case model.editing of
+                            NotEditing ->
+                                value
+
+                            Editing text ->
+                                text
+                    , placeholder = Nothing
+                    , label = label2.id
+                    }
+             )
+                :: (if isSecret then
+                        [ Ui.el
+                            [ Ui.Input.button (Edit { model | showSecret = not model.showSecret } |> msg)
+                            , -- Is a little wider than the check button because it seems too skinny otherwise
+                              Ui.width (Ui.px 42)
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.height Ui.fill
+                            , Ui.borderColor MyUi.inputBorder
+                            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                            , Ui.background MyUi.inputBackground
+                            , if result == Nothing then
+                                Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+
+                              else
+                                Ui.noAttr
+                            ]
+                            (Ui.html
+                                (if model.showSecret then
+                                    Icons.openEye
+
+                                 else
+                                    Icons.closedEye
+                                )
+                            )
+                        ]
+
+                    else
+                        []
+                   )
+                ++ (case result of
                         Just result2 ->
                             [ Ui.el
                                 [ Ui.Input.button
