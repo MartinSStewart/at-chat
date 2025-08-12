@@ -13,7 +13,6 @@ import GuildName
 import Html
 import Html.Attributes
 import Icons
-import Image
 import LocalState exposing (FrontendGuild)
 import MyUi
 import Ui exposing (Element)

@@ -5,7 +5,6 @@ module User exposing
     , EmailStatus(..)
     , FrontendUser
     , GuildOrDmId(..)
-    , allEmailNotifications
     , backendToFrontend
     , backendToFrontendForUser
     , profileImage
@@ -66,16 +65,6 @@ type EmailStatus
 
 type EmailNotifications
     = CheckEvery5Minutes
-    | CheckEveryHour
-    | NeverNotifyMe
-
-
-allEmailNotifications : List EmailNotifications
-allEmailNotifications =
-    [ CheckEvery5Minutes
-    , CheckEveryHour
-    , NeverNotifyMe
-    ]
 
 
 type AdminUiSection

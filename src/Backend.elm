@@ -11,8 +11,6 @@ module Backend exposing
 import AiChat
 import Array
 import Array.Extra
-import Bytes exposing (Bytes)
-import Bytes.Decode
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
@@ -414,7 +412,7 @@ update msg model =
                         )
                         (SeqDict.values users)
                         |> Task.sequence
-                        |> Task.attempt (GotDiscordUserAvatars time)
+                        |> Task.attempt GotDiscordUserAvatars
                     )
 
                 Err error ->
@@ -542,7 +540,7 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotDiscordUserAvatars time result ->
+        GotDiscordUserAvatars result ->
             case result of
                 Ok userAvatars ->
                     ( List.foldl
@@ -623,7 +621,7 @@ handleDiscordEditMessage edit model =
                                     messageIndex
                                     guild
                             of
-                                Ok ( _, guild2 ) ->
+                                Ok guild2 ->
                                     ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
                                     , broadcastToGuild
                                         guildId
@@ -1718,7 +1716,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_SendEditMessage _ guildOrDmId messageIndex newContent attachedFiles ->
                     let
                         attachedFiles2 =
-                            validateAttachedFiles model.files attachedFiles
+                            validateAttachedFiles model2.files attachedFiles
                     in
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
@@ -1737,7 +1735,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             messageIndex
                                             guild
                                     of
-                                        Ok ( _, guild2 ) ->
+                                        Ok guild2 ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
                                                 [ Local_SendEditMessage
@@ -1812,11 +1810,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     time
                                                     userId
                                                     newContent
-                                                    attachedFiles
+                                                    attachedFiles2
                                                     messageIndex
                                                     dmChannel
                                             of
-                                                Ok ( _, dmChannel2 ) ->
+                                                Ok dmChannel2 ->
                                                     ( { model2
                                                         | dmChannels =
                                                             SeqDict.insert dmChannelId dmChannel2 model2.dmChannels

@@ -155,7 +155,14 @@ canScroll model =
             True
 
 
-guildColumn : Bool -> Route -> Id UserId -> BackendUser -> SeqDict (Id GuildId) FrontendGuild -> Bool -> Element FrontendMsg
+guildColumn :
+    Bool
+    -> Route
+    -> Id UserId
+    -> BackendUser
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> Bool
+    -> Element FrontendMsg
 guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
     Ui.el
         [ Ui.inFront
@@ -1283,7 +1290,12 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                         ("0 calc(12px + "
                             ++ MyUi.insetBottom
                             ++ " * 0.5) "
-                            ++ MyUi.insetBottom
+                            ++ (if model.virtualKeyboardOpen then
+                                    "0"
+
+                                else
+                                    MyUi.insetBottom
+                               )
                             ++ " calc(12px + "
                             ++ MyUi.insetBottom
                             ++ " * 0.5)"

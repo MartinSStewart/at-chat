@@ -38,7 +38,6 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
-import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -113,6 +112,7 @@ type alias LoadedFrontend =
     , route : Route
     , time : Time.Posix
     , windowSize : Coord CssPixels
+    , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
@@ -448,7 +448,7 @@ type BackendMsg
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId Int (Result Discord.HttpError Discord.Message)
-    | GotDiscordUserAvatars Time.Posix (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileHash )))
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileHash )))
 
 
 type LoginResult

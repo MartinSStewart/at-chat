@@ -236,6 +236,7 @@ initLoadedFrontend loading time loginResult =
             , route = loading.route
             , time = time
             , windowSize = loading.windowSize
+            , virtualKeyboardOpen = False
             , loginStatus = loginStatus
             , elmUiState = Ui.Anim.init
             , lastCopied = Nothing
@@ -911,10 +912,10 @@ isPressMsg msg =
         EditMessage_GotFileHashName _ _ _ _ ->
             False
 
-        EditMessage_PastedFiles guildOrDmId nonempty ->
+        EditMessage_PastedFiles _ _ ->
             False
 
-        PastedFiles guildOrDmId nonempty ->
+        PastedFiles _ _ ->
             False
 
 
@@ -963,7 +964,23 @@ updateLoaded msg model =
             ( { model | time = time }, Command.none )
 
         GotWindowSize width height ->
-            ( { model | windowSize = Coord.xy width height }
+            let
+                delta : Int
+                delta =
+                    Coord.yRaw model.windowSize - height
+            in
+            ( { model
+                | windowSize = Coord.xy width height
+                , virtualKeyboardOpen =
+                    if delta > 10 then
+                        True
+
+                    else if delta < -10 then
+                        False
+
+                    else
+                        model.virtualKeyboardOpen
+              }
             , Command.none
             )
 
@@ -2944,7 +2961,7 @@ gotFiles guildOrDmId files model =
 
 editMessage_gotFiles :
     GuildOrDmId
-    -> Nonempty File.File
+    -> Nonempty File
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 editMessage_gotFiles guildOrDmId files model =
@@ -3889,12 +3906,8 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            case LocalState.editMessage userId time newContent attachedFiles channelId messageIndex guild of
-                                Ok ( _, guild2 ) ->
-                                    guild2
-
-                                Err _ ->
-                                    guild
+                            LocalState.editMessage userId time newContent attachedFiles channelId messageIndex guild
+                                |> Result.withDefault guild
                         )
                         local.guilds
             }
@@ -3905,12 +3918,8 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            case LocalState.editMessageHelper time userId newContent attachedFiles messageIndex dmChannel of
-                                Ok ( _, dmChannel2 ) ->
-                                    dmChannel2
-
-                                Err _ ->
-                                    dmChannel
+                            LocalState.editMessageHelper time userId newContent attachedFiles messageIndex dmChannel
+                                |> Result.withDefault dmChannel
                         )
                         local.dmChannels
             }

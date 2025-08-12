@@ -13,7 +13,7 @@ import Types exposing (BackendModel, BackendMsg)
 
 
 checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg )
-checkFileUpload _ model headers text =
+checkFileUpload _ model _ text =
     case String.split "," text of
         [ fileHash, fileSize, sessionId ] ->
             case
@@ -38,7 +38,7 @@ checkFileUpload _ model headers text =
 
 
 lamdera_handleEndpoints : Json.Value -> HttpRequest -> BackendModel -> ( RPCResult, BackendModel, Cmd BackendMsg )
-lamdera_handleEndpoints reqRaw req model =
+lamdera_handleEndpoints _ req model =
     case req.endpoint of
         "is-file-upload-allowed" ->
             LamderaRPC.handleEndpointString checkFileUpload req model

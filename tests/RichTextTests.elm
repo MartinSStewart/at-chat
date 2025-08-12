@@ -1,7 +1,6 @@
 module RichTextTests exposing (test)
 
 import Expect
-import Fuzz
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
@@ -125,32 +124,3 @@ test =
         --            |> RichText.toString users
         --            |> Expect.equal (String.Nonempty.toString text)
         ]
-
-
-markdownStringFuzzer : Fuzz.Fuzzer NonemptyString
-markdownStringFuzzer =
-    Fuzz.list
-        (Fuzz.oneOfValues
-            [ "a"
-            , " "
-            , "*"
-            , "@"
-            , "_"
-            , "__"
-            , "~~"
-            , "["
-            , "!"
-            , "]"
-            , "0"
-            , "👨\u{200D}👩\u{200D}👧\u{200D}👦"
-            ]
-        )
-        |> Fuzz.map
-            (\list ->
-                case String.concat list |> String.Nonempty.fromString of
-                    Just nonempty ->
-                        nonempty
-
-                    Nothing ->
-                        NonemptyString ' ' ""
-            )

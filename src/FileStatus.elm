@@ -1,8 +1,8 @@
 module FileStatus exposing
-    ( ContentType
+    ( ContentType(..)
     , ContentTypeType(..)
     , FileData
-    , FileHash
+    , FileHash(..)
     , FileId
     , FileStatus(..)
     , addFileHash
@@ -49,10 +49,14 @@ type FileStatus
     | FileError Http.Error
 
 
+{-| OpaqueVariants
+-}
 type FileId
-    = FileStatusId Never
+    = FileId Never
 
 
+{-| OpaqueVariants
+-}
 type FileHash
     = FileHash String
 
@@ -115,6 +119,8 @@ fileHash =
     FileHash
 
 
+{-| OpaqueVariants
+-}
 type ContentType
     = ContentType Int
 
@@ -160,7 +166,7 @@ uploadBytes sessionId bytes =
                         Http.NetworkError_ ->
                             Err Http.NetworkError
 
-                        Http.BadStatus_ metadata body ->
+                        Http.BadStatus_ metadata _ ->
                             Err (Http.BadStatus metadata.statusCode)
                 )
         , timeout = Nothing

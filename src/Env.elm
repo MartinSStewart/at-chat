@@ -1,6 +1,5 @@
 module Env exposing (..)
 
-import Discord exposing (Authentication)
 import EmailAddress exposing (EmailAddress)
 import Postmark
 import Unsafe
@@ -49,16 +48,6 @@ noReplyEmailAddress =
 adminEmail : String
 adminEmail =
     "a@a.se"
-
-
-botToken_ : String
-botToken_ =
-    ""
-
-
-botToken : Authentication
-botToken =
-    Discord.botToken botToken_
 
 
 openRouterKey : String

@@ -16,7 +16,6 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import FileStatus
 import Html exposing (Html)
 import Html.Attributes
 import Icons

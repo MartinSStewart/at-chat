@@ -49,7 +49,7 @@ import DmChannel exposing (DmChannel, LastTypedAt)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
-import FileStatus exposing (ContentType, FileData, FileHash, FileId)
+import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -612,20 +612,18 @@ editMessage :
     ->
         Result
             ()
-            ( UserTextMessageData
-            , { a
+            { a
                 | channels :
                     SeqDict
                         (Id ChannelId)
                         { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-              }
-            )
+            }
 editMessage editedBy time newContent attachedFiles channelId messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             case editMessageHelper time editedBy newContent attachedFiles messageIndex channel of
-                Ok ( newMessage, channel2 ) ->
-                    Ok ( newMessage, { guild | channels = SeqDict.insert channelId channel2 guild.channels } )
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
                 _ ->
                     Err ()
@@ -641,7 +639,7 @@ editMessageHelper :
     -> SeqDict (Id FileId) FileData
     -> Int
     -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-    -> Result () ( UserTextMessageData, { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } )
+    -> Result () { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
 editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
     case Array.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
@@ -651,8 +649,7 @@ editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
                     data2 =
                         { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
                 in
-                ( data2
-                , { channel
+                { channel
                     | messages = Array.set messageIndex (UserTextMessage data2) channel.messages
                     , lastTypedAt =
                         SeqDict.update
@@ -670,8 +667,7 @@ editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
                                         Nothing
                             )
                             channel.lastTypedAt
-                  }
-                )
+                }
                     |> Ok
 
             else
