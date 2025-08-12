@@ -14,6 +14,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
+import FileStatus exposing (FileData, FileId)
 import Html
 import Html.Attributes
 import Html.Events
@@ -72,10 +73,11 @@ view :
     -> HtmlId
     -> String
     -> String
+    -> SeqDict (Id FileId) FileData
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element msg
-view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text pingUser local =
+view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -179,7 +181,7 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
                         users =
                             LocalState.allUsers local
                     in
-                    RichText.textInputView users (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->

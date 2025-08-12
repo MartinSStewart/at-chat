@@ -232,6 +232,7 @@ createNewUser createdAt name email userIsAdmin =
     , lastViewed = SeqDict.empty
     , dmLastViewed = SeqDict.empty
     , lastChannelViewed = SeqDict.empty
+    , icon = Nothing
     }
 
 

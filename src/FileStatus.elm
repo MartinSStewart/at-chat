@@ -71,7 +71,7 @@ sizeToString int =
 
 fileUrl : ContentType -> FileHash -> String
 fileUrl (ContentType contentType2) (FileHash fileHash2) =
-    domain ++ "file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+    domain ++ "/file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
 
 
 contentTypeType : ContentType -> ContentTypeType
@@ -129,7 +129,7 @@ upload onResult sessionId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
-        , url = domain ++ "file/upload"
+        , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
         , expect = Http.expectString (\result -> Result.map fileHash result |> onResult)
         , timeout = Nothing
@@ -142,7 +142,7 @@ uploadBytes sessionId bytes =
     Http.task
         { method = "POST"
         , headers = [ Http.header "sid" sessionId ]
-        , url = domain ++ "file/upload"
+        , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" bytes
         , resolver =
             Http.stringResolver
@@ -170,10 +170,10 @@ uploadBytes sessionId bytes =
 domain : String
 domain =
     if Env.isProduction then
-        "/"
+        Env.domain
 
     else
-        "http://localhost:3000/"
+        "http://localhost:3000"
 
 
 fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg

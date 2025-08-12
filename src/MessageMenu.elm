@@ -217,6 +217,7 @@ view model extraOptions local loggedIn =
                                     editMessageTextInputId
                                     ""
                                     edit
+                                    attachedFiles
                                     loggedIn.pingUser
                                     local
                                 ]

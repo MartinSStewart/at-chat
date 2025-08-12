@@ -508,14 +508,13 @@ memberLabel localUser userId =
             ]
         , Ui.Font.color MyUi.font3
         ]
-        [ User.profileImage
-        , case LocalState.getUser userId localUser of
+        (case LocalState.getUser userId localUser of
             Just user ->
-                Ui.text (PersonName.toString user.name)
+                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
-                Ui.none
-        ]
+                []
+        )
 
 
 sidebarOffsetAttr : LoggedIn2 -> LoadedFrontend -> Ui.Attribute msg
@@ -1557,7 +1556,13 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                         , Ui.width Ui.shrink
                         , Ui.alignTop
                         ]
-                        User.profileImage
+                        (case SeqDict.get message2.createdBy allUsers of
+                            Just user ->
+                                User.profileImage user.icon
+
+                            Nothing ->
+                                User.profileImage Nothing
+                        )
                     , Ui.column
                         []
                         [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
@@ -2083,7 +2088,7 @@ friendLabel openedOtherUserId otherUserId otherUser =
         , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        [ User.profileImage
+        [ User.profileImage otherUser.icon
         , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
         ]
 

@@ -448,6 +448,7 @@ type BackendMsg
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId Int (Result Discord.HttpError Discord.Message)
+    | GotDiscordUserAvatars Time.Posix (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileHash )))
 
 
 type LoginResult

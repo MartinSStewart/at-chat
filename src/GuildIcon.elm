@@ -104,8 +104,6 @@ view mode guild =
                         _ ->
                             Ui.rounded (round (toFloat size * 8 / 50))
                     , Ui.clip
-                    , Ui.border 1
-                    , Ui.borderColor MyUi.secondaryGrayBorder
                     , MyUi.hoverText name
                     ]
                     { source = FileStatus.fileUrl FileStatus.pngContent icon

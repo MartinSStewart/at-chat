@@ -17,6 +17,7 @@ module User exposing
 
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
+import FileStatus exposing (FileHash)
 import Id exposing (ChannelId, GuildId, Id, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
@@ -39,6 +40,7 @@ type alias BackendUser =
     , lastViewed : SeqDict GuildOrDmId Int
     , dmLastViewed : SeqDict (Id UserId) Int
     , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
+    , icon : Maybe FileHash
     }
 
 
@@ -97,6 +99,7 @@ type alias FrontendUser =
     { name : PersonName
     , isAdmin : Bool
     , createdAt : Time.Posix
+    , icon : Maybe FileHash
     }
 
 
@@ -107,6 +110,7 @@ backendToFrontend user =
     { name = user.name
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , icon = user.icon
     }
 
 
@@ -117,6 +121,7 @@ backendToFrontendForUser user =
     { name = user.name
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , icon = user.icon
     }
 
 
@@ -130,12 +135,26 @@ toString userId allUsers =
             "<missing>"
 
 
-profileImage : Element msg
-profileImage =
-    Ui.el
-        [ Ui.background (Ui.rgb 100 100 100)
-        , Ui.rounded 8
-        , Ui.width (Ui.px 40)
-        , Ui.height (Ui.px 40)
-        ]
-        Ui.none
+profileImage : Maybe FileHash -> Element msg
+profileImage maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.rounded 8
+                , Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 40)
+                , Ui.clip
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            Ui.el
+                [ Ui.background (Ui.rgb 100 100 100)
+                , Ui.rounded 8
+                , Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 40)
+                ]
+                Ui.none

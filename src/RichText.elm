@@ -707,6 +707,19 @@ view pressedSpoiler revealedSpoilers users attachedFiles nonempty =
         |> Tuple.second
 
 
+normalTextView : String -> RichTextState -> List (Html msg)
+normalTextView text state =
+    [ Html.span
+        [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
+        , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
+        , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
+        , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
+        , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
+        ]
+        [ Html.text text ]
+    ]
+
+
 viewHelper :
     (Int -> msg)
     -> Int
@@ -725,16 +738,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
 
                 NormalText char text ->
                     ( spoilerIndex2
-                    , currentList
-                        ++ [ Html.span
-                                [ htmlAttrIf state.italic (Html.Attributes.style "font-style" "italic")
-                                , htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
-                                , htmlAttrIf state.bold (Html.Attributes.style "font-weight" "700")
-                                , htmlAttrIf state.strikethrough (Html.Attributes.style "text-decoration" "line-through")
-                                , htmlAttrIf state.spoiler (Html.Attributes.style "opacity" "0")
-                                ]
-                                [ Html.text (String.cons char text) ]
-                           ]
+                    , currentList ++ normalTextView (String.cons char text) state
                     )
 
                 Italic nonempty2 ->
@@ -951,16 +955,20 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                                    ]
 
                         Nothing ->
-                            currentList
+                            currentList ++ normalTextView (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) state
                     )
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
 
 
-textInputView : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
-textInputView users nonempty =
-    textInputViewHelper { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False } users nonempty
+textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) FileData -> Nonempty RichText -> List (Html msg)
+textInputView users attachedFiles nonempty =
+    textInputViewHelper
+        { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
+        users
+        attachedFiles
+        nonempty
 
 
 htmlAttrIf : Bool -> Html.Attribute msg -> Html.Attribute msg
@@ -976,8 +984,13 @@ type alias RichTextState =
     { italic : Bool, underline : Bool, bold : Bool, strikethrough : Bool, spoiler : Bool }
 
 
-textInputViewHelper : RichTextState -> SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> List (Html msg)
-textInputViewHelper state allUsers nonempty =
+textInputViewHelper :
+    RichTextState
+    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) FileData
+    -> Nonempty RichText
+    -> List (Html msg)
+textInputViewHelper state allUsers attachedFiles nonempty =
     List.concatMap
         (\item ->
             case item of
@@ -1008,27 +1021,27 @@ textInputViewHelper state allUsers nonempty =
 
                 Italic nonempty2 ->
                     formatText "_"
-                        :: textInputViewHelper { state | italic = True } allUsers nonempty2
+                        :: textInputViewHelper { state | italic = True } allUsers attachedFiles nonempty2
                         ++ [ formatText "_" ]
 
                 Underline nonempty2 ->
                     formatText "__"
-                        :: textInputViewHelper { state | underline = True } allUsers nonempty2
+                        :: textInputViewHelper { state | underline = True } allUsers attachedFiles nonempty2
                         ++ [ formatText "__" ]
 
                 Bold nonempty2 ->
                     formatText "*"
-                        :: textInputViewHelper { state | bold = True } allUsers nonempty2
+                        :: textInputViewHelper { state | bold = True } allUsers attachedFiles nonempty2
                         ++ [ formatText "*" ]
 
                 Strikethrough nonempty2 ->
                     formatText "~~"
-                        :: textInputViewHelper { state | strikethrough = True } allUsers nonempty2
+                        :: textInputViewHelper { state | strikethrough = True } allUsers attachedFiles nonempty2
                         ++ [ formatText "~~" ]
 
                 Spoiler nonempty2 ->
                     formatText "||"
-                        :: textInputViewHelper { state | spoiler = True } allUsers nonempty2
+                        :: textInputViewHelper { state | spoiler = True } allUsers attachedFiles nonempty2
                         ++ [ formatText "||" ]
 
                 Hyperlink protocol rest ->
@@ -1076,7 +1089,17 @@ textInputViewHelper state allUsers nonempty =
                     ]
 
                 AttachedFile fileId ->
-                    [ formatText (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) ]
+                    let
+                        text : String
+                        text =
+                            attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix
+                    in
+                    [ if SeqDict.member fileId attachedFiles then
+                        formatText text
+
+                      else
+                        Html.text text
+                    ]
         )
         (List.Nonempty.toList nonempty)
 
