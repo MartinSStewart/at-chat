@@ -73,7 +73,7 @@ view :
     -> HtmlId
     -> String
     -> String
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) a
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element msg

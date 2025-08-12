@@ -1232,6 +1232,13 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                     Nothing ->
                         ""
                 )
+                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                    Just attachedFiles ->
+                        NonemptyDict.toSeqDict attachedFiles
+
+                    Nothing ->
+                        SeqDict.empty
+                )
                 loggedIn.pingUser
                 local
             , (case
@@ -1430,6 +1437,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
+                        editing.attachedFiles
                         pingUser
                         local
                         |> Ui.el [ Ui.paddingXY 5 0 ]

@@ -962,7 +962,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
         (List.Nonempty.toList nonempty)
 
 
-textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) FileData -> Nonempty RichText -> List (Html msg)
+textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
 textInputView users attachedFiles nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
@@ -987,7 +987,7 @@ type alias RichTextState =
 textInputViewHelper :
     RichTextState
     -> SeqDict (Id UserId) { a | name : PersonName }
-    -> SeqDict (Id FileId) FileData
+    -> SeqDict (Id FileId) b
     -> Nonempty RichText
     -> List (Html msg)
 textInputViewHelper state allUsers attachedFiles nonempty =
