@@ -24,7 +24,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task
+import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Email.Html
@@ -195,6 +195,38 @@ subscriptions model =
         ]
 
 
+loadImage : String -> Task restriction x (Maybe FileHash)
+loadImage url =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = url
+        , body = Http.emptyBody
+        , resolver =
+            Http.bytesResolver
+                (\result2 ->
+                    case result2 of
+                        Http.GoodStatus_ _ body ->
+                            Ok (Just body)
+
+                        _ ->
+                            Ok Nothing
+                )
+        , timeout = Just (Duration.seconds 30)
+        }
+        |> Task.andThen
+            (\maybeBytes ->
+                case maybeBytes of
+                    Just bytes ->
+                        FileStatus.uploadBytes Env.secretKey bytes
+                            |> Task.map Just
+                            |> Task.onError (\_ -> Task.succeed Nothing)
+
+                    Nothing ->
+                        Task.succeed Nothing
+            )
+
+
 update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 update msg model =
     case msg of
@@ -361,7 +393,28 @@ update msg model =
                     in
                     ( addDiscordUsers time users model
                         |> addDiscordGuilds time (SeqDict.fromList data)
-                    , Command.none
+                    , List.map
+                        (\guildMember ->
+                            Task.map
+                                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
+                                (case guildMember.user.avatar of
+                                    Just avatar ->
+                                        loadImage
+                                            (Discord.userAvatarUrl
+                                                { size = Discord.DefaultImageSize
+                                                , imageType = Discord.Choice1 Discord.Png
+                                                }
+                                                guildMember.user.id
+                                                avatar
+                                            )
+
+                                    Nothing ->
+                                        Task.succeed Nothing
+                                )
+                        )
+                        (SeqDict.values users)
+                        |> Task.sequence
+                        |> Task.attempt (GotDiscordUserAvatars time)
                     )
 
                 Err error ->
@@ -402,40 +455,14 @@ update msg model =
                                 (Discord.getGuildChannels botToken2 partialGuild.id)
                                 (case partialGuild.icon of
                                     Just icon ->
-                                        Http.task
-                                            { method = "GET"
-                                            , headers = []
-                                            , url =
-                                                Discord.guildIconUrl
-                                                    { size = Discord.DefaultImageSize
-                                                    , imageType = Discord.Choice1 Discord.Png
-                                                    }
-                                                    partialGuild.id
-                                                    icon
-                                            , body = Http.emptyBody
-                                            , resolver =
-                                                Http.bytesResolver
-                                                    (\result2 ->
-                                                        case result2 of
-                                                            Http.GoodStatus_ _ body ->
-                                                                Ok (Just body)
-
-                                                            _ ->
-                                                                Ok Nothing
-                                                    )
-                                            , timeout = Just (Duration.seconds 30)
-                                            }
-                                            |> Task.andThen
-                                                (\maybeBytes ->
-                                                    case maybeBytes of
-                                                        Just bytes ->
-                                                            FileStatus.uploadBytes Env.secretKey bytes
-                                                                |> Task.map Just
-                                                                |> Task.onError (\_ -> Task.succeed Nothing)
-
-                                                        Nothing ->
-                                                            Task.succeed Nothing
-                                                )
+                                        loadImage
+                                            (Discord.guildIconUrl
+                                                { size = Discord.DefaultImageSize
+                                                , imageType = Discord.Choice1 Discord.Png
+                                                }
+                                                partialGuild.id
+                                                icon
+                                            )
 
                                     Nothing ->
                                         Task.succeed Nothing
@@ -509,6 +536,31 @@ update msg model =
                                 )
                                 model.dmChannels
                       }
+                    , Command.none
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        GotDiscordUserAvatars time result ->
+            case result of
+                Ok userAvatars ->
+                    ( List.foldl
+                        (\( discordUserId, maybeAvatar ) model2 ->
+                            case OneToOne.second discordUserId model2.discordUsers of
+                                Just userId ->
+                                    { model2
+                                        | users =
+                                            NonemptyDict.updateIfExists userId
+                                                (\user -> { user | icon = maybeAvatar })
+                                                model2.users
+                                    }
+
+                                Nothing ->
+                                    model2
+                        )
+                        model
+                        userAvatars
                     , Command.none
                     )
 

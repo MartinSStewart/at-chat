@@ -16,6 +16,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import FileStatus
 import Html exposing (Html)
 import Html.Attributes
 import Icons
@@ -27,7 +28,7 @@ import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
+import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
@@ -89,7 +90,7 @@ mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Load
 mobileMenuMaxHeight extraOptions local loggedIn model =
     (case showEdit extraOptions.guildOrDmId extraOptions.messageIndex loggedIn of
         Just edit ->
-            toFloat (List.length (String.lines edit)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
+            toFloat (List.length (String.lines edit.text)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
         Nothing ->
             let
@@ -146,12 +147,12 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmId -> Int -> LoggedIn2 -> Maybe String
+showEdit : GuildOrDmId -> Int -> LoggedIn2 -> Maybe EditMessage
 showEdit guildOrDmId messageIndex loggedIn =
     case SeqDict.get guildOrDmId loggedIn.editMessage of
         Just edit ->
             if edit.messageIndex == messageIndex then
-                Just edit.text
+                Just edit
 
             else
                 Nothing
@@ -216,7 +217,8 @@ view model extraOptions local loggedIn =
                                     (editMessageTextInputConfig guildOrDmId)
                                     editMessageTextInputId
                                     ""
-                                    edit
+                                    edit.text
+                                    edit.attachedFiles
                                     loggedIn.pingUser
                                     local
                                 ]
