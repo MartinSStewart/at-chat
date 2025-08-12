@@ -2,6 +2,7 @@ module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import Backend
 import Effect.Lamdera as Lamdera
+import Env
 import FileStatus
 import Http
 import Json.Encode as Json
@@ -15,8 +16,12 @@ checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Htt
 checkFileUpload _ model headers text =
     case String.split "," text of
         [ fileHash, fileSize, sessionId ] ->
-            case ( Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model, String.toInt fileSize ) of
-                ( Just _, Just fileSize2 ) ->
+            case
+                ( sessionId == Env.secretKey || Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing
+                , String.toInt fileSize
+                )
+            of
+                ( True, Just fileSize2 ) ->
                     ( Ok "valid"
                     , { model
                         | files =

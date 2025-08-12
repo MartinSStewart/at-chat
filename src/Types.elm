@@ -380,12 +380,12 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error String)
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileHash)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
-    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error String)
+    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error FileHash)
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
 
@@ -433,7 +433,15 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            (List ( Discord.Id.Id Discord.Id.GuildId, ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 ) ))
+            (List
+                ( Discord.Id.Id Discord.Id.GuildId
+                , { guild : Discord.Guild
+                  , members : List Discord.GuildMember
+                  , channels : List Discord.Channel2
+                  , icon : Maybe FileHash
+                  }
+                )
+            )
         )
     | SentGuildMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage

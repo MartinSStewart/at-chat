@@ -11,6 +11,8 @@ module Backend exposing
 import AiChat
 import Array
 import Array.Extra
+import Bytes exposing (Bytes)
+import Bytes.Decode
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
@@ -18,6 +20,7 @@ import Discord.Markdown
 import DmChannel exposing (DmChannel, DmChannelId, LastTypedAt)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -349,7 +352,7 @@ update msg model =
                         users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
                         users =
                             List.concatMap
-                                (\( _, ( _, members, _ ) ) ->
+                                (\( _, { members } ) ->
                                     List.map (\member -> ( member.user.id, member )) members
                                 )
                                 data
@@ -378,9 +381,15 @@ update msg model =
                     ( { model | discordBotId = Just botUser.id }
                     , List.map
                         (\partialGuild ->
-                            Task.map3
-                                (\guild members channels ->
-                                    ( guild.id, ( guild, members, channels ) )
+                            Task.map4
+                                (\guild members channels maybeIcon ->
+                                    ( guild.id
+                                    , { guild = guild
+                                      , members = members
+                                      , channels = channels
+                                      , icon = maybeIcon
+                                      }
+                                    )
                                 )
                                 (Discord.getGuild botToken2 partialGuild.id)
                                 (Discord.listGuildMembers
@@ -391,6 +400,46 @@ update msg model =
                                     }
                                 )
                                 (Discord.getGuildChannels botToken2 partialGuild.id)
+                                (case partialGuild.icon of
+                                    Just icon ->
+                                        Http.task
+                                            { method = "GET"
+                                            , headers = []
+                                            , url =
+                                                Discord.guildIconUrl
+                                                    { size = Discord.DefaultImageSize
+                                                    , imageType = Discord.Choice1 Discord.Png
+                                                    }
+                                                    partialGuild.id
+                                                    icon
+                                            , body = Http.emptyBody
+                                            , resolver =
+                                                Http.bytesResolver
+                                                    (\result2 ->
+                                                        case result2 of
+                                                            Http.GoodStatus_ _ body ->
+                                                                Ok (Just body)
+
+                                                            _ ->
+                                                                Ok Nothing
+                                                    )
+                                            , timeout = Just (Duration.seconds 30)
+                                            }
+                                            |> Task.andThen
+                                                (\maybeBytes ->
+                                                    case maybeBytes of
+                                                        Just bytes ->
+                                                            FileStatus.uploadBytes Env.secretKey bytes
+                                                                |> Task.map Just
+                                                                |> Task.onError (\_ -> Task.succeed Nothing)
+
+                                                        Nothing ->
+                                                            Task.succeed Nothing
+                                                )
+
+                                    Nothing ->
+                                        Task.succeed Nothing
+                                )
                         )
                         guilds
                         |> Task.sequence
@@ -651,12 +700,19 @@ addDiscordUsers time newUsers model =
 
 addDiscordGuilds :
     Time.Posix
-    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Guild, List Discord.GuildMember, List Discord.Channel2 )
+    ->
+        SeqDict
+            (Discord.Id.Id Discord.Id.GuildId)
+            { guild : Discord.Guild
+            , members : List Discord.GuildMember
+            , channels : List Discord.Channel2
+            , icon : Maybe FileHash
+            }
     -> BackendModel
     -> BackendModel
 addDiscordGuilds time guilds model =
     SeqDict.foldl
-        (\discordGuildId ( discordGuild, guildMembers, discordChannels ) model2 ->
+        (\discordGuildId data model2 ->
             case OneToOne.second discordGuildId model2.discordGuilds of
                 Just _ ->
                     model2
@@ -665,7 +721,7 @@ addDiscordGuilds time guilds model =
                     let
                         ownerId : Id UserId
                         ownerId =
-                            case OneToOne.second discordGuild.ownerId model2.discordUsers of
+                            case OneToOne.second data.guild.ownerId model2.discordUsers of
                                 Just ownerId2 ->
                                     ownerId2
 
@@ -683,7 +739,7 @@ addDiscordGuilds time guilds model =
                                         Missing ->
                                             9999
                                 )
-                                discordChannels
+                                data.channels
                                 |> List.indexedMap
                                     (\index channel ->
                                         let
@@ -767,7 +823,7 @@ addDiscordGuilds time guilds model =
                         newGuild =
                             { createdAt = time
                             , createdBy = ownerId
-                            , name = GuildName.fromStringLossy discordGuild.name
+                            , name = GuildName.fromStringLossy data.guild.name
                             , icon = Nothing
                             , channels = channels
                             , members =
@@ -784,7 +840,7 @@ addDiscordGuilds time guilds model =
                                             Nothing ->
                                                 Nothing
                                     )
-                                    guildMembers
+                                    data.members
                                     |> SeqDict.fromList
                             , owner = ownerId
                             , invites = SeqDict.empty

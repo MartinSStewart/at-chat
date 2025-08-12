@@ -14,12 +14,15 @@ module FileStatus exposing
     , onlyUploadedFiles
     , sizeToString
     , upload
+    , uploadBytes
     )
 
+import Bytes exposing (Bytes)
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (SessionId)
+import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
 import Icons
@@ -115,16 +118,46 @@ contentType a =
     OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
 
 
-upload : (Result Http.Error String -> msg) -> SessionId -> File -> Command restriction toFrontend msg
+upload : (Result Http.Error FileHash -> msg) -> SessionId -> File -> Command restriction toFrontend msg
 upload onResult sessionId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
         , url = domain ++ "file/upload"
         , body = Http.fileBody file2
-        , expect = Http.expectString onResult
+        , expect = Http.expectString (\result -> Result.map fileHash result |> onResult)
         , timeout = Nothing
         , tracker = Nothing
+        }
+
+
+uploadBytes : String -> Bytes -> Task restriction Http.Error FileHash
+uploadBytes sessionId bytes =
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "sid" sessionId ]
+        , url = domain ++ "file/upload"
+        , body = Http.bytesBody "application/octet-stream" bytes
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        Http.GoodStatus_ _ body ->
+                            Ok (fileHash body)
+
+                        Http.BadUrl_ string ->
+                            Err (Http.BadUrl string)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata body ->
+                            Err (Http.BadStatus metadata.statusCode)
+                )
+        , timeout = Nothing
         }
 
 
@@ -247,7 +280,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
         )
 
 
-addFileHash : Result Http.Error String -> FileStatus -> FileStatus
+addFileHash : Result Http.Error FileHash -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
@@ -257,7 +290,7 @@ addFileHash result fileStatus =
                         { fileName = fileName
                         , fileSize = fileSize
                         , contentType = contentType2
-                        , fileHash = fileHash fileHash2
+                        , fileHash = fileHash2
                         }
 
                 Err error ->
