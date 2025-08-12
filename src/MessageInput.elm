@@ -101,6 +101,7 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
             , Html.Attributes.style "caret-color" "white"
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "outline" "none"
+            , Html.Events.onClick msgConfig.pressedTextInput
             , Html.Events.preventDefaultOn
                 "paste"
                 (Json.Decode.at
