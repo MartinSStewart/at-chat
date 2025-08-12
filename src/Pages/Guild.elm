@@ -334,7 +334,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                                     ]
 
                         Nothing ->
-                            Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] (Ui.text "Work in progress")
+                            Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
                     ]
 
 
