@@ -1292,7 +1292,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                             ++ MyUi.insetBottom
                             ++ " * 0.5) "
                             ++ (if model.virtualKeyboardOpen then
-                                    "0"
+                                    "calc(" ++ MyUi.insetBottom ++ " * 0.5)"
 
                                 else
                                     MyUi.insetBottom
@@ -1887,7 +1887,7 @@ channelColumnContainer header content =
                 , Ui.Font.color MyUi.font1
                 , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
                 , Ui.borderColor MyUi.border1
-                , Ui.height (Ui.px 40)
+                , Ui.height (Ui.px channelHeaderHeight)
                 , MyUi.noShrinking
                 , Ui.clipWithEllipsis
                 ]
