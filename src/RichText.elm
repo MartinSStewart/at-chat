@@ -985,8 +985,6 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                                                                     , Html.Attributes.style "display" "block"
                                                                     , Html.Attributes.width (round w3)
                                                                     , Html.Attributes.height (round h2)
-
-                                                                    --, Html.Attributes.style "height"
                                                                     ]
                                                                     []
 
