@@ -1,6 +1,7 @@
 module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import Backend
+import Coord
 import Effect.Lamdera as Lamdera
 import Env
 import FileStatus
@@ -9,23 +10,36 @@ import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SeqDict
+import Toop exposing (T4(..))
 import Types exposing (BackendModel, BackendMsg)
 
 
 checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Http.Error String, BackendModel, Cmd msg )
 checkFileUpload _ model _ text =
     case String.split "," text of
-        [ fileHash, fileSize, sessionId ] ->
+        [ fileHash, fileSize, sessionId, width, height ] ->
             case
-                ( sessionId == Env.secretKey || Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing
-                , String.toInt fileSize
-                )
+                T4
+                    (sessionId == Env.secretKey || Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing)
+                    (String.toInt fileSize)
+                    (String.toInt width)
+                    (String.toInt height)
             of
-                ( True, Just fileSize2 ) ->
+                T4 True (Just fileSize2) (Just width2) (Just height2) ->
                     ( Ok "valid"
                     , { model
                         | files =
-                            SeqDict.insert (FileStatus.fileHash fileHash) { fileSize = fileSize2 } model.files
+                            SeqDict.insert
+                                (FileStatus.fileHash fileHash)
+                                { fileSize = fileSize2
+                                , imageSize =
+                                    if width2 > 0 then
+                                        Just (Coord.xy width2 height2)
+
+                                    else
+                                        Nothing
+                                }
+                                model.files
                       }
                     , Cmd.none
                     )

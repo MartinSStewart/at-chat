@@ -2846,7 +2846,10 @@ updateLoaded msg model =
                                     if edit.messageIndex == messageIndex then
                                         { edit
                                             | attachedFiles =
-                                                SeqDict.updateIfExists fileId (FileStatus.addFileHash result) edit.attachedFiles
+                                                SeqDict.updateIfExists
+                                                    fileId
+                                                    (FileStatus.addFileHash result)
+                                                    edit.attachedFiles
                                         }
 
                                     else

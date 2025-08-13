@@ -1,5 +1,6 @@
 module Types exposing
     ( AdminStatusLoginData(..)
+    , BackendFileData
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
@@ -258,8 +259,12 @@ type alias BackendModel =
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
-    , files : SeqDict FileHash { fileSize : Int }
+    , files : SeqDict FileHash BackendFileData
     }
+
+
+type alias BackendFileData =
+    { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
 
 type LastRequest
@@ -384,12 +389,12 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | OneFrameAfterDragEnd
-    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileHash)
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
-    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error FileHash)
+    | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
 

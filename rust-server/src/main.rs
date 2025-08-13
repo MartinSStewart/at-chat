@@ -9,6 +9,7 @@ use axum::{
     routing::get,
     routing::post,
 };
+use imagesize::blob_size;
 use sha2::{Digest, Sha224};
 use std::fs;
 
@@ -84,6 +85,11 @@ async fn upload_endpoint(request: Request) -> Response<String> {
 async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
     let hash: String = hash_bytes(&bytes);
 
+    let size: imagesize::ImageSize = blob_size(&bytes).unwrap_or(imagesize::ImageSize {
+        width: 0,
+        height: 0,
+    });
+
     match reqwest::Client::new()
         .post(if cfg!(debug_assertions) {
             "http://localhost:8000/_r/is-file-upload-allowed"
@@ -91,7 +97,17 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
             "https://at-chat.app/_r/is-file-upload-allowed"
         })
         .header("Content-Type", "text/plain")
-        .body(hash.clone() + "," + &(bytes.len().to_string()) + "," + &session_id2)
+        .body(
+            hash.clone()
+                + ","
+                + &(bytes.len().to_string())
+                + ","
+                + &session_id2
+                + ","
+                + &size.width.to_string()
+                + ","
+                + &size.height.to_string(),
+        )
         .send()
         .await
     {
@@ -99,11 +115,14 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
             Ok(text) => {
                 let path: String = filepath(hash.clone());
                 if text == "valid" {
+                    let response: String =
+                        hash + "," + &size.width.to_string() + "," + &size.height.to_string();
+
                     match fs::exists(&path) {
-                        Ok(true) => response_with_headers(StatusCode::OK, hash),
+                        Ok(true) => response_with_headers(StatusCode::OK, response),
 
                         _ => match fs::write(path, bytes) {
-                            Ok(()) => response_with_headers(StatusCode::OK, hash),
+                            Ok(()) => response_with_headers(StatusCode::OK, response),
                             Err(_) => response_with_headers(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 String::from("Internal error"),

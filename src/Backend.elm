@@ -55,7 +55,7 @@ import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, EmailStatus(..), GuildOrDmId(..))
 
@@ -2639,7 +2639,7 @@ broadcastToDmChannel clientId userId otherUserId serverMsg model =
             ]
 
 
-validateAttachedFiles : SeqDict FileHash { fileSize : Int } -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
+validateAttachedFiles : SeqDict FileHash BackendFileData -> SeqDict (Id FileId) FileData -> SeqDict (Id FileId) FileData
 validateAttachedFiles uploadedFiles dict =
     SeqDict.filterMap
         (\id fileData ->

@@ -14,7 +14,8 @@ module Pages.Guild exposing
 
 import Array exposing (Array)
 import ChannelName
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import DmChannel exposing (LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -362,6 +363,20 @@ dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
                 (Ui.text "User not found")
 
 
+channelViewWidth : Coord CssPixels -> Int
+channelViewWidth windowSize =
+    if MyUi.isMobile { windowSize = windowSize } then
+        Coord.xRaw windowSize
+
+    else
+        Coord.xRaw windowSize - (GuildIcon.fullWidth + 1 + channelColumnWidth + memberColumnWidth)
+
+
+channelColumnWidth : number
+channelColumnWidth =
+    241
+
+
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
     case loggedIn.newGuildForm of
@@ -469,6 +484,11 @@ guildView model guildId channelRoute loggedIn local =
                     homePageLoggedInView Nothing Nothing model loggedIn local
 
 
+memberColumnWidth : number
+memberColumnWidth =
+    200
+
+
 memberColumn : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
 memberColumn localUser guildOwner guildMembers =
     let
@@ -480,7 +500,7 @@ memberColumn localUser guildOwner guildMembers =
         , Ui.alignRight
         , Ui.background MyUi.background2
         , Ui.Font.color MyUi.font1
-        , Ui.width (Ui.px 200)
+        , Ui.width (Ui.px memberColumnWidth)
         , Ui.scrollable
         ]
         [ Ui.column

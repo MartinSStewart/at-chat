@@ -19,6 +19,8 @@ module FileStatus exposing
     )
 
 import Bytes exposing (Bytes)
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
@@ -40,7 +42,12 @@ import Ui.Shadow
 
 
 type alias FileData =
-    { fileName : FileName, fileSize : Int, contentType : ContentType, fileHash : FileHash }
+    { fileName : FileName
+    , fileSize : Int
+    , imageSize : Maybe (Coord CssPixels)
+    , contentType : ContentType
+    , fileHash : FileHash
+    }
 
 
 type FileStatus
@@ -130,14 +137,42 @@ contentType a =
     OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
 
 
-upload : (Result Http.Error FileHash -> msg) -> SessionId -> File -> Command restriction toFrontend msg
+upload : (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> msg) -> SessionId -> File -> Command restriction toFrontend msg
 upload onResult sessionId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
-        , expect = Http.expectString (\result -> Result.map fileHash result |> onResult)
+        , expect =
+            Http.expectString
+                (\result ->
+                    (case result of
+                        Ok text ->
+                            case String.split "," text of
+                                [ fileHash2, width, height ] ->
+                                    ( fileHash fileHash2
+                                    , case ( String.toInt width, String.toInt height ) of
+                                        ( Just width2, Just height2 ) ->
+                                            if width2 > 0 then
+                                                Coord.xy width2 height2 |> Just
+
+                                            else
+                                                Nothing
+
+                                        _ ->
+                                            Nothing
+                                    )
+                                        |> Ok
+
+                                _ ->
+                                    Err (Http.BadBody "Invalid format")
+
+                        Err error ->
+                            Err error
+                    )
+                        |> onResult
+                )
         , timeout = Nothing
         , tracker = Nothing
         }
@@ -292,15 +327,16 @@ fileUploadPreview onPressDelete filesToUpload2 =
         )
 
 
-addFileHash : Result Http.Error FileHash -> FileStatus -> FileStatus
+addFileHash : Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
             case result of
-                Ok fileHash2 ->
+                Ok ( fileHash2, imageSize ) ->
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize
+                        , imageSize = imageSize
                         , contentType = contentType2
                         , fileHash = fileHash2
                         }
