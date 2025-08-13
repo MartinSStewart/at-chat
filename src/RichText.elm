@@ -689,14 +689,16 @@ mentionsUser userId nonempty =
 
 
 view :
-    (Int -> msg)
+    Bool
+    -> (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Html msg)
-view pressedSpoiler revealedSpoilers users attachedFiles nonempty =
+view preview pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
+        preview
         pressedSpoiler
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
@@ -721,7 +723,8 @@ normalTextView text state =
 
 
 viewHelper :
-    (Int -> msg)
+    Bool
+    -> (Int -> msg)
     -> Int
     -> RichTextState
     -> SeqSet Int
@@ -729,7 +732,7 @@ viewHelper :
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> ( Int, List (Html msg) )
-viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
+viewHelper preview pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -745,6 +748,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                     let
                         ( spoilerIndex3, list ) =
                             viewHelper
+                                preview
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | italic = True }
@@ -759,6 +763,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                     let
                         ( spoilerIndex3, list ) =
                             viewHelper
+                                preview
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | underline = True }
@@ -773,6 +778,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                     let
                         ( spoilerIndex3, list ) =
                             viewHelper
+                                preview
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | bold = True }
@@ -787,6 +793,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                     let
                         ( spoilerIndex3, list ) =
                             viewHelper
+                                preview
                                 pressedSpoiler
                                 spoilerIndex2
                                 { state | strikethrough = True }
@@ -805,6 +812,7 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                         -- Ignore the spoiler index value. It shouldn't be possible to have nested spoilers
                         ( _, list ) =
                             viewHelper
+                                preview
                                 pressedSpoiler
                                 spoilerIndex2
                                 (if revealed then
@@ -890,73 +898,85 @@ viewHelper pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedF
                     )
 
                 CodeBlock _ text ->
-                    ( spoilerIndex2
-                    , currentList
-                        ++ [ Html.div
-                                [ Html.Attributes.style "background-color" "rgb(90,100,120)"
-                                , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
-                                , Html.Attributes.style "padding" "0 4px 0 4px"
-                                , Html.Attributes.style "border-radius" "4px"
-                                , Html.Attributes.style "font-family" "monospace"
-                                ]
-                                [ Html.text text ]
-                           ]
-                    )
+                    if preview then
+                        ( spoilerIndex2
+                        , currentList ++ [ Html.text "<...>" ]
+                        )
+
+                    else
+                        ( spoilerIndex2
+                        , currentList
+                            ++ [ Html.div
+                                    [ Html.Attributes.style "background-color" "rgb(90,100,120)"
+                                    , Html.Attributes.style "border" "rgb(55,61,73) solid 1px"
+                                    , Html.Attributes.style "padding" "0 4px 0 4px"
+                                    , Html.Attributes.style "border-radius" "4px"
+                                    , Html.Attributes.style "font-family" "monospace"
+                                    ]
+                                    [ Html.text text ]
+                               ]
+                        )
 
                 AttachedFile fileId ->
-                    ( spoilerIndex2
-                    , case SeqDict.get fileId attachedFiles of
-                        Just fileData ->
-                            let
-                                fileUrl =
-                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
-                            in
-                            currentList
-                                ++ [ case FileStatus.contentTypeType fileData.contentType of
-                                        FileStatus.Image ->
-                                            Html.a
-                                                [ Html.Attributes.href fileUrl
-                                                , Html.Attributes.target "_blank"
-                                                , Html.Attributes.rel "noreferrer"
-                                                , Html.Attributes.style "max-width" "min(300px, 100%)"
-                                                , Html.Attributes.style "max-height" "400px"
-                                                , Html.Attributes.style "object-fit" "contain"
-                                                ]
-                                                [ Html.img
-                                                    [ Html.Attributes.src fileUrl
-                                                    , Html.Attributes.style "display" "block"
+                    if preview then
+                        ( spoilerIndex2
+                        , currentList ++ [ Html.text "<file>" ]
+                        )
+
+                    else
+                        ( spoilerIndex2
+                        , case SeqDict.get fileId attachedFiles of
+                            Just fileData ->
+                                let
+                                    fileUrl =
+                                        FileStatus.fileUrl fileData.contentType fileData.fileHash
+                                in
+                                currentList
+                                    ++ [ case FileStatus.contentTypeType fileData.contentType of
+                                            FileStatus.Image ->
+                                                Html.a
+                                                    [ Html.Attributes.href fileUrl
+                                                    , Html.Attributes.target "_blank"
+                                                    , Html.Attributes.rel "noreferrer"
                                                     , Html.Attributes.style "max-width" "min(300px, 100%)"
                                                     , Html.Attributes.style "max-height" "400px"
+                                                    , Html.Attributes.style "object-fit" "contain"
                                                     ]
-                                                    []
-                                                ]
-
-                                        _ ->
-                                            Html.a
-                                                [ Html.Attributes.style "max-width" "284px"
-                                                , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
-                                                , Html.Attributes.style "border-radius" "4px"
-                                                , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
-                                                , Html.Attributes.style "display" "block"
-                                                , Html.Attributes.href fileUrl
-                                                , Html.Attributes.target "_blank"
-                                                , Html.Attributes.rel "noreferrer"
-                                                , Html.Attributes.style "font-size" "14px"
-                                                , Html.Attributes.style "padding" "4px 8px 4px 8px"
-                                                ]
-                                                [ Html.text (FileName.toString fileData.fileName)
-                                                , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
-                                                , Html.div
-                                                    [ Html.Attributes.style "display" "inline-block"
-                                                    , Html.Attributes.style "transform" "translateY(4px)"
+                                                    [ Html.img
+                                                        [ Html.Attributes.src fileUrl
+                                                        , Html.Attributes.style "display" "block"
+                                                        , Html.Attributes.style "max-width" "min(300px, 100%)"
+                                                        , Html.Attributes.style "max-height" "400px"
+                                                        ]
+                                                        []
                                                     ]
-                                                    [ Icons.download ]
-                                                ]
-                                   ]
 
-                        Nothing ->
-                            currentList ++ normalTextView (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) state
-                    )
+                                            _ ->
+                                                Html.a
+                                                    [ Html.Attributes.style "max-width" "284px"
+                                                    , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+                                                    , Html.Attributes.style "border-radius" "4px"
+                                                    , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+                                                    , Html.Attributes.style "display" "block"
+                                                    , Html.Attributes.href fileUrl
+                                                    , Html.Attributes.target "_blank"
+                                                    , Html.Attributes.rel "noreferrer"
+                                                    , Html.Attributes.style "font-size" "14px"
+                                                    , Html.Attributes.style "padding" "4px 8px 4px 8px"
+                                                    ]
+                                                    [ Html.text (FileName.toString fileData.fileName)
+                                                    , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
+                                                    , Html.div
+                                                        [ Html.Attributes.style "display" "inline-block"
+                                                        , Html.Attributes.style "transform" "translateY(4px)"
+                                                        ]
+                                                        [ Icons.download ]
+                                                    ]
+                                       ]
+
+                            Nothing ->
+                                currentList ++ normalTextView (attachedFilePrefix ++ Id.toString fileId ++ attachedFileSuffix) state
+                        )
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)

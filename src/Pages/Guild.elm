@@ -1594,6 +1594,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
+                                False
                                 (PressedSpoiler messageIndex)
                                 (case SeqDict.get messageIndex revealedSpoilers of
                                     Just nonempty ->
@@ -1687,6 +1688,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                         ]
                         [ Html.text (User.toString repliedToData.createdBy allUsers) ]
                         :: RichText.view
+                            True
                             (\_ -> FrontendNoOp)
                             (case SeqDict.get repliedToIndex revealedSpoilers of
                                 Just set ->
@@ -1734,6 +1736,8 @@ repliedToHeaderHelper messageIndex content =
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
         , Ui.Input.button (PressedReplyLink messageIndex)
+        , Ui.Font.color MyUi.font3
+        , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
         ]
         [ Ui.el
             [ Ui.width (Ui.px 18)
