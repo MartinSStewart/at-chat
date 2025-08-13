@@ -13,6 +13,7 @@ module Pages.Guild exposing
     )
 
 import Array exposing (Array)
+import Bitwise
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -363,13 +364,24 @@ dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
                 (Ui.text "User not found")
 
 
-channelViewWidth : Coord CssPixels -> Int
-channelViewWidth windowSize =
-    if MyUi.isMobile { windowSize = windowSize } then
-        Coord.xRaw windowSize
+conversationWidth : LoadedFrontend -> Int
+conversationWidth model =
+    if MyUi.isMobile model then
+        Coord.xRaw model.windowSize
+            - (User.profileImageSize
+                + (messagePaddingX * 2)
+                + profileImagePaddingRight
+              )
 
     else
-        Coord.xRaw windowSize - (GuildIcon.fullWidth + 1 + channelColumnWidth + memberColumnWidth)
+        Coord.xRaw model.windowSize
+            - ((GuildIcon.fullWidth + 1)
+                + channelColumnWidth
+                + memberColumnWidth
+                + User.profileImageSize
+                + (messagePaddingX * 2)
+                + profileImagePaddingRight
+              )
 
 
 channelColumnWidth : number
@@ -821,6 +833,10 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
         lastViewedIndex : Int
         lastViewedIndex =
             SeqDict.get guildOrDmId local.localUser.user.lastViewed |> Maybe.withDefault -1
+
+        containerWidth : Int
+        containerWidth =
+            conversationWidth model
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -940,6 +956,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                             if MyUi.isMobile model then
                                 -- On mobile, we show the editor at the bottom instead
                                 messageView
+                                    containerWidth
                                     revealedSpoilers
                                     highlight
                                     messageHover
@@ -966,6 +983,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
+                                                containerWidth
                                                 revealedSpoilers
                                                 highlight
                                                 messageHover
@@ -978,7 +996,14 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                         Nothing ->
                                             Ui.Lazy.lazy6
                                                 messageViewNotHovered
-                                                otherUserIsEditing
+                                                ((if otherUserIsEditing then
+                                                    1
+
+                                                  else
+                                                    0
+                                                 )
+                                                    + Bitwise.shiftLeftBy 1 containerWidth
+                                                )
                                                 revealedSpoilers
                                                 highlight
                                                 local.localUser
@@ -989,6 +1014,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
+                                                containerWidth
                                                 revealedSpoilers
                                                 highlight
                                                 messageHover
@@ -1001,7 +1027,14 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                         Nothing ->
                                             Ui.Lazy.lazy6
                                                 messageViewHovered
-                                                otherUserIsEditing
+                                                ((if otherUserIsEditing then
+                                                    1
+
+                                                  else
+                                                    0
+                                                 )
+                                                    + Bitwise.shiftLeftBy 1 containerWidth
+                                                )
                                                 revealedSpoilers
                                                 highlight
                                                 local.localUser
@@ -1514,27 +1547,59 @@ type IsHovered
 
 
 messageViewNotHovered :
-    Bool
+    Int
     -> SeqDict Int (NonemptySet Int)
     -> HighlightMessage
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewNotHovered isEditing revealedSpoilers highlight localUser messageIndex message =
-    messageView revealedSpoilers highlight IsNotHovered isEditing localUser Nothing messageIndex message
+messageViewNotHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
+    let
+        isEditing =
+            Bitwise.and 0x01 isEditingAndContainerWidth == 1
+
+        containerWidth =
+            Bitwise.shiftRightBy 1 isEditingAndContainerWidth
+    in
+    messageView
+        containerWidth
+        revealedSpoilers
+        highlight
+        IsNotHovered
+        isEditing
+        localUser
+        Nothing
+        messageIndex
+        message
 
 
 messageViewHovered :
-    Bool
+    Int
     -> SeqDict Int (NonemptySet Int)
     -> HighlightMessage
     -> LocalUser
     -> Int
     -> Message
     -> Element FrontendMsg
-messageViewHovered isEditing revealedSpoilers highlight localUser messageIndex message =
-    messageView revealedSpoilers highlight IsHovered isEditing localUser Nothing messageIndex message
+messageViewHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
+    let
+        isEditing =
+            Bitwise.and 0x01 isEditingAndContainerWidth == 1
+
+        containerWidth =
+            Bitwise.shiftRightBy 1 isEditingAndContainerWidth
+    in
+    messageView
+        containerWidth
+        revealedSpoilers
+        highlight
+        IsHovered
+        isEditing
+        localUser
+        Nothing
+        messageIndex
+        message
 
 
 type HighlightMessage
@@ -1544,8 +1609,14 @@ type HighlightMessage
     | UrlHighlight
 
 
+profileImagePaddingRight : number
+profileImagePaddingRight =
+    8
+
+
 messageView :
-    SeqDict Int (NonemptySet Int)
+    Int
+    -> SeqDict Int (NonemptySet Int)
     -> HighlightMessage
     -> IsHovered
     -> Bool
@@ -1554,7 +1625,7 @@ messageView :
     -> Int
     -> Message
     -> Element FrontendMsg
-messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
+messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -1586,7 +1657,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                     [ Ui.el
                         [ Ui.paddingWith
                             { left = 0
-                            , right = 8
+                            , right = profileImagePaddingRight
                             , top =
                                 case maybeRepliedTo of
                                     Just _ ->
@@ -1620,7 +1691,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
-                                False
+                                containerWidth
                                 (PressedSpoiler messageIndex)
                                 (case SeqDict.get messageIndex revealedSpoilers of
                                     Just nonempty ->
@@ -1724,8 +1795,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                         , Html.Attributes.style "padding" "0 6px 0 2px"
                         ]
                         [ Html.text (User.toString repliedToData.createdBy allUsers) ]
-                        :: RichText.view
-                            True
+                        :: RichText.preview
                             (\_ -> FrontendNoOp)
                             (case SeqDict.get repliedToIndex revealedSpoilers of
                                 Just set ->
@@ -1798,6 +1868,11 @@ userJoinedContent userId allUsers =
         ]
 
 
+messagePaddingX : number
+messagePaddingX =
+    8
+
+
 messageContainer :
     HighlightMessage
     -> Int
@@ -1832,8 +1907,8 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                 (Json.Decode.field "clientY" Json.Decode.float)
             )
          , Ui.paddingWith
-            { left = 8
-            , right = 8
+            { left = messagePaddingX
+            , right = messagePaddingX
             , top = 4
             , bottom =
                 if maybeReactions == Nothing then

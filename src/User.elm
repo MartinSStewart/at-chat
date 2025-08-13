@@ -8,6 +8,7 @@ module User exposing
     , backendToFrontend
     , backendToFrontendForUser
     , profileImage
+    , profileImageSize
     , sectionToString
     , setLastChannelViewed
     , setName
@@ -124,14 +125,19 @@ toString userId allUsers =
             "<missing>"
 
 
+profileImageSize : number
+profileImageSize =
+    40
+
+
 profileImage : Maybe FileHash -> Element msg
 profileImage maybeFileHash =
     case maybeFileHash of
         Just fileHash ->
             Ui.image
                 [ Ui.rounded 8
-                , Ui.width (Ui.px 40)
-                , Ui.height (Ui.px 40)
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
                 , Ui.clip
                 ]
                 { source = FileStatus.fileUrl FileStatus.pngContent fileHash
@@ -143,7 +149,7 @@ profileImage maybeFileHash =
             Ui.el
                 [ Ui.background (Ui.rgb 100 100 100)
                 , Ui.rounded 8
-                , Ui.width (Ui.px 40)
-                , Ui.height (Ui.px 40)
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
                 ]
                 Ui.none
