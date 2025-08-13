@@ -3739,7 +3739,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordDirectMessage time _ sender richText ->
+                Server_DiscordDirectMessage time _ sender richText replyTo ->
                     { local
                         | dmChannels =
                             SeqDict.update
@@ -3753,7 +3753,7 @@ changeUpdate localMsg local =
                                                 , content = richText
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
-                                                , repliedTo = Nothing
+                                                , repliedTo = replyTo
                                                 , attachedFiles = SeqDict.empty
                                                 }
                                             )
