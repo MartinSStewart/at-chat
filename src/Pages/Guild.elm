@@ -1568,7 +1568,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                             , top =
                                 case maybeRepliedTo of
                                     Just _ ->
-                                        22
+                                        24
 
                                     Nothing ->
                                         2

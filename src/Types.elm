@@ -519,7 +519,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) GuildOrDmId Int
     | Server_DiscordDeleteMessage MessageId
     | Server_SetName (Id UserId) PersonName
-    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText)
+    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe Int)
 
 
 type LocalChange

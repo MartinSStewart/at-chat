@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -2175,7 +2175,16 @@ type alias Message =
     -- application field is excluded
     -- message_reference field is excluded
     , flags : OptionalData Int
+    , referencedMessage : ReferencedMessage
     }
+
+
+{-| A message that is being referenced (probably because a user is replying to a message)
+-}
+type ReferencedMessage
+    = Referenced Message
+    | ReferenceDeleted
+    | NoReference
 
 
 type MessageType
@@ -2499,6 +2508,23 @@ decodeMessage =
         |> JD.andMap (decodeOptionalData "webhook_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "type" decodeMessageType)
         |> JD.andMap (decodeOptionalData "flags" JD.int)
+        |> JD.andMap
+            (JD.optionalField "referenced_message" (JD.nullable (JD.lazy (\() -> decodeMessage)))
+                |> JD.map
+                    (\maybe ->
+                        case Debug.log "a" maybe of
+                            Just maybe2 ->
+                                case maybe2 of
+                                    Just message ->
+                                        Referenced message
+
+                                    Nothing ->
+                                        ReferenceDeleted
+
+                            Nothing ->
+                                NoReference
+                    )
+            )
 
 
 decodeMessageType : JD.Decoder MessageType
