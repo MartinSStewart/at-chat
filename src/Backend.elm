@@ -12,6 +12,8 @@ import AiChat
 import Array
 import Array.Extra
 import ChannelName
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -193,7 +195,7 @@ subscriptions model =
         ]
 
 
-loadImage : String -> Task restriction x (Maybe FileHash)
+loadImage : String -> Task restriction x (Maybe ( FileHash, Maybe (Coord units) ))
 loadImage url =
     Http.task
         { method = "GET"
@@ -550,7 +552,7 @@ update msg model =
                                     { model2
                                         | users =
                                             NonemptyDict.updateIfExists userId
-                                                (\user -> { user | icon = maybeAvatar })
+                                                (\user -> { user | icon = Maybe.map Tuple.first maybeAvatar })
                                                 model2.users
                                     }
 
@@ -756,7 +758,7 @@ addDiscordGuilds :
             { guild : Discord.Guild
             , members : List Discord.GuildMember
             , channels : List Discord.Channel2
-            , icon : Maybe FileHash
+            , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
             }
     -> BackendModel
     -> BackendModel
@@ -874,7 +876,7 @@ addDiscordGuilds time guilds model =
                             { createdAt = time
                             , createdBy = ownerId
                             , name = GuildName.fromStringLossy data.guild.name
-                            , icon = data.icon
+                            , icon = Maybe.map Tuple.first data.icon
                             , channels = channels
                             , members =
                                 List.filterMap

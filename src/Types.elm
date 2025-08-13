@@ -447,7 +447,7 @@ type BackendMsg
                 , { guild : Discord.Guild
                   , members : List Discord.GuildMember
                   , channels : List Discord.Channel2
-                  , icon : Maybe FileHash
+                  , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
                   }
                 )
             )
@@ -457,7 +457,7 @@ type BackendMsg
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId Int (Result Discord.HttpError Discord.Message)
-    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileHash )))
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
 
 
 type LoginResult

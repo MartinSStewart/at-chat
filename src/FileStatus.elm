@@ -137,6 +137,28 @@ contentType a =
     OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
 
 
+uploadHelper : String -> Result Http.Error ( FileHash, Maybe (Coord units) )
+uploadHelper text =
+    case String.split "," text of
+        [ fileHash2, width, height ] ->
+            ( fileHash fileHash2
+            , case ( String.toInt width, String.toInt height ) of
+                ( Just width2, Just height2 ) ->
+                    if width2 > 0 then
+                        Coord.xy width2 height2 |> Just
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+            )
+                |> Ok
+
+        _ ->
+            Err (Http.BadBody "Invalid format")
+
+
 upload : (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> msg) -> SessionId -> File -> Command restriction toFrontend msg
 upload onResult sessionId file2 =
     Http.request
@@ -149,24 +171,7 @@ upload onResult sessionId file2 =
                 (\result ->
                     (case result of
                         Ok text ->
-                            case String.split "," text of
-                                [ fileHash2, width, height ] ->
-                                    ( fileHash fileHash2
-                                    , case ( String.toInt width, String.toInt height ) of
-                                        ( Just width2, Just height2 ) ->
-                                            if width2 > 0 then
-                                                Coord.xy width2 height2 |> Just
-
-                                            else
-                                                Nothing
-
-                                        _ ->
-                                            Nothing
-                                    )
-                                        |> Ok
-
-                                _ ->
-                                    Err (Http.BadBody "Invalid format")
+                            uploadHelper text
 
                         Err error ->
                             Err error
@@ -178,7 +183,7 @@ upload onResult sessionId file2 =
         }
 
 
-uploadBytes : String -> Bytes -> Task restriction Http.Error FileHash
+uploadBytes : String -> Bytes -> Task restriction Http.Error ( FileHash, Maybe (Coord units) )
 uploadBytes sessionId bytes =
     Http.task
         { method = "POST"
@@ -189,8 +194,8 @@ uploadBytes sessionId bytes =
             Http.stringResolver
                 (\result ->
                     case result of
-                        Http.GoodStatus_ _ body ->
-                            Ok (fileHash body)
+                        Http.GoodStatus_ _ text ->
+                            uploadHelper text
 
                         Http.BadUrl_ string ->
                             Err (Http.BadUrl string)
