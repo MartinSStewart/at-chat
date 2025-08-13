@@ -166,7 +166,6 @@ type alias FrontendChannel =
     , messages : Array Message
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     }
 
 
@@ -180,7 +179,6 @@ channelToFrontend channel =
             , messages = channel.messages
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
-            , linkedMessageIds = channel.linkedMessageIds
             }
                 |> Just
 
@@ -267,8 +265,8 @@ getUser userId localUser =
 
 createMessage :
     Message
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int }
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
 createMessage message channel =
     { channel
         | messages =
@@ -286,7 +284,7 @@ createMessage message channel =
                                     && (previous.editedAt == Nothing)
                                     && (previous.createdBy == data.createdBy)
                                     && not (SeqDict.isEmpty previous.reactions)
-                                    && not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
+                                --&& not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
                             then
                                 Array.set
                                     previousIndex
@@ -402,7 +400,6 @@ createChannelFrontend time userId channelName guild =
                 , messages = Array.empty
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
-                , linkedMessageIds = OneToOne.empty
                 }
                 guild.channels
     }
@@ -499,10 +496,7 @@ addInvite :
     -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
     -> { d | invites : SeqDict (SecretId InviteLinkId) { createdBy : Id UserId, createdAt : Time.Posix } }
 addInvite inviteId userId time guild =
-    { guild
-        | invites =
-            SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites
-    }
+    { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
 
 
 addMember :
@@ -516,11 +510,7 @@ addMember :
             , channels :
                 SeqDict
                     (Id ChannelId)
-                    { d
-                        | messages : Array Message
-                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-                        , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
-                    }
+                    { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
         }
     ->
         Result
@@ -532,11 +522,7 @@ addMember :
                 , channels :
                     SeqDict
                         (Id ChannelId)
-                        { d
-                            | messages : Array Message
-                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-                            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
-                        }
+                        { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
             }
 addMember time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
