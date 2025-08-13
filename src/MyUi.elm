@@ -56,6 +56,7 @@ module MyUi exposing
     , simpleButton
     , textLinkColor
     , timeElapsedView
+    , timestamp
     , userLabelHtml
     , white
     , widthAttr
@@ -157,9 +158,11 @@ datestamp time =
         ++ String.right 2 (String.fromInt (Time.toYear Time.utc time))
 
 
-
---++ ":"
---++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
+timestamp : Time.Posix -> Time.Zone -> String
+timestamp time zone =
+    String.padLeft 2 '0' (String.fromInt (Time.toHour zone time))
+        ++ ":"
+        ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute zone time))
 
 
 monthToInt : Month -> Int

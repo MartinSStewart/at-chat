@@ -98,6 +98,7 @@ type alias LoadingFrontend =
     , loginStatus : LoadStatus
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
+    , timezone : Time.Zone
     }
 
 
@@ -111,6 +112,7 @@ type alias LoadedFrontend =
     { navigationKey : Key
     , route : Route
     , time : Time.Posix
+    , timezone : Time.Zone
     , windowSize : Coord CssPixels
     , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
@@ -297,6 +299,7 @@ type FrontendMsg
     | UrlChanged Url
     | GotTime Time.Posix
     | GotWindowSize Int Int
+    | GotTimezone Time.Zone
     | LoginFormMsg LoginForm.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg

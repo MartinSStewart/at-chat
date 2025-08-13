@@ -875,10 +875,12 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     , Ui.paddingXY 4 0
                                     , Ui.alignRight
                                     , Ui.Font.size 12
+                                    , Ui.contentCenterY
                                     , Ui.Font.bold
                                     , Ui.height (Ui.px 15)
                                     , Ui.roundedWith
-                                        { bottomLeft = 4, bottomRight = 0, topLeft = 0, topRight = 0 }
+                                        { bottomLeft = 8, bottomRight = 0, topLeft = 8, topRight = 0 }
+                                    , Ui.move { x = 0, y = -8, z = 0 }
                                     ]
                                     (Ui.text "New")
                                 )
@@ -1587,10 +1589,14 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                     , Ui.column
                         []
                         [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
-                        , User.toString message2.createdBy allUsers
-                            ++ " "
-                            |> Ui.text
-                            |> Ui.el [ Ui.Font.bold ]
+                        , Ui.row
+                            []
+                            [ User.toString message2.createdBy allUsers
+                                ++ " "
+                                |> Ui.text
+                                |> Ui.el [ Ui.Font.bold ]
+                            , messageTimestamp message2.createdAt localUser.timezone
+                            ]
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
@@ -1634,7 +1640,7 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                     ]
                 )
 
-        UserJoinedMessage _ userId reactions ->
+        UserJoinedMessage joinedAt userId reactions ->
             messageContainer
                 highlight
                 messageIndex
@@ -1642,7 +1648,12 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                 localUser.userId
                 reactions
                 isHovered
-                (userJoinedContent userId allUsers)
+                (Ui.row
+                    []
+                    [ userJoinedContent userId allUsers
+                    , messageTimestamp joinedAt localUser.timezone
+                    ]
+                )
 
         DeletedMessage ->
             Ui.el
@@ -1665,6 +1676,12 @@ messageView revealedSpoilers highlight isHovered isBeingEdited localUser maybeRe
                         Ui.background MyUi.hoverAndReplyToColor
                 ]
                 (Ui.text "Message deleted")
+
+
+messageTimestamp createdAt timezone =
+    MyUi.timestamp createdAt timezone
+        |> Ui.text
+        |> Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.width Ui.shrink ]
 
 
 repliedToMessage :

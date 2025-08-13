@@ -191,6 +191,7 @@ init url key =
         , route = route
         , windowSize = Coord.xy 1920 1080
         , time = Nothing
+        , timezone = Time.utc
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
@@ -203,6 +204,7 @@ init url key =
         , Ports.loadSounds
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
+        , Task.perform GotTimezone Time.here
         ]
     )
 
@@ -217,7 +219,7 @@ initLoadedFrontend loading time loginResult =
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper time loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper time loading.timezone loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -235,6 +237,7 @@ initLoadedFrontend loading time loginResult =
             { navigationKey = loading.navigationKey
             , route = loading.route
             , time = time
+            , timezone = loading.timezone
             , windowSize = loading.windowSize
             , virtualKeyboardOpen = False
             , loginStatus = loginStatus
@@ -259,14 +262,15 @@ initLoadedFrontend loading time loginResult =
 
 loadedInitHelper :
     Time.Posix
+    -> Time.Zone
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
-loadedInitHelper time loginData loading =
+loadedInitHelper time timezone loginData loading =
     let
         localState : LocalState
         localState =
-            loginDataToLocalState loginData
+            loginDataToLocalState timezone loginData
 
         maybeAdmin : Maybe ( Pages.Admin.Model, Maybe Pages.Admin.AdminChange, Command FrontendOnly ToBackend msg )
         maybeAdmin =
@@ -366,8 +370,8 @@ loadedInitHelper time loginData loading =
         cmds
 
 
-loginDataToLocalState : LoginData -> LocalState
-loginDataToLocalState loginData =
+loginDataToLocalState : Time.Zone -> LoginData -> LocalState
+loginDataToLocalState timezone loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -387,6 +391,7 @@ loginDataToLocalState loginData =
         { userId = loginData.userId
         , user = loginData.user
         , otherUsers = loginData.otherUsers
+        , timezone = timezone
         }
     }
 
@@ -425,6 +430,9 @@ update msg model =
 
                 CheckedPwaStatus pwaStatus ->
                     ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
+
+                GotTimezone timezone ->
+                    ( Loading { loading | timezone = timezone }, Command.none )
 
                 _ ->
                     ( model, Command.none )
@@ -921,6 +929,9 @@ isPressMsg msg =
         PressedTextInput ->
             True
 
+        GotTimezone zone ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -968,6 +979,10 @@ updateLoaded msg model =
 
         GotWindowSize width height ->
             ( { model | windowSize = Coord.xy width height }, Command.none )
+
+        GotTimezone _ ->
+            -- We should only get the timezone while loading
+            ( model, Command.none )
 
         PressedShowLogin ->
             case model.loginStatus of
@@ -4029,7 +4044,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.time loginData model
+                                    loadedInitHelper model.time model.timezone loginData model
 
                                 ( model2, cmdB ) =
                                     routeRequest
@@ -4272,7 +4287,7 @@ updateLoadedFromBackend msg model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState = loginDataToLocalState loginData |> Local.init
+                                | localState = loginDataToLocalState model.timezone loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none

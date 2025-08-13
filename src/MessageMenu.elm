@@ -285,7 +285,7 @@ miniView canEdit messageIndex =
         , Ui.rounded 4
         , Ui.borderColor MyUi.border1
         , Ui.border 1
-        , Ui.move { x = -8, y = -16, z = 0 }
+        , Ui.move { x = -48, y = -16, z = 0 }
         , Ui.height (Ui.px 32)
         ]
         [ miniButton (MessageMenu_PressedShowReactionEmojiSelector messageIndex) Icons.smile
