@@ -29,6 +29,8 @@ import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
+import Html
+import Html.Attributes
 import Icons
 import Id exposing (GuildOrDmId(..), Id)
 import MyUi
@@ -342,18 +344,17 @@ fileUploadPreview onPressDelete filesToUpload2 =
                         FileUploaded fileData ->
                             case contentTypeType fileData.contentType of
                                 Image ->
-                                    Ui.image
-                                        [ Ui.width (Ui.px (previewSize - 2))
-                                        , Ui.height (Ui.px (previewSize - 2))
-                                        , Ui.rounded 8
-                                        , Ui.clip
-                                        , Ui.centerX
-                                        , Ui.centerY
+                                    Html.img
+                                        [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                        , Html.Attributes.style "object-fit" "cover"
+                                        , Html.Attributes.width (previewSize - 2)
+                                        , Html.Attributes.height (previewSize - 2)
+                                        , Html.Attributes.style "display" "flex"
+                                        , Html.Attributes.style "align-self" "center"
+                                        , Html.Attributes.style "border-radius" "8px"
                                         ]
-                                        { source = fileUrl fileData.contentType fileData.fileHash
-                                        , description = ""
-                                        , onLoad = Nothing
-                                        }
+                                        []
+                                        |> Ui.html
 
                                 Text ->
                                     Ui.el

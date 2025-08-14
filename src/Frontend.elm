@@ -127,34 +127,29 @@ subscriptions model =
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
                             Subscription.batch
-                                [ case routeToGuildOrDmId loaded.route of
-                                    Just guildOrDmId ->
-                                        case SeqDict.get guildOrDmId loggedIn.filesToUpload of
-                                            Just filesToUpload ->
-                                                NonemptyDict.foldl
-                                                    (\fileId fileStatus list ->
-                                                        case fileStatus of
-                                                            FileUploading _ _ _ ->
-                                                                Http.track
-                                                                    (FileStatus.uploadTrackerId guildOrDmId fileId)
-                                                                    (FileUploadProgress guildOrDmId fileId)
-                                                                    :: list
+                                [ SeqDict.foldl
+                                    (\guildOrDmId filesToUpload list ->
+                                        NonemptyDict.foldl
+                                            (\fileId fileStatus list2 ->
+                                                case fileStatus of
+                                                    FileUploading _ _ _ ->
+                                                        Http.track
+                                                            (FileStatus.uploadTrackerId guildOrDmId fileId)
+                                                            (FileUploadProgress guildOrDmId fileId)
+                                                            :: list2
 
-                                                            FileUploaded _ ->
-                                                                list
+                                                    FileUploaded _ ->
+                                                        list2
 
-                                                            FileError _ _ _ _ ->
-                                                                list
-                                                    )
-                                                    []
-                                                    filesToUpload
-                                                    |> Subscription.batch
-
-                                            Nothing ->
-                                                Subscription.none
-
-                                    Nothing ->
-                                        Subscription.none
+                                                    FileError _ _ _ _ ->
+                                                        list2
+                                            )
+                                            list
+                                            filesToUpload
+                                    )
+                                    []
+                                    loggedIn.filesToUpload
+                                    |> Subscription.batch
                                 , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
@@ -2904,37 +2899,41 @@ updateLoaded msg model =
             ( { model | virtualKeyboardOpen = True }, Command.none )
 
         FileUploadProgress guildOrDmId fileId progress ->
-            case progress of
-                Http.Sending progress2 ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | filesToUpload =
-                                    SeqDict.updateIfExists
-                                        guildOrDmId
-                                        (NonemptyDict.updateIfExists
-                                            fileId
-                                            (\fileStatus ->
-                                                case fileStatus of
-                                                    FileUploading fileName _ contentType ->
-                                                        FileUploading fileName progress2 contentType
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | filesToUpload =
+                            SeqDict.updateIfExists
+                                guildOrDmId
+                                (NonemptyDict.updateIfExists
+                                    fileId
+                                    (\fileStatus ->
+                                        case fileStatus of
+                                            FileUploading fileName fileSize contentType ->
+                                                FileUploading
+                                                    fileName
+                                                    (case progress of
+                                                        Http.Sending progress2 ->
+                                                            progress2
 
-                                                    FileUploaded _ ->
-                                                        fileStatus
+                                                        Http.Receiving { received } ->
+                                                            { sent = received, size = fileSize.size }
+                                                    )
+                                                    contentType
 
-                                                    FileError _ _ _ _ ->
-                                                        fileStatus
-                                            )
-                                        )
-                                        loggedIn.filesToUpload
-                              }
-                            , Command.none
-                            )
-                        )
-                        model
+                                            FileUploaded _ ->
+                                                fileStatus
 
-                Http.Receiving _ ->
-                    ( model, Command.none )
+                                            FileError _ _ _ _ ->
+                                                fileStatus
+                                    )
+                                )
+                                loggedIn.filesToUpload
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
 
 gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
