@@ -2512,7 +2512,7 @@ decodeMessage =
             (JD.optionalField "referenced_message" (JD.nullable (JD.lazy (\() -> decodeMessage)))
                 |> JD.map
                     (\maybe ->
-                        case Debug.log "a" maybe of
+                        case maybe of
                             Just maybe2 ->
                                 case maybe2 of
                                     Just message ->

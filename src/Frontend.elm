@@ -4702,6 +4702,8 @@ view model =
                                             , Ui.width Ui.shrink
                                             , Ui.border 1
                                             , Ui.borderColor MyUi.border1
+                                            , Ui.alignBottom
+                                            , Ui.centerX
                                             ]
                                             (Ui.text "Reloading...")
                                             |> Ui.inFront

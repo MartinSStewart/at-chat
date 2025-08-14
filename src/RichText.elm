@@ -5,6 +5,7 @@ module RichText exposing
     , append
     , attachedFilePrefix
     , attachedFileSuffix
+    , fromDiscord
     , fromNonemptyString
     , mentionsUser
     , preview
@@ -53,7 +54,7 @@ type RichText
 
 type Language
     = Language NonemptyString
-    | None
+    | NoLanguage
 
 
 normalTextFromString : String -> Maybe RichText
@@ -160,7 +161,7 @@ toString users nonempty =
                                 Language unknown ->
                                     String.Nonempty.toString unknown ++ "\n"
 
-                                None ->
+                                NoLanguage ->
                                     ""
                            )
                         ++ string
@@ -486,11 +487,11 @@ codeBlockParser =
         (\text ->
             case String.split "\n" text of
                 [ single ] ->
-                    ( None, single )
+                    ( NoLanguage, single )
 
                 head :: rest ->
                     if String.contains " " head then
-                        ( None, text )
+                        ( NoLanguage, text )
 
                     else
                         case String.Nonempty.fromString head of
@@ -498,10 +499,10 @@ codeBlockParser =
                                 ( Language nonempty, String.join "\n" rest )
 
                             Nothing ->
-                                ( None, text )
+                                ( NoLanguage, text )
 
                 [] ->
-                    ( None, "" )
+                    ( NoLanguage, "" )
         )
         |. Parser.symbol "```"
         |= Parser.loop
@@ -1153,7 +1154,7 @@ textInputViewHelper state allUsers attachedFiles nonempty =
                                     Language language2 ->
                                         String.Nonempty.toString language2 ++ "\n"
 
-                                    None ->
+                                    NoLanguage ->
                                         ""
                                )
                         )
@@ -1192,6 +1193,68 @@ hyperlinkToString protocol rest =
 formatText : String -> Html msg
 formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
+
+
+fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List (Discord.Markdown.Markdown a) -> Nonempty RichText
+fromDiscord mapping content =
+    List.filterMap
+        (\item ->
+            case item of
+                Discord.Markdown.CodeBlock maybeLanguage content2 ->
+                    CodeBlock
+                        (case maybeLanguage of
+                            Just language ->
+                                case String.Nonempty.fromString language of
+                                    Just nonempty ->
+                                        Language nonempty
+
+                                    Nothing ->
+                                        NoLanguage
+
+                            Nothing ->
+                                NoLanguage
+                        )
+                        content2
+                        |> Just
+
+                Discord.Markdown.Quote markdowns ->
+                    Debug.todo ""
+
+                Discord.Markdown.Code string ->
+                    Debug.todo ""
+
+                Discord.Markdown.Text string ->
+                    case String.Nonempty.fromString string of
+                        Just (NonemptyString char rest) ->
+                            NormalText char rest |> Just
+
+                        Nothing ->
+                            Nothing
+
+                Discord.Markdown.Bold markdowns ->
+                    Debug.todo ""
+
+                Discord.Markdown.Italic markdowns ->
+                    Debug.todo ""
+
+                Discord.Markdown.Underline markdowns ->
+                    Debug.todo ""
+
+                Discord.Markdown.Strikethrough markdowns ->
+                    Debug.todo ""
+
+                Discord.Markdown.Ping id ->
+                    Debug.todo ""
+
+                Discord.Markdown.CustomEmoji string id ->
+                    Debug.todo ""
+
+                Discord.Markdown.Spoiler markdowns ->
+                    Debug.todo ""
+        )
+        content
+        |> List.Nonempty.fromList
+        |> Maybe.withDefault (Nonempty (NormalText ' ' "") [])
 
 
 toDiscord :
@@ -1241,7 +1304,7 @@ toDiscord mapping attachedFiles content =
                             Language language2 ->
                                 Just (String.Nonempty.toString language2)
 
-                            None ->
+                            NoLanguage ->
                                 Nothing
                         )
                         string
