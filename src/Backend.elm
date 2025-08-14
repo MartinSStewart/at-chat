@@ -606,6 +606,7 @@ discordMessageToRichText : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId
 discordMessageToRichText discordUsers text =
     Discord.Markdown.parser (String.Nonempty.toString text)
         |> RichText.fromDiscord discordUsers
+        |> Maybe.withDefault (Nonempty (RichText.NormalText (String.Nonempty.head text) (String.Nonempty.tail text)) [])
 
 
 handleDiscordEditMessage :
@@ -636,7 +637,7 @@ handleDiscordEditMessage edit model =
                             let
                                 richText : Nonempty RichText
                                 richText =
-                                    discordMessageToRichText model.users edit.content
+                                    discordMessageToRichText model.discordUsers edit.content
                             in
                             case
                                 LocalState.editMessage
@@ -839,7 +840,7 @@ addDiscordChannel time ownerId model index ( channel, messages ) =
                         handleDiscordCreateGuildMessageHelper
                             (discordReplyTo message channel2)
                             userId
-                            (discordMessageToRichText model.users nonempty)
+                            (discordMessageToRichText model.discordUsers nonempty)
                             message
                             channel2
 
@@ -983,7 +984,7 @@ handleDiscordCreateMessage message model =
                 let
                     richText : Nonempty RichText
                     richText =
-                        discordMessageToRichText model.users nonempty
+                        discordMessageToRichText model.discordUsers nonempty
 
                     dmChannelId : DmChannelId
                     dmChannelId =
@@ -1066,7 +1067,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message nonempty model =
     let
         richText : Nonempty RichText
         richText =
-            discordMessageToRichText model.users nonempty
+            discordMessageToRichText model.discordUsers nonempty
 
         maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : { createdAt : Time.Posix, createdBy : Id UserId, name : ChannelName.ChannelName, messages : Array.Array Message, status : ChannelStatus, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId), linkedMessageIds : OneToOne.OneToOne (Discord.Id.Id Discord.Id.MessageId) Int } }
         maybeData =

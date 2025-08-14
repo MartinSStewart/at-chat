@@ -28,6 +28,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
+import Maybe.Extra
 import MyUi
 import OneToOne exposing (OneToOne)
 import Parser exposing ((|.), (|=), Parser, Step(..))
@@ -396,14 +397,7 @@ parser users modifiers =
                     |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
                     |. Parser.symbol "`"
                     |> Parser.backtrackable
-                , Parser.succeed Tuple.pair
-                    |= Parser.oneOf
-                        [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
-                        , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
-                        ]
-                    |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
-                            |> Parser.getChompedString
-                       )
+                , urlParser
                     |> Parser.map
                         (\( protocol, rest ) ->
                             (case Url.fromString ("https://" ++ rest) of
@@ -450,6 +444,17 @@ parser users modifiers =
                 , Parser.map (\() -> bailOut state modifiers) Parser.end
                 ]
         )
+
+
+urlParser =
+    Parser.succeed Tuple.pair
+        |= Parser.oneOf
+            [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
+            , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
+            ]
+        |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
+                |> Parser.getChompedString
+           )
 
 
 attachedFilePrefix : String
@@ -1195,66 +1200,91 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List (Discord.Markdown.Markdown a) -> Nonempty RichText
+fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List (Discord.Markdown.Markdown a) -> Maybe (Nonempty RichText)
 fromDiscord mapping content =
-    List.filterMap
-        (\item ->
-            case item of
-                Discord.Markdown.CodeBlock maybeLanguage content2 ->
-                    CodeBlock
-                        (case maybeLanguage of
-                            Just language ->
-                                case String.Nonempty.fromString language of
-                                    Just nonempty ->
-                                        Language nonempty
+    List.concatMap (fromDiscordHelper mapping) content |> List.Nonempty.fromList
 
-                                    Nothing ->
-                                        NoLanguage
+
+fromDiscordHelper : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> Discord.Markdown.Markdown a -> List RichText
+fromDiscordHelper mapping content =
+    case content of
+        Discord.Markdown.CodeBlock maybeLanguage content2 ->
+            [ CodeBlock
+                (case maybeLanguage of
+                    Just language ->
+                        case String.Nonempty.fromString language of
+                            Just nonempty ->
+                                Language nonempty
 
                             Nothing ->
                                 NoLanguage
-                        )
-                        content2
-                        |> Just
 
-                Discord.Markdown.Quote markdowns ->
-                    Debug.todo ""
+                    Nothing ->
+                        NoLanguage
+                )
+                content2
+            ]
 
-                Discord.Markdown.Code string ->
-                    Debug.todo ""
+        Discord.Markdown.Quote markdowns ->
+            case fromDiscord mapping markdowns of
+                Just nonempty ->
+                    NormalText '>' " " :: List.Nonempty.toList nonempty
 
-                Discord.Markdown.Text string ->
-                    case String.Nonempty.fromString string of
-                        Just (NonemptyString char rest) ->
-                            NormalText char rest |> Just
+                Nothing ->
+                    []
 
-                        Nothing ->
-                            Nothing
+        Discord.Markdown.Code string ->
+            case String.Nonempty.fromString string of
+                Just (NonemptyString char rest) ->
+                    [ InlineCode char rest ]
 
-                Discord.Markdown.Bold markdowns ->
-                    Debug.todo ""
+                Nothing ->
+                    []
 
-                Discord.Markdown.Italic markdowns ->
-                    Debug.todo ""
+        Discord.Markdown.Text string ->
+            Parser.run
+                (Parser.loop
+                    []
+                    urlParser
+                )
+                string
 
-                Discord.Markdown.Underline markdowns ->
-                    Debug.todo ""
+        --case String.Nonempty.fromString string of
+        --    Just (NonemptyString char rest) ->
+        --        [ NormalText char rest ]
+        --
+        --    Nothing ->
+        --        []
+        Discord.Markdown.Bold markdowns ->
+            fromDiscord mapping markdowns |> Maybe.map Bold |> Maybe.Extra.toList
 
-                Discord.Markdown.Strikethrough markdowns ->
-                    Debug.todo ""
+        Discord.Markdown.Italic markdowns ->
+            fromDiscord mapping markdowns |> Maybe.map Italic |> Maybe.Extra.toList
 
-                Discord.Markdown.Ping id ->
-                    Debug.todo ""
+        Discord.Markdown.Underline markdowns ->
+            fromDiscord mapping markdowns |> Maybe.map Underline |> Maybe.Extra.toList
 
-                Discord.Markdown.CustomEmoji string id ->
-                    Debug.todo ""
+        Discord.Markdown.Strikethrough markdowns ->
+            fromDiscord mapping markdowns |> Maybe.map Strikethrough |> Maybe.Extra.toList
 
-                Discord.Markdown.Spoiler markdowns ->
-                    Debug.todo ""
-        )
-        content
-        |> List.Nonempty.fromList
-        |> Maybe.withDefault (Nonempty (NormalText ' ' "") [])
+        Discord.Markdown.Ping id ->
+            case OneToOne.second id mapping of
+                Just userId ->
+                    [ UserMention userId ]
+
+                Nothing ->
+                    [ NormalText '@' "<missing>" ]
+
+        Discord.Markdown.CustomEmoji string id ->
+            case String.Nonempty.fromString (":" ++ string ++ ":") of
+                Just (NonemptyString char rest) ->
+                    [ NormalText char rest ]
+
+                Nothing ->
+                    []
+
+        Discord.Markdown.Spoiler markdowns ->
+            fromDiscord mapping markdowns |> Maybe.map Spoiler |> Maybe.Extra.toList
 
 
 toDiscord :
