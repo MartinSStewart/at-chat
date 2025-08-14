@@ -36,6 +36,7 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
+import UInt64
 import Url exposing (Protocol(..))
 
 
@@ -446,6 +447,7 @@ parser users modifiers =
         )
 
 
+urlParser : Parser ( Protocol, String )
 urlParser =
     Parser.succeed Tuple.pair
         |= Parser.oneOf
@@ -524,26 +526,14 @@ codeBlockParser =
 
 bailOut : LoopState -> List Modifiers -> Step state (Array RichText)
 bailOut state modifiers =
-    --let
-    --    _ =
-    --        Debug.log "bailOut" ( modifiers, state )
-    --in
     Array.append
         (case modifiers of
-            IsBold :: _ ->
-                Array.fromList [ NormalText '*' "" ]
-
-            IsItalic :: _ ->
-                Array.fromList [ NormalText '_' "" ]
-
-            IsUnderlined :: _ ->
-                Array.fromList [ NormalText '_' "_" ]
-
-            IsStrikethrough :: _ ->
-                Array.fromList [ NormalText '~' "~" ]
-
-            IsSpoilered :: _ ->
-                Array.fromList [ NormalText '|' "|" ]
+            head :: _ ->
+                let
+                    (NonemptyString char rest) =
+                        modifierToSymbol head
+                in
+                Array.fromList [ NormalText char rest ]
 
             [] ->
                 Array.empty
@@ -1200,91 +1190,189 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List (Discord.Markdown.Markdown a) -> Maybe (Nonempty RichText)
-fromDiscord mapping content =
-    List.concatMap (fromDiscordHelper mapping) content |> List.Nonempty.fromList
+fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> NonemptyString -> Nonempty RichText
+fromDiscord users string =
+    case Parser.run (discordParser users []) (String.Nonempty.toString string) of
+        Ok ok ->
+            case List.Nonempty.fromList (Array.toList ok) of
+                Just nonempty ->
+                    normalize nonempty
+
+                Nothing ->
+                    Nonempty (normalTextFromNonempty string) []
+
+        Err _ ->
+            Nonempty (normalTextFromNonempty string) []
 
 
-fromDiscordHelper : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> Discord.Markdown.Markdown a -> List RichText
-fromDiscordHelper mapping content =
-    case content of
-        Discord.Markdown.CodeBlock maybeLanguage content2 ->
-            [ CodeBlock
-                (case maybeLanguage of
-                    Just language ->
-                        case String.Nonempty.fromString language of
-                            Just nonempty ->
-                                Language nonempty
+type DiscordModifiers
+    = DiscordIsBold
+    | DiscordIsItalic
+    | DiscordIsItalic2
+    | DiscordIsUnderlined
+    | DiscordIsStrikethrough
+    | DiscordIsSpoilered
+
+
+discordModifierToSymbol : DiscordModifiers -> NonemptyString
+discordModifierToSymbol modifier =
+    case modifier of
+        DiscordIsBold ->
+            NonemptyString '*' "*"
+
+        DiscordIsItalic ->
+            NonemptyString '*' ""
+
+        DiscordIsItalic2 ->
+            NonemptyString '_' ""
+
+        DiscordIsUnderlined ->
+            NonemptyString '_' "_"
+
+        DiscordIsStrikethrough ->
+            NonemptyString '~' "~"
+
+        DiscordIsSpoilered ->
+            NonemptyString '|' "|"
+
+
+discordParser : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List DiscordModifiers -> Parser (Array RichText)
+discordParser users modifiers =
+    Parser.loop
+        { current = Array.empty, rest = Array.empty }
+        (\state ->
+            Parser.oneOf
+                [ Parser.succeed
+                    (\digits ->
+                        case UInt64.fromString digits of
+                            Just discordUserId ->
+                                case OneToOne.second (Discord.Id.fromUInt64 discordUserId) users of
+                                    Just userId ->
+                                        Loop
+                                            { current = Array.empty
+                                            , rest =
+                                                Array.append
+                                                    state.rest
+                                                    (Array.push (UserMention userId) (parserHelper state))
+                                            }
+
+                                    Nothing ->
+                                        Loop
+                                            { current = Array.push ("<@!" ++ digits ++ ">") state.current
+                                            , rest = state.rest
+                                            }
 
                             Nothing ->
-                                NoLanguage
+                                Loop
+                                    { current = Array.push ("<@!" ++ digits ++ ">") state.current
+                                    , rest = state.rest
+                                    }
+                    )
+                    |. Parser.symbol "<@!"
+                    |= (Parser.chompWhile Char.isDigit |> Parser.getChompedString)
+                    |. Parser.symbol ">"
+                    |> Parser.backtrackable
+                , discordModifierHelper users False DiscordIsBold Bold state modifiers
+                , discordModifierHelper users False DiscordIsUnderlined Underline state modifiers
+                , discordModifierHelper users True DiscordIsItalic Italic state modifiers
+                , discordModifierHelper users False DiscordIsItalic2 Italic state modifiers
+                , discordModifierHelper users False DiscordIsStrikethrough Strikethrough state modifiers
+                , discordModifierHelper users False DiscordIsSpoilered Spoiler state modifiers
+                , Parser.succeed
+                    (\( language, text ) ->
+                        case String.Nonempty.fromString text of
+                            Just _ ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (CodeBlock language text)
+                                                (parserHelper state)
+                                            )
+                                    }
 
-                    Nothing ->
-                        NoLanguage
-                )
-                content2
-            ]
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``````" state.current
+                                    , rest = state.rest
+                                    }
+                    )
+                    |= codeBlockParser
+                    |> Parser.backtrackable
+                , Parser.succeed
+                    (\text ->
+                        case String.Nonempty.fromString text of
+                            Just a ->
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (InlineCode (String.Nonempty.head a) (String.Nonempty.tail a))
+                                                (parserHelper state)
+                                            )
+                                    }
 
-        Discord.Markdown.Quote markdowns ->
-            case fromDiscord mapping markdowns of
-                Just nonempty ->
-                    NormalText '>' " " :: List.Nonempty.toList nonempty
+                            Nothing ->
+                                Loop
+                                    { current = Array.push "``" state.current
+                                    , rest = state.rest
+                                    }
+                    )
+                    |. Parser.symbol "`"
+                    |= (Parser.chompWhile (\char -> char /= '`') |> Parser.getChompedString)
+                    |. Parser.symbol "`"
+                    |> Parser.backtrackable
+                , urlParser
+                    |> Parser.map
+                        (\( protocol, rest ) ->
+                            (case Url.fromString ("https://" ++ rest) of
+                                Just _ ->
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push (Hyperlink protocol rest) (parserHelper state))
+                                    }
 
-                Nothing ->
-                    []
-
-        Discord.Markdown.Code string ->
-            case String.Nonempty.fromString string of
-                Just (NonemptyString char rest) ->
-                    [ InlineCode char rest ]
-
-                Nothing ->
-                    []
-
-        Discord.Markdown.Text string ->
-            Parser.run
-                (Parser.loop
-                    []
-                    urlParser
-                )
-                string
-
-        --case String.Nonempty.fromString string of
-        --    Just (NonemptyString char rest) ->
-        --        [ NormalText char rest ]
-        --
-        --    Nothing ->
-        --        []
-        Discord.Markdown.Bold markdowns ->
-            fromDiscord mapping markdowns |> Maybe.map Bold |> Maybe.Extra.toList
-
-        Discord.Markdown.Italic markdowns ->
-            fromDiscord mapping markdowns |> Maybe.map Italic |> Maybe.Extra.toList
-
-        Discord.Markdown.Underline markdowns ->
-            fromDiscord mapping markdowns |> Maybe.map Underline |> Maybe.Extra.toList
-
-        Discord.Markdown.Strikethrough markdowns ->
-            fromDiscord mapping markdowns |> Maybe.map Strikethrough |> Maybe.Extra.toList
-
-        Discord.Markdown.Ping id ->
-            case OneToOne.second id mapping of
-                Just userId ->
-                    [ UserMention userId ]
-
-                Nothing ->
-                    [ NormalText '@' "<missing>" ]
-
-        Discord.Markdown.CustomEmoji string id ->
-            case String.Nonempty.fromString (":" ++ string ++ ":") of
-                Just (NonemptyString char rest) ->
-                    [ NormalText char rest ]
-
-                Nothing ->
-                    []
-
-        Discord.Markdown.Spoiler markdowns ->
-            fromDiscord mapping markdowns |> Maybe.map Spoiler |> Maybe.Extra.toList
+                                Nothing ->
+                                    { current = Array.push (hyperlinkToString protocol rest) state.current
+                                    , rest = state.rest
+                                    }
+                            )
+                                |> Loop
+                        )
+                , Parser.succeed identity
+                    |. Parser.symbol attachedFilePrefix
+                    |= Parser.int
+                    |. Parser.symbol attachedFileSuffix
+                    |> Parser.backtrackable
+                    |> Parser.map
+                        (\int ->
+                            { current = Array.empty
+                            , rest =
+                                Array.append
+                                    state.rest
+                                    (Array.push (AttachedFile (Id.fromInt int)) (parserHelper state))
+                            }
+                                |> Loop
+                        )
+                , Parser.chompIf (\_ -> True)
+                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
+                    |> Parser.getChompedString
+                    |> Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.push a state.current
+                                , rest = state.rest
+                                }
+                        )
+                , Parser.map (\() -> discordBailOut state modifiers) Parser.end
+                ]
+        )
 
 
 toDiscord :
@@ -1348,3 +1436,107 @@ toDiscord mapping attachedFiles content =
                             Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)
+
+
+discordModifierHelper :
+    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    -> Bool
+    -> DiscordModifiers
+    -> (Nonempty RichText -> RichText)
+    -> LoopState
+    -> List DiscordModifiers
+    -> Parser (Step LoopState (Array RichText))
+discordModifierHelper users noTrailingWhitespace modifier container state modifiers =
+    let
+        symbol : NonemptyString
+        symbol =
+            discordModifierToSymbol modifier
+
+        symbolText =
+            String.Nonempty.toString symbol
+    in
+    if List.head modifiers == Just modifier then
+        Parser.map
+            (\() ->
+                case
+                    Array.append state.rest (parserHelper state)
+                        |> Array.toList
+                        |> List.Nonempty.fromList
+                of
+                    Just nonempty ->
+                        Done (Array.fromList [ container nonempty ])
+
+                    Nothing ->
+                        NormalText (String.Nonempty.head symbol) (String.Nonempty.tail symbol)
+                            |> List.singleton
+                            |> Array.fromList
+                            |> Done
+            )
+            (Parser.symbol symbolText)
+
+    else if List.member modifier modifiers then
+        getRemainingText
+            |> Parser.andThen
+                (\remainingText ->
+                    if String.startsWith symbolText remainingText then
+                        discordBailOut state modifiers |> Parser.succeed
+
+                    else
+                        Parser.backtrackable (Parser.problem "")
+                )
+
+    else
+        Parser.succeed identity
+            |. Parser.symbol symbolText
+            |= Parser.oneOf
+                [ if noTrailingWhitespace then
+                    getRemainingText
+                        |> Parser.andThen
+                            (\remainingText ->
+                                if
+                                    String.startsWith symbolText remainingText
+                                        || String.startsWith " " remainingText
+                                then
+                                    Parser.backtrackable (Parser.problem "")
+
+                                else
+                                    Parser.map
+                                        (\a ->
+                                            Loop
+                                                { current = Array.empty
+                                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                                }
+                                        )
+                                        (discordParser users (modifier :: modifiers))
+                            )
+
+                  else
+                    Parser.map
+                        (\a ->
+                            Loop
+                                { current = Array.empty
+                                , rest = Array.append state.rest (Array.append (parserHelper state) a)
+                                }
+                        )
+                        (discordParser users (modifier :: modifiers))
+                , Loop { current = Array.push symbolText state.current, rest = state.rest }
+                    |> Parser.succeed
+                ]
+
+
+discordBailOut : LoopState -> List DiscordModifiers -> Step state (Array RichText)
+discordBailOut state modifiers =
+    Array.append
+        (case modifiers of
+            head :: _ ->
+                let
+                    (NonemptyString char rest) =
+                        discordModifierToSymbol head
+                in
+                Array.fromList [ NormalText char rest ]
+
+            [] ->
+                Array.empty
+        )
+        (Array.append state.rest (parserHelper state))
+        |> Done
