@@ -200,7 +200,7 @@ upload onResult sessionId guildOrDmId fileId file2 =
                         |> onResult
                 )
         , timeout = Nothing
-        , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        , tracker = Just "a" --uploadTrackerId guildOrDmId fileId |> Just
         }
 
 
@@ -208,11 +208,12 @@ uploadTrackerId : GuildOrDmId -> Id FileId -> String
 uploadTrackerId guildOrDmId fileId =
     (case guildOrDmId of
         GuildOrDmId_Guild guildId channelId ->
-            Id.toString guildId ++ "," ++ Id.toString channelId
+            Id.toString guildId ++ "-" ++ Id.toString channelId
 
         GuildOrDmId_Dm otherUserId ->
             Id.toString otherUserId
     )
+        ++ "-"
         ++ Id.toString fileId
 
 

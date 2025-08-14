@@ -397,7 +397,7 @@ type FrontendMsg
     | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
-    | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
+    | FileUploadProgress Http.Progress
 
 
 type alias NewChannelForm =
