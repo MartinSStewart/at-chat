@@ -183,6 +183,7 @@ async fn get_file_endpoint(
                     Some(content_type2) => Response::builder()
                         .status(StatusCode::OK)
                         .header("Content-Type", content_type2.to_string())
+                        .header("Content-Disposition", "inline")
                         .body(Body::from(data))
                         .unwrap(),
                     None => Response::builder()
