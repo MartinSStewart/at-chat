@@ -19,6 +19,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
+import Id exposing (GuildOrDmId)
 import Json.Decode
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
@@ -32,7 +33,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User exposing (GuildOrDmId)
+import User
 
 
 width : number
@@ -386,7 +387,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                             [ Ui.Font.color MyUi.errorColor ]
                             (button
                                 isMobile
-                                (Icons.delete 24)
+                                Icons.delete
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
                             )

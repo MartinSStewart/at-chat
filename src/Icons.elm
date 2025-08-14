@@ -67,14 +67,14 @@ expandContainer =
     Phosphor.plusSquare Phosphor.Regular |> icon
 
 
-delete : Int -> Html msg
-delete width =
+delete : Html msg
+delete =
     Svg.svg
         [ Svg.Attributes.fill "none"
         , Svg.Attributes.viewBox "0 0 24 24"
         , Svg.Attributes.strokeWidth "1.5"
         , Svg.Attributes.stroke "currentColor"
-        , Svg.Attributes.width (String.fromInt width)
+        , Svg.Attributes.width "24"
         ]
         [ Svg.path
             [ Svg.Attributes.strokeLinecap "round"

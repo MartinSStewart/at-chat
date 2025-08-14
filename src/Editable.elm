@@ -211,7 +211,7 @@ view htmlId isSecret label validation msg value model =
                                 , Ui.Font.color MyUi.deleteButtonFont
                                 , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
                                 ]
-                                (Ui.html (Icons.delete 24))
+                                (Ui.html Icons.delete)
                             ]
 
                         Nothing ->

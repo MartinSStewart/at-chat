@@ -590,7 +590,7 @@ deleteButton htmlId onPress =
         , Ui.Shadow.shadows
             [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
         ]
-        (Ui.html (Icons.delete 24))
+        (Ui.html Icons.delete)
 
 
 hoverText : String -> Ui.Attribute msg

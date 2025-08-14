@@ -34,7 +34,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -59,7 +59,7 @@ import TOTP.Key
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, EmailStatus(..), GuildOrDmId(..))
+import User exposing (BackendUser, EmailStatus(..))
 
 
 app :

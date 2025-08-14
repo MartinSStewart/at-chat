@@ -15,8 +15,7 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Bitwise
 import ChannelName
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import DmChannel exposing (LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -28,7 +27,7 @@ import GuildName
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -57,7 +56,7 @@ import Ui.Gradient
 import Ui.Input
 import Ui.Lazy
 import Ui.Prose
-import User exposing (BackendUser, FrontendUser, GuildOrDmId(..))
+import User exposing (BackendUser, FrontendUser)
 
 
 repliedToUserId : Maybe Int -> FrontendChannel -> Maybe (Id UserId)

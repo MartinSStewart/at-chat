@@ -1,6 +1,7 @@
 module Id exposing
     ( ChannelId(..)
     , GuildId(..)
+    , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
     , UserId(..)
@@ -13,6 +14,11 @@ module Id exposing
 
 import List.Extra
 import SeqDict exposing (SeqDict)
+
+
+type GuildOrDmId
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_Dm (Id UserId)
 
 
 type UserId

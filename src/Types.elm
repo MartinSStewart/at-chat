@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
@@ -83,7 +83,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser, GuildOrDmId)
+import User exposing (BackendUser, FrontendUser)
 
 
 type FrontendModel
@@ -397,6 +397,7 @@ type FrontendMsg
     | EditMessage_GotFileHashName GuildOrDmId Int (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
+    | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
 
 
 type alias NewChannelForm =

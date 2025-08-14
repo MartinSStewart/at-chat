@@ -18,6 +18,7 @@ import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Select
+import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
@@ -32,7 +33,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, Id, UserId)
+import Id exposing (ChannelId, GuildOrDmId(..), Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -64,7 +65,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser, GuildOrDmId(..))
+import User exposing (BackendUser)
 import UserOptions
 import Vector2d
 
@@ -126,7 +127,35 @@ subscriptions model =
                     , case loaded.loginStatus of
                         LoggedIn loggedIn ->
                             Subscription.batch
-                                [ case loggedIn.sidebarMode of
+                                [ case routeToGuildOrDmId loaded.route of
+                                    Just guildOrDmId ->
+                                        case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                            Just filesToUpload ->
+                                                NonemptyDict.foldl
+                                                    (\fileId fileStatus list ->
+                                                        case fileStatus of
+                                                            FileUploading _ _ _ ->
+                                                                Http.track
+                                                                    (FileStatus.uploadTrackerId guildOrDmId fileId)
+                                                                    (FileUploadProgress guildOrDmId fileId)
+                                                                    :: list
+
+                                                            FileUploaded _ ->
+                                                                list
+
+                                                            FileError _ _ _ _ ->
+                                                                list
+                                                    )
+                                                    []
+                                                    filesToUpload
+                                                    |> Subscription.batch
+
+                                            Nothing ->
+                                                Subscription.none
+
+                                    Nothing ->
+                                        Subscription.none
+                                , case loggedIn.sidebarMode of
                                     ChannelSidebarOpened ->
                                         Subscription.none
 
@@ -929,7 +958,10 @@ isPressMsg msg =
         PressedTextInput ->
             True
 
-        GotTimezone zone ->
+        GotTimezone _ ->
+            False
+
+        FileUploadProgress _ _ _ ->
             False
 
 
@@ -2871,6 +2903,39 @@ updateLoaded msg model =
         PressedTextInput ->
             ( { model | virtualKeyboardOpen = True }, Command.none )
 
+        FileUploadProgress guildOrDmId fileId progress ->
+            case progress of
+                Http.Sending progress2 ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | filesToUpload =
+                                    SeqDict.updateIfExists
+                                        guildOrDmId
+                                        (NonemptyDict.updateIfExists
+                                            fileId
+                                            (\fileStatus ->
+                                                case fileStatus of
+                                                    FileUploading fileName _ contentType ->
+                                                        FileUploading fileName progress2 contentType
+
+                                                    FileUploaded _ ->
+                                                        fileStatus
+
+                                                    FileError _ _ _ _ ->
+                                                        fileStatus
+                                            )
+                                        )
+                                        loggedIn.filesToUpload
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Http.Receiving _ ->
+                    ( model, Command.none )
+
 
 gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 gotFiles guildOrDmId files model =
@@ -2894,13 +2959,15 @@ gotFiles guildOrDmId files model =
                                     , FileStatus.upload
                                         (GotFileHashName guildOrDmId id)
                                         loggedIn.sessionId
+                                        guildOrDmId
+                                        id
                                         file2
                                         :: cmds2
                                     , NonemptyDict.insert
                                         id
                                         (FileUploading
                                             (File.name file2 |> FileName.fromString)
-                                            (File.size file2)
+                                            { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
                                         )
                                         dict3
@@ -2919,9 +2986,16 @@ gotFiles guildOrDmId files model =
                                 (List.Nonempty.toList files)
                             , List.indexedMap
                                 (\index file2 ->
+                                    let
+                                        id : Id FileId
+                                        id =
+                                            Id.fromInt (index + 1)
+                                    in
                                     FileStatus.upload
-                                        (GotFileHashName guildOrDmId (Id.fromInt (index + 1)))
+                                        (GotFileHashName guildOrDmId id)
                                         loggedIn.sessionId
+                                        guildOrDmId
+                                        id
                                         file2
                                 )
                                 (List.Nonempty.toList files)
@@ -2930,7 +3004,7 @@ gotFiles guildOrDmId files model =
                                     ( Id.fromInt (index + 1)
                                     , FileUploading
                                         (File.name file2 |> FileName.fromString)
-                                        (File.size file2)
+                                        { sent = 0, size = File.size file2 }
                                         (File.mime file2 |> FileStatus.contentType)
                                     )
                                 )
@@ -2981,25 +3055,28 @@ editMessage_gotFiles guildOrDmId files model =
                             List.Nonempty.foldl
                                 (\file2 ( fileText2, cmds2, dict3 ) ->
                                     let
-                                        id =
+                                        fileId : Id FileId
+                                        fileId =
                                             Id.nextId dict3
                                     in
                                     ( fileText2
                                         ++ [ " "
                                                 ++ RichText.attachedFilePrefix
-                                                ++ Id.toString id
+                                                ++ Id.toString fileId
                                                 ++ RichText.attachedFileSuffix
                                            ]
                                     , FileStatus.upload
-                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex id)
+                                        (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
                                         loggedIn.sessionId
+                                        guildOrDmId
+                                        fileId
                                         file2
                                         :: cmds2
                                     , SeqDict.insert
-                                        id
+                                        fileId
                                         (FileUploading
                                             (File.name file2 |> FileName.fromString)
-                                            (File.size file2)
+                                            { sent = 0, size = File.size file2 }
                                             (File.mime file2 |> FileStatus.contentType)
                                         )
                                         dict3

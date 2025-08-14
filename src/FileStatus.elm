@@ -16,6 +16,7 @@ module FileStatus exposing
     , sizeToString
     , upload
     , uploadBytes
+    , uploadTrackerId
     )
 
 import Bytes exposing (Bytes)
@@ -29,7 +30,7 @@ import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
 import Icons
-import Id exposing (Id)
+import Id exposing (GuildOrDmId(..), Id)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -51,9 +52,9 @@ type alias FileData =
 
 
 type FileStatus
-    = FileUploading FileName Int ContentType
+    = FileUploading FileName { sent : Int, size : Int } ContentType
     | FileUploaded FileData
-    | FileError Http.Error
+    | FileError FileName Int ContentType Http.Error
 
 
 {-| OpaqueVariants
@@ -70,7 +71,7 @@ type FileHash
 
 sizeToString : Int -> String
 sizeToString int =
-    if int < 1024 then
+    if int < 200 then
         String.fromInt int ++ " bytes"
 
     else if int < 1024 * 1024 then
@@ -78,6 +79,18 @@ sizeToString int =
 
     else
         StringExtra.removeTrailing0s 1 (toFloat int / (1024 * 1024)) ++ "mb"
+
+
+progressToString : { sent : Int, size : Int } -> String
+progressToString { sent, size } =
+    if size < 200 then
+        String.fromInt sent ++ "/" ++ String.fromInt size ++ " bytes"
+
+    else if size < 1024 * 1024 then
+        StringExtra.removeTrailing0s 1 (toFloat sent / 1024) ++ "/" ++ StringExtra.removeTrailing0s 1 (toFloat size / 1024) ++ "kb"
+
+    else
+        StringExtra.removeTrailing0s 1 (toFloat sent / (1024 * 1024)) ++ "/" ++ StringExtra.removeTrailing0s 1 (toFloat size / (1024 * 1024)) ++ "mb"
 
 
 fileUrl : ContentType -> FileHash -> String
@@ -159,8 +172,14 @@ uploadHelper text =
             Err (Http.BadBody "Invalid format")
 
 
-upload : (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> msg) -> SessionId -> File -> Command restriction toFrontend msg
-upload onResult sessionId file2 =
+upload :
+    (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> msg)
+    -> SessionId
+    -> GuildOrDmId
+    -> Id FileId
+    -> File
+    -> Command restriction toFrontend msg
+upload onResult sessionId guildOrDmId fileId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
@@ -179,8 +198,20 @@ upload onResult sessionId file2 =
                         |> onResult
                 )
         , timeout = Nothing
-        , tracker = Nothing
+        , tracker = uploadTrackerId guildOrDmId fileId |> Just
         }
+
+
+uploadTrackerId : GuildOrDmId -> Id FileId -> String
+uploadTrackerId guildOrDmId fileId =
+    (case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId ->
+            Id.toString guildId ++ "," ++ Id.toString channelId
+
+        GuildOrDmId_Dm otherUserId ->
+            Id.toString otherUserId
+    )
+        ++ Id.toString fileId
 
 
 uploadBytes : String -> Bytes -> Task restriction Http.Error ( FileHash, Maybe (Coord units) )
@@ -222,19 +253,23 @@ domain =
         "http://localhost:3000"
 
 
+previewSize =
+    150
+
+
 fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
 fileUploadPreview onPressDelete filesToUpload2 =
     Ui.row
         [ Ui.spacing 2
-        , Ui.move { x = 0, y = -100, z = 0 }
+        , Ui.move { x = 0, y = -previewSize, z = 0 }
         , Ui.width Ui.shrink
         , Ui.paddingXY 8 0
         ]
         (List.map
             (\( fileStatusId, fileStatus ) ->
                 Ui.el
-                    [ Ui.width (Ui.px 100)
-                    , Ui.height (Ui.px 100)
+                    [ Ui.width (Ui.px previewSize)
+                    , Ui.height (Ui.px previewSize)
                     , Ui.Shadow.shadows
                         [ { x = 0
                           , y = -2
@@ -255,14 +290,14 @@ fileUploadPreview onPressDelete filesToUpload2 =
                         , Ui.move { x = -3, y = -3, z = 0 }
                         ]
                         (Ui.el
-                            [ Ui.width (Ui.px 28)
-                            , Ui.height (Ui.px 28)
+                            [ Ui.width (Ui.px 34)
+                            , Ui.height (Ui.px 34)
                             , Ui.rounded 16
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.background MyUi.deleteButtonBackground
                             ]
-                            (Ui.html (Icons.delete 19))
+                            (Ui.html Icons.delete)
                         )
                         |> Ui.inFront
                     , Ui.el
@@ -271,11 +306,33 @@ fileUploadPreview onPressDelete filesToUpload2 =
                         , Ui.Font.bold
                         , Ui.Shadow.font
                             { offset = ( 0, 0 )
-                            , blur = 2
+                            , blur = 3
                             , color = Ui.rgb 0 0 0
                             }
                         ]
                         (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
+                        |> Ui.inFront
+                    , (case fileStatus of
+                        FileUploading _ fileSize _ ->
+                            progressToString fileSize
+
+                        FileUploaded fileData ->
+                            sizeToString fileData.fileSize
+
+                        FileError _ fileSize _ _ ->
+                            sizeToString fileSize
+                      )
+                        |> Ui.text
+                        |> Ui.el
+                            [ Ui.alignRight
+                            , Ui.Font.size 14
+                            , Ui.paddingRight 8
+                            , Ui.Shadow.font
+                                { offset = ( 0, 0 )
+                                , blur = 3
+                                , color = Ui.rgb 0 0 0
+                                }
+                            ]
                         |> Ui.inFront
                     ]
                     (case fileStatus of
@@ -286,8 +343,8 @@ fileUploadPreview onPressDelete filesToUpload2 =
                             case contentTypeType fileData.contentType of
                                 Image ->
                                     Ui.image
-                                        [ Ui.width (Ui.px 98)
-                                        , Ui.height (Ui.px 98)
+                                        [ Ui.width (Ui.px (previewSize - 2))
+                                        , Ui.height (Ui.px (previewSize - 2))
                                         , Ui.rounded 8
                                         , Ui.clip
                                         , Ui.centerX
@@ -319,7 +376,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                         ]
                                         (Ui.text "0110\n0001")
 
-                        FileError _ ->
+                        FileError _ _ _ _ ->
                             Ui.el
                                 [ Ui.centerX
                                 , Ui.centerY
@@ -340,19 +397,19 @@ addFileHash result fileStatus =
                 Ok ( fileHash2, imageSize ) ->
                     FileUploaded
                         { fileName = fileName
-                        , fileSize = fileSize
+                        , fileSize = fileSize.size
                         , imageSize = imageSize
                         , contentType = contentType2
                         , fileHash = fileHash2
                         }
 
                 Err error ->
-                    FileError error
+                    FileError fileName fileSize.size contentType2 error
 
         FileUploaded _ ->
             fileStatus
 
-        FileError _ ->
+        FileError _ _ _ _ ->
             fileStatus
 
 
@@ -367,7 +424,7 @@ onlyUploadedFiles dict =
                 FileUploaded fileData ->
                     Just fileData
 
-                FileError _ ->
+                FileError _ _ _ _ ->
                     Nothing
         )
         dict

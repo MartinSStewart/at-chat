@@ -51,7 +51,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), UserTextMessageData)
@@ -64,7 +64,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser, GuildOrDmId(..))
+import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 
 
 type alias LocalState =
