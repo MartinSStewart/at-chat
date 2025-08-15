@@ -54,7 +54,7 @@ import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), Route(..), ThreadRoute(..))
 import SeqDict exposing (SeqDict)
 import String.Nonempty
 import Touch exposing (Touch)
@@ -119,7 +119,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _) ->
+                        GuildRoute _ (ChannelRoute _ _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -533,7 +533,7 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId maybeMessageIndex ->
+                ChannelRoute channelId thread maybeMessageIndex ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
@@ -627,7 +627,7 @@ routeRequest previousRoute newRoute model =
                                     Just guild ->
                                         routeReplace
                                             model3
-                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel Nothing))
+                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel NoThread Nothing))
 
                                     Nothing ->
                                         Command.none
@@ -637,7 +637,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
-        DmRoute _ _ ->
+        DmRoute _ thread _ ->
             updateLoggedIn
                 (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none ))
                 model2
@@ -658,7 +658,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DmRoute _ _ ->
+        DmRoute _ _ _ ->
             True
 
 
@@ -1273,7 +1273,7 @@ updateLoaded msg model =
                                 ( model2, routeCmd ) =
                                     routePush
                                         { model | loginStatus = LoggedIn loggedIn2 }
-                                        (GuildRoute guildId (ChannelRoute nextChannelId Nothing))
+                                        (GuildRoute guildId (ChannelRoute nextChannelId NoThread Nothing))
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
 
@@ -1345,7 +1345,7 @@ updateLoaded msg model =
                                             SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                     }
                         }
-                        (GuildRoute guildId (ChannelRoute channelId Nothing))
+                        (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1392,7 +1392,7 @@ updateLoaded msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute guild.announcementChannel Nothing)
+                                            (ChannelRoute guild.announcementChannel NoThread Nothing)
                                         )
 
                                 Nothing ->
@@ -1683,10 +1683,10 @@ updateLoaded msg model =
                             case loggedIn.showEmojiSelector of
                                 EmojiSelectorHidden ->
                                     case model.route of
-                                        GuildRoute guildId (ChannelRoute channelId _) ->
+                                        GuildRoute guildId (ChannelRoute channelId thread _) ->
                                             EmojiSelectorForReaction (GuildOrDmId_Guild guildId channelId) messageIndex
 
-                                        DmRoute otherUserId _ ->
+                                        DmRoute otherUserId thread _ ->
                                             EmojiSelectorForReaction (GuildOrDmId_Dm otherUserId) messageIndex
 
                                         _ ->
@@ -1720,7 +1720,7 @@ updateLoaded msg model =
                         maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
                         maybeMessageAndId =
                             case model.route of
-                                GuildRoute guildId (ChannelRoute channelId _) ->
+                                GuildRoute guildId (ChannelRoute channelId thread _) ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
                                         Just ( _, channel ) ->
                                             case Array.get messageIndex channel.messages of
@@ -1736,7 +1736,7 @@ updateLoaded msg model =
                                         Nothing ->
                                             Nothing
 
-                                DmRoute otherUserId _ ->
+                                DmRoute otherUserId thread _ ->
                                     case SeqDict.get otherUserId local.dmChannels of
                                         Just dmChannel ->
                                             case Array.get messageIndex dmChannel.messages of
@@ -1832,7 +1832,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case model.route of
-                        GuildRoute guildId (ChannelRoute channelId _) ->
+                        GuildRoute guildId (ChannelRoute channelId thread _) ->
                             handleLocalChange
                                 model.time
                                 (Local_AddReactionEmoji
@@ -1844,7 +1844,7 @@ updateLoaded msg model =
                                 loggedIn
                                 Command.none
 
-                        DmRoute otherUserId _ ->
+                        DmRoute otherUserId thread _ ->
                             handleLocalChange
                                 model.time
                                 (Local_AddReactionEmoji
@@ -2145,7 +2145,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case model.route of
-                        GuildRoute guildId (ChannelRoute channelId _) ->
+                        GuildRoute guildId (ChannelRoute channelId thread _) ->
                             ( MessageMenu.close
                                 model
                                 { loggedIn
@@ -2158,7 +2158,7 @@ updateLoaded msg model =
                             , setFocus model Pages.Guild.channelTextInputId
                             )
 
-                        DmRoute otherUserId _ ->
+                        DmRoute otherUserId thread _ ->
                             ( MessageMenu.close
                                 model
                                 { loggedIn
@@ -2177,7 +2177,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case model.route of
-                        GuildRoute guildId (ChannelRoute channelId _) ->
+                        GuildRoute guildId (ChannelRoute channelId thread _) ->
                             ( MessageMenu.close
                                 model
                                 { loggedIn
@@ -2190,7 +2190,7 @@ updateLoaded msg model =
                             , setFocus model Pages.Guild.channelTextInputId
                             )
 
-                        DmRoute otherUserId _ ->
+                        DmRoute otherUserId thread _ ->
                             ( MessageMenu.close
                                 model
                                 { loggedIn
@@ -2573,8 +2573,8 @@ updateLoaded msg model =
 
         PressedReplyLink messageIndex ->
             case model.route of
-                GuildRoute guildId (ChannelRoute channelId _) ->
-                    routePush model (GuildRoute guildId (ChannelRoute channelId (Just messageIndex)))
+                GuildRoute guildId (ChannelRoute channelId thread _) ->
+                    routePush model (GuildRoute guildId (ChannelRoute channelId thread (Just messageIndex)))
 
                 _ ->
                     ( model, Command.none )
@@ -4295,7 +4295,7 @@ updateLoadedFromBackend msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute guild.announcementChannel Nothing)
+                                            (ChannelRoute guild.announcementChannel NoThread Nothing)
                                         )
 
                                 Nothing ->
@@ -4329,7 +4329,7 @@ updateLoadedFromBackend msg model =
                                             model
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute guild.announcementChannel Nothing)
+                                                (ChannelRoute guild.announcementChannel NoThread Nothing)
                                             )
 
                                     else
@@ -4858,7 +4858,7 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
-                    DmRoute userId maybeMessageHighlight ->
+                    DmRoute userId thread maybeMessageHighlight ->
                         requiresLogin (Pages.Guild.homePageLoggedInView (Just userId) maybeMessageHighlight loaded)
         ]
     }
@@ -4917,10 +4917,10 @@ guildOrDmIdToMessages guildOrDmId local =
 routeToGuildOrDmId : Route -> Maybe GuildOrDmId
 routeToGuildOrDmId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId _) ->
+        GuildRoute guildId (ChannelRoute channelId thread _) ->
             GuildOrDmId_Guild guildId channelId |> Just
 
-        DmRoute otherUserId _ ->
+        DmRoute otherUserId thread _ ->
             GuildOrDmId_Dm otherUserId |> Just
 
         _ ->

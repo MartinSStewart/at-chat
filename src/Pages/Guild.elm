@@ -41,7 +41,7 @@ import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), Route(..), ThreadRoute(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -204,6 +204,7 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                                             (SeqDict.get guildId currentUser.lastChannelViewed
                                                 |> Maybe.withDefault guild.announcementChannel
                                             )
+                                            NoThread
                                             Nothing
                                         )
                                     )
@@ -539,7 +540,7 @@ memberLabel localUser userId =
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
-        , Ui.Input.button (PressedLink (DmRoute userId Nothing))
+        , Ui.Input.button (PressedLink (DmRoute userId NoThread Nothing))
         , MyUi.hover
             [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
             , Ui.Anim.fontColor MyUi.font1
@@ -600,7 +601,7 @@ sidebarOffsetAttr loggedIn model =
 channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
-        ChannelRoute channelId maybeMessageHighlight ->
+        ChannelRoute channelId thread maybeMessageHighlight ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     conversationView
@@ -2061,7 +2062,7 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                         isSelected : Bool
                         isSelected =
                             case channelRoute of
-                                ChannelRoute a _ ->
+                                ChannelRoute a thread _ ->
                                     a == channelId
 
                                 EditChannelRoute a ->
@@ -2085,7 +2086,10 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                         , MyUi.noShrinking
                         ]
                         [ Ui.el
-                            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId Nothing)))
+                            [ Ui.Input.button
+                                (PressedLink
+                                    (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
+                                )
                             , Ui.height Ui.fill
                             , Ui.contentCenterY
                             , Ui.paddingWith
@@ -2213,7 +2217,7 @@ friendLabel openedOtherUserId otherUserId otherUser =
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
-        , Ui.Input.button (PressedLink (Route.DmRoute otherUserId Nothing))
+        , Ui.Input.button (PressedLink (Route.DmRoute otherUserId NoThread Nothing))
         , Ui.Font.color
             (if isSelected then
                 MyUi.font1
