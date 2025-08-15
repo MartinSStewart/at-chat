@@ -1214,6 +1214,17 @@ type DiscordModifiers
     | DiscordIsSpoilered
 
 
+allDiscordModifiers : List DiscordModifiers
+allDiscordModifiers =
+    [ DiscordIsBold
+    , DiscordIsItalic
+    , DiscordIsItalic2
+    , DiscordIsUnderlined
+    , DiscordIsStrikethrough
+    , DiscordIsSpoilered
+    ]
+
+
 discordModifierToSymbol : DiscordModifiers -> NonemptyString
 discordModifierToSymbol modifier =
     case modifier of
@@ -1345,23 +1356,8 @@ discordParser users modifiers =
                             )
                                 |> Loop
                         )
-                , Parser.succeed identity
-                    |. Parser.symbol attachedFilePrefix
-                    |= Parser.int
-                    |. Parser.symbol attachedFileSuffix
-                    |> Parser.backtrackable
-                    |> Parser.map
-                        (\int ->
-                            { current = Array.empty
-                            , rest =
-                                Array.append
-                                    state.rest
-                                    (Array.push (AttachedFile (Id.fromInt int)) (parserHelper state))
-                            }
-                                |> Loop
-                        )
                 , Parser.chompIf (\_ -> True)
-                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char stopOnChar)))
+                    |> Parser.andThen (\_ -> Parser.chompWhile (\char -> not (SeqSet.member char discordStopOnChar)))
                     |> Parser.getChompedString
                     |> Parser.map
                         (\a ->
@@ -1373,6 +1369,15 @@ discordParser users modifiers =
                 , Parser.map (\() -> discordBailOut state modifiers) Parser.end
                 ]
         )
+
+
+discordStopOnChar : SeqSet Char
+discordStopOnChar =
+    [ '<', 'h', '`' ]
+        ++ List.map
+            (\modifier -> discordModifierToSymbol modifier |> String.Nonempty.head)
+            allDiscordModifiers
+        |> SeqSet.fromList
 
 
 toDiscord :
