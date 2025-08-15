@@ -60,9 +60,9 @@ decode url =
             case Id.fromString guildId of
                 Just guildId2 ->
                     case rest of
-                        [ "c", channelId, "t", threadMessageIndex, "m", messageIndex ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
+                        "c" :: channelId :: rest2 ->
+                            case ( Id.fromString channelId, rest2 ) of
+                                ( Just channelId2, [ "t", threadMessageIndex, "m", messageIndex ] ) ->
                                     GuildRoute
                                         guildId2
                                         (ChannelRoute
@@ -71,33 +71,27 @@ decode url =
                                             (String.toInt messageIndex)
                                         )
 
-                                Nothing ->
-                                    HomePageRoute
+                                ( Just channelId2, [ "t", threadMessageIndex ] ) ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute
+                                            channelId2
+                                            (stringToThread threadMessageIndex)
+                                            Nothing
+                                        )
 
-                        [ "c", channelId, "m", messageIndex ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
+                                ( Just channelId2, [ "m", messageIndex ] ) ->
                                     GuildRoute
                                         guildId2
                                         (ChannelRoute channelId2 NoThread (String.toInt messageIndex))
 
-                                Nothing ->
-                                    HomePageRoute
-
-                        [ "c", channelId ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
+                                ( Just channelId2, [] ) ->
                                     GuildRoute guildId2 (ChannelRoute channelId2 NoThread Nothing)
 
-                                Nothing ->
-                                    HomePageRoute
-
-                        [ "c", channelId, "edit" ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
+                                ( Just channelId2, [ "edit" ] ) ->
                                     GuildRoute guildId2 (EditChannelRoute channelId2)
 
-                                Nothing ->
+                                _ ->
                                     HomePageRoute
 
                         [ "new" ] ->

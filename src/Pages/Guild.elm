@@ -601,17 +601,61 @@ sidebarOffsetAttr loggedIn model =
 channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
-        ChannelRoute channelId thread maybeMessageHighlight ->
+        ChannelRoute channelId threadRoute maybeMessageHighlight ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    conversationView
-                        (GuildOrDmId_Guild guildId channelId)
-                        maybeMessageHighlight
-                        loggedIn
-                        model
-                        local
-                        (ChannelName.toString channel.name)
-                        channel
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            case Array.get threadMessageIndex channel.messages of
+                                Just message ->
+                                    let
+                                        allUsers : SeqDict (Id UserId) FrontendUser
+                                        allUsers =
+                                            LocalState.allUsers local
+
+                                        preview : String
+                                        preview =
+                                            case message of
+                                                UserTextMessage data ->
+                                                    let
+                                                        text =
+                                                            RichText.toString allUsers data.content
+                                                    in
+                                                    if String.length text > 20 then
+                                                        String.left 18 text ++ "..."
+
+                                                    else
+                                                        text
+
+                                                UserJoinedMessage _ userId _ ->
+                                                    User.toString userId allUsers ++ " joined!"
+
+                                                DeletedMessage ->
+                                                    "Deleted message"
+                                    in
+                                    conversationView
+                                        (GuildOrDmId_Guild guildId channelId)
+                                        maybeMessageHighlight
+                                        loggedIn
+                                        model
+                                        local
+                                        (ChannelName.toString channel.name ++ " / " ++ preview)
+                                        (SeqDict.get threadMessageIndex channel.threads
+                                            |> Maybe.withDefault DmChannel.threadInit
+                                        )
+
+                                Nothing ->
+                                    Ui.text "Thread not found"
+
+                        NoThread ->
+                            conversationView
+                                (GuildOrDmId_Guild guildId channelId)
+                                maybeMessageHighlight
+                                loggedIn
+                                model
+                                local
+                                (ChannelName.toString channel.name)
+                                channel
 
                 Nothing ->
                     Ui.el

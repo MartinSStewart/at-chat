@@ -6,6 +6,7 @@ module DmChannel exposing
     , channelIdFromUserIds
     , init
     , otherUserId
+    , threadInit
     )
 
 import Array exposing (Array)
@@ -30,6 +31,15 @@ type alias Thread =
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+    }
+
+
+threadInit : Thread
+threadInit =
+    { messages = Array.empty
+    , lastTypedAt = SeqDict.empty
+    , linkedId = Nothing
+    , linkedMessageIds = OneToOne.empty
     }
 
 
