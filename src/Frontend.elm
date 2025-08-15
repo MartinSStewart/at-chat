@@ -959,6 +959,9 @@ isPressMsg msg =
         FileUploadProgress _ _ _ ->
             False
 
+        MessageMenu_PressedCreateThread int ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -2139,6 +2142,38 @@ updateLoaded msg model =
                 model
 
         MessageMenu_PressedReply messageIndex ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case model.route of
+                        GuildRoute guildId (ChannelRoute channelId _) ->
+                            ( MessageMenu.close
+                                model
+                                { loggedIn
+                                    | replyTo =
+                                        SeqDict.insert
+                                            (GuildOrDmId_Guild guildId channelId)
+                                            messageIndex
+                                            loggedIn.replyTo
+                                }
+                            , setFocus model Pages.Guild.channelTextInputId
+                            )
+
+                        DmRoute otherUserId _ ->
+                            ( MessageMenu.close
+                                model
+                                { loggedIn
+                                    | replyTo =
+                                        SeqDict.insert (GuildOrDmId_Dm otherUserId) messageIndex loggedIn.replyTo
+                                }
+                            , setFocus model Pages.Guild.channelTextInputId
+                            )
+
+                        _ ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        MessageMenu_PressedCreateThread messageIndex ->
             updateLoggedIn
                 (\loggedIn ->
                     case model.route of

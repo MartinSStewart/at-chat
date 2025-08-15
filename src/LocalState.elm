@@ -45,7 +45,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DmChannel, LastTypedAt)
+import DmChannel exposing (DmChannel, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -158,6 +158,7 @@ type alias BackendChannel =
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+    , threads : SeqDict Int Thread
     }
 
 
@@ -168,6 +169,7 @@ type alias FrontendChannel =
     , messages : Array Message
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , threads : SeqDict Int Thread
     }
 
 
@@ -181,6 +183,7 @@ channelToFrontend channel =
             , messages = channel.messages
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
+            , threads = channel.threads
             }
                 |> Just
 
@@ -346,6 +349,7 @@ createGuild time userId guildName =
                 , lastTypedAt = SeqDict.empty
                 , linkedId = Nothing
                 , linkedMessageIds = OneToOne.empty
+                , threads = SeqDict.empty
                 }
               )
             ]
@@ -380,6 +384,7 @@ createChannel time userId channelName guild =
                 , lastTypedAt = SeqDict.empty
                 , linkedId = Nothing
                 , linkedMessageIds = OneToOne.empty
+                , threads = SeqDict.empty
                 }
                 guild.channels
     }
@@ -402,6 +407,7 @@ createChannelFrontend time userId channelName guild =
                 , messages = Array.empty
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
+                , threads = SeqDict.empty
                 }
                 guild.channels
     }

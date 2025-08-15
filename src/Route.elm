@@ -1,6 +1,7 @@
 module Route exposing
     ( ChannelRoute(..)
     , Route(..)
+    , ThreadRoute(..)
     , decode
     , encode
     )
@@ -17,16 +18,21 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
-    | DmRoute (Id UserId) (Maybe Int)
+    | DmRoute (Id UserId) ThreadRoute (Maybe Int)
     | AiChatRoute
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) (Maybe Int)
+    = ChannelRoute (Id ChannelId) ThreadRoute (Maybe Int)
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
+
+
+type ThreadRoute
+    = NoThread
+    | ViewThread Int
 
 
 decode : Url -> Route
@@ -54,12 +60,22 @@ decode url =
             case Id.fromString guildId of
                 Just guildId2 ->
                     case rest of
+                        [ "c", channelId, "t", threadMessageIndex, "m", messageIndex ] ->
+                            case ( String.toInt threadMessageIndex, Id.fromString channelId ) of
+                                ( Just threadMessageIndex2, Just channelId2 ) ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute channelId2 (ViewThread threadMessageIndex2) (String.toInt messageIndex))
+
+                                _ ->
+                                    HomePageRoute
+
                         [ "c", channelId, "m", messageIndex ] ->
                             case Id.fromString channelId of
                                 Just channelId2 ->
                                     GuildRoute
                                         guildId2
-                                        (ChannelRoute channelId2 (String.toInt messageIndex))
+                                        (ChannelRoute channelId2 NoThread (String.toInt messageIndex))
 
                                 Nothing ->
                                     HomePageRoute
@@ -67,7 +83,7 @@ decode url =
                         [ "c", channelId ] ->
                             case Id.fromString channelId of
                                 Just channelId2 ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2 Nothing)
+                                    GuildRoute guildId2 (ChannelRoute channelId2 NoThread Nothing)
 
                                 Nothing ->
                                     HomePageRoute

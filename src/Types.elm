@@ -356,6 +356,7 @@ type FrontendMsg
     | PressedPingUserForEditMessage GuildOrDmId Int
     | PressedArrowUpInEmptyInput GuildOrDmId
     | MessageMenu_PressedReply Int
+    | MessageMenu_PressedCreateThread Int
     | PressedCloseReplyTo GuildOrDmId
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility

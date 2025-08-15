@@ -120,6 +120,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , linkedId = Nothing
                         , linkedMessageIds = OneToOne.empty
+                        , threads = SeqDict.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -131,6 +132,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , linkedId = Nothing
                         , linkedMessageIds = OneToOne.empty
+                        , threads = SeqDict.empty
                         }
                       )
                     ]
@@ -856,6 +858,7 @@ addDiscordChannel time ownerId model index ( channel, messages ) =
             , lastTypedAt = SeqDict.empty
             , linkedId = Just channel.id
             , linkedMessageIds = OneToOne.empty
+            , threads = SeqDict.empty
             }
             messages
         )
@@ -1062,7 +1065,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message nonempty model =
         richText =
             RichText.fromDiscord model.discordUsers nonempty
 
-        maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : { createdAt : Time.Posix, createdBy : Id UserId, name : ChannelName.ChannelName, messages : Array.Array Message, status : ChannelStatus, lastTypedAt : SeqDict (Id UserId) LastTypedAt, linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId), linkedMessageIds : OneToOne.OneToOne (Discord.Id.Id Discord.Id.MessageId) Int } }
+        maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel }
         maybeData =
             case OneToOne.second discordGuildId model.discordGuilds of
                 Just guildId ->
