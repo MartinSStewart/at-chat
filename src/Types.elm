@@ -447,7 +447,7 @@ type BackendMsg
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.Guild
                   , members : List Discord.GuildMember
-                  , channels : List Discord.Channel2
+                  , channels : List ( Discord.Channel2, List Discord.Message )
                   , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
                   }
                 )

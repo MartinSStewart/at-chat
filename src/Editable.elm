@@ -22,6 +22,8 @@ type Editing
     | Editing String
 
 
+{-| OpaqueVariants
+-}
 type Msg value
     = Edit Model
     | PressedAcceptEdit value
@@ -64,12 +66,25 @@ view htmlId isSecret label validation msg value model =
 
         result : Maybe (Result String a)
         result =
-            case model.editing of
+            case editing of
                 NotEditing ->
                     Nothing
 
                 Editing text ->
                     validation text |> Just
+
+        editing : Editing
+        editing =
+            case model.editing of
+                Editing editing2 ->
+                    if editing2 == value then
+                        NotEditing
+
+                    else
+                        model.editing
+
+                NotEditing ->
+                    model.editing
     in
     Ui.column
         [ Ui.widthMax 400 ]
@@ -104,7 +119,7 @@ view htmlId isSecret label validation msg value model =
                     ]
                     { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
                     , text =
-                        case model.editing of
+                        case editing of
                             NotEditing ->
                                 value
 
@@ -121,7 +136,7 @@ view htmlId isSecret label validation msg value model =
                     , Ui.height Ui.fill
                     , Ui.borderColor MyUi.inputBorder
                     , Ui.background MyUi.inputBackground
-                    , case model.editing of
+                    , case editing of
                         NotEditing ->
                             Ui.rounded 4
 
@@ -131,7 +146,7 @@ view htmlId isSecret label validation msg value model =
                     ]
                     { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
                     , text =
-                        case model.editing of
+                        case editing of
                             NotEditing ->
                                 value
 
