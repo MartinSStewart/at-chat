@@ -2,6 +2,7 @@ module Id exposing
     ( ChannelId(..)
     , GuildId(..)
     , GuildOrDmId(..)
+    , GuildOrDmId_NoThread(..)
     , Id(..)
     , InviteLinkId(..)
     , UserId(..)
@@ -19,6 +20,11 @@ import SeqDict exposing (SeqDict)
 type GuildOrDmId
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
     | GuildOrDmId_Dm (Id UserId)
+
+
+type GuildOrDmId_NoThread
+    = GuildOrDmId_NoThread_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_NoThread_Dm (Id UserId)
 
 
 type UserId

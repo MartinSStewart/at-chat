@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, GuildOrDmId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId, GuildOrDmId_NoThread, Id, InviteLinkId, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
@@ -356,7 +356,7 @@ type FrontendMsg
     | PressedPingUserForEditMessage GuildOrDmId Int
     | PressedArrowUpInEmptyInput GuildOrDmId
     | MessageMenu_PressedReply Int
-    | MessageMenu_PressedCreateThread Int
+    | MessageMenu_PressedOpenThread Int
     | PressedCloseReplyTo GuildOrDmId
     | PressedSpoiler Int Int
     | VisibilityChanged Visibility

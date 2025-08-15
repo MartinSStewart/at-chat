@@ -33,7 +33,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildOrDmId(..), Id, UserId)
+import Id exposing (ChannelId, GuildOrDmId(..), GuildOrDmId_NoThread(..), Id, UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -959,7 +959,7 @@ isPressMsg msg =
         FileUploadProgress _ _ _ ->
             False
 
-        MessageMenu_PressedCreateThread int ->
+        MessageMenu_PressedOpenThread int ->
             True
 
 
@@ -2173,37 +2173,20 @@ updateLoaded msg model =
                 )
                 model
 
-        MessageMenu_PressedCreateThread messageIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case model.route of
-                        GuildRoute guildId (ChannelRoute channelId thread _) ->
-                            ( MessageMenu.close
-                                model
-                                { loggedIn
-                                    | replyTo =
-                                        SeqDict.insert
-                                            (GuildOrDmId_Guild guildId channelId)
-                                            messageIndex
-                                            loggedIn.replyTo
-                                }
-                            , setFocus model Pages.Guild.channelTextInputId
-                            )
+        MessageMenu_PressedOpenThread messageIndex ->
+            case ( model.route, model.loginStatus ) of
+                ( GuildRoute guildId (ChannelRoute channelId NoThread _), LoggedIn loggedIn ) ->
+                    routePush
+                        { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                        (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
 
-                        DmRoute otherUserId thread _ ->
-                            ( MessageMenu.close
-                                model
-                                { loggedIn
-                                    | replyTo =
-                                        SeqDict.insert (GuildOrDmId_Dm otherUserId) messageIndex loggedIn.replyTo
-                                }
-                            , setFocus model Pages.Guild.channelTextInputId
-                            )
+                ( DmRoute otherUserId NoThread _, LoggedIn loggedIn ) ->
+                    routePush
+                        { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                        (DmRoute otherUserId (ViewThread messageIndex) Nothing)
 
-                        _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                _ ->
+                    ( model, Command.none )
 
         PressedCloseReplyTo guildOrDmId ->
             updateLoggedIn
