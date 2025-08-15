@@ -4,7 +4,6 @@ module MessageMenu exposing
     , editMessageTextInputId
     , menuHeight
     , messageMenuSpeed
-    , miniView
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
     , view
@@ -24,6 +23,7 @@ import Json.Decode
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
+import MessageView exposing (MessageViewMsg(..))
 import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
@@ -276,48 +276,6 @@ editMessageTextInputConfig guildOrDmId =
 editMessageTextInputId : HtmlId
 editMessageTextInputId =
     Dom.id "editMessageTextInput"
-
-
-miniView : Bool -> Int -> Element FrontendMsg
-miniView canEdit messageIndex =
-    Ui.row
-        [ Ui.alignRight
-        , Ui.background MyUi.background1
-        , Ui.rounded 4
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.move { x = -48, y = -16, z = 0 }
-        , Ui.height (Ui.px 32)
-        ]
-        [ miniButton (MessageMenu_PressedShowReactionEmojiSelector messageIndex) Icons.smile
-        , if canEdit then
-            miniButton (\_ -> MessageMenu_PressedEditMessage messageIndex) Icons.pencil
-
-          else
-            Ui.none
-        , miniButton (\_ -> MessageMenu_PressedReply messageIndex) Icons.reply
-        , miniButton (MessageMenu_PressedShowFullMenu messageIndex) Icons.dotDotDot
-        ]
-
-
-miniButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
-miniButton onPress svg =
-    Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 3
-        , Ui.height Ui.fill
-        , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
-
-        --, Ui.Input.button onPress
-        , Ui.Events.stopPropagationOn "click"
-            (Json.Decode.map2
-                (\x y -> ( onPress (Coord.xy (round x) (round y)), True ))
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
-            )
-        , Ui.pointer
-        ]
-        (Ui.html svg)
 
 
 menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)

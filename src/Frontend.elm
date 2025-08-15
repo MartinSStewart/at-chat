@@ -44,6 +44,7 @@ import LoginForm
 import Message exposing (Message(..), UserTextMessageData)
 import MessageInput
 import MessageMenu
+import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
@@ -776,15 +777,6 @@ isPressMsg msg =
         KeyDown _ ->
             False
 
-        MouseEnteredMessage _ ->
-            False
-
-        MouseExitedMessage _ ->
-            False
-
-        AltPressedMessage _ _ ->
-            False
-
         MessageMenu_PressedShowReactionEmojiSelector _ _ ->
             True
 
@@ -792,12 +784,6 @@ isPressMsg msg =
             True
 
         PressedEmojiSelectorEmoji _ ->
-            True
-
-        PressedReactionEmoji_Add _ _ ->
-            True
-
-        PressedReactionEmoji_Remove _ _ ->
             True
 
         GotPingUserPositionForEditMessage _ ->
@@ -822,9 +808,6 @@ isPressMsg msg =
             True
 
         PressedCloseReplyTo _ ->
-            True
-
-        PressedSpoiler _ _ ->
             True
 
         VisibilityChanged _ ->
@@ -869,13 +852,7 @@ isPressMsg msg =
         PressedReactionEmojiContainer ->
             True
 
-        MessageMenu_PressedShowFullMenu _ _ ->
-            True
-
         MessageMenu_PressedDeleteMessage _ _ ->
-            True
-
-        PressedReplyLink _ ->
             True
 
         ScrolledToMessage ->
@@ -961,6 +938,9 @@ isPressMsg msg =
 
         MessageMenu_PressedOpenThread int ->
             True
+
+        MessageViewMsg guildOrDmId messageViewMsg ->
+            MessageView.isPressMsg messageViewMsg
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -1619,192 +1599,11 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        MouseEnteredMessage messageIndex ->
-            if MyUi.isMobile model then
-                ( model, Command.none )
-
-            else
-                updateLoggedIn
-                    (\loggedIn ->
-                        case ( routeToGuildOrDmId model.route, loggedIn.messageHover ) of
-                            ( Nothing, MessageMenu _ ) ->
-                                ( loggedIn, Command.none )
-
-                            ( Just guildOrDmId, _ ) ->
-                                ( case loggedIn.messageHover of
-                                    MessageMenu _ ->
-                                        loggedIn
-
-                                    _ ->
-                                        { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
-                                , Command.none
-                                )
-
-                            _ ->
-                                ( loggedIn, Command.none )
-                    )
-                    model
-
-        MouseExitedMessage messageIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | messageHover =
-                            case routeToGuildOrDmId model.route of
-                                Just guildOrDmId ->
-                                    if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
-                                        NoMessageHover
-
-                                    else
-                                        loggedIn.messageHover
-
-                                Nothing ->
-                                    loggedIn.messageHover
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        AltPressedMessage messageIndex clickedAt ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( handleAltPressedMessage messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
-                    , Command.none
-                    )
-                )
-                model
-
         MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | showEmojiSelector =
-                            case loggedIn.showEmojiSelector of
-                                EmojiSelectorHidden ->
-                                    case routeToGuildOrDmId model.route of
-                                        Just guildOrDmId ->
-                                            EmojiSelectorForReaction guildOrDmId messageIndex
-
-                                        Nothing ->
-                                            loggedIn.showEmojiSelector
-
-                                EmojiSelectorForReaction _ _ ->
-                                    EmojiSelectorHidden
-
-                                EmojiSelectorForMessage ->
-                                    EmojiSelectorHidden
-                        , messageHover =
-                            case loggedIn.messageHover of
-                                NoMessageHover ->
-                                    loggedIn.messageHover
-
-                                MessageHover _ _ ->
-                                    loggedIn.messageHover
-
-                                MessageMenu a ->
-                                    MessageHover a.guildOrDmId a.messageIndex
-                      }
-                    , Command.none
-                    )
-                )
-                model
+            showReactionEmojiSelector messageIndex model
 
         MessageMenu_PressedEditMessage messageIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
-                        maybeMessageAndId =
-                            case model.route of
-                                GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
-                                    case LocalState.getGuildAndChannel guildId channelId local of
-                                        Just ( _, channel ) ->
-                                            case Array.get messageIndex channel.messages of
-                                                Just (UserTextMessage message) ->
-                                                    ( GuildOrDmId_Guild guildId channelId threadRoute
-                                                    , message
-                                                    )
-                                                        |> Just
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                DmRoute otherUserId threadRoute _ ->
-                                    case SeqDict.get otherUserId local.dmChannels of
-                                        Just dmChannel ->
-                                            case Array.get messageIndex dmChannel.messages of
-                                                Just (UserTextMessage message) ->
-                                                    ( GuildOrDmId_Dm otherUserId threadRoute
-                                                    , message
-                                                    )
-                                                        |> Just
-
-                                                _ ->
-                                                    Nothing
-
-                                        Nothing ->
-                                            Nothing
-
-                                _ ->
-                                    Nothing
-
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    ( case maybeMessageAndId of
-                        Just ( guildOrDmId, message ) ->
-                            let
-                                loggedIn2 =
-                                    { loggedIn
-                                        | editMessage =
-                                            SeqDict.insert
-                                                guildOrDmId
-                                                { messageIndex = messageIndex
-                                                , text =
-                                                    RichText.toString (LocalState.allUsers local) message.content
-                                                , attachedFiles =
-                                                    SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
-                                                }
-                                                loggedIn.editMessage
-                                    }
-                            in
-                            { loggedIn2
-                                | messageHover =
-                                    case loggedIn2.messageHover of
-                                        NoMessageHover ->
-                                            loggedIn2.messageHover
-
-                                        MessageHover _ _ ->
-                                            loggedIn2.messageHover
-
-                                        MessageMenu extraOptions ->
-                                            { extraOptions
-                                                | mobileMode =
-                                                    { offset =
-                                                        Types.messageMenuMobileOffset extraOptions.mobileMode
-                                                    , targetOffset =
-                                                        MessageMenu.mobileMenuMaxHeight
-                                                            extraOptions
-                                                            local
-                                                            loggedIn2
-                                                            model
-                                                    }
-                                                        |> MessageMenuOpening
-                                            }
-                                                |> MessageMenu
-                            }
-
-                        Nothing ->
-                            loggedIn
-                    , setFocus model MessageMenu.editMessageTextInputId
-                    )
-                )
-                model
+            pressedEditMessage messageIndex model
 
         PressedEmojiSelectorEmoji emoji ->
             updateLoggedIn
@@ -1821,38 +1620,6 @@ updateLoaded msg model =
                                 Command.none
 
                         EmojiSelectorForMessage ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
-        PressedReactionEmoji_Add messageIndex emoji ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case routeToGuildOrDmId model.route of
-                        Just guildOrDmId ->
-                            handleLocalChange
-                                model.time
-                                (Local_AddReactionEmoji guildOrDmId messageIndex emoji |> Just)
-                                loggedIn
-                                Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
-        PressedReactionEmoji_Remove messageIndex emoji ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case routeToGuildOrDmId model.route of
-                        Just guildOrDmId ->
-                            handleLocalChange
-                                model.time
-                                (Local_RemoveReactionEmoji guildOrDmId messageIndex emoji |> Just)
-                                loggedIn
-                                Command.none
-
-                        Nothing ->
                             ( loggedIn, Command.none )
                 )
                 model
@@ -2122,20 +1889,12 @@ updateLoaded msg model =
                 model
 
         MessageMenu_PressedReply messageIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case routeToGuildOrDmId model.route of
-                        Just guildOrDmId ->
-                            ( MessageMenu.close
-                                model
-                                { loggedIn | replyTo = SeqDict.insert guildOrDmId messageIndex loggedIn.replyTo }
-                            , setFocus model Pages.Guild.channelTextInputId
-                            )
+            case routeToGuildOrDmId model.route of
+                Just guildOrDmId ->
+                    pressedReply guildOrDmId messageIndex model
 
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                Nothing ->
+                    ( model, Command.none )
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
@@ -2161,53 +1920,6 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedSpoiler messageIndex spoilerIndex ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case routeToGuildOrDmId model.route of
-                        Just guildOrDmId ->
-                            let
-                                revealedSpoilers : RevealedSpoilers
-                                revealedSpoilers =
-                                    case loggedIn.revealedSpoilers of
-                                        Just a ->
-                                            if a.guildOrDmId == guildOrDmId then
-                                                a
-
-                                            else
-                                                { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
-
-                                        Nothing ->
-                                            { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
-                            in
-                            ( { loggedIn
-                                | revealedSpoilers =
-                                    Just
-                                        { revealedSpoilers
-                                            | messages =
-                                                SeqDict.update
-                                                    messageIndex
-                                                    (\maybe ->
-                                                        (case maybe of
-                                                            Just revealed ->
-                                                                NonemptySet.insert spoilerIndex revealed
-
-                                                            Nothing ->
-                                                                NonemptySet.singleton spoilerIndex
-                                                        )
-                                                            |> Just
-                                                    )
-                                                    revealedSpoilers.messages
-                                        }
-                              }
-                            , Command.none
-                            )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
         VisibilityChanged visibility ->
             case visibility of
                 Effect.Browser.Events.Visible ->
@@ -2228,37 +1940,7 @@ updateLoaded msg model =
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
         TouchStart time touches ->
-            case model.drag of
-                NoDrag ->
-                    ( { model | drag = DragStart time touches, dragPrevious = model.drag }
-                    , case NonemptyDict.toList touches of
-                        [ ( _, single ) ] ->
-                            let
-                                htmlId : String
-                                htmlId =
-                                    Dom.idToString single.target
-                            in
-                            if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
-                                case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
-                                    Just messageIndex ->
-                                        Process.sleep (Duration.seconds 0.5)
-                                            |> Task.perform (\() -> CheckMessageAltPress time messageIndex)
-
-                                    Nothing ->
-                                        Command.none
-
-                            else
-                                Command.none
-
-                        _ ->
-                            Command.none
-                    )
-
-                DragStart _ _ ->
-                    ( model, Command.none )
-
-                Dragging _ ->
-                    ( model, Command.none )
+            touchStart time touches model
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -2451,62 +2133,6 @@ updateLoaded msg model =
         PressedReactionEmojiContainer ->
             ( model, Command.none )
 
-        MessageMenu_PressedShowFullMenu messageIndex clickedAt ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case routeToGuildOrDmId model.route of
-                        Just guildOrDmId ->
-                            let
-                                local : LocalState
-                                local =
-                                    Local.model loggedIn.localState
-
-                                menuHeight : Int
-                                menuHeight =
-                                    MessageMenu.menuHeight
-                                        { guildOrDmId = guildOrDmId
-                                        , messageIndex = messageIndex
-                                        , position = clickedAt
-                                        }
-                                        local
-                                        model
-                            in
-                            ( { loggedIn
-                                | messageHover =
-                                    MessageMenu
-                                        { position =
-                                            -- Move the menu up if it's too close to the bottom of the screen
-                                            if Coord.yRaw clickedAt + menuHeight + 60 > Coord.yRaw model.windowSize then
-                                                Coord.plus
-                                                    (Coord.xy (-MessageMenu.width - 8) (-8 - menuHeight))
-                                                    clickedAt
-
-                                            else
-                                                Coord.plus
-                                                    (Coord.xy (-MessageMenu.width - 8) -8)
-                                                    clickedAt
-                                        , guildOrDmId = guildOrDmId
-                                        , messageIndex = messageIndex
-                                        , mobileMode =
-                                            MessageMenuOpening
-                                                { offset = Quantity.zero
-                                                , targetOffset =
-                                                    MessageMenu.mobileMenuOpeningOffset
-                                                        guildOrDmId
-                                                        messageIndex
-                                                        local
-                                                        model
-                                                }
-                                        }
-                              }
-                            , Command.none
-                            )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
         MessageMenu_PressedDeleteMessage guildOrDmId messageIndex ->
             updateLoggedIn
                 (\loggedIn ->
@@ -2517,14 +2143,6 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
-
-        PressedReplyLink messageIndex ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId thread _) ->
-                    routePush model (GuildRoute guildId (ChannelRoute channelId thread (Just messageIndex)))
-
-                _ ->
-                    ( model, Command.none )
 
         ScrolledToMessage ->
             ( model, Command.none )
@@ -2916,6 +2534,376 @@ updateLoaded msg model =
                     )
                 )
                 model
+
+        MessageViewMsg guildOrDmId messageViewMsg ->
+            case messageViewMsg of
+                MessageView.MessageView_PressedSpoiler messageIndex spoilerIndex ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                revealedSpoilers : RevealedSpoilers
+                                revealedSpoilers =
+                                    case loggedIn.revealedSpoilers of
+                                        Just a ->
+                                            if a.guildOrDmId == guildOrDmId then
+                                                a
+
+                                            else
+                                                { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
+
+                                        Nothing ->
+                                            { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
+                            in
+                            ( { loggedIn
+                                | revealedSpoilers =
+                                    Just
+                                        { revealedSpoilers
+                                            | messages =
+                                                SeqDict.update
+                                                    messageIndex
+                                                    (\maybe ->
+                                                        (case maybe of
+                                                            Just revealed ->
+                                                                NonemptySet.insert spoilerIndex revealed
+
+                                                            Nothing ->
+                                                                NonemptySet.singleton spoilerIndex
+                                                        )
+                                                            |> Just
+                                                    )
+                                                    revealedSpoilers.messages
+                                        }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                MessageView.MessageView_MouseEnteredMessage messageIndex ->
+                    if MyUi.isMobile model then
+                        ( model, Command.none )
+
+                    else
+                        updateLoggedIn
+                            (\loggedIn ->
+                                ( case loggedIn.messageHover of
+                                    MessageMenu _ ->
+                                        loggedIn
+
+                                    _ ->
+                                        { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
+                                , Command.none
+                                )
+                            )
+                            model
+
+                MessageView.MessageView_MouseExitedMessage messageIndex ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | messageHover =
+                                    if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
+                                        NoMessageHover
+
+                                    else
+                                        loggedIn.messageHover
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                MessageView.MessageView_TouchStart time touches ->
+                    touchStart time touches model
+
+                MessageView.MessageView_AltPressedMessage messageIndex clickedAt ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( handleAltPressedMessage messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
+                            , Command.none
+                            )
+                        )
+                        model
+
+                MessageView.MessageView_PressedReactionEmoji_Remove messageIndex emoji ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (Local_RemoveReactionEmoji guildOrDmId messageIndex emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                MessageView.MessageView_PressedReactionEmoji_Add messageIndex emoji ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (Local_AddReactionEmoji guildOrDmId messageIndex emoji |> Just)
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                MessageView.MessageView_NoOp ->
+                    ( model, Command.none )
+
+                MessageView.MessageView_PressedReplyLink messageIndex ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                            routePush model (GuildRoute guildId (ChannelRoute channelId threadRoute (Just messageIndex)))
+
+                        GuildOrDmId_Dm otherUserId threadRoute ->
+                            routePush model (DmRoute otherUserId threadRoute (Just messageIndex))
+
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex clickedAt ->
+                    showReactionEmojiSelector messageIndex model
+
+                MessageView.MessageViewMsg_PressedEditMessage messageIndex ->
+                    pressedEditMessage messageIndex model
+
+                MessageView.MessageViewMsg_PressedReply messageIndex ->
+                    pressedReply guildOrDmId messageIndex model
+
+                MessageView.MessageViewMsg_PressedShowFullMenu messageIndex clickedAt ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+
+                                menuHeight : Int
+                                menuHeight =
+                                    MessageMenu.menuHeight
+                                        { guildOrDmId = guildOrDmId
+                                        , messageIndex = messageIndex
+                                        , position = clickedAt
+                                        }
+                                        local
+                                        model
+                            in
+                            ( { loggedIn
+                                | messageHover =
+                                    MessageMenu
+                                        { position =
+                                            -- Move the menu up if it's too close to the bottom of the screen
+                                            if Coord.yRaw clickedAt + menuHeight + 60 > Coord.yRaw model.windowSize then
+                                                Coord.plus
+                                                    (Coord.xy (-MessageMenu.width - 8) (-8 - menuHeight))
+                                                    clickedAt
+
+                                            else
+                                                Coord.plus
+                                                    (Coord.xy (-MessageMenu.width - 8) -8)
+                                                    clickedAt
+                                        , guildOrDmId = guildOrDmId
+                                        , messageIndex = messageIndex
+                                        , mobileMode =
+                                            MessageMenuOpening
+                                                { offset = Quantity.zero
+                                                , targetOffset =
+                                                    MessageMenu.mobileMenuOpeningOffset
+                                                        guildOrDmId
+                                                        messageIndex
+                                                        local
+                                                        model
+                                                }
+                                        }
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+
+pressedReply : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply guildOrDmId messageIndex model =
+    updateLoggedIn
+        (\loggedIn ->
+            ( MessageMenu.close
+                model
+                { loggedIn | replyTo = SeqDict.insert guildOrDmId messageIndex loggedIn.replyTo }
+            , setFocus model Pages.Guild.channelTextInputId
+            )
+        )
+        model
+
+
+pressedEditMessage : Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage messageIndex model =
+    updateLoggedIn
+        (\loggedIn ->
+            let
+                maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
+                maybeMessageAndId =
+                    case model.route of
+                        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel ) ->
+                                    case Array.get messageIndex channel.messages of
+                                        Just (UserTextMessage message) ->
+                                            ( GuildOrDmId_Guild guildId channelId threadRoute
+                                            , message
+                                            )
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                        DmRoute otherUserId threadRoute _ ->
+                            case SeqDict.get otherUserId local.dmChannels of
+                                Just dmChannel ->
+                                    case Array.get messageIndex dmChannel.messages of
+                                        Just (UserTextMessage message) ->
+                                            ( GuildOrDmId_Dm otherUserId threadRoute
+                                            , message
+                                            )
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                        _ ->
+                            Nothing
+
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+            in
+            ( case maybeMessageAndId of
+                Just ( guildOrDmId, message ) ->
+                    let
+                        loggedIn2 =
+                            { loggedIn
+                                | editMessage =
+                                    SeqDict.insert
+                                        guildOrDmId
+                                        { messageIndex = messageIndex
+                                        , text =
+                                            RichText.toString (LocalState.allUsers local) message.content
+                                        , attachedFiles =
+                                            SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                        }
+                                        loggedIn.editMessage
+                            }
+                    in
+                    { loggedIn2
+                        | messageHover =
+                            case loggedIn2.messageHover of
+                                NoMessageHover ->
+                                    loggedIn2.messageHover
+
+                                MessageHover _ _ ->
+                                    loggedIn2.messageHover
+
+                                MessageMenu extraOptions ->
+                                    { extraOptions
+                                        | mobileMode =
+                                            { offset =
+                                                Types.messageMenuMobileOffset extraOptions.mobileMode
+                                            , targetOffset =
+                                                MessageMenu.mobileMenuMaxHeight
+                                                    extraOptions
+                                                    local
+                                                    loggedIn2
+                                                    model
+                                            }
+                                                |> MessageMenuOpening
+                                    }
+                                        |> MessageMenu
+                    }
+
+                Nothing ->
+                    loggedIn
+            , setFocus model MessageMenu.editMessageTextInputId
+            )
+        )
+        model
+
+
+showReactionEmojiSelector : Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector messageIndex model =
+    updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | showEmojiSelector =
+                    case loggedIn.showEmojiSelector of
+                        EmojiSelectorHidden ->
+                            case routeToGuildOrDmId model.route of
+                                Just guildOrDmId ->
+                                    EmojiSelectorForReaction guildOrDmId messageIndex
+
+                                Nothing ->
+                                    loggedIn.showEmojiSelector
+
+                        EmojiSelectorForReaction _ _ ->
+                            EmojiSelectorHidden
+
+                        EmojiSelectorForMessage ->
+                            EmojiSelectorHidden
+                , messageHover =
+                    case loggedIn.messageHover of
+                        NoMessageHover ->
+                            loggedIn.messageHover
+
+                        MessageHover _ _ ->
+                            loggedIn.messageHover
+
+                        MessageMenu a ->
+                            MessageHover a.guildOrDmId a.messageIndex
+              }
+            , Command.none
+            )
+        )
+        model
+
+
+touchStart :
+    Time.Posix
+    -> NonemptyDict Int Touch
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+touchStart time touches model =
+    case model.drag of
+        NoDrag ->
+            ( { model | drag = DragStart time touches, dragPrevious = model.drag }
+            , case NonemptyDict.toList touches of
+                [ ( _, single ) ] ->
+                    let
+                        htmlId : String
+                        htmlId =
+                            Dom.idToString single.target
+                    in
+                    if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
+                        case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
+                            Just messageIndex ->
+                                Process.sleep (Duration.seconds 0.5)
+                                    |> Task.perform (\() -> CheckMessageAltPress time messageIndex)
+
+                            Nothing ->
+                                Command.none
+
+                    else
+                        Command.none
+
+                _ ->
+                    Command.none
+            )
+
+        DragStart _ _ ->
+            ( model, Command.none )
+
+        Dragging _ ->
+            ( model, Command.none )
 
 
 gotFiles : GuildOrDmId -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

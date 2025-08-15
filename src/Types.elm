@@ -66,6 +66,7 @@ import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGu
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
+import MessageView
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -341,14 +342,9 @@ type FrontendMsg
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | MouseEnteredMessage Int
-    | MouseExitedMessage Int
-    | AltPressedMessage Int (Coord CssPixels)
     | MessageMenu_PressedShowReactionEmojiSelector Int (Coord CssPixels)
     | MessageMenu_PressedEditMessage Int
     | PressedEmojiSelectorEmoji Emoji
-    | PressedReactionEmoji_Add Int Emoji
-    | PressedReactionEmoji_Remove Int Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage GuildOrDmId String
     | PressedSendEditMessage GuildOrDmId
@@ -358,7 +354,6 @@ type FrontendMsg
     | MessageMenu_PressedReply Int
     | MessageMenu_PressedOpenThread Int
     | PressedCloseReplyTo GuildOrDmId
-    | PressedSpoiler Int Int
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
@@ -373,9 +368,7 @@ type FrontendMsg
     | UserScrolled { scrolledToBottomOfChannel : Bool }
     | PressedBody
     | PressedReactionEmojiContainer
-    | MessageMenu_PressedShowFullMenu Int (Coord CssPixels)
     | MessageMenu_PressedDeleteMessage GuildOrDmId Int
-    | PressedReplyLink Int
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
@@ -399,6 +392,7 @@ type FrontendMsg
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
+    | MessageViewMsg GuildOrDmId MessageView.MessageViewMsg
 
 
 type alias NewChannelForm =

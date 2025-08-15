@@ -15,7 +15,8 @@ module Pages.Guild exposing
 import Array exposing (Array)
 import Bitwise
 import ChannelName
-import Coord
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import DmChannel exposing (LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -35,8 +36,9 @@ import Maybe.Extra
 import Message exposing (Message(..))
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
+import MessageView exposing (MessageViewMsg(..))
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
@@ -46,7 +48,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
-import Touch
+import Touch exposing (Touch)
 import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
@@ -1021,6 +1023,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     maybeRepliedTo
                                     index
                                     message
+                                    |> Ui.map (MessageViewMsg guildOrDmId)
 
                             else
                                 messageEditingView
@@ -1048,6 +1051,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 maybeRepliedTo
                                                 index
                                                 message
+                                                |> Ui.map (MessageViewMsg guildOrDmId)
 
                                         Nothing ->
                                             Ui.Lazy.lazy6
@@ -1065,6 +1069,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 local.localUser
                                                 index
                                                 message
+                                                |> Ui.map (MessageViewMsg guildOrDmId)
 
                                 _ ->
                                     case maybeRepliedTo of
@@ -1079,6 +1084,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 maybeRepliedTo
                                                 index
                                                 message
+                                                |> Ui.map (MessageViewMsg guildOrDmId)
 
                                         Nothing ->
                                             Ui.Lazy.lazy6
@@ -1096,6 +1102,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 local.localUser
                                                 index
                                                 message
+                                                |> Ui.map (MessageViewMsg guildOrDmId)
                    )
                 :: list
             )
@@ -1274,13 +1281,34 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom ]
                     (case guildOrDmId of
-                        GuildOrDmId_Guild _ _ (ViewThread _) ->
-                            Ui.text ("This is the start of #" ++ name)
+                        GuildOrDmId_Guild guildId channelId (ViewThread threadMessageIndex) ->
+                            case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel2 ) ->
+                                    case Array.get threadMessageIndex channel2.messages of
+                                        Just message ->
+                                            threadStarterMessage
+                                                (conversationWidth model)
+                                                SeqDict.empty
+                                                False
+                                                local.localUser
+                                                Nothing
+                                                threadMessageIndex
+                                                message
+                                                |> Ui.map (MessageViewMsg (GuildOrDmId_Guild guildId channelId NoThread))
+
+                                        Nothing ->
+                                            Ui.none
+
+                                Nothing ->
+                                    Ui.none
 
                         GuildOrDmId_Guild _ _ NoThread ->
+                            Ui.text ("This is the start of #" ++ name)
+
+                        GuildOrDmId_Dm _ (ViewThread _) ->
                             Ui.none
 
-                        GuildOrDmId_Dm otherUserId (ViewThread _) ->
+                        GuildOrDmId_Dm otherUserId NoThread ->
                             Ui.text
                                 ("This is the start of your conversation with "
                                     ++ (if otherUserId == local.localUser.userId then
@@ -1290,9 +1318,6 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                             name
                                        )
                                 )
-
-                        GuildOrDmId_Dm _ NoThread ->
-                            Ui.none
                     )
                     :: conversationViewHelper
                         guildOrDmId
@@ -1461,7 +1486,7 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element FrontendMsg)
+reactionEmojiView : Int -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
 reactionEmojiView messageIndex currentUserId reactions =
     if SeqDict.isEmpty reactions then
         Nothing
@@ -1502,10 +1527,10 @@ reactionEmojiView messageIndex currentUserId reactions =
                         , Ui.Font.bold
                         , Ui.Input.button
                             (if hasReactedTo then
-                                PressedReactionEmoji_Remove messageIndex emoji
+                                MessageView_PressedReactionEmoji_Remove messageIndex emoji
 
                              else
-                                PressedReactionEmoji_Add messageIndex emoji
+                                MessageView_PressedReactionEmoji_Add messageIndex emoji
                             )
                         ]
                         [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
@@ -1551,6 +1576,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                 ]
                 [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
+                    |> Ui.map (MessageViewMsg guildOrDmId)
                 , User.toString data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
@@ -1595,7 +1621,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
                     ]
                 , case maybeReactions of
                     Just reactionView ->
-                        Ui.el [ Ui.paddingXY 8 0 ] reactionView
+                        Ui.el [ Ui.paddingXY 8 0 ] reactionView |> Ui.map (MessageViewMsg guildOrDmId)
 
                     Nothing ->
                         Ui.none
@@ -1621,7 +1647,7 @@ messageViewNotHovered :
     -> LocalUser
     -> Int
     -> Message
-    -> Element FrontendMsg
+    -> Element MessageViewMsg
 messageViewNotHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
     let
         isEditing =
@@ -1649,7 +1675,7 @@ messageViewHovered :
     -> LocalUser
     -> Int
     -> Message
-    -> Element FrontendMsg
+    -> Element MessageViewMsg
 messageViewHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
     let
         isEditing =
@@ -1692,7 +1718,7 @@ messageView :
     -> Maybe ( Int, Message )
     -> Int
     -> Message
-    -> Element FrontendMsg
+    -> Element MessageViewMsg
 messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
         --_ =
@@ -1760,7 +1786,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
                                 containerWidth
-                                (PressedSpoiler messageIndex)
+                                (MessageView_PressedSpoiler messageIndex)
                                 (case SeqDict.get messageIndex revealedSpoilers of
                                     Just nonempty ->
                                         NonemptySet.toSeqSet nonempty
@@ -1837,6 +1863,162 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                 (Ui.text "Message deleted")
 
 
+threadStarterMessageContainer :
+    Int
+    -> Id UserId
+    -> SeqDict Emoji (NonemptySet (Id UserId))
+    -> Element MessageViewMsg
+    -> Element MessageViewMsg
+threadStarterMessageContainer messageIndex currentUserId reactions messageContent =
+    let
+        maybeReactions : Maybe (Element MessageViewMsg)
+        maybeReactions =
+            reactionEmojiView messageIndex currentUserId reactions
+    in
+    Ui.column
+        [ Ui.Font.color MyUi.font1
+        , Ui.paddingWith
+            { left = messagePaddingX
+            , right = messagePaddingX
+            , top = 4
+            , bottom =
+                if maybeReactions == Nothing then
+                    8
+
+                else
+                    4
+            }
+        , Ui.spacing 4
+        , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
+        ]
+        (messageContent :: Maybe.Extra.toList maybeReactions)
+
+
+threadStarterMessage :
+    Int
+    -> SeqDict Int (NonemptySet Int)
+    -> Bool
+    -> LocalUser
+    -> Maybe ( Int, Message )
+    -> Int
+    -> Message
+    -> Element MessageViewMsg
+threadStarterMessage containerWidth revealedSpoilers isBeingEdited localUser maybeRepliedTo messageIndex message =
+    let
+        --_ =
+        --    Debug.log "changed" messageIndex
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers2 localUser
+    in
+    case message of
+        UserTextMessage message2 ->
+            threadStarterMessageContainer
+                messageIndex
+                localUser.userId
+                message2.reactions
+                (Ui.row
+                    []
+                    [ Ui.el
+                        [ Ui.paddingWith
+                            { left = 0
+                            , right = profileImagePaddingRight
+                            , top =
+                                case maybeRepliedTo of
+                                    Just _ ->
+                                        24
+
+                                    Nothing ->
+                                        2
+                            , bottom = 0
+                            }
+                        , Ui.width Ui.shrink
+                        , Ui.alignTop
+                        ]
+                        (case SeqDict.get message2.createdBy allUsers of
+                            Just user ->
+                                User.profileImage user.icon
+
+                            Nothing ->
+                                User.profileImage Nothing
+                        )
+                    , Ui.column
+                        []
+                        [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
+                        , Ui.row
+                            []
+                            [ User.toString message2.createdBy allUsers
+                                ++ " "
+                                |> Ui.text
+                                |> Ui.el [ Ui.Font.bold ]
+                            , messageTimestamp message2.createdAt localUser.timezone
+                            ]
+                        , Html.div
+                            [ Html.Attributes.style "white-space" "pre-wrap" ]
+                            (RichText.view
+                                containerWidth
+                                (MessageView_PressedSpoiler messageIndex)
+                                (case SeqDict.get messageIndex revealedSpoilers of
+                                    Just nonempty ->
+                                        NonemptySet.toSeqSet nonempty
+
+                                    Nothing ->
+                                        SeqSet.empty
+                                )
+                                allUsers
+                                message2.attachedFiles
+                                message2.content
+                                ++ (if isBeingEdited then
+                                        [ Html.span
+                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                            , Html.Attributes.style "font-size" "12px"
+                                            ]
+                                            [ Html.text " (editing...)" ]
+                                        ]
+
+                                    else
+                                        case message2.editedAt of
+                                            Just editedAt ->
+                                                [ Html.span
+                                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                                    , Html.Attributes.style "font-size" "12px"
+                                                    , MyUi.datestamp editedAt |> Html.Attributes.title
+                                                    ]
+                                                    [ Html.text " (edited)" ]
+                                                ]
+
+                                            Nothing ->
+                                                []
+                                   )
+                            )
+                            |> Ui.html
+                        ]
+                    ]
+                )
+
+        UserJoinedMessage joinedAt userId reactions ->
+            threadStarterMessageContainer
+                messageIndex
+                localUser.userId
+                reactions
+                (Ui.row
+                    []
+                    [ userJoinedContent userId allUsers
+                    , messageTimestamp joinedAt localUser.timezone
+                    ]
+                )
+
+        DeletedMessage ->
+            Ui.el
+                [ Ui.Font.color MyUi.font3
+                , Ui.Font.italic
+                , Ui.Font.size 14
+                , Ui.paddingXY 8 4
+                , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
+                ]
+                (Ui.text "Message deleted")
+
+
 messageTimestamp createdAt timezone =
     MyUi.timestamp createdAt timezone
         |> Ui.text
@@ -1847,7 +2029,7 @@ repliedToMessage :
     Maybe ( Int, Message )
     -> SeqDict Int (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
-    -> Element FrontendMsg
+    -> Element MessageViewMsg
 repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
     case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
@@ -1864,7 +2046,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                         ]
                         [ Html.text (User.toString repliedToData.createdBy allUsers) ]
                         :: RichText.preview
-                            (\_ -> FrontendNoOp)
+                            (\_ -> MessageView_NoOp)
                             (case SeqDict.get repliedToIndex revealedSpoilers of
                                 Just set ->
                                     NonemptySet.toSeqSet set
@@ -1904,13 +2086,13 @@ messageHtmlIdPrefix =
     "guild_message_"
 
 
-repliedToHeaderHelper : Int -> Element FrontendMsg -> Element FrontendMsg
+repliedToHeaderHelper : Int -> Element MessageViewMsg -> Element MessageViewMsg
 repliedToHeaderHelper messageIndex content =
     Ui.row
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
-        , Ui.Input.button (PressedReplyLink messageIndex)
+        , Ui.Input.button (MessageView_PressedReplyLink messageIndex)
         , Ui.Font.color MyUi.font3
         , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
         ]
@@ -1948,29 +2130,30 @@ messageContainer :
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
     -> IsHovered
-    -> Element FrontendMsg
-    -> Element FrontendMsg
+    -> Element MessageViewMsg
+    -> Element MessageViewMsg
 messageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
     let
+        maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
             reactionEmojiView messageIndex currentUserId reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
-         , Ui.Events.onMouseEnter (MouseEnteredMessage messageIndex)
-         , Ui.Events.onMouseLeave (MouseExitedMessage messageIndex)
+         , Ui.Events.onMouseEnter (MessageView_MouseEnteredMessage messageIndex)
+         , Ui.Events.onMouseLeave (MessageView_MouseExitedMessage messageIndex)
          , Ui.Events.on
             "touchstart"
             (Touch.touchEventDecoder
                 (\time touches ->
-                    TouchStart
+                    MessageView_TouchStart
                         time
                         (NonemptyDict.map (\_ touch -> { touch | target = messageHtmlId messageIndex }) touches)
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
-                (\x y -> ( AltPressedMessage messageIndex (Coord.xy (round x) (round y)), True ))
+                (\x y -> ( MessageView_AltPressedMessage messageIndex (Coord.xy (round x) (round y)), True ))
                 (Json.Decode.field "clientX" Json.Decode.float)
                 (Json.Decode.field "clientY" Json.Decode.float)
             )
@@ -2016,7 +2199,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageMenu.miniView canEdit messageIndex
+                        , MessageView.miniView canEdit messageIndex
                             |> Ui.inFront
                         ]
 
