@@ -5,6 +5,7 @@ module Id exposing
     , GuildOrDmId_NoThread(..)
     , Id(..)
     , InviteLinkId(..)
+    , ThreadRoute(..)
     , UserId(..)
     , fromInt
     , fromString
@@ -18,8 +19,13 @@ import SeqDict exposing (SeqDict)
 
 
 type GuildOrDmId
-    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_Dm (Id UserId)
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId) ThreadRoute
+    | GuildOrDmId_Dm (Id UserId) ThreadRoute
+
+
+type ThreadRoute
+    = NoThread
+    | ViewThread Int
 
 
 type GuildOrDmId_NoThread

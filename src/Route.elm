@@ -1,14 +1,13 @@
 module Route exposing
     ( ChannelRoute(..)
     , Route(..)
-    , ThreadRoute(..)
     , decode
     , encode
     )
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, ThreadRoute(..), UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -28,11 +27,6 @@ type ChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
-
-
-type ThreadRoute
-    = NoThread
-    | ViewThread Int
 
 
 decode : Url -> Route

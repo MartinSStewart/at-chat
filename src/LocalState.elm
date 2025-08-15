@@ -39,6 +39,7 @@ module LocalState exposing
     , memberIsEditTypingHelper
     , memberIsTyping
     , removeReactionEmoji
+    , updateChannel
     )
 
 import Array exposing (Array)
@@ -51,7 +52,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), UserTextMessageData)
@@ -242,18 +243,38 @@ createNewUser createdAt name email userIsAdmin =
 getMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
 getMessages guildOrDmId local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        GuildOrDmId_Guild guildId channelId threadRoute ->
             case getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
-                    Just channel.messages
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            case SeqDict.get threadMessageIndex channel.threads of
+                                Just thread ->
+                                    Just thread.messages
+
+                                Nothing ->
+                                    Nothing
+
+                        NoThread ->
+                            Just channel.messages
 
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm otherUserId threadRoute ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
-                    Just dmChannel.messages
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            case SeqDict.get threadMessageIndex dmChannel.threads of
+                                Just thread ->
+                                    Just thread.messages
+
+                                Nothing ->
+                                    Nothing
+
+                        NoThread ->
+                            Just dmChannel.messages
 
                 Nothing ->
                     Nothing
@@ -564,20 +585,34 @@ allUsers2 localUser =
 addReactionEmoji :
     Emoji
     -> Id UserId
-    -> Id ChannelId
+    -> ThreadRoute
     -> Int
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
-addReactionEmoji emoji userId channelId messageIndex guild =
-    updateChannel
-        (\channel ->
+    -> { b | messages : Array Message, threads : SeqDict Int Thread }
+    -> { b | messages : Array Message, threads : SeqDict Int Thread }
+addReactionEmoji emoji userId threadRoute messageIndex channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadMessageIndex
+                        (\thread ->
+                            { thread
+                                | messages =
+                                    Array.Extra.update
+                                        messageIndex
+                                        (Message.addReactionEmoji userId emoji)
+                                        channel.messages
+                            }
+                        )
+                        channel.threads
+            }
+
+        NoThread ->
             { channel
                 | messages =
                     Array.Extra.update messageIndex (Message.addReactionEmoji userId emoji) channel.messages
             }
-        )
-        channelId
-        guild
 
 
 updateChannel :
@@ -674,22 +709,36 @@ editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
 removeReactionEmoji :
     Emoji
     -> Id UserId
-    -> Id ChannelId
+    -> ThreadRoute
     -> Int
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array Message } }
-removeReactionEmoji emoji userId channelId messageIndex guild =
-    updateChannel
-        (\channel ->
+    -> { b | messages : Array Message, threads : SeqDict Int Thread }
+    -> { b | messages : Array Message, threads : SeqDict Int Thread }
+removeReactionEmoji emoji userId threadRoute messageIndex channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadMessageIndex
+                        (\thread ->
+                            { thread
+                                | messages =
+                                    Array.Extra.update
+                                        messageIndex
+                                        (Message.removeReactionEmoji userId emoji)
+                                        channel.messages
+                            }
+                        )
+                        channel.threads
+            }
+
+        NoThread ->
             { channel
                 | messages =
                     Array.Extra.update messageIndex
                         (Message.removeReactionEmoji userId emoji)
                         channel.messages
             }
-        )
-        channelId
-        guild
 
 
 markAllChannelsAsViewed :
@@ -702,7 +751,10 @@ markAllChannelsAsViewed guildId guild user =
         | lastViewed =
             SeqDict.foldl
                 (\channelId channel state ->
-                    SeqDict.insert (GuildOrDmId_Guild guildId channelId) (Array.length channel.messages - 1) state
+                    SeqDict.insert
+                        (GuildOrDmId_Guild guildId channelId NoThread)
+                        (Array.length channel.messages - 1)
+                        state
                 )
                 user.lastViewed
                 guild.channels

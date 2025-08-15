@@ -352,7 +352,7 @@ userDropdownList guildOrDmId local =
             LocalState.allUsers local
     in
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId _ ->
+        GuildOrDmId_Guild guildId _ _ ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     guild.owner
@@ -361,7 +361,7 @@ userDropdownList guildOrDmId local =
                 Nothing ->
                     []
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId_Dm otherUserId _ ->
             [ local.localUser.userId, otherUserId ]
     )
         |> List.filterMap

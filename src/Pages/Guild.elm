@@ -27,7 +27,7 @@ import GuildName
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -41,7 +41,7 @@ import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), Route(..), ThreadRoute(..))
+import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -135,7 +135,13 @@ guildHasNotifications currentUserId currentUser guildId guild =
                     state
 
                 _ ->
-                    case channelHasNotifications currentUserId currentUser (GuildOrDmId_Guild guildId channelId) channel of
+                    case
+                        channelHasNotifications
+                            currentUserId
+                            currentUser
+                            (GuildOrDmId_Guild guildId channelId NoThread)
+                            channel
+                    of
                         NoNotification ->
                             state
 
@@ -252,7 +258,13 @@ loggedInAsView local =
         ]
 
 
-homePageLoggedInView : Maybe (Id UserId) -> Maybe Int -> LoadedFrontend -> LoggedIn2 -> LocalState -> Element FrontendMsg
+homePageLoggedInView :
+    Maybe ( Id UserId, ThreadRoute )
+    -> Maybe Int
+    -> LoadedFrontend
+    -> LoggedIn2
+    -> LocalState
+    -> Element FrontendMsg
 homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local =
     case loggedIn.newGuildForm of
         Just form ->
@@ -267,8 +279,8 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                     [ Ui.column
                         [ Ui.height Ui.fill
                         , case maybeOtherUserId of
-                            Just otherUserId ->
-                                dmChannelView otherUserId maybeMessageHighlight loggedIn local model
+                            Just ( otherUserId, threadRoute ) ->
+                                dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
@@ -321,8 +333,8 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                         , loggedInAsView local
                         ]
                     , case maybeOtherUserId of
-                        Just otherUserId ->
-                            dmChannelView otherUserId maybeMessageHighlight loggedIn local model
+                        Just ( otherUserId, threadRoute ) ->
+                            dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
@@ -340,14 +352,14 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                     ]
 
 
-dmChannelView : Id UserId -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-dmChannelView otherUserId maybeMessageHighlight loggedIn local model =
+dmChannelView : Id UserId -> ThreadRoute -> Maybe Int -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model =
     case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
             SeqDict.get otherUserId local.dmChannels
                 |> Maybe.withDefault DmChannel.init
                 |> conversationView
-                    (GuildOrDmId_Dm otherUserId)
+                    (GuildOrDmId_Dm otherUserId threadRoute)
                     maybeMessageHighlight
                     loggedIn
                     model
@@ -634,7 +646,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                                     "Deleted message"
                                     in
                                     conversationView
-                                        (GuildOrDmId_Guild guildId channelId)
+                                        (GuildOrDmId_Guild guildId channelId threadRoute)
                                         maybeMessageHighlight
                                         loggedIn
                                         model
@@ -649,7 +661,7 @@ channelView channelRoute guildId guild loggedIn local model =
 
                         NoThread ->
                             conversationView
-                                (GuildOrDmId_Guild guildId channelId)
+                                (GuildOrDmId_Guild guildId channelId NoThread)
                                 maybeMessageHighlight
                                 loggedIn
                                 model
@@ -1208,7 +1220,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
         [ channelHeader
             isMobile
             (case guildOrDmId of
-                GuildOrDmId_Dm otherUserId ->
+                GuildOrDmId_Dm otherUserId _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1 ]
                         (if otherUserId == local.localUser.userId then
@@ -1231,7 +1243,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                             ]
                         )
 
-                GuildOrDmId_Guild _ _ ->
+                GuildOrDmId_Guild _ _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2 ]
                         [ Ui.html Icons.hashtag, Ui.text name ]
@@ -1262,10 +1274,13 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 (Ui.el
                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom ]
                     (case guildOrDmId of
-                        GuildOrDmId_Guild _ _ ->
+                        GuildOrDmId_Guild _ _ (ViewThread _) ->
                             Ui.text ("This is the start of #" ++ name)
 
-                        GuildOrDmId_Dm otherUserId ->
+                        GuildOrDmId_Guild _ _ NoThread ->
+                            Ui.none
+
+                        GuildOrDmId_Dm otherUserId (ViewThread _) ->
                             Ui.text
                                 ("This is the start of your conversation with "
                                     ++ (if otherUserId == local.localUser.userId then
@@ -1275,6 +1290,9 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                             name
                                        )
                                 )
+
+                        GuildOrDmId_Dm _ NoThread ->
+                            Ui.none
                     )
                     :: conversationViewHelper
                         guildOrDmId
@@ -1320,10 +1338,13 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                 (messageInputConfig guildOrDmId)
                 channelTextInputId
                 (case guildOrDmId of
-                    GuildOrDmId_Guild _ _ ->
+                    GuildOrDmId_Guild _ _ NoThread ->
                         "Write a message in #" ++ name
 
-                    GuildOrDmId_Dm otherUserId ->
+                    GuildOrDmId_Guild _ _ (ViewThread _) ->
+                        "Write a message in thread"
+
+                    GuildOrDmId_Dm otherUserId NoThread ->
                         "Write a message to "
                             ++ (if otherUserId == local.localUser.userId then
                                     "yourself"
@@ -1331,6 +1352,9 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                 else
                                     name
                                )
+
+                    GuildOrDmId_Dm _ (ViewThread _) ->
+                        "Write a message in thread"
                 )
                 (case SeqDict.get guildOrDmId loggedIn.drafts of
                     Just text ->
@@ -2155,7 +2179,7 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                                     channelHasNotifications
                                         currentUserId
                                         currentUser
-                                        (GuildOrDmId_Guild guildId channelId)
+                                        (GuildOrDmId_Guild guildId channelId NoThread)
                                         channel
                                   )
                                     |> GuildIcon.notificationView MyUi.background2
@@ -2220,7 +2244,7 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
         )
 
 
-friendsColumn : Maybe (Id UserId) -> LocalState -> Element FrontendMsg
+friendsColumn : Maybe ( Id UserId, ThreadRoute ) -> LocalState -> Element FrontendMsg
 friendsColumn openedOtherUserId local =
     channelColumnContainer
         [ Ui.el
@@ -2247,12 +2271,12 @@ friendsColumn openedOtherUserId local =
         )
 
 
-friendLabel : Maybe (Id UserId) -> Id UserId -> FrontendUser -> Element FrontendMsg
+friendLabel : Maybe ( Id UserId, ThreadRoute ) -> Id UserId -> FrontendUser -> Element FrontendMsg
 friendLabel openedOtherUserId otherUserId otherUser =
     let
         isSelected : Bool
         isSelected =
-            Just otherUserId == openedOtherUserId
+            Just ( otherUserId, NoThread ) == openedOtherUserId
 
         _ =
             Debug.log "rerender friendLabel" ()

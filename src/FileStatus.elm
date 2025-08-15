@@ -32,7 +32,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId(..), Id)
+import Id exposing (GuildOrDmId(..), Id, ThreadRoute(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -207,12 +207,29 @@ upload onResult sessionId guildOrDmId fileId file2 =
 uploadTrackerId : GuildOrDmId -> Id FileId -> String
 uploadTrackerId guildOrDmId fileId =
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            Id.toString guildId ++ "," ++ Id.toString channelId
+        GuildOrDmId_Guild guildId channelId threadRoute ->
+            Id.toString guildId
+                ++ ","
+                ++ Id.toString channelId
+                ++ (case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            ",t" ++ String.fromInt threadMessageIndex
 
-        GuildOrDmId_Dm otherUserId ->
+                        NoThread ->
+                            ""
+                   )
+
+        GuildOrDmId_Dm otherUserId threadRoute ->
             Id.toString otherUserId
+                ++ (case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            ",t" ++ String.fromInt threadMessageIndex
+
+                        NoThread ->
+                            ""
+                   )
     )
+        ++ "f"
         ++ Id.toString fileId
 
 
