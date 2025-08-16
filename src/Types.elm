@@ -343,7 +343,7 @@ type FrontendMsg
     | TextInputLostFocus HtmlId
     | KeyDown String
     | MessageMenu_PressedShowReactionEmojiSelector Int (Coord CssPixels)
-    | MessageMenu_PressedEditMessage Int
+    | MessageMenu_PressedEditMessage GuildOrDmId Int
     | PressedEmojiSelectorEmoji Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage GuildOrDmId String
@@ -357,7 +357,7 @@ type FrontendMsg
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
-    | TouchStart Time.Posix (NonemptyDict Int Touch)
+    | TouchStart (Maybe ( GuildOrDmId, Int )) Time.Posix (NonemptyDict Int Touch)
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix
@@ -375,7 +375,7 @@ type FrontendMsg
     | PressedCancelMessageEdit GuildOrDmId
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
-    | CheckMessageAltPress Time.Posix Int
+    | CheckMessageAltPress Time.Posix GuildOrDmId Int
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg

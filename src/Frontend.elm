@@ -780,7 +780,7 @@ isPressMsg msg =
         MessageMenu_PressedShowReactionEmojiSelector _ _ ->
             True
 
-        MessageMenu_PressedEditMessage _ ->
+        MessageMenu_PressedEditMessage _ _ ->
             True
 
         PressedEmojiSelectorEmoji _ ->
@@ -819,7 +819,7 @@ isPressMsg msg =
         CheckedPwaStatus _ ->
             False
 
-        TouchStart _ _ ->
+        TouchStart _ _ _ ->
             False
 
         TouchMoved _ _ ->
@@ -873,7 +873,7 @@ isPressMsg msg =
         PressedEditMessagePingDropdownContainer ->
             True
 
-        CheckMessageAltPress _ _ ->
+        CheckMessageAltPress _ _ _ ->
             False
 
         PressedShowUserOption ->
@@ -1602,8 +1602,8 @@ updateLoaded msg model =
         MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
             showReactionEmojiSelector messageIndex model
 
-        MessageMenu_PressedEditMessage messageIndex ->
-            pressedEditMessage messageIndex model
+        MessageMenu_PressedEditMessage guildOrDmId messageIndex ->
+            pressedEditMessage guildOrDmId messageIndex model
 
         PressedEmojiSelectorEmoji emoji ->
             updateLoggedIn
@@ -1939,8 +1939,8 @@ updateLoaded msg model =
         CheckedPwaStatus pwaStatus ->
             ( { model | pwaStatus = pwaStatus }, Command.none )
 
-        TouchStart time touches ->
-            touchStart time touches model
+        TouchStart time maybeGuildOrDmIdAndMessageIndex touches ->
+            touchStart time maybeGuildOrDmIdAndMessageIndex touches model
 
         TouchMoved time newTouches ->
             case model.drag of
@@ -2168,13 +2168,14 @@ updateLoaded msg model =
         PressedEditMessagePingDropdownContainer ->
             ( model, setFocus model MessageMenu.editMessageTextInputId )
 
-        CheckMessageAltPress startTime messageIndex ->
+        CheckMessageAltPress startTime guildOrDmId messageIndex ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
                         updateLoggedIn
                             (\loggedIn ->
                                 ( handleAltPressedMessage
+                                    guildOrDmId
                                     messageIndex
                                     Coord.origin
                                     loggedIn
@@ -2613,13 +2614,13 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time touches ->
-                    touchStart time touches model
+                MessageView.MessageView_TouchStart time messageIndex touches ->
+                    touchStart (Just ( guildOrDmId, messageIndex )) time touches model
 
                 MessageView.MessageView_AltPressedMessage messageIndex clickedAt ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( handleAltPressedMessage messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
+                            ( handleAltPressedMessage guildOrDmId messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
                             , Command.none
                             )
                         )
@@ -2662,7 +2663,7 @@ updateLoaded msg model =
                     showReactionEmojiSelector messageIndex model
 
                 MessageView.MessageViewMsg_PressedEditMessage messageIndex ->
-                    pressedEditMessage messageIndex model
+                    pressedEditMessage guildOrDmId messageIndex model
 
                 MessageView.MessageViewMsg_PressedReply messageIndex ->
                     pressedReply guildOrDmId messageIndex model
@@ -2732,55 +2733,31 @@ pressedReply guildOrDmId messageIndex model =
         model
 
 
-pressedEditMessage : Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-pressedEditMessage messageIndex model =
+pressedEditMessage : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
             let
-                maybeMessageAndId : Maybe ( GuildOrDmId, UserTextMessageData )
-                maybeMessageAndId =
-                    case model.route of
-                        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
-                            case LocalState.getGuildAndChannel guildId channelId local of
-                                Just ( _, channel ) ->
-                                    case Array.get messageIndex channel.messages of
-                                        Just (UserTextMessage message) ->
-                                            ( GuildOrDmId_Guild guildId channelId threadRoute
-                                            , message
-                                            )
-                                                |> Just
+                maybeMessage : Maybe UserTextMessageData
+                maybeMessage =
+                    case LocalState.getMessages guildOrDmId local of
+                        Just ( _, messages ) ->
+                            case Array.get messageIndex messages of
+                                Just (UserTextMessage data) ->
+                                    Just data
 
-                                        _ ->
-                                            Nothing
-
-                                Nothing ->
+                                _ ->
                                     Nothing
 
-                        DmRoute otherUserId threadRoute _ ->
-                            case SeqDict.get otherUserId local.dmChannels of
-                                Just dmChannel ->
-                                    case Array.get messageIndex dmChannel.messages of
-                                        Just (UserTextMessage message) ->
-                                            ( GuildOrDmId_Dm otherUserId threadRoute
-                                            , message
-                                            )
-                                                |> Just
-
-                                        _ ->
-                                            Nothing
-
-                                Nothing ->
-                                    Nothing
-
-                        _ ->
+                        Nothing ->
                             Nothing
 
                 local : LocalState
                 local =
                     Local.model loggedIn.localState
             in
-            ( case maybeMessageAndId of
-                Just ( guildOrDmId, message ) ->
+            ( case maybeMessage of
+                Just message ->
                     let
                         loggedIn2 =
                             { loggedIn
@@ -2868,11 +2845,12 @@ showReactionEmojiSelector messageIndex model =
 
 
 touchStart :
-    Time.Posix
+    Maybe ( GuildOrDmId, Int )
+    -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-touchStart time touches model =
+touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
     case model.drag of
         NoDrag ->
             ( { model | drag = DragStart time touches, dragPrevious = model.drag }
@@ -2883,17 +2861,13 @@ touchStart time touches model =
                         htmlId =
                             Dom.idToString single.target
                     in
-                    if String.startsWith Pages.Guild.messageHtmlIdPrefix htmlId then
-                        case String.dropLeft (String.length Pages.Guild.messageHtmlIdPrefix) htmlId |> String.toInt of
-                            Just messageIndex ->
-                                Process.sleep (Duration.seconds 0.5)
-                                    |> Task.perform (\() -> CheckMessageAltPress time messageIndex)
+                    case maybeGuildOrDmIdAndMessageIndex of
+                        Just ( guildOrMessageId, messageIndex ) ->
+                            Process.sleep (Duration.seconds 0.5)
+                                |> Task.perform (\() -> CheckMessageAltPress time guildOrMessageId messageIndex)
 
-                            Nothing ->
-                                Command.none
-
-                    else
-                        Command.none
+                        Nothing ->
+                            Command.none
 
                 _ ->
                     Command.none
@@ -3073,31 +3047,26 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-handleAltPressedMessage : Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage messageIndex clickedAt loggedIn local model =
-    case routeToGuildOrDmId model.route of
-        Just guildOrDmId ->
-            { loggedIn
-                | messageHover =
-                    MessageMenu
-                        { guildOrDmId = guildOrDmId
-                        , messageIndex = messageIndex
-                        , position = clickedAt
-                        , mobileMode =
-                            MessageMenuOpening
-                                { offset = Quantity.zero
-                                , targetOffset =
-                                    MessageMenu.mobileMenuOpeningOffset
-                                        guildOrDmId
-                                        messageIndex
-                                        local
-                                        model
-                                }
+handleAltPressedMessage : GuildOrDmId -> Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage guildOrDmId messageIndex clickedAt loggedIn local model =
+    { loggedIn
+        | messageHover =
+            MessageMenu
+                { guildOrDmId = guildOrDmId
+                , messageIndex = messageIndex
+                , position = clickedAt
+                , mobileMode =
+                    MessageMenuOpening
+                        { offset = Quantity.zero
+                        , targetOffset =
+                            MessageMenu.mobileMenuOpeningOffset
+                                guildOrDmId
+                                messageIndex
+                                local
+                                model
                         }
-            }
-
-        Nothing ->
-            loggedIn
+                }
+    }
 
 
 handleTouchEnd : Time.Posix -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4554,7 +4523,7 @@ layout model attributes child =
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
             :: attributes
             ++ (if MyUi.isMobile model then
-                    [ Html.Events.on "touchstart" (Touch.touchEventDecoder TouchStart) |> Ui.htmlAttribute
+                    [ Html.Events.on "touchstart" (Touch.touchEventDecoder (TouchStart Nothing)) |> Ui.htmlAttribute
                     , Html.Events.on "touchmove" (Touch.touchEventDecoder TouchMoved) |> Ui.htmlAttribute
                     , Html.Events.on
                         "touchend"

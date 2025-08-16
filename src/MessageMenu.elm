@@ -318,7 +318,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                             isMobile
                             Icons.pencil
                             "Edit message"
-                            (MessageMenu_PressedEditMessage messageIndex)
+                            (MessageMenu_PressedEditMessage guildOrDmId messageIndex)
                             |> Just
 
                       else

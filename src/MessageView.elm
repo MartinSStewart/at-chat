@@ -19,7 +19,7 @@ type MessageViewMsg
     = MessageView_PressedSpoiler Int Int
     | MessageView_MouseEnteredMessage Int
     | MessageView_MouseExitedMessage Int
-    | MessageView_TouchStart Time.Posix (NonemptyDict Int Touch)
+    | MessageView_TouchStart Time.Posix Int (NonemptyDict Int Touch)
     | MessageView_AltPressedMessage Int (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove Int Emoji
     | MessageView_PressedReactionEmoji_Add Int Emoji
@@ -43,7 +43,7 @@ isPressMsg msg =
         MessageView_MouseExitedMessage int ->
             False
 
-        MessageView_TouchStart posix nonemptyDict ->
+        MessageView_TouchStart posix _ nonemptyDict ->
             False
 
         MessageView_AltPressedMessage int coord ->
