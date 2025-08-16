@@ -1574,10 +1574,14 @@ updateLoaded msg model =
                                                             Nothing ->
                                                                 Nothing
                                                         )
-                                                        (if SeqDict.member guildOrDmId loggedIn2.editMessage then
+                                                        (if
+                                                            SeqDict.member guildOrDmId loggedIn2.editMessage
+                                                                || SeqDict.member (Id.guildOrDmIdSetThreadRoute guildOrDmId NoThread) loggedIn2.editMessage
+                                                         then
                                                             { loggedIn2
                                                                 | editMessage =
                                                                     SeqDict.remove guildOrDmId loggedIn2.editMessage
+                                                                        |> SeqDict.remove (Id.guildOrDmIdSetThreadRoute guildOrDmId NoThread)
                                                             }
 
                                                          else
