@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, GuildOrDmId, GuildOrDmId_NoThread, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId, GuildOrDmId_NoThread, Id, InviteLinkId, ThreadRoute, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
@@ -148,7 +148,7 @@ type alias LoggedIn2 =
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
-    , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
+    , channelNameHover : Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
     , messageHover : MessageHover
@@ -320,8 +320,8 @@ type FrontendMsg
     | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
-    | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
-    | MouseExitedChannelName (Id GuildId) (Id ChannelId)
+    | MouseEnteredChannelName (Id GuildId) (Id ChannelId) ThreadRoute
+    | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm

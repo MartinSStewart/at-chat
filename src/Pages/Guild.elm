@@ -1367,7 +1367,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                         "Write a message in #" ++ name
 
                     GuildOrDmId_Guild _ _ (ViewThread _) ->
-                        "Write a message in thread"
+                        "Write a message in this thread"
 
                     GuildOrDmId_Dm otherUserId NoThread ->
                         "Write a message to "
@@ -1379,7 +1379,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                )
 
                     GuildOrDmId_Dm _ (ViewThread _) ->
-                        "Write a message in thread"
+                        "Write a message in this thread"
                 )
                 (case SeqDict.get guildOrDmId loggedIn.drafts of
                     Just text ->
@@ -2221,17 +2221,38 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
         (messageContent :: Maybe.Extra.toList maybeReactions)
 
 
-channelColumnNotMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnNotMobile :
+    Id UserId
+    -> BackendUser
+    -> Id GuildId
+    -> FrontendGuild
+    -> ChannelRoute
+    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> Element FrontendMsg
 channelColumnNotMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
     channelColumn False currentUserId currentUser guildId guild channelRoute channelNameHover True
 
 
-channelColumnCanScrollMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCanScrollMobile :
+    Id UserId
+    -> BackendUser
+    -> Id GuildId
+    -> FrontendGuild
+    -> ChannelRoute
+    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> Element FrontendMsg
 channelColumnCanScrollMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
     channelColumn True currentUserId currentUser guildId guild channelRoute channelNameHover True
 
 
-channelColumnCannotScrollMobile : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelRoute -> Maybe ( Id GuildId, Id ChannelId ) -> Element FrontendMsg
+channelColumnCannotScrollMobile :
+    Id UserId
+    -> BackendUser
+    -> Id GuildId
+    -> FrontendGuild
+    -> ChannelRoute
+    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> Element FrontendMsg
 channelColumnCannotScrollMobile currentUserId currentUser guildId guild channelRoute channelNameHover =
     channelColumn True currentUserId currentUser guildId guild channelRoute channelNameHover False
 
@@ -2278,11 +2299,12 @@ channelColumn :
     -> Id GuildId
     -> FrontendGuild
     -> ChannelRoute
-    -> Maybe ( Id GuildId, Id ChannelId )
+    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> Bool
     -> Element FrontendMsg
 channelColumn isMobile currentUserId currentUser guildId guild channelRoute channelNameHover canScroll2 =
     let
+        guildName : String
         guildName =
             GuildName.toString guild.name
     in
@@ -2310,92 +2332,118 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
             (List.map
                 (\( channelId, channel ) ->
                     let
-                        isSelected : Bool
-                        isSelected =
+                        threads =
                             case channelRoute of
-                                ChannelRoute a thread _ ->
-                                    a == channelId
-
-                                EditChannelRoute a ->
-                                    a == channelId
-
-                                _ ->
-                                    False
-
-                        isHover : Bool
-                        isHover =
-                            channelNameHover == Just ( guildId, channelId )
-                    in
-                    Ui.row
-                        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                        , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId)
-                        , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId)
-                        , Ui.clipWithEllipsis
-                        , Ui.height (Ui.px channelHeaderHeight)
-                        , MyUi.hoverText (ChannelName.toString channel.name)
-                        , Ui.contentCenterY
-                        , MyUi.noShrinking
-                        ]
-                        [ Ui.el
-                            [ Ui.Input.button
-                                (PressedLink
-                                    (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
-                                )
-                            , Ui.height Ui.fill
-                            , Ui.contentCenterY
-                            , Ui.paddingWith
-                                { left = 26
-                                , right =
-                                    if isHover then
-                                        0
+                                ChannelRoute channelId2 (ViewThread threadMessageIndex) _ ->
+                                    if channelId2 == channelId then
+                                        SeqDict.insert threadMessageIndex DmChannel.threadInit channel.threads
 
                                     else
-                                        8
-                                , top = 0
-                                , bottom = 0
-                                }
-                            , Ui.el
-                                [ (if isSelected && not isMobile then
-                                    NoNotification
+                                        channel.threads
 
-                                   else
-                                    channelHasNotifications
-                                        currentUserId
-                                        currentUser
-                                        (GuildOrDmId_Guild guildId channelId NoThread)
-                                        channel
-                                  )
-                                    |> GuildIcon.notificationView MyUi.background2
-                                , Ui.width (Ui.px 20)
-                                , Ui.move { x = 4, y = 0, z = 0 }
-                                , Ui.centerY
-                                ]
-                                (Ui.html Icons.hashtag)
-                                |> Ui.inFront
-                            , if isSelected then
-                                Ui.Font.color MyUi.font1
+                                _ ->
+                                    channel.threads
+                    in
+                    Ui.column
+                        []
+                        [ channelColumnRow
+                            isMobile
+                            channelNameHover
+                            channelRoute
+                            currentUserId
+                            currentUser
+                            guildId
+                            channelId
+                            channel
+                        , Ui.column
+                            []
+                            (SeqDict.toList threads
+                                |> List.indexedMap
+                                    (\index ( threadMessageIndex, thread ) ->
+                                        let
+                                            threadRoute : ThreadRoute
+                                            threadRoute =
+                                                ViewThread threadMessageIndex
 
-                              else
-                                Ui.Font.color MyUi.font3
-                            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
-                            ]
-                            (Ui.text (ChannelName.toString channel.name))
-                        , if isHover then
-                            Ui.el
-                                [ Ui.alignRight
-                                , Ui.width (Ui.px 26)
-                                , Ui.contentCenterY
-                                , Ui.height Ui.fill
-                                , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
-                                , Ui.Font.color MyUi.font3
-                                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
-                                , Ui.Input.button
-                                    (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
-                                ]
-                                (Ui.html Icons.gearIcon)
+                                            isSelected : Bool
+                                            isSelected =
+                                                case channelRoute of
+                                                    ChannelRoute a (ViewThread b) _ ->
+                                                        a == channelId && b == threadMessageIndex
 
-                          else
-                            Ui.none
+                                                    _ ->
+                                                        False
+
+                                            isHover : Bool
+                                            isHover =
+                                                channelNameHover == Just ( guildId, channelId, NoThread )
+                                        in
+                                        Ui.row
+                                            [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+                                            , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId threadRoute)
+                                            , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId threadRoute)
+                                            , Ui.clipWithEllipsis
+                                            , Ui.height (Ui.px channelHeaderHeight)
+                                            , MyUi.hoverText (ChannelName.toString channel.name)
+                                            , Ui.contentCenterY
+                                            , MyUi.noShrinking
+                                            ]
+                                            [ Ui.el
+                                                [ Ui.Input.button
+                                                    (PressedLink
+                                                        (GuildRoute guildId (ChannelRoute channelId threadRoute Nothing))
+                                                    )
+                                                , Ui.height Ui.fill
+                                                , Ui.contentCenterY
+                                                , Ui.paddingWith
+                                                    { left = 28
+                                                    , right =
+                                                        if isHover then
+                                                            0
+
+                                                        else
+                                                            8
+                                                    , top = 0
+                                                    , bottom = 0
+                                                    }
+                                                , Ui.el
+                                                    [ (if isSelected && not isMobile then
+                                                        NoNotification
+
+                                                       else
+                                                        channelHasNotifications
+                                                            currentUserId
+                                                            currentUser
+                                                            (GuildOrDmId_Guild guildId channelId threadRoute)
+                                                            channel
+                                                      )
+                                                        |> GuildIcon.notificationView MyUi.background2
+                                                    , Ui.move { x = 4, y = 0, z = 0 }
+                                                    , Ui.Font.color MyUi.font3
+                                                    ]
+                                                    (Ui.html
+                                                        (if SeqDict.size threads - 1 == index then
+                                                            Icons.threadBottomSegment
+
+                                                         else if index == 0 then
+                                                            Icons.threadTopSegment
+
+                                                         else
+                                                            Icons.threadMiddleSegment
+                                                        )
+                                                    )
+                                                    |> Ui.inFront
+                                                , if isSelected then
+                                                    Ui.Font.color MyUi.font1
+
+                                                  else
+                                                    Ui.Font.color MyUi.font3
+                                                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                                                ]
+                                                (Ui.text (ChannelName.toString channel.name))
+                                            ]
+                                    )
+                            )
                         ]
                 )
                 (SeqDict.toList guild.channels)
@@ -2425,6 +2473,107 @@ channelColumn isMobile currentUserId currentUser guildId guild channelRoute chan
                    ]
             )
         )
+
+
+channelColumnRow :
+    Bool
+    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> ChannelRoute
+    -> Id UserId
+    -> BackendUser
+    -> Id GuildId
+    -> Id ChannelId
+    -> FrontendChannel
+    -> Element FrontendMsg
+channelColumnRow isMobile channelNameHover channelRoute currentUserId currentUser guildId channelId channel =
+    let
+        isSelected : Bool
+        isSelected =
+            case channelRoute of
+                ChannelRoute a NoThread _ ->
+                    a == channelId
+
+                EditChannelRoute a ->
+                    a == channelId
+
+                _ ->
+                    False
+
+        isHover : Bool
+        isHover =
+            channelNameHover == Just ( guildId, channelId, NoThread )
+    in
+    Ui.row
+        [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId NoThread)
+        , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId NoThread)
+        , Ui.clipWithEllipsis
+        , Ui.height (Ui.px channelHeaderHeight)
+        , MyUi.hoverText (ChannelName.toString channel.name)
+        , Ui.contentCenterY
+        , MyUi.noShrinking
+        ]
+        [ Ui.el
+            [ Ui.Input.button
+                (PressedLink
+                    (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
+                )
+            , Ui.height Ui.fill
+            , Ui.contentCenterY
+            , Ui.paddingWith
+                { left = 26
+                , right =
+                    if isHover then
+                        0
+
+                    else
+                        8
+                , top = 0
+                , bottom = 0
+                }
+            , Ui.el
+                [ (if isSelected && not isMobile then
+                    NoNotification
+
+                   else
+                    channelHasNotifications
+                        currentUserId
+                        currentUser
+                        (GuildOrDmId_Guild guildId channelId NoThread)
+                        channel
+                  )
+                    |> GuildIcon.notificationView MyUi.background2
+                , Ui.width (Ui.px 20)
+                , Ui.move { x = 4, y = 0, z = 0 }
+                , Ui.centerY
+                ]
+                (Ui.html Icons.hashtag)
+                |> Ui.inFront
+            , if isSelected then
+                Ui.Font.color MyUi.font1
+
+              else
+                Ui.Font.color MyUi.font3
+            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+            ]
+            (Ui.text (ChannelName.toString channel.name))
+        , if isHover then
+            Ui.el
+                [ Ui.alignRight
+                , Ui.width (Ui.px 26)
+                , Ui.contentCenterY
+                , Ui.height Ui.fill
+                , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
+                , Ui.Font.color MyUi.font3
+                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                , Ui.Input.button
+                    (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
+                ]
+                (Ui.html Icons.gearIcon)
+
+          else
+            Ui.none
+        ]
 
 
 friendsColumn : Maybe ( Id UserId, ThreadRoute ) -> LocalState -> Element FrontendMsg

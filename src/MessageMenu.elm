@@ -324,7 +324,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                       else
                         Nothing
                     , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
-                    , button isMobile Icons.hashtag "Create thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+                    , button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
                     , button
                         isMobile
                         Icons.copyIcon

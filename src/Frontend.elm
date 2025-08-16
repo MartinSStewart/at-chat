@@ -711,10 +711,10 @@ isPressMsg msg =
         PressedSubmitNewChannel _ _ ->
             False
 
-        MouseEnteredChannelName _ _ ->
+        MouseEnteredChannelName _ _ _ ->
             False
 
-        MouseExitedChannelName _ _ ->
+        MouseExitedChannelName _ _ _ ->
             False
 
         EditChannelFormChanged _ _ _ ->
@@ -1275,19 +1275,19 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
-        MouseEnteredChannelName guildId channelId ->
+        MouseEnteredChannelName guildId channelId threadRoute ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | channelNameHover = Just ( guildId, channelId ) }, Command.none )
+                    ( { loggedIn | channelNameHover = Just ( guildId, channelId, threadRoute ) }, Command.none )
                 )
                 model
 
-        MouseExitedChannelName guildId channelId ->
+        MouseExitedChannelName guildId channelId threadRoute ->
             updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn
                         | channelNameHover =
-                            if loggedIn.channelNameHover == Just ( guildId, channelId ) then
+                            if loggedIn.channelNameHover == Just ( guildId, channelId, threadRoute ) then
                                 Nothing
 
                             else
