@@ -28,6 +28,7 @@ module Icons exposing
     , sortDescending
     , threadBottomSegment
     , threadMiddleSegment
+    , threadSingleSegment
     , threadTopSegment
     , users
     , x
@@ -390,16 +391,44 @@ threadBottomSegment =
         ]
         [ Svg.g []
             [ Svg.line
+                [ Svg.Attributes.y2 "20.75"
+                , Svg.Attributes.x2 "10"
+                , Svg.Attributes.y1 "0"
+                , Svg.Attributes.x1 "10"
+                ]
+                []
+            , Svg.line
                 [ Svg.Attributes.y2 "20"
+                , Svg.Attributes.x2 "10"
+                , Svg.Attributes.y1 "20"
+                , Svg.Attributes.x1 "20"
+                ]
+                []
+            ]
+        ]
+
+
+threadSingleSegment : Svg msg
+threadSingleSegment =
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 20 38"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "20"
+        ]
+        [ Svg.g []
+            [ Svg.line
+                [ Svg.Attributes.y2 "20.75"
                 , Svg.Attributes.x2 "10"
                 , Svg.Attributes.y1 "4"
                 , Svg.Attributes.x1 "10"
                 ]
                 []
             , Svg.line
-                [ Svg.Attributes.y2 "19"
+                [ Svg.Attributes.y2 "20"
                 , Svg.Attributes.x2 "10"
-                , Svg.Attributes.y1 "19"
+                , Svg.Attributes.y1 "20"
                 , Svg.Attributes.x1 "20"
                 ]
                 []

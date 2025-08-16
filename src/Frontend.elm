@@ -3391,6 +3391,7 @@ changeUpdate localMsg local =
                                                                     , attachedFiles = attachedFiles
                                                                     }
                                                                 )
+                                                                threadRoute
                                                                 channel
                                                             )
                                                             guild.channels
@@ -3435,6 +3436,7 @@ changeUpdate localMsg local =
                                                 , attachedFiles = attachedFiles
                                                 }
                                             )
+                                            threadRoute
                             in
                             { local
                                 | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
@@ -3597,6 +3599,7 @@ changeUpdate localMsg local =
                                                                     , attachedFiles = attachedFiles
                                                                     }
                                                                 )
+                                                                threadRoute
                                                                 channel
                                                             )
                                                             guild.channels
@@ -3647,6 +3650,7 @@ changeUpdate localMsg local =
                                                 , attachedFiles = attachedFiles
                                                 }
                                             )
+                                            threadRoute
                             in
                             { local
                                 | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
@@ -3821,6 +3825,7 @@ changeUpdate localMsg local =
                                                 , attachedFiles = SeqDict.empty
                                                 }
                                             )
+                                            NoThread
                                         |> Just
                                 )
                                 local.dmChannels

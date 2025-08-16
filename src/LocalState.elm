@@ -240,7 +240,7 @@ createNewUser createdAt name email userIsAdmin =
     }
 
 
-getMessages : GuildOrDmId -> LocalState -> Maybe (Array Message)
+getMessages : GuildOrDmId -> LocalState -> Maybe ( ThreadRoute, Array Message )
 getMessages guildOrDmId local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -250,13 +250,13 @@ getMessages guildOrDmId local =
                         ViewThread threadMessageIndex ->
                             case SeqDict.get threadMessageIndex channel.threads of
                                 Just thread ->
-                                    Just thread.messages
+                                    Just ( threadRoute, thread.messages )
 
                                 Nothing ->
                                     Nothing
 
                         NoThread ->
-                            Just channel.messages
+                            Just ( threadRoute, channel.messages )
 
                 Nothing ->
                     Nothing
@@ -268,13 +268,13 @@ getMessages guildOrDmId local =
                         ViewThread threadMessageIndex ->
                             case SeqDict.get threadMessageIndex dmChannel.threads of
                                 Just thread ->
-                                    Just thread.messages
+                                    Just ( threadRoute, thread.messages )
 
                                 Nothing ->
                                     Nothing
 
                         NoThread ->
-                            Just dmChannel.messages
+                            Just ( threadRoute, dmChannel.messages )
 
                 Nothing ->
                     Nothing
@@ -291,9 +291,29 @@ getUser userId localUser =
 
 createMessage :
     Message
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-createMessage message channel =
+    -> ThreadRoute
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+createMessage message threadRoute channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            { channel
+                | threads =
+                    SeqDict.update
+                        threadMessageIndex
+                        (\maybe ->
+                            Maybe.withDefault DmChannel.threadInit maybe
+                                |> createMessageHelper message
+                                |> Just
+                        )
+                        channel.threads
+            }
+
+        NoThread ->
+            createMessageHelper message channel
+
+
+createMessageHelper message channel =
     { channel
         | messages =
             case message of
@@ -563,7 +583,7 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     guild.announcementChannel
-                    (createMessage (UserJoinedMessage time userId SeqDict.empty))
+                    (createMessageHelper (UserJoinedMessage time userId SeqDict.empty))
                     guild.channels
         }
             |> Ok

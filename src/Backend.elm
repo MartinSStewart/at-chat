@@ -1026,6 +1026,7 @@ handleDiscordCreateMessage message model =
                                     , attachedFiles = SeqDict.empty
                                     }
                                 )
+                                NoThread
                                 { dmChannel
                                     | linkedMessageIds =
                                         OneToOne.insert message.id
@@ -1168,6 +1169,7 @@ handleDiscordCreateGuildMessageHelper replyTo userId richText message channel =
             , attachedFiles = SeqDict.empty
             }
         )
+        NoThread
         { channel
             | linkedMessageIds =
                 OneToOne.insert message.id
@@ -2645,6 +2647,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                         , attachedFiles = attachedFiles
                         }
                     )
+                    threadRoute
 
         messageIndex =
             Array.length dmChannel.messages - 1
@@ -2772,6 +2775,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                             , attachedFiles = attachedFiles
                             }
                         )
+                        threadRoute
                         channel
 
                 messageIndex : Int

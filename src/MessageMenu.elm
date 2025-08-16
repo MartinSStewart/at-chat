@@ -18,7 +18,7 @@ import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId)
+import Id exposing (GuildOrDmId, ThreadRoute(..))
 import Json.Decode
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
@@ -281,7 +281,7 @@ editMessageTextInputId =
 menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId messageIndex position local model =
     case LocalState.getMessages guildOrDmId local of
-        Just messages ->
+        Just ( threadRoute, messages ) ->
             case Array.get messageIndex messages of
                 Just message ->
                     let
@@ -324,7 +324,12 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                       else
                         Nothing
                     , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
-                    , button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+                    , case threadRoute of
+                        ViewThread _ ->
+                            Nothing
+
+                        NoThread ->
+                            button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
                     , button
                         isMobile
                         Icons.copyIcon
