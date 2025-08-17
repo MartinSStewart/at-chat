@@ -17,6 +17,7 @@ module Pages.Guild exposing
     )
 
 import Array exposing (Array)
+import Array.Extra
 import Bitwise
 import ChannelName
 import Coord exposing (Coord)
@@ -37,7 +38,7 @@ import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
-import Message exposing (Message(..))
+import Message exposing (Message(..), UserTextMessageData)
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
@@ -1745,7 +1746,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread r
                         Ui.none
                 , case maybeThread of
                     Just thread ->
-                        threadStarterIndicator messageIndex thread
+                        threadStarterIndicator (LocalState.allUsers local) messageIndex thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmId)
 
@@ -1775,14 +1776,14 @@ messageViewNotThreadStarter :
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight } =
+        { containerWidth, isEditing, highlight, isHovered } =
             messageViewDecode data
     in
     messageView
         containerWidth
         revealedSpoilers
         highlight
-        IsNotHovered
+        isHovered
         isEditing
         localUser
         Nothing
@@ -1801,14 +1802,14 @@ messageViewThreadStarter :
     -> Element MessageViewMsg
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
-        { containerWidth, isEditing, highlight } =
+        { containerWidth, isEditing, highlight, isHovered } =
             messageViewDecode data
     in
     messageView
         containerWidth
         revealedSpoilers
         highlight
-        IsHovered
+        isHovered
         isEditing
         localUser
         Nothing
@@ -1852,6 +1853,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
     case message of
         UserTextMessage message2 ->
             messageContainer
+                allUsers
                 (case highlight of
                     NoHighlight ->
                         if RichText.mentionsUser localUser.userId message2.content then
@@ -1950,6 +1952,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
 
         UserJoinedMessage joinedAt userId reactions ->
             messageContainer
+                allUsers
                 highlight
                 messageIndex
                 False
@@ -2136,30 +2139,16 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             repliedToHeaderHelper
                 repliedToIndex
-                (Html.div
-                    [ Html.Attributes.style "white-space" "nowrap"
-                    , Html.Attributes.style "overflow" "hidden"
-                    , Html.Attributes.style "text-overflow" "ellipsis"
-                    ]
-                    (Html.span
-                        [ Html.Attributes.style "color" "rgb(200,200,200)"
-                        , Html.Attributes.style "padding" "0 6px 0 2px"
-                        ]
-                        [ Html.text (User.toString repliedToData.createdBy allUsers) ]
-                        :: RichText.preview
-                            (\_ -> MessageView_NoOp)
-                            (case SeqDict.get repliedToIndex revealedSpoilers of
-                                Just set ->
-                                    NonemptySet.toSeqSet set
+                (userTextMessagePreview
+                    allUsers
+                    (case SeqDict.get repliedToIndex revealedSpoilers of
+                        Just set ->
+                            NonemptySet.toSeqSet set
 
-                                Nothing ->
-                                    SeqSet.empty
-                            )
-                            allUsers
-                            repliedToData.attachedFiles
-                            repliedToData.content
+                        Nothing ->
+                            SeqSet.empty
                     )
-                    |> Ui.html
+                    repliedToData
                 )
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
@@ -2175,6 +2164,28 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
 
         Nothing ->
             Ui.none
+
+
+userTextMessagePreview : SeqDict (Id UserId) FrontendUser -> SeqSet Int -> UserTextMessageData -> Element MessageViewMsg
+userTextMessagePreview allUsers revealedSpoilers message =
+    Html.div
+        [ Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "text-overflow" "ellipsis"
+        ]
+        (Html.span
+            [ Html.Attributes.style "color" "rgb(200,200,200)"
+            , Html.Attributes.style "padding" "0 6px 0 2px"
+            ]
+            [ Html.text (User.toString message.createdBy allUsers) ]
+            :: RichText.preview
+                (\_ -> MessageView_NoOp)
+                revealedSpoilers
+                allUsers
+                message.attachedFiles
+                message.content
+        )
+        |> Ui.html
 
 
 messageHtmlId : Int -> HtmlId
@@ -2225,7 +2236,8 @@ messagePaddingX =
 
 
 messageContainer :
-    HighlightMessage
+    SeqDict (Id UserId) FrontendUser
+    -> HighlightMessage
     -> Int
     -> Bool
     -> Id UserId
@@ -2234,7 +2246,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
+messageContainer allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -2325,7 +2337,7 @@ messageContainer highlight messageIndex canEdit currentUserId reactions maybeThr
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ threadStarterIndicator messageIndex thread
+                        [ threadStarterIndicator allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -2334,9 +2346,9 @@ messageContainer highlight messageIndex canEdit currentUserId reactions maybeThr
         )
 
 
-threadStarterIndicator : Int -> Thread -> Element MessageViewMsg
-threadStarterIndicator messageIndex thread =
-    Ui.el
+threadStarterIndicator : SeqDict (Id UserId) FrontendUser -> Int -> Thread -> Element MessageViewMsg
+threadStarterIndicator allUsers messageIndex thread =
+    Ui.column
         [ Ui.paddingXY 8 4
         , Ui.border 1
         , Ui.borderColor MyUi.border1
@@ -2344,7 +2356,30 @@ threadStarterIndicator messageIndex thread =
         , Ui.width Ui.shrink
         , Ui.Input.button (MessageView_PressedViewThreadLink messageIndex)
         ]
-        (Ui.text ("Messages " ++ String.fromInt (Array.length thread.messages)))
+        [ Ui.row
+            []
+            [ Ui.html Icons.hashtag
+            , Ui.el
+                [ Ui.Font.color MyUi.font3 ]
+                (Ui.text (String.fromInt (Array.length thread.messages) ++ " messages"))
+            ]
+        , case Array.Extra.last thread.messages of
+            Just last ->
+                case last of
+                    UserTextMessage data ->
+                        userTextMessagePreview allUsers SeqSet.empty data
+
+                    UserJoinedMessage joinedAt userId reactions ->
+                        userJoinedContent userId allUsers
+
+                    DeletedMessage ->
+                        Ui.el
+                            [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
+                            (Ui.text "Message deleted")
+
+            Nothing ->
+                Ui.none
+        ]
 
 
 channelColumnNotMobile :
