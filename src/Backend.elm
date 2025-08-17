@@ -139,7 +139,6 @@ init =
             , members = SeqDict.fromList []
             , owner = adminUserId
             , invites = SeqDict.empty
-            , announcementChannel = Id.fromInt 0
             }
     in
     ( { users =
@@ -1034,7 +1033,6 @@ addDiscordGuilds time guilds model =
                                     |> SeqDict.fromList
                             , owner = ownerId
                             , invites = SeqDict.empty
-                            , announcementChannel = Id.fromInt 0
                             }
 
                         newGuild2 : BackendGuild

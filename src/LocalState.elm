@@ -17,6 +17,7 @@ module LocalState exposing
     , addReactionEmoji
     , allUsers
     , allUsers2
+    , announcementChannel
     , createChannel
     , createChannelFrontend
     , createGuild
@@ -100,7 +101,6 @@ type alias BackendGuild =
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
-    , announcementChannel : Id ChannelId
     }
 
 
@@ -113,7 +113,6 @@ type alias FrontendGuild =
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
-    , announcementChannel : Id ChannelId
     }
 
 
@@ -128,7 +127,6 @@ guildToFrontendForUser userId guild =
         , members = guild.members
         , owner = guild.owner
         , invites = guild.invites
-        , announcementChannel = guild.announcementChannel
         }
             |> Just
 
@@ -146,7 +144,6 @@ guildToFrontend guild =
     , members = guild.members
     , owner = guild.owner
     , invites = guild.invites
-    , announcementChannel = guild.announcementChannel
     }
 
 
@@ -370,18 +367,13 @@ createMessageHelper message channel =
 
 createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild
 createGuild time userId guildName =
-    let
-        announcementChannelId : Id ChannelId
-        announcementChannelId =
-            Id.fromInt 0
-    in
     { createdAt = time
     , createdBy = userId
     , name = guildName
     , icon = Nothing
     , channels =
         SeqDict.fromList
-            [ ( announcementChannelId
+            [ ( Id.fromInt 0
               , { createdAt = time
                 , createdBy = userId
                 , name = defaultChannelName
@@ -397,7 +389,6 @@ createGuild time userId guildName =
     , members = SeqDict.empty
     , owner = userId
     , invites = SeqDict.empty
-    , announcementChannel = announcementChannelId
     }
 
 
@@ -555,7 +546,6 @@ addMember :
         { a
             | owner : Id UserId
             , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-            , announcementChannel : Id ChannelId
             , channels :
                 SeqDict
                     (Id ChannelId)
@@ -567,7 +557,6 @@ addMember :
             { a
                 | owner : Id UserId
                 , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-                , announcementChannel : Id ChannelId
                 , channels :
                     SeqDict
                         (Id ChannelId)
@@ -582,11 +571,16 @@ addMember time userId guild =
             | members = SeqDict.insert userId { joinedAt = time } guild.members
             , channels =
                 SeqDict.updateIfExists
-                    guild.announcementChannel
+                    (announcementChannel guild)
                     (createMessageHelper (UserJoinedMessage time userId SeqDict.empty))
                     guild.channels
         }
             |> Ok
+
+
+announcementChannel : { a | channels : SeqDict (Id ChannelId) b } -> Id ChannelId
+announcementChannel guild =
+    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Id.fromInt 0)
 
 
 allUsers : LocalState -> SeqDict (Id UserId) FrontendUser

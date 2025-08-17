@@ -210,7 +210,7 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                                         guildId
                                         (ChannelRoute
                                             (SeqDict.get guildId currentUser.lastChannelViewed
-                                                |> Maybe.withDefault guild.announcementChannel
+                                                |> Maybe.withDefault (LocalState.announcementChannel guild)
                                             )
                                             NoThread
                                             Nothing

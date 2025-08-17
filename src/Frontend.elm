@@ -628,7 +628,10 @@ routeRequest previousRoute newRoute model =
                                     Just guild ->
                                         routeReplace
                                             model3
-                                            (GuildRoute guildId (ChannelRoute guild.announcementChannel NoThread Nothing))
+                                            (GuildRoute
+                                                guildId
+                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                            )
 
                                     Nothing ->
                                         Command.none
@@ -1372,7 +1375,7 @@ updateLoaded msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute guild.announcementChannel NoThread Nothing)
+                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
                                         )
 
                                 Nothing ->
@@ -4198,7 +4201,7 @@ updateLoadedFromBackend msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute guild.announcementChannel NoThread Nothing)
+                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
                                         )
 
                                 Nothing ->
@@ -4232,7 +4235,7 @@ updateLoadedFromBackend msg model =
                                             model
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute guild.announcementChannel NoThread Nothing)
+                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
                                             )
 
                                     else
