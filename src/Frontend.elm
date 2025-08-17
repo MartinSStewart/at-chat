@@ -3814,7 +3814,10 @@ memberTyping time userId guildOrDmId local =
         GuildOrDmId_Guild guildId channelId threadRoute ->
             { local
                 | guilds =
-                    SeqDict.updateIfExists guildId (LocalState.memberIsTyping userId time channelId) local.guilds
+                    SeqDict.updateIfExists
+                        guildId
+                        (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId)
+                        local.guilds
             }
 
         GuildOrDmId_Dm otherUserId threadRoute ->
@@ -3822,15 +3825,7 @@ memberTyping time userId guildOrDmId local =
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
-                        (\dmChannel ->
-                            { dmChannel
-                                | lastTypedAt =
-                                    SeqDict.insert
-                                        userId
-                                        { time = time, messageIndex = Nothing }
-                                        dmChannel.lastTypedAt
-                            }
-                        )
+                        (LocalState.memberIsTyping userId time threadRoute)
                         local.dmChannels
             }
 

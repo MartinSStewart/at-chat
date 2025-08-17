@@ -470,19 +470,33 @@ deleteChannelFrontend channelId guild =
 memberIsTyping :
     Id UserId
     -> Time.Posix
-    -> Id ChannelId
-    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
-    -> { d | channels : SeqDict (Id ChannelId) { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
-memberIsTyping userId time channelId guild =
-    updateChannel
-        (\channel ->
+    -> ThreadRoute
+    -> { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+    -> { e | lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+memberIsTyping userId time threadRoute channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadMessageIndex
+                        (\thread ->
+                            { thread
+                                | lastTypedAt =
+                                    SeqDict.insert
+                                        userId
+                                        { time = time, messageIndex = Nothing }
+                                        thread.lastTypedAt
+                            }
+                        )
+                        channel.threads
+            }
+
+        NoThread ->
             { channel
                 | lastTypedAt =
                     SeqDict.insert userId { time = time, messageIndex = Nothing } channel.lastTypedAt
             }
-        )
-        channelId
-        guild
 
 
 memberIsEditTyping :

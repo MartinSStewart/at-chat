@@ -10,7 +10,6 @@ module Backend exposing
 
 import AiChat
 import Array
-import Array.Extra
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -1740,7 +1739,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | guilds =
                                             SeqDict.insert
                                                 guildId
-                                                (LocalState.memberIsTyping userId time channelId guild)
+                                                (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId guild)
                                                 model2.guilds
                                       }
                                     , Command.batch
@@ -1769,12 +1768,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | dmChannels =
                                             SeqDict.updateIfExists
                                                 dmChannelId
-                                                (\dmChannel ->
-                                                    { dmChannel
-                                                        | lastTypedAt =
-                                                            SeqDict.insert userId { time = time, messageIndex = Nothing } dmChannel.lastTypedAt
-                                                    }
-                                                )
+                                                (LocalState.memberIsTyping userId time threadRoute)
                                                 model2.dmChannels
                                       }
                                     , Command.batch
