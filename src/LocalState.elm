@@ -28,7 +28,6 @@ module LocalState exposing
     , deleteMessage
     , deleteMessageHelper
     , editChannel
-    , editMessage
     , editMessageHelper
     , getGuildAndChannel
     , getMessages
@@ -652,44 +651,35 @@ updateChannel updateFunc channelId guild =
     { guild | channels = SeqDict.updateIfExists channelId updateFunc guild.channels }
 
 
-editMessage :
-    Id UserId
-    -> Time.Posix
+editMessageHelper :
+    Time.Posix
+    -> Id UserId
     -> Nonempty RichText
     -> SeqDict (Id FileId) FileData
-    -> Id ChannelId
     -> Int
-    ->
-        { a
-            | channels :
-                SeqDict
-                    (Id ChannelId)
-                    { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-        }
-    ->
-        Result
-            ()
-            { a
-                | channels :
-                    SeqDict
-                        (Id ChannelId)
-                        { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-            }
-editMessage editedBy time newContent attachedFiles channelId messageIndex guild =
-    case SeqDict.get channelId guild.channels of
-        Just channel ->
-            case editMessageHelper time editedBy newContent attachedFiles messageIndex channel of
-                Ok channel2 ->
-                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+    -> ThreadRoute
+    -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+    -> Result () { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+editMessageHelper time editedBy newContent attachedFiles messageIndex threadRoute channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editMessageHelper2 time editedBy newContent attachedFiles messageIndex thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
 
-                _ ->
+                        Err () ->
+                            Err ()
+
+                Nothing ->
                     Err ()
 
-        Nothing ->
-            Err ()
+        NoThread ->
+            editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel
 
 
-editMessageHelper :
+editMessageHelper2 :
     Time.Posix
     -> Id UserId
     -> Nonempty RichText
@@ -697,7 +687,7 @@ editMessageHelper :
     -> Int
     -> { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
     -> Result () { b | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-editMessageHelper time editedBy newContent attachedFiles messageIndex channel =
+editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
     case Array.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy then

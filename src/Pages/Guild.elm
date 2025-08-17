@@ -2361,7 +2361,13 @@ threadStarterIndicator allUsers messageIndex thread =
             [ Ui.html Icons.hashtag
             , Ui.el
                 [ Ui.Font.color MyUi.font3 ]
-                (Ui.text (String.fromInt (Array.length thread.messages) ++ " messages"))
+                (case Array.length thread.messages of
+                    1 ->
+                        Ui.text "1 message"
+
+                    count ->
+                        Ui.text (String.fromInt count ++ " messages")
+                )
             ]
         , case Array.Extra.last thread.messages of
             Just last ->

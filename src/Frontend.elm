@@ -3935,9 +3935,19 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                 | guilds =
                     SeqDict.updateIfExists
                         guildId
-                        (\guild ->
-                            LocalState.editMessage userId time newContent attachedFiles channelId messageIndex guild
-                                |> Result.withDefault guild
+                        (LocalState.updateChannel
+                            (\channel ->
+                                LocalState.editMessageHelper
+                                    time
+                                    userId
+                                    newContent
+                                    attachedFiles
+                                    messageIndex
+                                    threadRoute
+                                    channel
+                                    |> Result.withDefault channel
+                            )
+                            channelId
                         )
                         local.guilds
             }
@@ -3948,7 +3958,14 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.editMessageHelper time userId newContent attachedFiles messageIndex dmChannel
+                            LocalState.editMessageHelper
+                                time
+                                userId
+                                newContent
+                                attachedFiles
+                                messageIndex
+                                threadRoute
+                                dmChannel
                                 |> Result.withDefault dmChannel
                         )
                         local.dmChannels

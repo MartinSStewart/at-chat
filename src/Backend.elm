@@ -659,17 +659,23 @@ handleDiscordEditMessage edit model =
                                     RichText.fromDiscord model.discordUsers edit.content
                             in
                             case
-                                LocalState.editMessage
-                                    userId
+                                LocalState.editMessageHelper
                                     edit.timestamp
+                                    userId
                                     richText
                                     SeqDict.empty
-                                    channelId
                                     messageIndex
-                                    guild
+                                    NoThread
+                                    channel
                             of
-                                Ok guild2 ->
-                                    ( { model | guilds = SeqDict.insert guildId guild2 model.guilds }
+                                Ok channel2 ->
+                                    ( { model
+                                        | guilds =
+                                            SeqDict.updateIfExists
+                                                guildId
+                                                (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                model.guilds
+                                      }
                                     , broadcastToGuild
                                         guildId
                                         (Server_SendEditMessage
@@ -1932,54 +1938,60 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             validateAttachedFiles model2.files attachedFiles
                     in
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId _ ->
+                        GuildOrDmId_Guild guildId channelId threadRoute ->
                             asGuildMember
                                 model2
                                 sessionId
                                 guildId
                                 (\userId _ guild ->
-                                    case
-                                        LocalState.editMessage
-                                            userId
-                                            time
-                                            newContent
-                                            attachedFiles2
-                                            channelId
-                                            messageIndex
-                                            guild
-                                    of
-                                        Ok guild2 ->
-                                            ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
-                                            , Command.batch
-                                                [ Local_SendEditMessage
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            case
+                                                LocalState.editMessageHelper
                                                     time
-                                                    guildOrDmId
-                                                    messageIndex
+                                                    userId
                                                     newContent
                                                     attachedFiles2
-                                                    |> LocalChangeResponse changeId
-                                                    |> Lamdera.sendToFrontend clientId
-                                                , broadcastToGuildExcludingOne
-                                                    clientId
-                                                    guildId
-                                                    (Server_SendEditMessage
-                                                        time
-                                                        userId
-                                                        guildOrDmId
-                                                        messageIndex
-                                                        newContent
-                                                        attachedFiles2
-                                                        |> ServerChange
-                                                    )
-                                                    model2
-                                                , case SeqDict.get channelId guild2.channels of
-                                                    Just channel ->
-                                                        case
-                                                            ( channel.linkedId
-                                                            , OneToOne.first messageIndex channel.linkedMessageIds
+                                                    messageIndex
+                                                    threadRoute
+                                                    channel
+                                            of
+                                                Ok channel2 ->
+                                                    ( { model2
+                                                        | guilds =
+                                                            SeqDict.updateIfExists
+                                                                guildId
+                                                                (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                                model.guilds
+                                                      }
+                                                    , Command.batch
+                                                        [ Local_SendEditMessage
+                                                            time
+                                                            guildOrDmId
+                                                            messageIndex
+                                                            newContent
+                                                            attachedFiles2
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , broadcastToGuildExcludingOne
+                                                            clientId
+                                                            guildId
+                                                            (Server_SendEditMessage
+                                                                time
+                                                                userId
+                                                                guildOrDmId
+                                                                messageIndex
+                                                                newContent
+                                                                attachedFiles2
+                                                                |> ServerChange
+                                                            )
+                                                            model2
+                                                        , case
+                                                            ( channel2.linkedId
+                                                            , OneToOne.first messageIndex channel2.linkedMessageIds
                                                             , model2.botToken
                                                             )
-                                                        of
+                                                          of
                                                             ( Just discordChannelId, Just discordMessageId, Just botToken ) ->
                                                                 Discord.editMessage
                                                                     (botTokenToAuth botToken)
@@ -1995,13 +2007,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                             _ ->
                                                                 Command.none
+                                                        ]
+                                                    )
 
-                                                    Nothing ->
-                                                        Command.none
-                                                ]
-                                            )
+                                                Err () ->
+                                                    ( model2
+                                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                                    )
 
-                                        Err () ->
+                                        Nothing ->
                                             ( model2
                                             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                             )
@@ -2026,6 +2040,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     newContent
                                                     attachedFiles2
                                                     messageIndex
+                                                    threadRoute
                                                     dmChannel
                                             of
                                                 Ok dmChannel2 ->
