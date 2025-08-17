@@ -2726,6 +2726,17 @@ updateLoaded msg model =
                         )
                         model
 
+                MessageView.MessageView_PressedViewThreadLink messageIndex ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId NoThread ->
+                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
+
+                        GuildOrDmId_Dm otherUserId NoThread ->
+                            routePush model (DmRoute otherUserId (ViewThread messageIndex) Nothing)
+
+                        _ ->
+                            ( model, Command.none )
+
 
 pressedReply : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedReply guildOrDmId messageIndex model =

@@ -40,12 +40,7 @@ users =
 
 fromDiscordHelper : String -> List RichText
 fromDiscordHelper text =
-    case String.Nonempty.fromString text of
-        Just nonempty ->
-            RichText.fromDiscord users nonempty |> List.Nonempty.toList
-
-        Nothing ->
-            Debug.todo "Empty string"
+    RichText.fromDiscord users text |> List.Nonempty.toList
 
 
 basicFormattingTests : Test

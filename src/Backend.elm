@@ -1739,7 +1739,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | guilds =
                                             SeqDict.insert
                                                 guildId
-                                                (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId guild)
+                                                (LocalState.updateChannel
+                                                    (LocalState.memberIsTyping userId time threadRoute)
+                                                    channelId
+                                                    guild
+                                                )
                                                 model2.guilds
                                       }
                                     , Command.batch

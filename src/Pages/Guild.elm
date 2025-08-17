@@ -1,5 +1,7 @@
 module Pages.Guild exposing
-    ( channelHeaderHeight
+    ( HighlightMessage(..)
+    , IsHovered(..)
+    , channelHeaderHeight
     , channelTextInputId
     , conversationContainerId
     , dropdownButtonId
@@ -8,6 +10,8 @@ module Pages.Guild exposing
     , messageHtmlId
     , messageHtmlIdPrefix
     , messageInputConfig
+    , messageViewDecode
+    , messageViewEncode
     , newGuildFormInit
     , repliedToUserId
     )
@@ -17,7 +21,7 @@ import Bitwise
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (LastTypedAt, Thread)
+import DmChannel exposing (DmChannel, LastTypedAt, Thread)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -358,15 +362,21 @@ dmChannelView : Id UserId -> ThreadRoute -> Maybe Int -> LoggedIn2 -> LocalState
 dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model =
     case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
-            SeqDict.get otherUserId local.dmChannels
-                |> Maybe.withDefault DmChannel.init
-                |> conversationView
-                    (GuildOrDmId_Dm otherUserId threadRoute)
-                    maybeMessageHighlight
-                    loggedIn
-                    model
-                    local
-                    (PersonName.toString otherUser.name)
+            let
+                dmChannel : DmChannel
+                dmChannel =
+                    SeqDict.get otherUserId local.dmChannels
+                        |> Maybe.withDefault DmChannel.init
+            in
+            conversationView
+                (GuildOrDmId_Dm otherUserId threadRoute)
+                maybeMessageHighlight
+                loggedIn
+                model
+                local
+                (PersonName.toString otherUser.name)
+                dmChannel.threads
+                dmChannel
 
         Nothing ->
             Ui.el
@@ -651,6 +661,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                     ++ " / "
                                     ++ threadPreviewText threadMessageIndex channel local.localUser
                                 )
+                                SeqDict.empty
                                 (SeqDict.get threadMessageIndex channel.threads
                                     |> Maybe.withDefault DmChannel.threadInit
                                 )
@@ -663,6 +674,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 model
                                 local
                                 (ChannelName.toString channel.name)
+                                channel.threads
                                 channel
 
                 Nothing ->
@@ -869,12 +881,13 @@ messageHover guildOrDmId messageIndex2 loggedIn =
 conversationViewHelper :
     GuildOrDmId
     -> Maybe Int
+    -> SeqDict Int Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local model =
+conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedIn local model =
     let
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -922,6 +935,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
     Array.foldr
         (\message ( index, list ) ->
             let
+                messageHover2 : IsHovered
                 messageHover2 =
                     messageHover guildOrDmId index loggedIn
 
@@ -1019,6 +1033,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     otherUserIsEditing
                                     local.localUser
                                     maybeRepliedTo
+                                    (SeqDict.get index threads)
                                     index
                                     message
                                     |> Ui.map (MessageViewMsg guildOrDmId)
@@ -1029,14 +1044,15 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                     index
                                     message
                                     maybeRepliedTo
+                                    (SeqDict.get index threads)
                                     revealedSpoilers
                                     editing
                                     loggedIn.pingUser
                                     local
 
                         Nothing ->
-                            case messageHover2 of
-                                IsNotHovered ->
+                            case SeqDict.get index threads of
+                                Nothing ->
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
@@ -1047,29 +1063,22 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 otherUserIsEditing
                                                 local.localUser
                                                 maybeRepliedTo
+                                                Nothing
                                                 index
                                                 message
                                                 |> Ui.map (MessageViewMsg guildOrDmId)
 
                                         Nothing ->
-                                            Ui.Lazy.lazy6
-                                                messageViewNotHovered
-                                                ((if otherUserIsEditing then
-                                                    1
-
-                                                  else
-                                                    0
-                                                 )
-                                                    + Bitwise.shiftLeftBy 1 containerWidth
-                                                )
+                                            Ui.Lazy.lazy5
+                                                messageViewNotThreadStarter
+                                                (messageViewEncode messageHover2 containerWidth otherUserIsEditing highlight)
                                                 revealedSpoilers
-                                                highlight
                                                 local.localUser
                                                 index
                                                 message
                                                 |> Ui.map (MessageViewMsg guildOrDmId)
 
-                                _ ->
+                                Just thread ->
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
@@ -1080,25 +1089,19 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
                                                 otherUserIsEditing
                                                 local.localUser
                                                 maybeRepliedTo
+                                                (Just thread)
                                                 index
                                                 message
                                                 |> Ui.map (MessageViewMsg guildOrDmId)
 
                                         Nothing ->
                                             Ui.Lazy.lazy6
-                                                messageViewHovered
-                                                ((if otherUserIsEditing then
-                                                    1
-
-                                                  else
-                                                    0
-                                                 )
-                                                    + Bitwise.shiftLeftBy 1 containerWidth
-                                                )
+                                                messageViewThreadStarter
+                                                (messageViewEncode messageHover2 containerWidth otherUserIsEditing highlight)
                                                 revealedSpoilers
-                                                highlight
                                                 local.localUser
                                                 index
+                                                thread
                                                 message
                                                 |> Ui.map (MessageViewMsg guildOrDmId)
                    )
@@ -1108,6 +1111,74 @@ conversationViewHelper guildOrDmId maybeMessageHighlight channel loggedIn local 
         ( Array.length channel.messages - 1, [] )
         channel.messages
         |> Tuple.second
+
+
+messageViewEncode : IsHovered -> Int -> Bool -> HighlightMessage -> Int
+messageViewEncode isHovered containerWidth otherUserIsEditing highlight =
+    (if otherUserIsEditing then
+        1
+
+     else
+        0
+    )
+        + Bitwise.shiftLeftBy
+            1
+            (case isHovered of
+                IsNotHovered ->
+                    0
+
+                IsHovered ->
+                    1
+
+                IsHoveredButNoMenu ->
+                    2
+            )
+        + Bitwise.shiftLeftBy
+            3
+            (case highlight of
+                NoHighlight ->
+                    0
+
+                ReplyToHighlight ->
+                    1
+
+                MentionHighlight ->
+                    2
+
+                UrlHighlight ->
+                    3
+            )
+        + Bitwise.shiftLeftBy 5 containerWidth
+
+
+messageViewDecode : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered }
+messageViewDecode value =
+    { isEditing = Bitwise.and 0x01 value == 1
+    , isHovered =
+        case Bitwise.shiftRightBy 1 value |> Bitwise.and 0x03 of
+            1 ->
+                IsHovered
+
+            2 ->
+                IsHoveredButNoMenu
+
+            _ ->
+                IsNotHovered
+    , highlight =
+        case Bitwise.shiftRightBy 3 value |> Bitwise.and 0x03 of
+            1 ->
+                ReplyToHighlight
+
+            2 ->
+                MentionHighlight
+
+            3 ->
+                UrlHighlight
+
+            _ ->
+                NoHighlight
+    , containerWidth = Bitwise.shiftRightBy 5 value
+    }
 
 
 channelHeader : Bool -> Element FrontendMsg -> Element FrontendMsg
@@ -1202,9 +1273,10 @@ conversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
+    -> SeqDict Int Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> Element FrontendMsg
-conversationView guildOrDmId maybeMessageHighlight loggedIn model local name channel =
+conversationView guildOrDmId maybeMessageHighlight loggedIn model local name threads channel =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -1297,6 +1369,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                                         threadMessageIndex
                                                         message
                                                         Nothing
+                                                        Nothing
                                                         SeqDict.empty
                                                         editMessage
                                                         loggedIn.pingUser
@@ -1311,6 +1384,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                                         False
                                                         local.localUser
                                                         Nothing
+                                                        Nothing
                                                         threadMessageIndex
                                                         message
                                                         |> Ui.map (MessageViewMsg guildOrDmId2)
@@ -1323,6 +1397,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                                                     (messageHover guildOrDmId2 threadMessageIndex loggedIn)
                                                     False
                                                     local.localUser
+                                                    Nothing
                                                     Nothing
                                                     threadMessageIndex
                                                     message
@@ -1363,6 +1438,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name cha
                     :: conversationViewHelper
                         guildOrDmId
                         maybeMessageHighlight
+                        threads
                         channel
                         loggedIn
                         local
@@ -1586,12 +1662,13 @@ messageEditingView :
     -> Int
     -> Message
     -> Maybe ( Int, Message )
+    -> Maybe Thread
     -> SeqDict Int (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoilers editing pingUser local =
+messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1666,6 +1743,14 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo revealedSpoil
 
                     Nothing ->
                         Ui.none
+                , case maybeThread of
+                    Just thread ->
+                        threadStarterIndicator messageIndex thread
+                            |> Ui.el [ Ui.paddingXY 8 0 ]
+                            |> Ui.map (MessageViewMsg guildOrDmId)
+
+                    Nothing ->
+                        Ui.none
                 ]
 
         UserJoinedMessage _ _ _ ->
@@ -1681,21 +1766,17 @@ type IsHovered
     | IsHoveredButNoMenu
 
 
-messageViewNotHovered :
+messageViewNotThreadStarter :
     Int
     -> SeqDict Int (NonemptySet Int)
-    -> HighlightMessage
     -> LocalUser
     -> Int
     -> Message
     -> Element MessageViewMsg
-messageViewNotHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
+messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
-        isEditing =
-            Bitwise.and 0x01 isEditingAndContainerWidth == 1
-
-        containerWidth =
-            Bitwise.shiftRightBy 1 isEditingAndContainerWidth
+        { containerWidth, isEditing, highlight } =
+            messageViewDecode data
     in
     messageView
         containerWidth
@@ -1705,25 +1786,23 @@ messageViewNotHovered isEditingAndContainerWidth revealedSpoilers highlight loca
         isEditing
         localUser
         Nothing
+        Nothing
         messageIndex
         message
 
 
-messageViewHovered :
+messageViewThreadStarter :
     Int
     -> SeqDict Int (NonemptySet Int)
-    -> HighlightMessage
     -> LocalUser
     -> Int
+    -> Thread
     -> Message
     -> Element MessageViewMsg
-messageViewHovered isEditingAndContainerWidth revealedSpoilers highlight localUser messageIndex message =
+messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
-        isEditing =
-            Bitwise.and 0x01 isEditingAndContainerWidth == 1
-
-        containerWidth =
-            Bitwise.shiftRightBy 1 isEditingAndContainerWidth
+        { containerWidth, isEditing, highlight } =
+            messageViewDecode data
     in
     messageView
         containerWidth
@@ -1733,6 +1812,7 @@ messageViewHovered isEditingAndContainerWidth revealedSpoilers highlight localUs
         isEditing
         localUser
         Nothing
+        (Just thread)
         messageIndex
         message
 
@@ -1757,10 +1837,11 @@ messageView :
     -> Bool
     -> LocalUser
     -> Maybe ( Int, Message )
+    -> Maybe Thread
     -> Int
     -> Message
     -> Element MessageViewMsg
-messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
+messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -1786,6 +1867,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                 (localUser.userId == message2.createdBy)
                 localUser.userId
                 message2.reactions
+                maybeThreadStarter
                 isHovered
                 (Ui.row
                     []
@@ -1873,6 +1955,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                 False
                 localUser.userId
                 reactions
+                maybeThreadStarter
                 isHovered
                 (Ui.row
                     []
@@ -2147,10 +2230,11 @@ messageContainer :
     -> Bool
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
+    -> Maybe Thread
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
+messageContainer highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -2237,7 +2321,30 @@ messageContainer highlight messageIndex canEdit currentUserId reactions isHovere
                                 [ Ui.background MyUi.hoverAndReplyToColor ]
                )
         )
-        (messageContent :: Maybe.Extra.toList maybeReactions)
+        (messageContent
+            :: Maybe.Extra.toList maybeReactions
+            ++ (case maybeThread of
+                    Just thread ->
+                        [ threadStarterIndicator messageIndex thread
+                        ]
+
+                    Nothing ->
+                        []
+               )
+        )
+
+
+threadStarterIndicator : Int -> Thread -> Element MessageViewMsg
+threadStarterIndicator messageIndex thread =
+    Ui.el
+        [ Ui.paddingXY 8 4
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.background MyUi.background1
+        , Ui.width Ui.shrink
+        , Ui.Input.button (MessageView_PressedViewThreadLink messageIndex)
+        ]
+        (Ui.text ("Messages " ++ String.fromInt (Array.length thread.messages)))
 
 
 channelColumnNotMobile :

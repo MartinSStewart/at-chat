@@ -29,6 +29,7 @@ type MessageViewMsg
     | MessageViewMsg_PressedEditMessage Int
     | MessageViewMsg_PressedReply Int
     | MessageViewMsg_PressedShowFullMenu Int (Coord CssPixels)
+    | MessageView_PressedViewThreadLink Int
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -71,6 +72,9 @@ isPressMsg msg =
             True
 
         MessageViewMsg_PressedShowFullMenu int coord ->
+            True
+
+        MessageView_PressedViewThreadLink int ->
             True
 
 
