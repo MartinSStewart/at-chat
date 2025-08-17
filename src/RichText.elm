@@ -1190,19 +1190,24 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> NonemptyString -> Nonempty RichText
-fromDiscord users string =
-    case Parser.run (discordParser users []) (String.Nonempty.toString string) of
+fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> String -> Nonempty RichText
+fromDiscord users text =
+    let
+        textOrEmpty =
+            String.Nonempty.fromString text
+                |> Maybe.withDefault (NonemptyString '<' "empty>")
+    in
+    case Parser.run (discordParser users []) text of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
                     normalize nonempty
 
                 Nothing ->
-                    Nonempty (normalTextFromNonempty string) []
+                    Nonempty (normalTextFromNonempty textOrEmpty) []
 
         Err _ ->
-            Nonempty (normalTextFromNonempty string) []
+            Nonempty (normalTextFromNonempty textOrEmpty) []
 
 
 type DiscordModifiers
@@ -1247,6 +1252,8 @@ discordModifierToSymbol modifier =
             NonemptyString '|' "|"
 
 
+{-| <https://discord.com/developers/docs/reference#message-formatting>
+-}
 discordParser : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List DiscordModifiers -> Parser (Array RichText)
 discordParser users modifiers =
     Parser.loop
@@ -1269,17 +1276,21 @@ discordParser users modifiers =
 
                                     Nothing ->
                                         Loop
-                                            { current = Array.push ("<@!" ++ digits ++ ">") state.current
+                                            { current = Array.push ("<@" ++ digits ++ ">") state.current
                                             , rest = state.rest
                                             }
 
                             Nothing ->
                                 Loop
-                                    { current = Array.push ("<@!" ++ digits ++ ">") state.current
+                                    { current = Array.push ("<@" ++ digits ++ ">") state.current
                                     , rest = state.rest
                                     }
                     )
-                    |. Parser.symbol "<@!"
+                    |. Parser.symbol "<@"
+                    |. Parser.oneOf
+                        [ Parser.symbol "!"
+                        , Parser.succeed ()
+                        ]
                     |= (Parser.chompWhile Char.isDigit |> Parser.getChompedString)
                     |. Parser.symbol ">"
                     |> Parser.backtrackable

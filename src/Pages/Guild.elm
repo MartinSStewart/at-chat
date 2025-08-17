@@ -2482,9 +2482,10 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
                                         (GuildOrDmId_Guild guildId channelId threadRoute)
                                         channel
                                   )
-                                    |> GuildIcon.notificationView MyUi.background2
-                                , Ui.move { x = 4, y = 0, z = 0 }
+                                    |> GuildIcon.notificationView 4 2 MyUi.background2
+                                , Ui.move { x = 0, y = 0, z = 0 }
                                 , Ui.Font.color MyUi.font3
+                                , Ui.width Ui.shrink
                                 ]
                                 (Ui.html
                                     (if SeqDict.size threads == 1 then
@@ -2552,10 +2553,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         , MyUi.noShrinking
         ]
         [ Ui.el
-            [ Ui.Input.button
-                (PressedLink
-                    (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
-                )
+            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId NoThread Nothing)))
             , Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.paddingWith
@@ -2580,7 +2578,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                         (GuildOrDmId_Guild guildId channelId NoThread)
                         channel
                   )
-                    |> GuildIcon.notificationView MyUi.background2
+                    |> GuildIcon.notificationView 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
                 , Ui.move { x = 4, y = 0, z = 0 }
                 , Ui.centerY

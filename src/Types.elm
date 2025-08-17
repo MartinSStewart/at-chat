@@ -444,6 +444,7 @@ type BackendMsg
                   , members : List Discord.GuildMember
                   , channels : List ( Discord.Channel2, List Discord.Message )
                   , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
+                  , threads : List ( Discord.Channel, List Discord.Message )
                   }
                 )
             )
