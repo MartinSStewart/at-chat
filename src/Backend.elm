@@ -2109,7 +2109,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_MemberEditTyping _ guildOrDmId messageIndex ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId _ ->
+                        GuildOrDmId_Guild guildId channelId threadRoute ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -2120,6 +2120,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             userId
                                             time
                                             channelId
+                                            threadRoute
                                             messageIndex
                                             guild
                                     of
@@ -2157,7 +2158,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
-                                            case LocalState.memberIsEditTypingHelper time userId messageIndex dmChannel of
+                                            case LocalState.memberIsEditTypingHelper time userId messageIndex threadRoute dmChannel of
                                                 Ok dmChannel2 ->
                                                     ( { model2
                                                         | dmChannels =
@@ -2214,7 +2215,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId _ ->
+                        GuildOrDmId_Guild guildId channelId threadRoute ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -2224,6 +2225,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         LocalState.deleteMessage
                                             userId
                                             channelId
+                                            threadRoute
                                             messageIndex
                                             guild
                                     of
@@ -2282,7 +2284,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
-                                            case LocalState.deleteMessageHelper userId messageIndex dmChannel of
+                                            case LocalState.deleteMessageHelper userId messageIndex threadRoute dmChannel of
                                                 Ok dmChannel2 ->
                                                     ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
                                                     , Command.batch

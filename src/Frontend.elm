@@ -3900,7 +3900,7 @@ memberEditTyping time userId guildOrDmId messageIndex local =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            LocalState.memberIsEditTyping userId time channelId messageIndex guild
+                            LocalState.memberIsEditTyping userId time channelId threadRoute messageIndex guild
                                 |> Result.withDefault guild
                         )
                         local.guilds
@@ -3912,7 +3912,7 @@ memberEditTyping time userId guildOrDmId messageIndex local =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.memberIsEditTypingHelper time userId messageIndex dmChannel
+                            LocalState.memberIsEditTypingHelper time userId messageIndex threadRoute dmChannel
                                 |> Result.withDefault dmChannel
                         )
                         local.dmChannels
@@ -3982,6 +3982,7 @@ deleteMessage userId guildOrDmId messageIndex local =
                         LocalState.deleteMessage
                             userId
                             channelId
+                            threadRoute
                             messageIndex
                             guild
                     of
@@ -4006,6 +4007,7 @@ deleteMessage userId guildOrDmId messageIndex local =
                             LocalState.deleteMessageHelper
                                 userId
                                 messageIndex
+                                threadRoute
                                 dmChannel
                                 |> Result.withDefault dmChannel
                         )

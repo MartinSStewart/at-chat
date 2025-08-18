@@ -502,13 +502,36 @@ memberIsEditTyping :
     Id UserId
     -> Time.Posix
     -> Id ChannelId
+    -> ThreadRoute
     -> Int
-    -> { d | channels : SeqDict (Id ChannelId) { e | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
-    -> Result () { d | channels : SeqDict (Id ChannelId) { e | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt } }
-memberIsEditTyping userId time channelId messageIndex guild =
+    ->
+        { d
+            | channels :
+                SeqDict
+                    (Id ChannelId)
+                    { e
+                        | messages : Array Message
+                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                        , threads : SeqDict Int Thread
+                    }
+        }
+    ->
+        Result
+            ()
+            { d
+                | channels :
+                    SeqDict
+                        (Id ChannelId)
+                        { e
+                            | messages : Array Message
+                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                            , threads : SeqDict Int Thread
+                        }
+            }
+memberIsEditTyping userId time channelId threadRoute messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case memberIsEditTypingHelper time userId messageIndex channel of
+            case memberIsEditTypingHelper time userId messageIndex threadRoute channel of
                 Ok channel2 ->
                     Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
@@ -523,23 +546,56 @@ memberIsEditTypingHelper :
     Time.Posix
     -> Id UserId
     -> Int
-    -> { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-    -> Result () { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
-memberIsEditTypingHelper time userId messageIndex channel =
-    case Array.get messageIndex channel.messages of
-        Just (UserTextMessage data) ->
-            if data.createdBy == userId then
-                { channel
-                    | lastTypedAt =
-                        SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
-                }
-                    |> Ok
+    -> ThreadRoute
+    -> { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+    -> Result () { a | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
+memberIsEditTypingHelper time userId messageIndex threadRoute channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case Array.get messageIndex thread.messages of
+                        Just (UserTextMessage data) ->
+                            if data.createdBy == userId then
+                                { channel
+                                    | threads =
+                                        SeqDict.insert
+                                            threadMessageIndex
+                                            { thread
+                                                | lastTypedAt =
+                                                    SeqDict.insert
+                                                        userId
+                                                        { time = time, messageIndex = Just messageIndex }
+                                                        thread.lastTypedAt
+                                            }
+                                            channel.threads
+                                }
+                                    |> Ok
 
-            else
-                Err ()
+                            else
+                                Err ()
 
-        _ ->
-            Err ()
+                        _ ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThread ->
+            case Array.get messageIndex channel.messages of
+                Just (UserTextMessage data) ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                _ ->
+                    Err ()
 
 
 addInvite :
@@ -782,13 +838,14 @@ markAllChannelsAsViewed guildId guild user =
 deleteMessage :
     Id UserId
     -> Id ChannelId
+    -> ThreadRoute
     -> Int
-    -> { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message } }
-    -> Result () { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message } }
-deleteMessage userId channelId messageIndex guild =
+    -> { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message, threads : SeqDict Int Thread } }
+    -> Result () { a | channels : SeqDict (Id ChannelId) { c | messages : Array Message, threads : SeqDict Int Thread } }
+deleteMessage userId channelId threadRoute messageIndex guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
-            case deleteMessageHelper userId messageIndex channel of
+            case deleteMessageHelper userId messageIndex threadRoute channel of
                 Ok channel2 ->
                     Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
@@ -802,19 +859,48 @@ deleteMessage userId channelId messageIndex guild =
 deleteMessageHelper :
     Id UserId
     -> Int
-    -> { a | messages : Array Message }
-    -> Result () { a | messages : Array Message }
-deleteMessageHelper userId messageIndex channel =
-    case Array.get messageIndex channel.messages of
-        Just (UserTextMessage message) ->
-            if message.createdBy == userId then
-                Ok { channel | messages = Array.set messageIndex DeletedMessage channel.messages }
+    -> ThreadRoute
+    -> { a | messages : Array Message, threads : SeqDict Int Thread }
+    -> Result () { a | messages : Array Message, threads : SeqDict Int Thread }
+deleteMessageHelper userId messageIndex threadRoute channel =
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case Array.get messageIndex thread.messages of
+                        Just (UserTextMessage message) ->
+                            if message.createdBy == userId then
+                                { channel
+                                    | threads =
+                                        SeqDict.insert
+                                            threadMessageIndex
+                                            { thread
+                                                | messages = Array.set messageIndex DeletedMessage thread.messages
+                                            }
+                                            channel.threads
+                                }
+                                    |> Ok
 
-            else
-                Err ()
+                            else
+                                Err ()
 
-        _ ->
-            Err ()
+                        _ ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThread ->
+            case Array.get messageIndex channel.messages of
+                Just (UserTextMessage message) ->
+                    if message.createdBy == userId then
+                        Ok { channel | messages = Array.set messageIndex DeletedMessage channel.messages }
+
+                    else
+                        Err ()
+
+                _ ->
+                    Err ()
 
 
 getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
