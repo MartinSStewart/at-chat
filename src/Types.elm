@@ -449,11 +449,11 @@ type BackendMsg
                 )
             )
         )
-    | SentGuildMessageToDiscord MessageId (Result Discord.HttpError Discord.Message)
+    | SentGuildMessageToDiscord MessageId ThreadRoute (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
-    | SentDirectMessageToDiscord DmChannelId Int (Result Discord.HttpError Discord.Message)
+    | SentDirectMessageToDiscord DmChannelId ThreadRoute Int (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
 
 

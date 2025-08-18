@@ -57,6 +57,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import UInt64
 import Unsafe
 import User exposing (BackendUser, EmailStatus(..))
 
@@ -513,7 +514,16 @@ update msg model =
                                         )
                                 )
                         )
-                        guilds
+                        (if Env.isProduction then
+                            guilds
+
+                         else
+                            List.filter
+                                (\guild ->
+                                    Just guild.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "654415002224295940")
+                                )
+                                guilds
+                        )
                         |> Task.sequence
                         |> Task.attempt (GotDiscordGuilds time botUser.id)
                     )
@@ -525,7 +535,7 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        SentGuildMessageToDiscord messageId result ->
+        SentGuildMessageToDiscord messageId threadRoute result ->
             case result of
                 Ok message ->
                     ( { model
@@ -538,13 +548,29 @@ update msg model =
                                             SeqDict.updateIfExists
                                                 messageId.channelId
                                                 (\channel ->
-                                                    { channel
-                                                        | linkedMessageIds =
-                                                            OneToOne.insert
-                                                                message.id
-                                                                messageId.messageIndex
-                                                                channel.linkedMessageIds
-                                                    }
+                                                    case threadRoute of
+                                                        ViewThread threadMessageIndex ->
+                                                            { channel
+                                                                | threads =
+                                                                    SeqDict.updateIfExists
+                                                                        threadMessageIndex
+                                                                        (\thread ->
+                                                                            { thread
+                                                                                | linkedMessageIds =
+                                                                                    OneToOne.insert message.id messageId.messageIndex thread.linkedMessageIds
+                                                                            }
+                                                                        )
+                                                                        channel.threads
+                                                            }
+
+                                                        NoThread ->
+                                                            { channel
+                                                                | linkedMessageIds =
+                                                                    OneToOne.insert
+                                                                        message.id
+                                                                        messageId.messageIndex
+                                                                        channel.linkedMessageIds
+                                                            }
                                                 )
                                                 guild.channels
                                     }
@@ -566,7 +592,7 @@ update msg model =
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
-        SentDirectMessageToDiscord dmChannelId messageIndex result ->
+        SentDirectMessageToDiscord dmChannelId threadRoute messageIndex result ->
             case result of
                 Ok message ->
                     ( { model
@@ -574,10 +600,26 @@ update msg model =
                             SeqDict.updateIfExists
                                 dmChannelId
                                 (\dmChannel ->
-                                    { dmChannel
-                                        | linkedMessageIds =
-                                            OneToOne.insert message.id messageIndex dmChannel.linkedMessageIds
-                                    }
+                                    case threadRoute of
+                                        ViewThread threadMessageIndex ->
+                                            { dmChannel
+                                                | threads =
+                                                    SeqDict.updateIfExists
+                                                        threadMessageIndex
+                                                        (\thread ->
+                                                            { thread
+                                                                | linkedMessageIds =
+                                                                    OneToOne.insert message.id messageIndex thread.linkedMessageIds
+                                                            }
+                                                        )
+                                                        dmChannel.threads
+                                            }
+
+                                        NoThread ->
+                                            { dmChannel
+                                                | linkedMessageIds =
+                                                    OneToOne.insert message.id messageIndex dmChannel.linkedMessageIds
+                                            }
                                 )
                                 model.dmChannels
                       }
@@ -889,6 +931,7 @@ addDiscordMessages threadRoute messages model channel =
             case OneToOne.second message.author.id model.discordUsers of
                 Just userId ->
                     handleDiscordCreateGuildMessageHelper
+                        (Just message.id)
                         threadRoute
                         (discordReplyTo message channel2)
                         userId
@@ -916,10 +959,10 @@ addDiscordThreads threads model channel =
                     case
                         OneToOne.second
                             (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64)
-                            channel.linkedMessageIds
+                            channel2.linkedMessageIds
                     of
                         Just messageIndex ->
-                            { channel
+                            { channel2
                                 | threads =
                                     SeqDict.insert
                                         messageIndex
@@ -928,7 +971,7 @@ addDiscordThreads threads model channel =
                                         , linkedId = Just thread.id
                                         , linkedMessageIds = OneToOne.empty
                                         }
-                                        channel.threads
+                                        channel2.threads
                             }
                                 |> addDiscordMessages (ViewThread messageIndex) (head :: rest) model
 
@@ -1104,6 +1147,7 @@ handleDiscordCreateMessage message model =
                         SeqDict.insert
                             dmChannelId
                             (LocalState.createMessage
+                                (Just message.id)
                                 (UserTextMessage
                                     { createdAt = message.timestamp
                                     , createdBy = userId
@@ -1124,12 +1168,7 @@ handleDiscordCreateMessage message model =
                                     }
                                 )
                                 NoThread
-                                { dmChannel
-                                    | linkedMessageIds =
-                                        OneToOne.insert message.id
-                                            (Array.length dmChannel.messages)
-                                            dmChannel.linkedMessageIds
-                                }
+                                dmChannel
                             )
                             model.dmChannels
                     , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
@@ -1209,6 +1248,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                 SeqDict.insert
                                     channelId
                                     (handleDiscordCreateGuildMessageHelper
+                                        (Just message.id)
                                         NoThread
                                         replyTo
                                         userId
@@ -1252,15 +1292,17 @@ discordReplyTo message channel =
 
 
 handleDiscordCreateGuildMessageHelper :
-    ThreadRoute
+    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    -> ThreadRoute
     -> Maybe Int
     -> Id UserId
     -> Nonempty RichText
     -> Discord.Message
     -> BackendChannel
     -> BackendChannel
-handleDiscordCreateGuildMessageHelper threadRoute replyTo userId richText message channel =
+handleDiscordCreateGuildMessageHelper maybeDiscordMessageId threadRoute replyTo userId richText message channel =
     LocalState.createMessage
+        maybeDiscordMessageId
         (UserTextMessage
             { createdAt = message.timestamp
             , createdBy = userId
@@ -1272,10 +1314,7 @@ handleDiscordCreateGuildMessageHelper threadRoute replyTo userId richText messag
             }
         )
         threadRoute
-        { channel
-            | linkedMessageIds =
-                OneToOne.insert message.id (Array.length channel.messages) channel.linkedMessageIds
-        }
+        channel
 
 
 updateFromFrontend :
@@ -2747,6 +2786,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
             SeqDict.get dmChannelId model.dmChannels
                 |> Maybe.withDefault DmChannel.init
                 |> LocalState.createMessage
+                    Nothing
                     (UserTextMessage
                         { createdAt = time
                         , createdBy = userId
@@ -2809,7 +2849,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                             Nothing ->
                                 Nothing
                     }
-                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
+                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId threadRoute messageIndex)
 
             _ ->
                 Command.none
@@ -2875,6 +2915,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                 channel2 : BackendChannel
                 channel2 =
                     LocalState.createMessage
+                        Nothing
                         (UserTextMessage
                             { createdAt = time
                             , createdBy = userId
@@ -2938,10 +2979,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                             }
                             |> Task.attempt
                                 (SentGuildMessageToDiscord
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , messageIndex = messageIndex
-                                    }
+                                    { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
+                                    threadRoute
                                 )
 
                     _ ->

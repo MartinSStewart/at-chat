@@ -3368,6 +3368,7 @@ changeUpdate localMsg local =
                                                         SeqDict.insert
                                                             channelId
                                                             (LocalState.createMessage
+                                                                Nothing
                                                                 (UserTextMessage
                                                                     { createdAt = createdAt
                                                                     , createdBy = local.localUser.userId
@@ -3413,6 +3414,7 @@ changeUpdate localMsg local =
                                     SeqDict.get otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.init
                                         |> LocalState.createMessage
+                                            Nothing
                                             (UserTextMessage
                                                 { createdAt = createdAt
                                                 , createdBy = local.localUser.userId
@@ -3576,6 +3578,7 @@ changeUpdate localMsg local =
                                                         SeqDict.insert
                                                             channelId
                                                             (LocalState.createMessage
+                                                                Nothing
                                                                 (UserTextMessage
                                                                     { createdAt = createdAt
                                                                     , createdBy = userId
@@ -3627,6 +3630,7 @@ changeUpdate localMsg local =
                                     SeqDict.get otherUserId local.dmChannels
                                         |> Maybe.withDefault DmChannel.init
                                         |> LocalState.createMessage
+                                            Nothing
                                             (UserTextMessage
                                                 { createdAt = createdAt
                                                 , createdBy = userId
@@ -3794,7 +3798,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordDirectMessage time _ sender richText replyTo ->
+                Server_DiscordDirectMessage time discordMessageId sender richText replyTo ->
                     { local
                         | dmChannels =
                             SeqDict.update
@@ -3802,6 +3806,7 @@ changeUpdate localMsg local =
                                 (\maybe ->
                                     Maybe.withDefault DmChannel.init maybe
                                         |> LocalState.createMessage
+                                            (Just discordMessageId)
                                             (UserTextMessage
                                                 { createdAt = time
                                                 , createdBy = sender

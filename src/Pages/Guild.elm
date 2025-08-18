@@ -2630,7 +2630,7 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
                                         (GuildOrDmId_Guild guildId channelId threadRoute)
                                         channel
                                   )
-                                    |> GuildIcon.notificationView 4 2 MyUi.background2
+                                    |> GuildIcon.notificationView 4 5 MyUi.background2
                                 , Ui.move { x = 0, y = 0, z = 0 }
                                 , Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink

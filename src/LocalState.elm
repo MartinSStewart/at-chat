@@ -166,6 +166,7 @@ type alias FrontendChannel =
     , messages : Array Message
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     , threads : SeqDict Int Thread
     }
 
@@ -180,6 +181,7 @@ channelToFrontend channel =
             , messages = channel.messages
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
+            , linkedMessageIds = channel.linkedMessageIds
             , threads = channel.threads
             }
                 |> Just
@@ -286,11 +288,24 @@ getUser userId localUser =
 
 
 createMessage :
-    Message
+    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    -> Message
     -> ThreadRoute
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
-    -> { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt, threads : SeqDict Int Thread }
-createMessage message threadRoute channel =
+    ->
+        { d
+            | messages : Array Message
+            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+            , threads : SeqDict Int Thread
+        }
+    ->
+        { d
+            | messages : Array Message
+            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+            , threads : SeqDict Int Thread
+        }
+createMessage maybeDiscordMessageId message threadRoute channel =
     case threadRoute of
         ViewThread threadMessageIndex ->
             { channel
@@ -299,17 +314,32 @@ createMessage message threadRoute channel =
                         threadMessageIndex
                         (\maybe ->
                             Maybe.withDefault DmChannel.threadInit maybe
-                                |> createMessageHelper message
+                                |> createMessageHelper maybeDiscordMessageId message
                                 |> Just
                         )
                         channel.threads
             }
 
         NoThread ->
-            createMessageHelper message channel
+            createMessageHelper maybeDiscordMessageId message channel
 
 
-createMessageHelper message channel =
+createMessageHelper :
+    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    -> Message
+    ->
+        { d
+            | messages : Array Message
+            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+        }
+    ->
+        { d
+            | messages : Array Message
+            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+        }
+createMessageHelper maybeDiscordMessageId message channel =
     { channel
         | messages =
             case message of
@@ -361,6 +391,13 @@ createMessageHelper message channel =
 
                 DeletedMessage ->
                     channel.lastTypedAt
+        , linkedMessageIds =
+            case maybeDiscordMessageId of
+                Just discordMessageId ->
+                    OneToOne.insert discordMessageId (Array.length channel.messages) channel.linkedMessageIds
+
+                Nothing ->
+                    channel.linkedMessageIds
     }
 
 
@@ -438,6 +475,7 @@ createChannelFrontend time userId channelName guild =
                 , messages = Array.empty
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
+                , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
                 }
                 guild.channels
@@ -618,7 +656,11 @@ addMember :
             , channels :
                 SeqDict
                     (Id ChannelId)
-                    { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+                    { d
+                        | messages : Array Message
+                        , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                        , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+                    }
         }
     ->
         Result
@@ -629,7 +671,11 @@ addMember :
                 , channels :
                     SeqDict
                         (Id ChannelId)
-                        { d | messages : Array Message, lastTypedAt : SeqDict (Id UserId) LastTypedAt }
+                        { d
+                            | messages : Array Message
+                            , lastTypedAt : SeqDict (Id UserId) LastTypedAt
+                            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
+                        }
             }
 addMember time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
@@ -641,7 +687,7 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     (announcementChannel guild)
-                    (createMessageHelper (UserJoinedMessage time userId SeqDict.empty))
+                    (createMessageHelper Nothing (UserJoinedMessage time userId SeqDict.empty))
                     guild.channels
         }
             |> Ok
