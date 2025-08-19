@@ -187,6 +187,7 @@ type MessageHover
 type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
     , guildOrDmId : GuildOrDmId
+    , isThreadStarter : Bool
     , messageIndex : Int
     , mobileMode : MessageHoverMobileMode
     }
@@ -357,7 +358,7 @@ type FrontendMsg
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
-    | TouchStart (Maybe ( GuildOrDmId, Int )) Time.Posix (NonemptyDict Int Touch)
+    | TouchStart (Maybe ( GuildOrDmId, Int, Bool )) Time.Posix (NonemptyDict Int Touch)
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix
@@ -375,7 +376,7 @@ type FrontendMsg
     | PressedCancelMessageEdit GuildOrDmId
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
-    | CheckMessageAltPress Time.Posix GuildOrDmId Int
+    | CheckMessageAltPress Time.Posix GuildOrDmId Int Bool
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg

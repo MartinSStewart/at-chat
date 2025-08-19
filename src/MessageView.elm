@@ -19,8 +19,8 @@ type MessageViewMsg
     = MessageView_PressedSpoiler Int Int
     | MessageView_MouseEnteredMessage Int
     | MessageView_MouseExitedMessage Int
-    | MessageView_TouchStart Time.Posix Int (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Int (Coord CssPixels)
+    | MessageView_TouchStart Time.Posix Bool Int (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool Int (Coord CssPixels)
     | MessageView_PressedReactionEmoji_Remove Int Emoji
     | MessageView_PressedReactionEmoji_Add Int Emoji
     | MessageView_NoOp
@@ -28,7 +28,7 @@ type MessageViewMsg
     | MessageViewMsg_PressedShowReactionEmojiSelector Int (Coord CssPixels)
     | MessageViewMsg_PressedEditMessage Int
     | MessageViewMsg_PressedReply Int
-    | MessageViewMsg_PressedShowFullMenu Int (Coord CssPixels)
+    | MessageViewMsg_PressedShowFullMenu Bool Int (Coord CssPixels)
     | MessageView_PressedViewThreadLink Int
 
 
@@ -44,10 +44,10 @@ isPressMsg msg =
         MessageView_MouseExitedMessage int ->
             False
 
-        MessageView_TouchStart posix _ nonemptyDict ->
+        MessageView_TouchStart _ _ _ _ ->
             False
 
-        MessageView_AltPressedMessage int coord ->
+        MessageView_AltPressedMessage int coord _ ->
             True
 
         MessageView_PressedReactionEmoji_Remove int emoji ->
@@ -71,15 +71,15 @@ isPressMsg msg =
         MessageViewMsg_PressedReply int ->
             True
 
-        MessageViewMsg_PressedShowFullMenu int coord ->
+        MessageViewMsg_PressedShowFullMenu _ int coord ->
             True
 
         MessageView_PressedViewThreadLink int ->
             True
 
 
-miniView : Bool -> Int -> Element MessageViewMsg
-miniView canEdit messageIndex =
+miniView : Bool -> Bool -> Int -> Element MessageViewMsg
+miniView isThreadStarter canEdit messageIndex =
     Ui.row
         [ Ui.alignRight
         , Ui.background MyUi.background1
@@ -95,8 +95,12 @@ miniView canEdit messageIndex =
 
           else
             Ui.none
-        , miniButton (\_ -> MessageViewMsg_PressedReply messageIndex) Icons.reply
-        , miniButton (MessageViewMsg_PressedShowFullMenu messageIndex) Icons.dotDotDot
+        , if isThreadStarter then
+            Ui.none
+
+          else
+            miniButton (\_ -> MessageViewMsg_PressedReply messageIndex) Icons.reply
+        , miniButton (MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex) Icons.dotDotDot
         ]
 
 

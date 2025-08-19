@@ -876,7 +876,7 @@ isPressMsg msg =
         PressedEditMessagePingDropdownContainer ->
             True
 
-        CheckMessageAltPress _ _ _ ->
+        CheckMessageAltPress _ _ _ _ ->
             False
 
         PressedShowUserOption ->
@@ -2175,7 +2175,7 @@ updateLoaded msg model =
         PressedEditMessagePingDropdownContainer ->
             ( model, setFocus model MessageMenu.editMessageTextInputId )
 
-        CheckMessageAltPress startTime guildOrDmId messageIndex ->
+        CheckMessageAltPress startTime guildOrDmId messageIndex isThreadStarter ->
             case model.drag of
                 DragStart dragStart _ ->
                     if startTime == dragStart then
@@ -2184,6 +2184,7 @@ updateLoaded msg model =
                                 ( handleAltPressedMessage
                                     guildOrDmId
                                     messageIndex
+                                    isThreadStarter
                                     Coord.origin
                                     loggedIn
                                     (Local.model loggedIn.localState)
@@ -2621,13 +2622,20 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time messageIndex touches ->
-                    touchStart (Just ( guildOrDmId, messageIndex )) time touches model
+                MessageView.MessageView_TouchStart time isThreadStarter messageIndex touches ->
+                    touchStart (Just ( guildOrDmId, messageIndex, isThreadStarter )) time touches model
 
-                MessageView.MessageView_AltPressedMessage messageIndex clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter messageIndex clickedAt ->
                     updateLoggedIn
                         (\loggedIn ->
-                            ( handleAltPressedMessage guildOrDmId messageIndex clickedAt loggedIn (Local.model loggedIn.localState) model
+                            ( handleAltPressedMessage
+                                guildOrDmId
+                                messageIndex
+                                isThreadStarter
+                                clickedAt
+                                loggedIn
+                                (Local.model loggedIn.localState)
+                                model
                             , Command.none
                             )
                         )
@@ -2675,7 +2683,7 @@ updateLoaded msg model =
                 MessageView.MessageViewMsg_PressedReply messageIndex ->
                     pressedReply guildOrDmId messageIndex model
 
-                MessageView.MessageViewMsg_PressedShowFullMenu messageIndex clickedAt ->
+                MessageView.MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex clickedAt ->
                     updateLoggedIn
                         (\loggedIn ->
                             let
@@ -2709,6 +2717,7 @@ updateLoaded msg model =
                                                     clickedAt
                                         , guildOrDmId = guildOrDmId
                                         , messageIndex = messageIndex
+                                        , isThreadStarter = isThreadStarter
                                         , mobileMode =
                                             MessageMenuOpening
                                                 { offset = Quantity.zero
@@ -2858,7 +2867,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 
 touchStart :
-    Maybe ( GuildOrDmId, Int )
+    Maybe ( GuildOrDmId, Int, Bool )
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
@@ -2869,15 +2878,11 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
             ( { model | drag = DragStart time touches, dragPrevious = model.drag }
             , case NonemptyDict.toList touches of
                 [ ( _, single ) ] ->
-                    let
-                        htmlId : String
-                        htmlId =
-                            Dom.idToString single.target
-                    in
                     case maybeGuildOrDmIdAndMessageIndex of
-                        Just ( guildOrMessageId, messageIndex ) ->
+                        Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                             Process.sleep (Duration.seconds 0.5)
-                                |> Task.perform (\() -> CheckMessageAltPress time guildOrMessageId messageIndex)
+                                |> Task.perform
+                                    (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
 
                         Nothing ->
                             Command.none
@@ -3060,13 +3065,14 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-handleAltPressedMessage : GuildOrDmId -> Int -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
-handleAltPressedMessage guildOrDmId messageIndex clickedAt loggedIn local model =
+handleAltPressedMessage : GuildOrDmId -> Int -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage guildOrDmId messageIndex isThreadStarter clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
             MessageMenu
                 { guildOrDmId = guildOrDmId
                 , messageIndex = messageIndex
+                , isThreadStarter = isThreadStarter
                 , position = clickedAt
                 , mobileMode =
                     MessageMenuOpening

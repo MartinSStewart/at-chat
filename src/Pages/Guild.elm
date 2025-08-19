@@ -1054,6 +1054,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                 -- On mobile, we show the editor at the bottom instead
                                 messageView
                                     containerWidth
+                                    True
                                     revealedSpoilers
                                     highlight
                                     messageHover2
@@ -1084,6 +1085,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                         Just _ ->
                                             messageView
                                                 containerWidth
+                                                True
                                                 revealedSpoilers
                                                 highlight
                                                 messageHover2
@@ -1110,6 +1112,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                         Just _ ->
                                             messageView
                                                 containerWidth
+                                                True
                                                 revealedSpoilers
                                                 highlight
                                                 messageHover2
@@ -1379,86 +1382,59 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                 ]
                 ((case guildOrDmId of
                     GuildOrDmId_Guild guildId channelId (ViewThread threadMessageIndex) ->
-                        (case LocalState.getGuildAndChannel guildId channelId local of
-                            Just ( _, channel2 ) ->
-                                let
-                                    guildOrDmId2 : GuildOrDmId
-                                    guildOrDmId2 =
-                                        GuildOrDmId_Guild guildId channelId NoThread
-                                in
-                                case Array.get threadMessageIndex channel2.messages of
-                                    Just message ->
-                                        case SeqDict.get guildOrDmId2 loggedIn.editMessage of
-                                            Just editMessage ->
-                                                if editMessage.messageIndex == threadMessageIndex then
-                                                    messageEditingView
-                                                        guildOrDmId2
-                                                        threadMessageIndex
-                                                        message
-                                                        Nothing
-                                                        Nothing
-                                                        SeqDict.empty
-                                                        editMessage
-                                                        loggedIn.pingUser
-                                                        local
+                        Ui.column
+                            [ Ui.alignBottom ]
+                            [ Ui.el
+                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                                (Ui.text "This is the start of a thread")
+                            , case LocalState.getGuildAndChannel guildId channelId local of
+                                Just ( _, channel2 ) ->
+                                    threadStarterMessage
+                                        (GuildOrDmId_Guild guildId channelId NoThread)
+                                        threadMessageIndex
+                                        channel2
+                                        loggedIn
+                                        local
+                                        model
 
-                                                else
-                                                    messageView
-                                                        (conversationWidth model)
-                                                        SeqDict.empty
-                                                        NoHighlight
-                                                        (messageHover guildOrDmId2 threadMessageIndex loggedIn)
-                                                        False
-                                                        local.localUser
-                                                        Nothing
-                                                        Nothing
-                                                        threadMessageIndex
-                                                        message
-                                                        |> Ui.map (MessageViewMsg guildOrDmId2)
-
-                                            Nothing ->
-                                                messageView
-                                                    (conversationWidth model)
-                                                    SeqDict.empty
-                                                    NoHighlight
-                                                    (messageHover guildOrDmId2 threadMessageIndex loggedIn)
-                                                    False
-                                                    local.localUser
-                                                    Nothing
-                                                    Nothing
-                                                    threadMessageIndex
-                                                    message
-                                                    |> Ui.map (MessageViewMsg guildOrDmId2)
-
-                                    Nothing ->
-                                        Ui.none
-
-                            Nothing ->
-                                Ui.none
-                        )
-                            |> Ui.el [ Ui.alignBottom ]
+                                Nothing ->
+                                    Ui.none
+                            ]
 
                     GuildOrDmId_Guild _ _ NoThread ->
                         Ui.el
-                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom ]
+                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                             (Ui.text ("This is the start of #" ++ name))
 
-                    GuildOrDmId_Dm _ (ViewThread _) ->
-                        Ui.el
+                    GuildOrDmId_Dm otherUserId (ViewThread threadMessageIndex) ->
+                        Ui.column
                             [ Ui.alignBottom ]
-                            Ui.none
+                            [ Ui.el
+                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                                (Ui.text "This is the start of a thread")
+                            , case SeqDict.get otherUserId local.dmChannels of
+                                Just dmChannel2 ->
+                                    threadStarterMessage
+                                        (GuildOrDmId_Dm otherUserId NoThread)
+                                        threadMessageIndex
+                                        dmChannel2
+                                        loggedIn
+                                        local
+                                        model
+
+                                Nothing ->
+                                    Ui.none
+                            ]
 
                     GuildOrDmId_Dm otherUserId NoThread ->
                         Ui.el
-                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom ]
+                            [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                             (Ui.text
-                                ("This is the start of your conversation with "
-                                    ++ (if otherUserId == local.localUser.userId then
-                                            "yourself"
+                                (if otherUserId == local.localUser.userId then
+                                    "This is the start of a conversation with yourself"
 
-                                        else
-                                            name
-                                       )
+                                 else
+                                    "This is the start of your conversation with " ++ name
                                 )
                             )
                  )
@@ -1596,6 +1572,57 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                     ]
             ]
         ]
+
+
+threadStarterMessage guildOrDmId2 threadMessageIndex channel2 loggedIn local model =
+    case Array.get threadMessageIndex channel2.messages of
+        Just message ->
+            case SeqDict.get guildOrDmId2 loggedIn.editMessage of
+                Just editMessage ->
+                    if editMessage.messageIndex == threadMessageIndex then
+                        messageEditingView
+                            guildOrDmId2
+                            threadMessageIndex
+                            message
+                            Nothing
+                            Nothing
+                            SeqDict.empty
+                            editMessage
+                            loggedIn.pingUser
+                            local
+
+                    else
+                        messageView
+                            (conversationWidth model)
+                            True
+                            SeqDict.empty
+                            NoHighlight
+                            (messageHover guildOrDmId2 threadMessageIndex loggedIn)
+                            False
+                            local.localUser
+                            Nothing
+                            Nothing
+                            threadMessageIndex
+                            message
+                            |> Ui.map (MessageViewMsg guildOrDmId2)
+
+                Nothing ->
+                    messageView
+                        (conversationWidth model)
+                        True
+                        SeqDict.empty
+                        NoHighlight
+                        (messageHover guildOrDmId2 threadMessageIndex loggedIn)
+                        False
+                        local.localUser
+                        Nothing
+                        Nothing
+                        threadMessageIndex
+                        message
+                        |> Ui.map (MessageViewMsg guildOrDmId2)
+
+        Nothing ->
+            Ui.none
 
 
 replyToHeader : msg -> Id UserId -> LocalState -> Element msg
@@ -1807,6 +1834,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
     in
     messageView
         containerWidth
+        False
         revealedSpoilers
         highlight
         isHovered
@@ -1833,6 +1861,7 @@ messageViewThreadStarter data revealedSpoilers localUser messageIndex thread mes
     in
     messageView
         containerWidth
+        False
         revealedSpoilers
         highlight
         isHovered
@@ -1858,6 +1887,7 @@ profileImagePaddingRight =
 
 messageView :
     Int
+    -> Bool
     -> SeqDict Int (NonemptySet Int)
     -> HighlightMessage
     -> IsHovered
@@ -1868,7 +1898,7 @@ messageView :
     -> Int
     -> Message
     -> Element MessageViewMsg
-messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
+messageView containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -1879,6 +1909,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
     case message of
         UserTextMessage message2 ->
             messageContainer
+                isThreadStarter
                 localUser.timezone
                 allUsers
                 (case highlight of
@@ -1979,6 +2010,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
 
         UserJoinedMessage joinedAt userId reactions ->
             messageContainer
+                isThreadStarter
                 localUser.timezone
                 allUsers
                 highlight
@@ -1997,6 +2029,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
 
         DeletedMessage createdAt ->
             messageContainer
+                isThreadStarter
                 localUser.timezone
                 allUsers
                 highlight
@@ -2030,139 +2063,6 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                     , messageTimestamp createdAt localUser.timezone |> Ui.html
                     ]
                 )
-
-
-
---threadStarterMessage :
---    Int
---    -> SeqDict Int (NonemptySet Int)
---    -> Bool
---    -> LocalUser
---    -> Maybe ( Int, Message )
---    -> Int
---    -> Message
---    -> Element MessageViewMsg
---threadStarterMessage containerWidth revealedSpoilers isBeingEdited localUser maybeRepliedTo messageIndex message =
---    let
---        --_ =
---        --    Debug.log "changed" messageIndex
---        allUsers : SeqDict (Id UserId) FrontendUser
---        allUsers =
---            LocalState.allUsers2 localUser
---    in
---    case message of
---        UserTextMessage message2 ->
---            messageContainer
---                NoHighlight
---                messageIndex
---                canEdit
---                localUser.userId
---                message2.reactions
---                isHovered
---                (Ui.row
---                    []
---                    [ Ui.el
---                        [ Ui.paddingWith
---                            { left = 0
---                            , right = profileImagePaddingRight
---                            , top =
---                                case maybeRepliedTo of
---                                    Just _ ->
---                                        24
---
---                                    Nothing ->
---                                        2
---                            , bottom = 0
---                            }
---                        , Ui.width Ui.shrink
---                        , Ui.alignTop
---                        ]
---                        (case SeqDict.get message2.createdBy allUsers of
---                            Just user ->
---                                User.profileImage user.icon
---
---                            Nothing ->
---                                User.profileImage Nothing
---                        )
---                    , Ui.column
---                        []
---                        [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
---                        , Ui.row
---                            []
---                            [ User.toString message2.createdBy allUsers
---                                ++ " "
---                                |> Ui.text
---                                |> Ui.el [ Ui.Font.bold ]
---                            , messageTimestamp message2.createdAt localUser.timezone
---                            ]
---                        , Html.div
---                            [ Html.Attributes.style "white-space" "pre-wrap" ]
---                            (RichText.view
---                                containerWidth
---                                (MessageView_PressedSpoiler messageIndex)
---                                (case SeqDict.get messageIndex revealedSpoilers of
---                                    Just nonempty ->
---                                        NonemptySet.toSeqSet nonempty
---
---                                    Nothing ->
---                                        SeqSet.empty
---                                )
---                                allUsers
---                                message2.attachedFiles
---                                message2.content
---                                ++ (if isBeingEdited then
---                                        [ Html.span
---                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
---                                            , Html.Attributes.style "font-size" "12px"
---                                            ]
---                                            [ Html.text " (editing...)" ]
---                                        ]
---
---                                    else
---                                        case message2.editedAt of
---                                            Just editedAt ->
---                                                [ Html.span
---                                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
---                                                    , Html.Attributes.style "font-size" "12px"
---                                                    , MyUi.datestamp editedAt |> Html.Attributes.title
---                                                    ]
---                                                    [ Html.text " (edited)" ]
---                                                ]
---
---                                            Nothing ->
---                                                []
---                                   )
---                            )
---                            |> Ui.html
---                        ]
---                    ]
---                )
---
---        UserJoinedMessage joinedAt userId reactions ->
---            messageContainer
---                NoHighlight
---                messageIndex
---                False
---                localUser.userId
---                reactions
---                isHovered
---                (Ui.row
---                    []
---                    [ userJoinedContent userId allUsers
---                    , messageTimestamp joinedAt localUser.timezone
---                    ]
---                )
---
---        DeletedMessage ->
---            Ui.el
---                [ Ui.Font.color MyUi.font3
---                , Ui.Font.italic
---                , Ui.Font.size 14
---                , Ui.paddingXY 8 4
---                , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
---                , Ui.alignBottom
---                ]
---                (Ui.text "Message deleted")
 
 
 messageTimestamp : Time.Posix -> Time.Zone -> Html msg
@@ -2281,7 +2181,8 @@ messagePaddingX =
 
 
 messageContainer :
-    Time.Zone
+    Bool
+    -> Time.Zone
     -> SeqDict (Id UserId) FrontendUser
     -> HighlightMessage
     -> Int
@@ -2292,7 +2193,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer timezone allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
+messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -2308,13 +2209,18 @@ messageContainer timezone allUsers highlight messageIndex canEdit currentUserId 
                 (\time touches ->
                     MessageView_TouchStart
                         time
+                        isThreadStarter
                         messageIndex
                         (NonemptyDict.map (\_ touch -> { touch | target = messageHtmlId messageIndex }) touches)
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
-                (\x y -> ( MessageView_AltPressedMessage messageIndex (Coord.xy (round x) (round y)), True ))
+                (\x y ->
+                    ( MessageView_AltPressedMessage isThreadStarter messageIndex (Coord.xy (round x) (round y))
+                    , True
+                    )
+                )
                 (Json.Decode.field "clientX" Json.Decode.float)
                 (Json.Decode.field "clientY" Json.Decode.float)
             )
@@ -2360,7 +2266,10 @@ messageContainer timezone allUsers highlight messageIndex canEdit currentUserId 
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView canEdit messageIndex
+                        , MessageView.miniView
+                            isThreadStarter
+                            canEdit
+                            messageIndex
                             |> Ui.inFront
                         ]
 
@@ -2406,13 +2315,13 @@ threadStarterIndicator timezone allUsers messageIndex thread =
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.border1)
         , Html.Attributes.style "padding" "4px 8px 4px 8px"
         , Html.Attributes.style "width" "fit-content"
-        , Html.Attributes.style "max-width" "calc(min(100% - 16px, 500px))"
+        , Html.Attributes.style "max-width" "calc(min(100% - 16px, 800px))"
+        , Html.Attributes.style "min-width" "250px"
         , Html.Events.onClick (MessageView_PressedViewThreadLink messageIndex)
         , Html.Attributes.style "cursor" "pointer"
         ]
         (Html.div
-            [ Html.Attributes.style "min-width" "250px"
-            , Html.Attributes.style "display" "flex"
+            [ Html.Attributes.style "display" "flex"
             , Html.Attributes.style "align-content" "center"
             , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
             ]

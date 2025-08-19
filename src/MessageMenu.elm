@@ -96,7 +96,7 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
             let
                 itemCount : Float
                 itemCount =
-                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex Coord.origin local model |> List.length |> toFloat
+                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex False Coord.origin local model |> List.length |> toFloat
             in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
@@ -108,7 +108,7 @@ mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId messageIndex Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId messageIndex False Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -126,7 +126,7 @@ menuHeight :
 menuHeight extraOptions local model =
     let
         itemCount =
-            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model
+            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex False extraOptions.position local model
                 |> List.length
     in
     itemCount * buttonHeight False + 2
@@ -231,7 +231,15 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
+                                    (menuItems
+                                        True
+                                        extraOptions.guildOrDmId
+                                        extraOptions.messageIndex
+                                        extraOptions.isThreadStarter
+                                        extraOptions.position
+                                        local
+                                        model
+                                    )
                        )
                 )
                 |> Ui.below
@@ -252,7 +260,15 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
+            (menuItems
+                False
+                extraOptions.guildOrDmId
+                extraOptions.messageIndex
+                extraOptions.isThreadStarter
+                extraOptions.position
+                local
+                model
+            )
 
 
 editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
@@ -278,8 +294,8 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile guildOrDmId messageIndex position local model =
+menuItems : Bool -> GuildOrDmId -> Int -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model =
     case LocalState.getMessages guildOrDmId local of
         Just ( threadRoute, messages ) ->
             case Array.get messageIndex messages of
@@ -323,13 +339,17 @@ menuItems isMobile guildOrDmId messageIndex position local model =
 
                       else
                         Nothing
-                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
-                    , case threadRoute of
-                        ViewThread _ ->
-                            Nothing
+                    , if isThreadStarter then
+                        Nothing
 
-                        NoThread ->
+                      else
+                        button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
+                    , case ( threadRoute, isThreadStarter ) of
+                        ( NoThread, False ) ->
                             button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+
+                        _ ->
+                            Nothing
                     , button
                         isMobile
                         Icons.copyIcon
