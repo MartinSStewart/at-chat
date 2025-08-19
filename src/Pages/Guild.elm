@@ -545,14 +545,13 @@ memberColumn localUser guildOwner guildMembers =
             ]
         , Ui.column
             [ Ui.paddingXY 4 4 ]
-            [ Ui.text "Members"
+            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
-                (List.map
-                    (\( userId, _ ) ->
-                        memberLabel localUser userId
-                    )
-                    (SeqDict.toList guildMembers)
+                (SeqDict.foldr
+                    (\userId _ list -> memberLabel localUser userId :: list)
+                    []
+                    guildMembers
                 )
             ]
         ]

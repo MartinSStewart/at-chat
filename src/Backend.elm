@@ -452,7 +452,7 @@ update msg model =
                                 (Discord.listGuildMembers
                                     botToken2
                                     { guildId = partialGuild.id
-                                    , limit = 100
+                                    , limit = 1000
                                     , after = Discord.Missing
                                     }
                                 )
@@ -940,6 +940,10 @@ addDiscordMessages threadRoute messages model channel =
                         channel2
 
                 _ ->
+                    let
+                        _ =
+                            Debug.log "missing" ( message.author.id, message.author.username )
+                    in
                     channel2
         )
         channel
@@ -1009,6 +1013,10 @@ addDiscordGuilds time guilds model =
                                     ownerId2
 
                                 Nothing ->
+                                    let
+                                        _ =
+                                            Debug.log "missing owner" data.guild.ownerId
+                                    in
                                     adminUserId
 
                         threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))

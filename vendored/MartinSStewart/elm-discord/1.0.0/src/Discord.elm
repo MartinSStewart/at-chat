@@ -823,6 +823,8 @@ getGuildMember authentication guildId userId =
   - limit: Max number of members to return (1-1000)
   - after: The highest user id in the previous page
 
+<https://discord.com/developers/docs/resources/guild#list-guild-members>
+
 -}
 listGuildMembers :
     Authentication
@@ -844,6 +846,8 @@ listGuildMembers authentication { guildId, limit, after } =
         )
 
 
+{-| <https://discord.com/developers/docs/resources/guild#list-active-guild-threads>
+-}
 listActiveThreads : Authentication -> Id GuildId -> Task r HttpError ActiveThreads
 listActiveThreads authentication guildId =
     httpGet
