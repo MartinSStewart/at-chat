@@ -311,7 +311,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                         isMobile
                         Icons.smile
                         "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector messageIndex position)
+                        (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId messageIndex position)
                         |> Just
                     , if canEditAndDelete then
                         button

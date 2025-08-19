@@ -342,7 +342,7 @@ type FrontendMsg
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | MessageMenu_PressedShowReactionEmojiSelector Int (Coord CssPixels)
+    | MessageMenu_PressedShowReactionEmojiSelector GuildOrDmId Int (Coord CssPixels)
     | MessageMenu_PressedEditMessage GuildOrDmId Int
     | PressedEmojiSelectorEmoji Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)

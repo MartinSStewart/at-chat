@@ -2406,7 +2406,7 @@ threadStarterIndicator timezone allUsers messageIndex thread =
         , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.border1)
         , Html.Attributes.style "padding" "4px 8px 4px 8px"
         , Html.Attributes.style "width" "fit-content"
-        , Html.Attributes.style "max-width" "calc(100% - 16px)"
+        , Html.Attributes.style "max-width" "calc(min(100% - 16px, 500px))"
         , Html.Events.onClick (MessageView_PressedViewThreadLink messageIndex)
         , Html.Attributes.style "cursor" "pointer"
         ]

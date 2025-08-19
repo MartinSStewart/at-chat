@@ -730,7 +730,7 @@ addReactionEmoji emoji userId threadRoute messageIndex channel =
                                     Array.Extra.update
                                         messageIndex
                                         (Message.addReactionEmoji userId emoji)
-                                        channel.messages
+                                        thread.messages
                             }
                         )
                         channel.threads
@@ -845,7 +845,7 @@ removeReactionEmoji emoji userId threadRoute messageIndex channel =
                                     Array.Extra.update
                                         messageIndex
                                         (Message.removeReactionEmoji userId emoji)
-                                        channel.messages
+                                        thread.messages
                             }
                         )
                         channel.threads

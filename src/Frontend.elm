@@ -780,7 +780,7 @@ isPressMsg msg =
         KeyDown _ ->
             False
 
-        MessageMenu_PressedShowReactionEmojiSelector _ _ ->
+        MessageMenu_PressedShowReactionEmojiSelector _ _ _ ->
             True
 
         MessageMenu_PressedEditMessage _ _ ->
@@ -1606,8 +1606,8 @@ updateLoaded msg model =
                 _ ->
                     ( model, Command.none )
 
-        MessageMenu_PressedShowReactionEmojiSelector messageIndex _ ->
-            showReactionEmojiSelector messageIndex model
+        MessageMenu_PressedShowReactionEmojiSelector guildOrDmId messageIndex _ ->
+            showReactionEmojiSelector guildOrDmId messageIndex model
 
         MessageMenu_PressedEditMessage guildOrDmId messageIndex ->
             pressedEditMessage guildOrDmId messageIndex model
@@ -2667,7 +2667,7 @@ updateLoaded msg model =
                             routePush model (DmRoute otherUserId threadRoute (Just messageIndex))
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex clickedAt ->
-                    showReactionEmojiSelector messageIndex model
+                    showReactionEmojiSelector guildOrDmId messageIndex model
 
                 MessageView.MessageViewMsg_PressedEditMessage messageIndex ->
                     pressedEditMessage guildOrDmId messageIndex model
@@ -2825,20 +2825,15 @@ pressedEditMessage guildOrDmId messageIndex model =
         model
 
 
-showReactionEmojiSelector : Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-showReactionEmojiSelector messageIndex model =
+showReactionEmojiSelector : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
             ( { loggedIn
                 | showEmojiSelector =
                     case loggedIn.showEmojiSelector of
                         EmojiSelectorHidden ->
-                            case routeToGuildOrDmId model.route of
-                                Just guildOrDmId ->
-                                    EmojiSelectorForReaction guildOrDmId messageIndex
-
-                                Nothing ->
-                                    loggedIn.showEmojiSelector
+                            EmojiSelectorForReaction guildOrDmId messageIndex
 
                         EmojiSelectorForReaction _ _ ->
                             EmojiSelectorHidden
