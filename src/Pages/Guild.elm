@@ -395,15 +395,29 @@ dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model
                     SeqDict.get otherUserId local.dmChannels
                         |> Maybe.withDefault DmChannel.init
             in
-            conversationView
-                (GuildOrDmId_Dm otherUserId threadRoute)
-                maybeMessageHighlight
-                loggedIn
-                model
-                local
-                (PersonName.toString otherUser.name)
-                dmChannel.threads
-                dmChannel
+            case threadRoute of
+                ViewThread threadMessageIndex ->
+                    SeqDict.get threadMessageIndex dmChannel.threads
+                        |> Maybe.withDefault DmChannel.threadInit
+                        |> conversationView
+                            (GuildOrDmId_Dm otherUserId threadRoute)
+                            maybeMessageHighlight
+                            loggedIn
+                            model
+                            local
+                            (PersonName.toString otherUser.name)
+                            SeqDict.empty
+
+                NoThread ->
+                    conversationView
+                        (GuildOrDmId_Dm otherUserId threadRoute)
+                        maybeMessageHighlight
+                        loggedIn
+                        model
+                        local
+                        (PersonName.toString otherUser.name)
+                        dmChannel.threads
+                        dmChannel
 
         Nothing ->
             Ui.el
@@ -678,20 +692,19 @@ channelView channelRoute guildId guild loggedIn local model =
                 Just channel ->
                     case threadRoute of
                         ViewThread threadMessageIndex ->
-                            conversationView
-                                (GuildOrDmId_Guild guildId channelId threadRoute)
-                                maybeMessageHighlight
-                                loggedIn
-                                model
-                                local
-                                (ChannelName.toString channel.name
-                                    ++ " / "
-                                    ++ threadPreviewText threadMessageIndex channel local.localUser
-                                )
-                                SeqDict.empty
-                                (SeqDict.get threadMessageIndex channel.threads
-                                    |> Maybe.withDefault DmChannel.threadInit
-                                )
+                            SeqDict.get threadMessageIndex channel.threads
+                                |> Maybe.withDefault DmChannel.threadInit
+                                |> conversationView
+                                    (GuildOrDmId_Guild guildId channelId threadRoute)
+                                    maybeMessageHighlight
+                                    loggedIn
+                                    model
+                                    local
+                                    (ChannelName.toString channel.name
+                                        ++ " / "
+                                        ++ threadPreviewText threadMessageIndex channel local.localUser
+                                    )
+                                    SeqDict.empty
 
                         NoThread ->
                             conversationView

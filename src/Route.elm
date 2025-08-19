@@ -110,6 +110,9 @@ decode url =
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
                             DmRoute userId2 (stringToThread threadMessageIndex) (String.toInt messageIndex)
 
+                        [ "t", threadMessageIndex ] ->
+                            DmRoute userId2 (stringToThread threadMessageIndex) Nothing
+
                         [ "m", messageIndex ] ->
                             DmRoute userId2 NoThread (String.toInt messageIndex)
 

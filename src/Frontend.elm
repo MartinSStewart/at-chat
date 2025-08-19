@@ -478,7 +478,7 @@ routeRequest previousRoute newRoute model =
         model2 =
             { model | route = newRoute }
     in
-    case newRoute of
+    case Debug.log "newRoute" newRoute of
         HomePageRoute ->
             ( { model2
                 | loginStatus =
@@ -641,10 +641,38 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
-        DmRoute _ thread _ ->
+        DmRoute _ _ maybeMessageIndex ->
+            let
+                model3 : LoadedFrontend
+                model3 =
+                    { model2
+                        | loginStatus =
+                            case model2.loginStatus of
+                                LoggedIn loggedIn ->
+                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+
+                                NotLoggedIn _ ->
+                                    model2.loginStatus
+                    }
+            in
             updateLoggedIn
-                (\loggedIn -> ( startOpeningChannelSidebar loggedIn, Command.none ))
-                model2
+                (\loggedIn ->
+                    ( startOpeningChannelSidebar loggedIn
+                    , Command.batch
+                        [ setFocus model3 Pages.Guild.channelTextInputId
+                        , case maybeMessageIndex of
+                            Just messageIndex ->
+                                smoothScroll (Pages.Guild.messageHtmlId messageIndex)
+                                    |> Task.attempt (\_ -> ScrolledToMessage)
+
+                            Nothing ->
+                                Process.sleep Duration.millisecond
+                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                        ]
+                    )
+                )
+                model3
 
 
 routeRequiresLogin : Route -> Bool
