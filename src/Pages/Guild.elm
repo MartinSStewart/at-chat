@@ -1397,7 +1397,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                             [ Ui.alignBottom ]
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "This is the start of a thread")
+                                (Ui.text "Start of thread")
                             , case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( _, channel2 ) ->
                                     threadStarterMessage
@@ -1422,7 +1422,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                             [ Ui.alignBottom ]
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "This is the start of a thread")
+                                (Ui.text "Start of thread")
                             , case SeqDict.get otherUserId local.dmChannels of
                                 Just dmChannel2 ->
                                     threadStarterMessage

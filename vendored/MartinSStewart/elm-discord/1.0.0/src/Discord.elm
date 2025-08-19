@@ -3211,7 +3211,10 @@ decodeDispatchEvent eventName =
             JD.field "d" (JD.succeed ResumedEvent)
 
         "MESSAGE_CREATE" ->
-            JD.field "d" decodeMessage |> JD.map MessageCreateEvent
+            JD.map2
+                MessageCreateEvent
+                (JD.at [ "d", "channel_type" ] decodeChannelType)
+                (JD.field "d" decodeMessage)
 
         "MESSAGE_UPDATE" ->
             JD.field "d" decodeMessageUpdate |> JD.map MessageUpdateEvent
@@ -3248,6 +3251,9 @@ decodeDispatchEvent eventName =
 
         "GUILD_MEMBER_UPDATE" ->
             JD.field "d" decodeGuildMemberUpdate |> JD.map GuildMemberUpdateEvent
+
+        "THREAD_CREATE" ->
+            JD.field "d" decodeChannel |> JD.map ThreadCreatedOrUserAddedToThreadEvent
 
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
@@ -3334,13 +3340,14 @@ type GatewayEvent
 type OpDispatchEvent
     = ReadyEvent SessionId
     | ResumedEvent
-    | MessageCreateEvent Message
+    | MessageCreateEvent ChannelType Message
     | MessageUpdateEvent MessageUpdate
     | MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
     | GuildMemberAddEvent (Id GuildId) GuildMember
     | GuildMemberRemoveEvent (Id GuildId) User
     | GuildMemberUpdateEvent GuildMemberUpdate
+    | ThreadCreatedOrUserAddedToThreadEvent Channel
 
 
 type GatewayCloseEventCode
@@ -3515,10 +3522,11 @@ type OutMsg connection
     | OpenHandle
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
-    | UserCreatedMessage Message
+    | UserCreatedMessage ChannelType Message
     | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserEditedMessage MessageUpdate
     | FailedToParseWebsocketMessage JD.Error
+    | ThreadCreatedOrUserAddedToThread Channel
 
 
 type alias Model connection =
@@ -3543,7 +3551,7 @@ type Msg
 
 websocketGatewayUrl : String
 websocketGatewayUrl =
-    "wss://gateway.discord.gg/?v=8&encoding=json"
+    "wss://gateway.discord.gg/?v=9&encoding=json"
 
 
 createdHandle : connection -> Model connection -> Model connection
@@ -3622,8 +3630,8 @@ handleGateway authToken response model =
                         ResumedEvent ->
                             ( model, [] )
 
-                        MessageCreateEvent message ->
-                            ( model, [ UserCreatedMessage message ] )
+                        MessageCreateEvent channelType message ->
+                            ( model, [ UserCreatedMessage channelType message ] )
 
                         MessageUpdateEvent messageUpdate ->
                             ( model, [ UserEditedMessage messageUpdate ] )
@@ -3664,6 +3672,9 @@ handleGateway authToken response model =
 
                         GuildMemberUpdateEvent _ ->
                             ( model, [] )
+
+                        ThreadCreatedOrUserAddedToThreadEvent channel ->
+                            ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )

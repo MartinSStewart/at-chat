@@ -34,6 +34,7 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
+    , linkedChannel
     , markAllChannelsAsViewed
     , memberIsEditTyping
     , memberIsEditTypingHelper
@@ -97,6 +98,7 @@ type alias BackendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
+    , linkedChannelIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelId)
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
@@ -153,7 +155,6 @@ type alias BackendChannel =
     , messages : Array Message
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedId : Maybe (Discord.Id.Id Discord.Id.ChannelId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     , threads : SeqDict Int Thread
     }
@@ -415,12 +416,12 @@ createGuild time userId guildName =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
-                , linkedId = Nothing
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
                 }
               )
             ]
+    , linkedChannelIds = OneToOne.empty
     , members = SeqDict.empty
     , owner = userId
     , invites = SeqDict.empty
@@ -449,12 +450,26 @@ createChannel time userId channelName guild =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
-                , linkedId = Nothing
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
                 }
                 guild.channels
     }
+
+
+linkedChannel : Discord.Id.Id Discord.Id.ChannelId -> BackendGuild -> Maybe ( Id ChannelId, BackendChannel )
+linkedChannel discordChannelId guild =
+    case OneToOne.second discordChannelId guild.linkedChannelIds of
+        Just channelId ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    Just ( channelId, channel )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
 
 
 createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild -> FrontendGuild
