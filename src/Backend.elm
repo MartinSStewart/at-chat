@@ -931,7 +931,7 @@ addDiscordMessages threadRoute messages model channel =
             case OneToOne.second message.author.id model.discordUsers of
                 Just userId ->
                     handleDiscordCreateGuildMessageHelper
-                        (Just message.id)
+                        message.id
                         threadRoute
                         (discordReplyTo message channel2)
                         userId
@@ -954,31 +954,26 @@ addDiscordThreads :
 addDiscordThreads threads model channel =
     List.foldl
         (\( thread, threadMessages ) channel2 ->
-            case threadMessages of
-                head :: rest ->
-                    case
-                        OneToOne.second
-                            (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64)
-                            channel2.linkedMessageIds
-                    of
-                        Just messageIndex ->
-                            { channel2
-                                | threads =
-                                    SeqDict.insert
-                                        messageIndex
-                                        { messages = Array.empty
-                                        , lastTypedAt = SeqDict.empty
-                                        , linkedId = Just thread.id
-                                        , linkedMessageIds = OneToOne.empty
-                                        }
-                                        channel2.threads
-                            }
-                                |> addDiscordMessages (ViewThread messageIndex) (head :: rest) model
+            case
+                OneToOne.second
+                    (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64)
+                    channel2.linkedMessageIds
+            of
+                Just messageIndex ->
+                    { channel2
+                        | threads =
+                            SeqDict.insert
+                                messageIndex
+                                { messages = Array.empty
+                                , lastTypedAt = SeqDict.empty
+                                , linkedId = Just thread.id
+                                , linkedMessageIds = OneToOne.empty
+                                }
+                                channel2.threads
+                    }
+                        |> addDiscordMessages (ViewThread messageIndex) threadMessages model
 
-                        Nothing ->
-                            channel2
-
-                [] ->
+                Nothing ->
                     channel2
         )
         channel
@@ -1248,7 +1243,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                 SeqDict.insert
                                     channelId
                                     (handleDiscordCreateGuildMessageHelper
-                                        (Just message.id)
+                                        message.id
                                         NoThread
                                         replyTo
                                         userId
@@ -1292,7 +1287,7 @@ discordReplyTo message channel =
 
 
 handleDiscordCreateGuildMessageHelper :
-    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    Discord.Id.Id Discord.Id.MessageId
     -> ThreadRoute
     -> Maybe Int
     -> Id UserId
@@ -1300,9 +1295,9 @@ handleDiscordCreateGuildMessageHelper :
     -> Discord.Message
     -> BackendChannel
     -> BackendChannel
-handleDiscordCreateGuildMessageHelper maybeDiscordMessageId threadRoute replyTo userId richText message channel =
+handleDiscordCreateGuildMessageHelper discordMessageId threadRoute replyTo userId richText message channel =
     LocalState.createMessage
-        maybeDiscordMessageId
+        (Just discordMessageId)
         (UserTextMessage
             { createdAt = message.timestamp
             , createdBy = userId
