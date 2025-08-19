@@ -1866,7 +1866,7 @@ updateLoaded msg model =
                                                     UserJoinedMessage _ _ _ ->
                                                         Nothing
 
-                                                    DeletedMessage ->
+                                                    DeletedMessage _ ->
                                                         Nothing
                                             )
                             in
@@ -3770,13 +3770,18 @@ changeUpdate localMsg local =
                                             SeqDict.updateIfExists
                                                 messageId.channelId
                                                 (\channel ->
-                                                    { channel
-                                                        | messages =
-                                                            Array.set
-                                                                messageId.messageIndex
-                                                                DeletedMessage
-                                                                channel.messages
-                                                    }
+                                                    case Array.get messageId.messageIndex channel.messages of
+                                                        Just (UserTextMessage data) ->
+                                                            { channel
+                                                                | messages =
+                                                                    Array.set
+                                                                        messageId.messageIndex
+                                                                        (DeletedMessage data.createdAt)
+                                                                        channel.messages
+                                                            }
+
+                                                        _ ->
+                                                            channel
                                                 )
                                                 guild.channels
                                     }

@@ -768,35 +768,45 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                 Just ( channelId, channel ) ->
                     case OneToOne.second messageId channel.linkedMessageIds of
                         Just messageIndex ->
-                            ( { model
-                                | guilds =
-                                    SeqDict.insert
+                            case Array.get messageIndex channel.messages of
+                                Just (UserTextMessage data) ->
+                                    ( { model
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                { guild
+                                                    | channels =
+                                                        SeqDict.insert
+                                                            channelId
+                                                            { channel
+                                                                | messages =
+                                                                    Array.set
+                                                                        messageIndex
+                                                                        (DeletedMessage data.createdAt)
+                                                                        channel.messages
+                                                                , linkedMessageIds =
+                                                                    OneToOne.removeFirst
+                                                                        messageId
+                                                                        channel.linkedMessageIds
+                                                            }
+                                                            guild.channels
+                                                }
+                                                model.guilds
+                                      }
+                                    , broadcastToGuild
                                         guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert
-                                                    channelId
-                                                    { channel
-                                                        | messages =
-                                                            Array.set messageIndex DeletedMessage channel.messages
-                                                        , linkedMessageIds =
-                                                            OneToOne.removeFirst messageId channel.linkedMessageIds
-                                                    }
-                                                    guild.channels
-                                        }
-                                        model.guilds
-                              }
-                            , broadcastToGuild
-                                guildId
-                                (Server_DiscordDeleteMessage
-                                    { guildId = guildId
-                                    , channelId = channelId
-                                    , messageIndex = messageIndex
-                                    }
-                                    |> ServerChange
-                                )
-                                model
-                            )
+                                        (Server_DiscordDeleteMessage
+                                            { guildId = guildId
+                                            , channelId = channelId
+                                            , messageIndex = messageIndex
+                                            }
+                                            |> ServerChange
+                                        )
+                                        model
+                                    )
+
+                                _ ->
+                                    ( model, Command.none )
 
                         Nothing ->
                             ( model, Command.none )

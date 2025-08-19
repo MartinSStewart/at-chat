@@ -30,8 +30,9 @@ import Env
 import FileStatus
 import GuildIcon exposing (NotificationType(..))
 import GuildName
-import Html
+import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Icons
 import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
 import Json.Decode
@@ -77,7 +78,7 @@ repliedToUserId maybeRepliedTo channel =
                 Just (UserJoinedMessage _ joinedUser _) ->
                     Just joinedUser
 
-                Just DeletedMessage ->
+                Just (DeletedMessage _) ->
                     Nothing
 
                 Nothing ->
@@ -127,7 +128,7 @@ channelOrThreadHasNotifications currentUserId currentUser guildOrDmId channel =
                             UserJoinedMessage _ _ _ ->
                                 NewMessage
 
-                            DeletedMessage ->
+                            DeletedMessage _ ->
                                 state
             )
             NoNotification
@@ -662,7 +663,7 @@ threadPreviewText threadMessageIndex channel localUser =
                 UserJoinedMessage _ userId _ ->
                     User.toString userId allUsers ++ " joined!"
 
-                DeletedMessage ->
+                DeletedMessage _ ->
                     "Deleted message"
 
         Nothing ->
@@ -1042,7 +1043,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                         UserJoinedMessage _ _ _ ->
                             Nothing
 
-                        DeletedMessage ->
+                        DeletedMessage _ ->
                             Nothing
             in
             ( index - 1
@@ -1492,7 +1493,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                         Just (UserJoinedMessage _ userId _) ->
                             replyToHeader (PressedCloseReplyTo guildOrDmId) userId local
 
-                        Just DeletedMessage ->
+                        Just (DeletedMessage _) ->
                             Ui.none
 
                         Nothing ->
@@ -1771,7 +1772,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread r
                         Ui.none
                 , case maybeThread of
                     Just thread ->
-                        threadStarterIndicator (LocalState.allUsers local) messageIndex thread
+                        threadStarterIndicator local.localUser.timezone (LocalState.allUsers local) messageIndex thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
                             |> Ui.map (MessageViewMsg guildOrDmId)
 
@@ -1782,7 +1783,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread r
         UserJoinedMessage _ _ _ ->
             Ui.none
 
-        DeletedMessage ->
+        DeletedMessage _ ->
             Ui.none
 
 
@@ -1878,6 +1879,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
     case message of
         UserTextMessage message2 ->
             messageContainer
+                localUser.timezone
                 allUsers
                 (case highlight of
                     NoHighlight ->
@@ -1930,7 +1932,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                                 ++ " "
                                 |> Ui.text
                                 |> Ui.el [ Ui.Font.bold ]
-                            , messageTimestamp message2.createdAt localUser.timezone
+                            , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
                             ]
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
@@ -1977,6 +1979,7 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
 
         UserJoinedMessage joinedAt userId reactions ->
             messageContainer
+                localUser.timezone
                 allUsers
                 highlight
                 messageIndex
@@ -1988,31 +1991,45 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
                 (Ui.row
                     []
                     [ userJoinedContent userId allUsers
-                    , messageTimestamp joinedAt localUser.timezone
+                    , messageTimestamp joinedAt localUser.timezone |> Ui.html
                     ]
                 )
 
-        DeletedMessage ->
-            Ui.el
-                [ Ui.Font.color MyUi.font3
-                , Ui.Font.italic
-                , Ui.Font.size 14
-                , Ui.paddingXY 8 4
-                , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
-                , case highlight of
-                    NoHighlight ->
-                        Ui.noAttr
+        DeletedMessage createdAt ->
+            messageContainer
+                localUser.timezone
+                allUsers
+                highlight
+                messageIndex
+                False
+                localUser.userId
+                SeqDict.empty
+                maybeThreadStarter
+                isHovered
+                (Ui.row
+                    [ Ui.paddingWith { left = 4, right = 0, top = 4, bottom = 0 } ]
+                    [ Ui.el
+                        [ Ui.Font.color MyUi.font3
+                        , Ui.Font.italic
+                        , Ui.Font.size 14
+                        , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
+                        , case highlight of
+                            NoHighlight ->
+                                Ui.noAttr
 
-                    ReplyToHighlight ->
-                        Ui.noAttr
+                            ReplyToHighlight ->
+                                Ui.noAttr
 
-                    MentionHighlight ->
-                        Ui.noAttr
+                            MentionHighlight ->
+                                Ui.noAttr
 
-                    UrlHighlight ->
-                        Ui.background MyUi.hoverAndReplyToColor
-                ]
-                (Ui.text "Message deleted")
+                            UrlHighlight ->
+                                Ui.background MyUi.hoverAndReplyToColor
+                        ]
+                        (Ui.text "Message deleted")
+                    , messageTimestamp createdAt localUser.timezone |> Ui.html
+                    ]
+                )
 
 
 
@@ -2148,10 +2165,13 @@ messageView containerWidth revealedSpoilers highlight isHovered isBeingEdited lo
 --                (Ui.text "Message deleted")
 
 
+messageTimestamp : Time.Posix -> Time.Zone -> Html msg
 messageTimestamp createdAt timezone =
-    MyUi.timestamp createdAt timezone
-        |> Ui.text
-        |> Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3, Ui.width Ui.shrink ]
+    Html.span
+        [ Html.Attributes.style "font-size" "14px"
+        , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+        ]
+        [ MyUi.timestamp createdAt timezone |> Html.text ]
 
 
 repliedToMessage :
@@ -2179,7 +2199,7 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
         Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
             repliedToHeaderHelper repliedToIndex (userJoinedContent userId allUsers)
 
-        Just ( repliedToIndex, DeletedMessage ) ->
+        Just ( repliedToIndex, DeletedMessage _ ) ->
             repliedToHeaderHelper
                 repliedToIndex
                 (Ui.el
@@ -2261,7 +2281,8 @@ messagePaddingX =
 
 
 messageContainer :
-    SeqDict (Id UserId) FrontendUser
+    Time.Zone
+    -> SeqDict (Id UserId) FrontendUser
     -> HighlightMessage
     -> Int
     -> Bool
@@ -2271,7 +2292,7 @@ messageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-messageContainer allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
+messageContainer timezone allUsers highlight messageIndex canEdit currentUserId reactions maybeThread isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -2362,7 +2383,7 @@ messageContainer allUsers highlight messageIndex canEdit currentUserId reactions
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ threadStarterIndicator allUsers messageIndex thread
+                        [ threadStarterIndicator timezone allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -2371,46 +2392,86 @@ messageContainer allUsers highlight messageIndex canEdit currentUserId reactions
         )
 
 
-threadStarterIndicator : SeqDict (Id UserId) FrontendUser -> Int -> Thread -> Element MessageViewMsg
-threadStarterIndicator allUsers messageIndex thread =
-    Ui.column
-        [ Ui.paddingXY 8 4
-        , Ui.border 1
-        , Ui.borderColor MyUi.border1
-        , Ui.background MyUi.background1
-        , Ui.width Ui.shrink
-        , Ui.Input.button (MessageView_PressedViewThreadLink messageIndex)
+threadStarterIndicator : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Int -> Thread -> Element MessageViewMsg
+threadStarterIndicator timezone allUsers messageIndex thread =
+    let
+        lastMessage =
+            Array.Extra.last thread.messages
+    in
+    Html.div
+        [ Html.Attributes.style "white-space" "nowrap"
+        , Html.Attributes.style "text-overflow" "ellipsis"
+        , Html.Attributes.style "overflow" "hidden"
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+        , Html.Attributes.style "border" ("1px solid " ++ MyUi.colorToStyle MyUi.border1)
+        , Html.Attributes.style "padding" "4px 8px 4px 8px"
+        , Html.Attributes.style "width" "fit-content"
+        , Html.Attributes.style "max-width" "calc(100% - 16px)"
+        , Html.Events.onClick (MessageView_PressedViewThreadLink messageIndex)
+        , Html.Attributes.style "cursor" "pointer"
         ]
-        [ Ui.row
-            []
-            [ Ui.html Icons.hashtag
-            , Ui.el
-                [ Ui.Font.color MyUi.font3 ]
-                (case Array.length thread.messages of
-                    1 ->
-                        Ui.text "1 message"
-
-                    count ->
-                        Ui.text (String.fromInt count ++ " messages")
-                )
+        (Html.div
+            [ Html.Attributes.style "min-width" "250px"
+            , Html.Attributes.style "display" "flex"
+            , Html.Attributes.style "align-content" "center"
+            , Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
             ]
-        , case Array.Extra.last thread.messages of
-            Just last ->
-                case last of
-                    UserTextMessage data ->
-                        userTextMessagePreview allUsers SeqSet.empty data
+            [ Icons.hashtag
+            , case Array.length thread.messages of
+                1 ->
+                    Html.text "1 message"
 
-                    UserJoinedMessage joinedAt userId reactions ->
-                        userJoinedContent userId allUsers
+                count ->
+                    Html.text (String.fromInt count ++ " messages")
+            , Html.div [ Html.Attributes.style "flex-grow" "1" ] []
+            , case lastMessage of
+                Just (UserTextMessage data) ->
+                    messageTimestamp data.createdAt timezone
 
-                    DeletedMessage ->
-                        Ui.el
-                            [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
-                            (Ui.text "Message deleted")
+                Just (UserJoinedMessage joinedAt _ _) ->
+                    messageTimestamp joinedAt timezone
 
-            Nothing ->
-                Ui.none
-        ]
+                Just (DeletedMessage createdAt) ->
+                    messageTimestamp createdAt timezone
+
+                Nothing ->
+                    Html.text ""
+            ]
+            :: (case lastMessage of
+                    Just last ->
+                        case last of
+                            UserTextMessage data ->
+                                Html.span
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3)
+                                    , Html.Attributes.style "padding" "0 6px 0 2px"
+                                    ]
+                                    [ Html.text (User.toString data.createdBy allUsers) ]
+                                    :: RichText.preview
+                                        (\_ -> MessageView_NoOp)
+                                        SeqSet.empty
+                                        allUsers
+                                        data.attachedFiles
+                                        data.content
+
+                            UserJoinedMessage joinedAt userId reactions ->
+                                [ Html.span
+                                    []
+                                    [ Html.b [] [ User.toString userId allUsers |> Html.text ]
+                                    , Html.text " joined!"
+                                    ]
+                                ]
+
+                            DeletedMessage _ ->
+                                [ Html.i
+                                    [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3) ]
+                                    [ Html.text "Message deleted" ]
+                                ]
+
+                    Nothing ->
+                        []
+               )
+        )
+        |> Ui.html
 
 
 channelColumnNotMobile :

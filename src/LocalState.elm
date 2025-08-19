@@ -378,7 +378,7 @@ createMessageHelper maybeDiscordMessageId message channel =
                 UserJoinedMessage _ _ _ ->
                     Array.push message channel.messages
 
-                DeletedMessage ->
+                DeletedMessage _ ->
                     Array.push message channel.messages
         , lastTypedAt =
             case message of
@@ -388,7 +388,7 @@ createMessageHelper maybeDiscordMessageId message channel =
                 UserJoinedMessage _ _ _ ->
                     channel.lastTypedAt
 
-                DeletedMessage ->
+                DeletedMessage _ ->
                     channel.lastTypedAt
         , linkedMessageIds =
             case maybeDiscordMessageId of
@@ -920,7 +920,7 @@ deleteMessageHelper userId messageIndex threadRoute channel =
                                         SeqDict.insert
                                             threadMessageIndex
                                             { thread
-                                                | messages = Array.set messageIndex DeletedMessage thread.messages
+                                                | messages = Array.set messageIndex (DeletedMessage message.createdAt) thread.messages
                                             }
                                             channel.threads
                                 }
@@ -939,7 +939,7 @@ deleteMessageHelper userId messageIndex threadRoute channel =
             case Array.get messageIndex channel.messages of
                 Just (UserTextMessage message) ->
                     if message.createdBy == userId then
-                        Ok { channel | messages = Array.set messageIndex DeletedMessage channel.messages }
+                        Ok { channel | messages = Array.set messageIndex (DeletedMessage message.createdAt) channel.messages }
 
                     else
                         Err ()

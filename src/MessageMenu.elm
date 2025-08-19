@@ -304,7 +304,7 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                                     User.toString userId (LocalState.allUsers local)
                                         ++ " joined!"
 
-                                DeletedMessage ->
+                                DeletedMessage _ ->
                                     "Message deleted"
                     in
                     [ button

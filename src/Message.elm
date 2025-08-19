@@ -14,7 +14,7 @@ import Time
 type Message
     = UserTextMessage UserTextMessageData
     | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
-    | DeletedMessage
+    | DeletedMessage Time.Posix
 
 
 type alias UserTextMessageData =
@@ -69,7 +69,7 @@ addReactionEmoji userId emoji message =
                     reactions
                 )
 
-        DeletedMessage ->
+        DeletedMessage _ ->
             message
 
 
@@ -114,5 +114,5 @@ removeReactionEmoji userId emoji message =
                     reactions
                 )
 
-        DeletedMessage ->
+        DeletedMessage _ ->
             message
