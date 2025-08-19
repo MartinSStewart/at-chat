@@ -2,12 +2,10 @@ module DiscordMarkdownTests exposing (test)
 
 import Discord.Id
 import Expect
-import Fuzz
 import Id
 import List.Nonempty exposing (Nonempty(..))
-import OneToOne
-import RichText exposing (Language(..), RichText(..))
-import String.Nonempty exposing (NonemptyString(..))
+import OneToOne exposing (OneToOne)
+import RichText exposing (RichText(..))
 import Test exposing (Test)
 import UInt64
 
@@ -25,6 +23,7 @@ test =
         ]
 
 
+users : OneToOne (Discord.Id.Id idType) (Id.Id a)
 users =
     OneToOne.fromList
         [ ( case UInt64.fromString "137748026084163580" of
@@ -284,30 +283,3 @@ discordSpecificTests =
 --                                    Expect.pass
 --                       )
 --        ]
-
-
-discordMarkdownFuzzer : Fuzz.Fuzzer String
-discordMarkdownFuzzer =
-    Fuzz.list
-        (Fuzz.oneOfValues
-            [ "a"
-            , " "
-            , "**"
-            , "_"
-            , "__"
-            , "~~"
-            , "||"
-            , "`"
-            , "```"
-            , "<@!"
-            , ">"
-            , "<:"
-            , ":"
-            , "123456789"
-            , "hello"
-            , "\n"
-            , "world"
-            , "emoji"
-            ]
-        )
-        |> Fuzz.map String.concat

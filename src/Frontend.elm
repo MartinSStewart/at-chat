@@ -2,7 +2,6 @@ module Frontend exposing (app, app_)
 
 import AiChat
 import Array exposing (Array)
-import Array.Extra
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
@@ -33,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildOrDmId(..), GuildOrDmId_NoThread(..), Id, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -478,7 +477,7 @@ routeRequest previousRoute newRoute model =
         model2 =
             { model | route = newRoute }
     in
-    case Debug.log "newRoute" newRoute of
+    case newRoute of
         HomePageRoute ->
             ( { model2
                 | loginStatus =
@@ -534,7 +533,7 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId thread maybeMessageIndex ->
+                ChannelRoute channelId _ maybeMessageIndex ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
@@ -967,10 +966,10 @@ isPressMsg msg =
         FileUploadProgress _ _ _ ->
             False
 
-        MessageMenu_PressedOpenThread int ->
+        MessageMenu_PressedOpenThread _ ->
             True
 
-        MessageViewMsg guildOrDmId messageViewMsg ->
+        MessageViewMsg _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
 
@@ -1009,10 +1008,6 @@ updateLoaded msg model =
                     ( model, BrowserNavigation.load url )
 
         UrlChanged url ->
-            let
-                _ =
-                    Debug.log "" url
-            in
             routeRequest (Just model.route) (Route.decode url) model
 
         GotTime time ->
@@ -2702,7 +2697,7 @@ updateLoaded msg model =
                         GuildOrDmId_Dm otherUserId threadRoute ->
                             routePush model (DmRoute otherUserId threadRoute (Just messageIndex))
 
-                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex clickedAt ->
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex _ ->
                     showReactionEmojiSelector guildOrDmId messageIndex model
 
                 MessageView.MessageViewMsg_PressedEditMessage messageIndex ->
@@ -2905,7 +2900,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
         NoDrag ->
             ( { model | drag = DragStart time touches, dragPrevious = model.drag }
             , case NonemptyDict.toList touches of
-                [ ( _, single ) ] ->
+                [ _ ] ->
                     case maybeGuildOrDmIdAndMessageIndex of
                         Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
                             Process.sleep (Duration.seconds 0.5)
@@ -4310,7 +4305,7 @@ updateLoadedFromBackend msg model =
 
                         ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _) ->
                             case guildOrDmId of
-                                GuildOrDmId_Guild guildId channelId threadRoute ->
+                                GuildOrDmId_Guild guildId channelId _ ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
                                         Just ( _, channel ) ->
                                             Command.batch
@@ -4331,7 +4326,7 @@ updateLoadedFromBackend msg model =
                                         Nothing ->
                                             Command.none
 
-                                GuildOrDmId_Dm _ threadRoute ->
+                                GuildOrDmId_Dm _ _ ->
                                     Command.none
 
                         _ ->

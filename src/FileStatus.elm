@@ -155,8 +155,8 @@ contentType a =
 uploadHelper : String -> Result Http.Error ( FileHash, Maybe (Coord units) )
 uploadHelper text =
     case String.split "," text of
-        [ fileHash2, width, height ] ->
-            ( fileHash fileHash2
+        [ fileHashValue, width, height ] ->
+            ( fileHash fileHashValue
             , case ( String.toInt width, String.toInt height ) of
                 ( Just width2, Just height2 ) ->
                     if width2 > 0 then
@@ -272,6 +272,7 @@ domain =
         "http://localhost:3000"
 
 
+previewSize : number
 previewSize =
     150
 

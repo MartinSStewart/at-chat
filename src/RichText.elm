@@ -28,7 +28,6 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
-import Maybe.Extra
 import MyUi
 import OneToOne exposing (OneToOne)
 import Parser exposing ((|.), (|=), Parser, Step(..))

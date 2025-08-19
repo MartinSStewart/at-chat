@@ -16,21 +16,17 @@ import CssPixels exposing (CssPixels)
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
-import Html.Attributes
 import Icons
 import Id exposing (GuildOrDmId, ThreadRoute(..))
-import Json.Decode
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
-import MessageView exposing (MessageViewMsg(..))
 import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
-import Ui.Events
 import Ui.Font
 import Ui.Input
 import User

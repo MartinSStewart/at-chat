@@ -8,7 +8,6 @@ module Pages.Guild exposing
     , guildView
     , homePageLoggedInView
     , messageHtmlId
-    , messageHtmlIdPrefix
     , messageInputConfig
     , messageViewDecode
     , messageViewEncode
@@ -20,8 +19,7 @@ import Array exposing (Array)
 import Array.Extra
 import Bitwise
 import ChannelName
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
+import Coord
 import DmChannel exposing (DmChannel, LastTypedAt, Thread)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -44,7 +42,7 @@ import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
-import NonemptyDict exposing (NonemptyDict)
+import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
@@ -54,7 +52,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
-import Touch exposing (Touch)
+import Touch
 import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
 import Ui exposing (Element)
 import Ui.Anim
@@ -147,7 +145,7 @@ guildHasNotifications currentUserId currentUser guildId guild =
                         state3 =
                             SeqDict.foldl
                                 (\threadMessageIndex thread state2 ->
-                                    case state of
+                                    case state2 of
                                         NewMessageForUser ->
                                             state2
 
@@ -890,11 +888,11 @@ emojiSelector =
 
 
 messageHover : GuildOrDmId -> Int -> LoggedIn2 -> IsHovered
-messageHover guildOrDmId messageIndex2 loggedIn =
+messageHover guildOrDmId messageIndex loggedIn =
     case loggedIn.messageHover of
         MessageMenu messageMenu ->
             if guildOrDmId == messageMenu.guildOrDmId then
-                if messageMenu.messageIndex == messageIndex2 then
+                if messageMenu.messageIndex == messageIndex then
                     IsHoveredButNoMenu
 
                 else
@@ -903,9 +901,9 @@ messageHover guildOrDmId messageIndex2 loggedIn =
             else
                 IsNotHovered
 
-        MessageHover guildOrDmIdA messageIndex ->
+        MessageHover guildOrDmIdA messageIndexA ->
             if guildOrDmId == guildOrDmIdA then
-                if messageIndex == messageIndex2 then
+                if messageIndexA == messageIndex then
                     IsHovered
 
                 else
@@ -1587,8 +1585,21 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
         ]
 
 
-threadStarterMessage guildOrDmId2 threadMessageIndex channel2 loggedIn local model =
-    case Array.get threadMessageIndex channel2.messages of
+threadStarterMessage :
+    GuildOrDmId
+    -> Int
+    ->
+        { a
+            | messages : Array Message
+            , -- Isn't used but is here to indicate this is a Channel or DmChannel type
+              threads : SeqDict Int Thread
+        }
+    -> LoggedIn2
+    -> LocalState
+    -> LoadedFrontend
+    -> Element FrontendMsg
+threadStarterMessage guildOrDmId2 threadMessageIndex channel loggedIn local model =
+    case Array.get threadMessageIndex channel.messages of
         Just message ->
             case SeqDict.get guildOrDmId2 loggedIn.editMessage of
                 Just editMessage ->
@@ -2375,7 +2386,7 @@ threadStarterIndicator timezone allUsers messageIndex thread =
                                         data.attachedFiles
                                         data.content
 
-                            UserJoinedMessage joinedAt userId reactions ->
+                            UserJoinedMessage _ userId _ ->
                                 [ Html.span
                                     []
                                     [ Html.b [] [ User.toString userId allUsers |> Html.text ]
@@ -2521,8 +2532,8 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channelId
                             channel
                             (case channelRoute of
-                                ChannelRoute channelId2 (ViewThread threadMessageIndex) _ ->
-                                    if channelId2 == channelId then
+                                ChannelRoute channelIdB (ViewThread threadMessageIndex) _ ->
+                                    if channelIdB == channelId then
                                         SeqDict.insert threadMessageIndex DmChannel.threadInit channel.threads
 
                                     else

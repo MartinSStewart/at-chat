@@ -38,43 +38,43 @@ isPressMsg msg =
         MessageView_PressedSpoiler _ _ ->
             True
 
-        MessageView_MouseEnteredMessage int ->
+        MessageView_MouseEnteredMessage _ ->
             False
 
-        MessageView_MouseExitedMessage int ->
+        MessageView_MouseExitedMessage _ ->
             False
 
         MessageView_TouchStart _ _ _ _ ->
             False
 
-        MessageView_AltPressedMessage int coord _ ->
+        MessageView_AltPressedMessage _ _ _ ->
             True
 
-        MessageView_PressedReactionEmoji_Remove int emoji ->
+        MessageView_PressedReactionEmoji_Remove _ _ ->
             True
 
-        MessageView_PressedReactionEmoji_Add int emoji ->
+        MessageView_PressedReactionEmoji_Add _ _ ->
             True
 
         MessageView_NoOp ->
             False
 
-        MessageView_PressedReplyLink int ->
+        MessageView_PressedReplyLink _ ->
             True
 
-        MessageViewMsg_PressedShowReactionEmojiSelector int coord ->
+        MessageViewMsg_PressedShowReactionEmojiSelector _ _ ->
             True
 
-        MessageViewMsg_PressedEditMessage int ->
+        MessageViewMsg_PressedEditMessage _ ->
             True
 
-        MessageViewMsg_PressedReply int ->
+        MessageViewMsg_PressedReply _ ->
             True
 
-        MessageViewMsg_PressedShowFullMenu _ int coord ->
+        MessageViewMsg_PressedShowFullMenu _ _ _ ->
             True
 
-        MessageView_PressedViewThreadLink int ->
+        MessageView_PressedViewThreadLink _ ->
             True
 
 

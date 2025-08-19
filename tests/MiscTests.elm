@@ -2,9 +2,10 @@ module MiscTests exposing (tests)
 
 import Expect
 import Pages.Guild exposing (HighlightMessage(..), IsHovered(..))
-import Test
+import Test exposing (Test)
 
 
+tests : Test
 tests =
     Test.describe
         "Misc tests"
