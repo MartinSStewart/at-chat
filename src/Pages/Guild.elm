@@ -66,7 +66,7 @@ import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
 
 
-repliedToUserId : Maybe Int -> FrontendChannel -> Maybe (Id UserId)
+repliedToUserId : Maybe Int -> { a | messages : Array Message } -> Maybe (Id UserId)
 repliedToUserId maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->
@@ -87,13 +87,13 @@ repliedToUserId maybeRepliedTo channel =
             Nothing
 
 
-channelHasNotifications :
+channelOrThreadHasNotifications :
     Id UserId
     -> BackendUser
     -> GuildOrDmId
-    -> FrontendChannel
+    -> { a | messages : Array Message }
     -> NotificationType
-channelHasNotifications currentUserId currentUser guildOrDmId channel =
+channelOrThreadHasNotifications currentUserId currentUser guildOrDmId channel =
     let
         lastViewed : Int
         lastViewed =
@@ -135,28 +135,53 @@ channelHasNotifications currentUserId currentUser guildOrDmId channel =
 
 guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> NotificationType
 guildHasNotifications currentUserId currentUser guildId guild =
-    List.foldl
-        (\( channelId, channel ) state ->
+    SeqDict.foldl
+        (\channelId channel state ->
             case state of
                 NewMessageForUser ->
                     state
 
                 _ ->
+                    let
+                        state3 =
+                            SeqDict.foldl
+                                (\threadMessageIndex thread state2 ->
+                                    case state of
+                                        NewMessageForUser ->
+                                            state2
+
+                                        _ ->
+                                            case
+                                                channelOrThreadHasNotifications
+                                                    currentUserId
+                                                    currentUser
+                                                    (GuildOrDmId_Guild guildId channelId (ViewThread threadMessageIndex))
+                                                    thread
+                                            of
+                                                NoNotification ->
+                                                    state2
+
+                                                notification ->
+                                                    notification
+                                )
+                                state
+                                channel.threads
+                    in
                     case
-                        channelHasNotifications
+                        channelOrThreadHasNotifications
                             currentUserId
                             currentUser
                             (GuildOrDmId_Guild guildId channelId NoThread)
                             channel
                     of
                         NoNotification ->
-                            state
+                            state3
 
                         notification ->
                             notification
         )
         NoNotification
-        (SeqDict.toList guild.channels)
+        guild.channels
 
 
 canScroll : LoadedFrontend -> Bool
@@ -568,6 +593,7 @@ memberLabel localUser userId =
             , Ui.Anim.fontColor MyUi.font1
             ]
         , Ui.Font.color MyUi.font3
+        , Ui.clipWithEllipsis
         ]
         (case LocalState.getUser userId localUser of
             Just user ->
@@ -2568,7 +2594,7 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
         []
         (SeqDict.toList threads
             |> List.indexedMap
-                (\index ( threadMessageIndex, _ ) ->
+                (\index ( threadMessageIndex, thread ) ->
                     let
                         threadRoute : ThreadRoute
                         threadRoute =
@@ -2623,11 +2649,11 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
                                     NoNotification
 
                                    else
-                                    channelHasNotifications
+                                    channelOrThreadHasNotifications
                                         localUser.userId
                                         localUser.user
                                         (GuildOrDmId_Guild guildId channelId threadRoute)
-                                        channel
+                                        thread
                                   )
                                     |> GuildIcon.notificationView 4 5 MyUi.background2
                                 , Ui.move { x = 0, y = 0, z = 0 }
@@ -2719,7 +2745,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                     NoNotification
 
                    else
-                    channelHasNotifications
+                    channelOrThreadHasNotifications
                         localUser.userId
                         localUser.user
                         (GuildOrDmId_Guild guildId channelId NoThread)

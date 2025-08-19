@@ -232,7 +232,6 @@ createNewUser createdAt name email userIsAdmin =
     , emailNotifications = CheckEvery5Minutes
     , lastEmailNotification = createdAt
     , lastViewed = SeqDict.empty
-    , dmLastViewed = SeqDict.empty
     , lastChannelViewed = SeqDict.empty
     , icon = Nothing
     }
