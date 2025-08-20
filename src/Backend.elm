@@ -120,6 +120,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , linkedMessageIds = OneToOne.empty
                         , threads = SeqDict.empty
+                        , linkedThreadIds = OneToOne.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -131,6 +132,7 @@ init =
                         , lastTypedAt = SeqDict.empty
                         , linkedMessageIds = OneToOne.empty
                         , threads = SeqDict.empty
+                        , linkedThreadIds = OneToOne.empty
                         }
                       )
                     ]
@@ -345,7 +347,7 @@ update msg model =
                                 Discord.UserCreatedMessage channelType message ->
                                     let
                                         _ =
-                                            Debug.log "created message" ( ( channelType, message.type_ ), message.content, Discord.Id.toString message.channelId )
+                                            Debug.log "created message" ( ( Discord.Id.toString message.id, channelType, message.type_ ), message.content, Discord.Id.toString message.channelId )
 
                                         ( model3, cmd2 ) =
                                             handleDiscordCreateMessage channelType message model2
@@ -741,51 +743,6 @@ handleDiscordEditMessage edit model =
             ( model, Command.none )
 
 
-handleDiscordThreadCreated : Discord.Channel -> BackendModel -> BackendModel
-handleDiscordThreadCreated thread model =
-    case ( thread.parentId, thread.guildId ) of
-        ( Included (Just parentId), Included discordGuildId ) ->
-            case OneToOne.second discordGuildId model.discordGuilds of
-                Just guildId ->
-                    let
-                        _ =
-                            Debug.log "guildId" guildId
-                    in
-                    case SeqDict.get guildId model.guilds of
-                        Just guild ->
-                            case LocalState.linkedChannel parentId guild of
-                                Just ( channelId, channel ) ->
-                                    let
-                                        _ =
-                                            Debug.log "channelId" channelId
-                                    in
-                                    { model
-                                        | guilds =
-                                            SeqDict.insert
-                                                guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            (addDiscordThread model thread [] channel)
-                                                            guild.channels
-                                                }
-                                                model.guilds
-                                    }
-
-                                Nothing ->
-                                    model
-
-                        Nothing ->
-                            model
-
-                Nothing ->
-                    model
-
-        _ ->
-            model
-
-
 handleDiscordDeleteMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> Discord.Id.Id Discord.Id.ChannelId
@@ -957,13 +914,23 @@ addDiscordChannel time ownerId model threads index discordChannel messages =
                 , lastTypedAt = SeqDict.empty
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
+                , linkedThreadIds = OneToOne.empty
                 }
                     |> addDiscordMessages NoThread messages model
         in
         ( Id.fromInt index
         , List.foldl
             (\( thread, threadMessages ) channel2 ->
-                addDiscordThread model thread threadMessages channel2
+                case
+                    OneToOne.second
+                        (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64)
+                        channel2.linkedMessageIds
+                of
+                    Just messageIndex ->
+                        addDiscordMessages (ViewThread messageIndex) threadMessages model channel2
+
+                    Nothing ->
+                        channel2
             )
             channel
             (SeqDict.get discordChannel.id threads |> Maybe.withDefault [])
@@ -978,10 +945,17 @@ addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> Back
 addDiscordMessages threadRoute messages model channel =
     List.foldr
         (\message channel2 ->
-            case OneToOne.second message.author.id model.discordUsers of
-                Just userId ->
+            case ( message.type_, OneToOne.second message.author.id model.discordUsers ) of
+                ( Discord.ThreadCreated, Nothing ) ->
+                    channel2
+
+                ( Discord.ThreadStarterMessage, Nothing ) ->
+                    channel2
+
+                ( _, Just userId ) ->
                     handleDiscordCreateGuildMessageHelper
                         message.id
+                        message.channelId
                         threadRoute
                         (discordReplyTo message channel2)
                         userId
@@ -998,27 +972,6 @@ addDiscordMessages threadRoute messages model channel =
         )
         channel
         messages
-
-
-addDiscordThread : BackendModel -> Discord.Channel -> List Discord.Message -> BackendChannel -> BackendChannel
-addDiscordThread model thread threadMessages channel2 =
-    case OneToOne.second (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64) channel2.linkedMessageIds of
-        Just messageIndex ->
-            { channel2
-                | threads =
-                    SeqDict.insert
-                        messageIndex
-                        { messages = Array.empty
-                        , lastTypedAt = SeqDict.empty
-                        , linkedId = Just thread.id
-                        , linkedMessageIds = OneToOne.empty
-                        }
-                        channel2.threads
-            }
-                |> addDiscordMessages (ViewThread messageIndex) threadMessages model
-
-        Nothing ->
-            channel2
 
 
 addDiscordGuilds :
@@ -1210,7 +1163,7 @@ handleDiscordCreateMessage channelType message model =
                             SeqDict.insert
                                 dmChannelId
                                 (LocalState.createMessage
-                                    (Just message.id)
+                                    (Just ( message.id, message.channelId ))
                                     (UserTextMessage
                                         { createdAt = message.timestamp
                                         , createdBy = userId
@@ -1330,6 +1283,7 @@ handleDiscordCreateGuildMessage userId discordGuildId channelType message model 
                                     channelId
                                     (handleDiscordCreateGuildMessageHelper
                                         message.id
+                                        message.channelId
                                         threadRoute
                                         replyTo
                                         userId
@@ -1374,6 +1328,7 @@ discordReplyTo message channel =
 
 handleDiscordCreateGuildMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
+    -> Discord.Id.Id Discord.Id.ChannelId
     -> ThreadRoute
     -> Maybe Int
     -> Id UserId
@@ -1381,9 +1336,9 @@ handleDiscordCreateGuildMessageHelper :
     -> Discord.Message
     -> BackendChannel
     -> BackendChannel
-handleDiscordCreateGuildMessageHelper discordMessageId threadRoute replyTo userId richText message channel =
+handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRoute replyTo userId richText message channel =
     LocalState.createMessage
-        (Just discordMessageId)
+        (Just ( discordMessageId, discordChannelId ))
         (UserTextMessage
             { createdAt = message.timestamp
             , createdBy = userId
@@ -3021,22 +2976,24 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                 maybeDiscordChannelId =
                     case Debug.log "threadRoute" threadRoute of
                         ViewThread threadMessageIndex ->
-                            case SeqDict.get threadMessageIndex channel.threads of
-                                Just thread ->
-                                    case Debug.log "threadRoute linked" thread.linkedId of
-                                        Just discordThreadId ->
-                                            ( discordThreadId
-                                            , case repliedTo of
-                                                Just index ->
-                                                    OneToOne.first index thread.linkedMessageIds
-
-                                                Nothing ->
-                                                    Nothing
-                                            )
-                                                |> Just
+                            case OneToOne.first threadMessageIndex channel.linkedThreadIds of
+                                Just discordThreadId ->
+                                    let
+                                        _ =
+                                            Debug.log "discordThreadId" (Discord.Id.toString discordThreadId)
+                                    in
+                                    ( discordThreadId
+                                    , case repliedTo of
+                                        Just index ->
+                                            SeqDict.get threadMessageIndex channel.threads
+                                                |> Maybe.withDefault DmChannel.threadInit
+                                                |> .linkedMessageIds
+                                                |> OneToOne.first index
 
                                         Nothing ->
                                             Nothing
+                                    )
+                                        |> Just
 
                                 Nothing ->
                                     Nothing

@@ -22,6 +22,7 @@ module LocalState exposing
     , createChannelFrontend
     , createGuild
     , createMessage
+    , createMessageHelper
     , createNewUser
     , deleteChannel
     , deleteChannelFrontend
@@ -157,6 +158,7 @@ type alias BackendChannel =
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     , threads : SeqDict Int Thread
+    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) Int
     }
 
 
@@ -169,6 +171,7 @@ type alias FrontendChannel =
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
     , threads : SeqDict Int Thread
+    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) Int
     }
 
 
@@ -184,6 +187,7 @@ channelToFrontend channel =
             , lastTypedAt = channel.lastTypedAt
             , linkedMessageIds = channel.linkedMessageIds
             , threads = channel.threads
+            , linkedThreadIds = channel.linkedThreadIds
             }
                 |> Just
 
@@ -288,7 +292,7 @@ getUser userId localUser =
 
 
 createMessage :
-    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    Maybe ( Discord.Id.Id Discord.Id.MessageId, Discord.Id.Id Discord.Id.ChannelId )
     -> Message
     -> ThreadRoute
     ->
@@ -297,6 +301,7 @@ createMessage :
             , lastTypedAt : SeqDict (Id UserId) LastTypedAt
             , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
             , threads : SeqDict Int Thread
+            , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) Int
         }
     ->
         { d
@@ -304,6 +309,7 @@ createMessage :
             , lastTypedAt : SeqDict (Id UserId) LastTypedAt
             , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) Int
             , threads : SeqDict Int Thread
+            , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) Int
         }
 createMessage maybeDiscordMessageId message threadRoute channel =
     case threadRoute of
@@ -314,14 +320,21 @@ createMessage maybeDiscordMessageId message threadRoute channel =
                         threadMessageIndex
                         (\maybe ->
                             Maybe.withDefault DmChannel.threadInit maybe
-                                |> createMessageHelper maybeDiscordMessageId message
+                                |> createMessageHelper (Maybe.map Tuple.first maybeDiscordMessageId) message
                                 |> Just
                         )
                         channel.threads
+                , linkedThreadIds =
+                    case maybeDiscordMessageId of
+                        Just ( _, discordChannelId ) ->
+                            OneToOne.insert discordChannelId threadMessageIndex channel.linkedThreadIds
+
+                        Nothing ->
+                            channel.linkedThreadIds
             }
 
         NoThread ->
-            createMessageHelper maybeDiscordMessageId message channel
+            createMessageHelper (Maybe.map Tuple.first maybeDiscordMessageId) message channel
 
 
 createMessageHelper :
@@ -418,6 +431,7 @@ createGuild time userId guildName =
                 , lastTypedAt = SeqDict.empty
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
+                , linkedThreadIds = OneToOne.empty
                 }
               )
             ]
@@ -452,6 +466,7 @@ createChannel time userId channelName guild =
                 , lastTypedAt = SeqDict.empty
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
+                , linkedThreadIds = OneToOne.empty
                 }
                 guild.channels
     }
@@ -474,15 +489,10 @@ linkedChannel discordChannelId guild =
 
 createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild -> FrontendGuild
 createChannelFrontend time userId channelName guild =
-    let
-        channelId : Id ChannelId
-        channelId =
-            Id.nextId guild.channels
-    in
     { guild
         | channels =
             SeqDict.insert
-                channelId
+                (Id.nextId guild.channels)
                 { createdAt = time
                 , createdBy = userId
                 , name = channelName
@@ -491,6 +501,7 @@ createChannelFrontend time userId channelName guild =
                 , lastTypedAt = SeqDict.empty
                 , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
+                , linkedThreadIds = OneToOne.empty
                 }
                 guild.channels
     }

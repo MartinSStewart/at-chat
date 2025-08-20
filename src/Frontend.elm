@@ -3834,7 +3834,7 @@ changeUpdate localMsg local =
                                 sender
                                 (\maybe ->
                                     Maybe.withDefault DmChannel.init maybe
-                                        |> LocalState.createMessage
+                                        |> LocalState.createMessageHelper
                                             (Just discordMessageId)
                                             (UserTextMessage
                                                 { createdAt = time
@@ -3846,7 +3846,6 @@ changeUpdate localMsg local =
                                                 , attachedFiles = SeqDict.empty
                                                 }
                                             )
-                                            NoThread
                                         |> Just
                                 )
                                 local.dmChannels
