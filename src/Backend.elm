@@ -344,10 +344,10 @@ update msg model =
                                         :: cmds
                                     )
 
-                                Discord.UserCreatedMessage channelType message ->
+                                Discord.UserCreatedMessage _ message ->
                                     let
                                         ( model3, cmd2 ) =
-                                            handleDiscordCreateMessage channelType message model2
+                                            handleDiscordCreateMessage message model2
                                     in
                                     ( model3, cmd2 :: cmds )
 
@@ -504,7 +504,7 @@ update msg model =
                                                         , limit = 100
                                                         , relativeTo = Discord.MostRecent
                                                         }
-                                                        |> Task.onError (\error -> Task.succeed [])
+                                                        |> Task.onError (\_ -> Task.succeed [])
                                                         |> Task.map (Tuple.pair thread)
                                                 )
                                                 activeThreads.threads
@@ -1108,11 +1108,10 @@ addDiscordGuilds time guilds model =
 
 
 handleDiscordCreateMessage :
-    Discord.ChannelType
-    -> Discord.Message
+    Discord.Message
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
-handleDiscordCreateMessage channelType message model =
+handleDiscordCreateMessage message model =
     case ( Just message.author.id == model.discordBotId, message.type_ ) of
         ( True, _ ) ->
             ( model, Command.none )
@@ -1192,7 +1191,7 @@ handleDiscordCreateMessage channelType message model =
                     )
 
                 ( Just userId, Included discordGuildId ) ->
-                    handleDiscordCreateGuildMessage userId discordGuildId channelType message model
+                    handleDiscordCreateGuildMessage userId discordGuildId message model
 
                 _ ->
                     let
@@ -1205,11 +1204,10 @@ handleDiscordCreateMessage channelType message model =
 handleDiscordCreateGuildMessage :
     Id UserId
     -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.ChannelType
     -> Discord.Message
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend msg )
-handleDiscordCreateGuildMessage userId discordGuildId channelType message model =
+handleDiscordCreateGuildMessage userId discordGuildId message model =
     let
         richText : Nonempty RichText
         richText =
@@ -3035,7 +3033,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                                     , replyTo =
                                         case repliedTo of
                                             Just index ->
-                                                SeqDict.get threadMessageIndex channel.threads
+                                                SeqDict.get threadMessageIndex channel2.threads
                                                     |> Maybe.withDefault DmChannel.threadInit
                                                     |> .linkedMessageIds
                                                     |> OneToOne.first index
