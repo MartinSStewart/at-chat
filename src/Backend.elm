@@ -346,9 +346,6 @@ update msg model =
 
                                 Discord.UserCreatedMessage channelType message ->
                                     let
-                                        _ =
-                                            Debug.log "created message" ( ( Discord.Id.toString message.id, channelType, message.type_ ), message.content, Discord.Id.toString message.channelId )
-
                                         ( model3, cmd2 ) =
                                             handleDiscordCreateMessage channelType message model2
                                     in
@@ -507,14 +504,7 @@ update msg model =
                                                         , limit = 100
                                                         , relativeTo = Discord.MostRecent
                                                         }
-                                                        |> Task.onError
-                                                            (\error ->
-                                                                let
-                                                                    _ =
-                                                                        Debug.log "missing thread messages" error
-                                                                in
-                                                                Task.succeed []
-                                                            )
+                                                        |> Task.onError (\error -> Task.succeed [])
                                                         |> Task.map (Tuple.pair thread)
                                                 )
                                                 activeThreads.threads
@@ -964,10 +954,6 @@ addDiscordMessages threadRoute messages model channel =
                         channel2
 
                 _ ->
-                    let
-                        _ =
-                            Debug.log "missing" ( message.author.id, message.author.username )
-                    in
                     channel2
         )
         channel
@@ -1003,10 +989,6 @@ addDiscordGuilds time guilds model =
                                     ownerId2
 
                                 Nothing ->
-                                    let
-                                        _ =
-                                            Debug.log "missing owner" data.guild.ownerId
-                                    in
                                     adminUserId
 
                         threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
@@ -2974,14 +2956,10 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
 
                 maybeDiscordChannelId : Maybe ( Discord.Id.Id Discord.Id.ChannelId, Maybe (Discord.Id.Id Discord.Id.MessageId) )
                 maybeDiscordChannelId =
-                    case Debug.log "threadRoute" threadRoute of
+                    case threadRoute of
                         ViewThread threadMessageIndex ->
                             case OneToOne.first threadMessageIndex channel.linkedThreadIds of
                                 Just discordThreadId ->
-                                    let
-                                        _ =
-                                            Debug.log "discordThreadId" (Discord.Id.toString discordThreadId)
-                                    in
                                     ( discordThreadId
                                     , case repliedTo of
                                         Just index ->
