@@ -6,6 +6,7 @@ module Id exposing
     , InviteLinkId(..)
     , ThreadRoute(..)
     , UserId(..)
+    , changeType
     , fromInt
     , fromString
     , guildOrDmIdSetThreadRoute
@@ -86,3 +87,8 @@ fromString string =
 toString : Id a -> String
 toString (Id a) =
     String.fromInt a
+
+
+changeType : Id a -> Id b
+changeType (Id id) =
+    Id id

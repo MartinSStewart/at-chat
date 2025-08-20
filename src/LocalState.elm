@@ -806,7 +806,7 @@ editMessageHelper2 :
 editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
     case Array.get messageIndex channel.messages of
         Just (UserTextMessage data) ->
-            if data.createdBy == editedBy then
+            if data.createdBy == editedBy && data.content /= newContent then
                 let
                     data2 : UserTextMessageData
                     data2 =
