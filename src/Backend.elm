@@ -16,7 +16,7 @@ import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
-import DmChannel exposing (DmChannel, DmChannelId, Thread)
+import DmChannel exposing (DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -375,7 +375,7 @@ update msg model =
                                     in
                                     ( model2, cmds )
 
-                                Discord.ThreadCreatedOrUserAddedToThread channel ->
+                                Discord.ThreadCreatedOrUserAddedToThread _ ->
                                     ( model2, cmds )
                          --( handleDiscordThreadCreated channel model2, cmds )
                         )
