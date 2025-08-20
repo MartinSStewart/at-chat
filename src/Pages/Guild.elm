@@ -2704,8 +2704,12 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
     in
     Ui.row
         [ Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-        , Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId NoThread)
-        , Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId NoThread)
+        , Ui.attrIf
+            (not isMobile)
+            (Ui.Events.onMouseEnter (MouseEnteredChannelName guildId channelId NoThread))
+        , Ui.attrIf
+            (not isMobile)
+            (Ui.Events.onMouseLeave (MouseExitedChannelName guildId channelId NoThread))
         , Ui.clipWithEllipsis
         , Ui.height (Ui.px channelHeaderHeight)
         , MyUi.hoverText (ChannelName.toString channel.name)
