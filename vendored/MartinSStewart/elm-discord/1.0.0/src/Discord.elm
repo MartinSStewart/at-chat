@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -846,6 +846,13 @@ listGuildMembers authentication { guildId, limit, after } =
         )
 
 
+type AutoArchiveDuration
+    = ArchiveAfter60Minutes
+    | ArchiveAfter1440Minutes
+    | ArchiveAfter4320Minutes
+    | ArchiveAfter10080Minutes
+
+
 {-| <https://discord.com/developers/docs/resources/guild#list-active-guild-threads>
 -}
 listActiveThreads : Authentication -> Id GuildId -> Task r HttpError ActiveThreads
@@ -855,6 +862,59 @@ listActiveThreads authentication guildId =
         decodeActiveThreads
         [ "guilds", Discord.Id.toString guildId, "threads", "active" ]
         []
+
+
+{-| <https://discord.com/developers/docs/resources/channel#start-thread-from-message>
+-}
+startThreadFromMessage :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , messageId : Id MessageId
+        , name : String
+        , autoArchiveDuration : OptionalData AutoArchiveDuration
+        , rateLimitPerUser : OptionalData (Quantity Int Seconds)
+        }
+    -> Task r HttpError Channel
+startThreadFromMessage authentication { channelId, messageId, name, autoArchiveDuration, rateLimitPerUser } =
+    httpPost
+        authentication
+        decodeChannel
+        [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId, "threads" ]
+        []
+        (JE.object
+            ([ ( "name", JE.string name )
+             ]
+                ++ (case autoArchiveDuration of
+                        Included duration ->
+                            [ ( "auto_archive_duration"
+                              , case duration of
+                                    ArchiveAfter60Minutes ->
+                                        JE.int 60
+
+                                    ArchiveAfter1440Minutes ->
+                                        JE.int 1440
+
+                                    ArchiveAfter4320Minutes ->
+                                        JE.int 4320
+
+                                    ArchiveAfter10080Minutes ->
+                                        JE.int 10080
+                              )
+                            ]
+
+                        Missing ->
+                            []
+                   )
+                ++ (case rateLimitPerUser of
+                        Included duration ->
+                            [ ( "rate_limit_per_user", JE.int (Quantity.unwrap duration) ) ]
+
+                        Missing ->
+                            []
+                   )
+            )
+        )
 
 
 type alias ActiveThreads =
