@@ -336,7 +336,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                                 local.localUser.user
                                 local.guilds
                                 (canScroll model)
-                            , friendsColumn maybeOtherUserId local
+                            , friendsColumn True maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -359,7 +359,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                                 local.localUser.user
                                 local.guilds
                                 (canScroll model)
-                            , friendsColumn maybeOtherUserId local
+                            , friendsColumn False maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -545,7 +545,7 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy3 memberColumn local.localUser guild.owner guild.members
+                            , Ui.Lazy.lazy4 memberColumn False local.localUser guild.owner guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -562,8 +562,8 @@ memberColumnWidth =
     200
 
 
-memberColumn : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-memberColumn localUser guildOwner guildMembers =
+memberColumn : Bool -> LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumn isMobile localUser guildOwner guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -579,7 +579,7 @@ memberColumn localUser guildOwner guildMembers =
         [ Ui.column
             [ Ui.paddingXY 4 4 ]
             [ Ui.text "Owner"
-            , memberLabel localUser guildOwner
+            , memberLabel isMobile localUser guildOwner
             ]
         , Ui.column
             [ Ui.paddingXY 4 4 ]
@@ -587,7 +587,7 @@ memberColumn localUser guildOwner guildMembers =
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
-                    (\userId _ list -> memberLabel localUser userId :: list)
+                    (\userId _ list -> memberLabel isMobile localUser userId :: list)
                     []
                     guildMembers
                 )
@@ -595,13 +595,14 @@ memberColumn localUser guildOwner guildMembers =
         ]
 
 
-memberLabel : LocalUser -> Id UserId -> Element FrontendMsg
-memberLabel localUser userId =
+memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
+memberLabel isMobile localUser userId =
     Ui.row
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
         , Ui.Input.button (PressedLink (DmRoute userId NoThread Nothing))
         , MyUi.hover
+            isMobile
             [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
             , Ui.Anim.fontColor MyUi.font1
             ]
@@ -969,6 +970,10 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
         containerWidth : Int
         containerWidth =
             conversationWidth model
+
+        isMobile : Bool
+        isMobile =
+            MyUi.isMobile model
     in
     Array.foldr
         (\message ( index, list ) ->
@@ -1064,6 +1069,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                             if MyUi.isMobile model then
                                 -- On mobile, we show the editor at the bottom instead
                                 messageView
+                                    isMobile
                                     containerWidth
                                     True
                                     revealedSpoilers
@@ -1079,6 +1085,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
 
                             else
                                 messageEditingView
+                                    isMobile
                                     guildOrDmId
                                     index
                                     message
@@ -1095,6 +1102,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
+                                                isMobile
                                                 containerWidth
                                                 True
                                                 revealedSpoilers
@@ -1111,7 +1119,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                         Nothing ->
                                             Ui.Lazy.lazy5
                                                 messageViewNotThreadStarter
-                                                (messageViewEncode messageHover2 containerWidth otherUserIsEditing highlight)
+                                                (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                 revealedSpoilers
                                                 local.localUser
                                                 index
@@ -1122,6 +1130,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                     case maybeRepliedTo of
                                         Just _ ->
                                             messageView
+                                                isMobile
                                                 containerWidth
                                                 True
                                                 revealedSpoilers
@@ -1138,7 +1147,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                                         Nothing ->
                                             Ui.Lazy.lazy6
                                                 messageViewThreadStarter
-                                                (messageViewEncode messageHover2 containerWidth otherUserIsEditing highlight)
+                                                (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
                                                 revealedSpoilers
                                                 local.localUser
                                                 index
@@ -1154,8 +1163,8 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
         |> Tuple.second
 
 
-messageViewEncode : IsHovered -> Int -> Bool -> HighlightMessage -> Int
-messageViewEncode isHovered containerWidth otherUserIsEditing highlight =
+messageViewEncode : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
+messageViewEncode isMobile isHovered containerWidth otherUserIsEditing highlight =
     (if otherUserIsEditing then
         1
 
@@ -1189,10 +1198,18 @@ messageViewEncode isHovered containerWidth otherUserIsEditing highlight =
                 UrlHighlight ->
                     3
             )
-        + Bitwise.shiftLeftBy 5 containerWidth
+        + Bitwise.shiftLeftBy
+            5
+            (if isMobile then
+                1
+
+             else
+                0
+            )
+        + Bitwise.shiftLeftBy 6 containerWidth
 
 
-messageViewDecode : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered }
+messageViewDecode : Int -> { containerWidth : Int, isEditing : Bool, highlight : HighlightMessage, isHovered : IsHovered, isMobile : Bool }
 messageViewDecode value =
     { isEditing = Bitwise.and 0x01 value == 1
     , isHovered =
@@ -1218,7 +1235,8 @@ messageViewDecode value =
 
             _ ->
                 NoHighlight
-    , containerWidth = Bitwise.shiftRightBy 5 value
+    , isMobile = Bitwise.shiftRightBy 5 value |> Bitwise.and 0x01 |> (==) 1
+    , containerWidth = Bitwise.shiftRightBy 6 value
     }
 
 
@@ -1401,6 +1419,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                             , case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( _, channel2 ) ->
                                     threadStarterMessage
+                                        isMobile
                                         (GuildOrDmId_Guild guildId channelId NoThread)
                                         threadMessageIndex
                                         channel2
@@ -1426,6 +1445,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
                             , case SeqDict.get otherUserId local.dmChannels of
                                 Just dmChannel2 ->
                                     threadStarterMessage
+                                        isMobile
                                         (GuildOrDmId_Dm otherUserId NoThread)
                                         threadMessageIndex
                                         dmChannel2
@@ -1586,7 +1606,8 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
 
 
 threadStarterMessage :
-    GuildOrDmId
+    Bool
+    -> GuildOrDmId
     -> Int
     ->
         { a
@@ -1598,13 +1619,14 @@ threadStarterMessage :
     -> LocalState
     -> LoadedFrontend
     -> Element FrontendMsg
-threadStarterMessage guildOrDmId2 threadMessageIndex channel loggedIn local model =
+threadStarterMessage isMobile guildOrDmId2 threadMessageIndex channel loggedIn local model =
     case Array.get threadMessageIndex channel.messages of
         Just message ->
             case SeqDict.get guildOrDmId2 loggedIn.editMessage of
                 Just editMessage ->
                     if editMessage.messageIndex == threadMessageIndex then
                         messageEditingView
+                            isMobile
                             guildOrDmId2
                             threadMessageIndex
                             message
@@ -1617,6 +1639,7 @@ threadStarterMessage guildOrDmId2 threadMessageIndex channel loggedIn local mode
 
                     else
                         messageView
+                            isMobile
                             (conversationWidth model)
                             True
                             SeqDict.empty
@@ -1632,6 +1655,7 @@ threadStarterMessage guildOrDmId2 threadMessageIndex channel loggedIn local mode
 
                 Nothing ->
                     messageView
+                        isMobile
                         (conversationWidth model)
                         True
                         SeqDict.empty
@@ -1736,7 +1760,8 @@ reactionEmojiView messageIndex currentUserId reactions =
 
 
 messageEditingView :
-    GuildOrDmId
+    Bool
+    -> GuildOrDmId
     -> Int
     -> Message
     -> Maybe ( Int, Message )
@@ -1746,7 +1771,7 @@ messageEditingView :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
+messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -1770,7 +1795,7 @@ messageEditingView guildOrDmId messageIndex message maybeRepliedTo maybeThread r
                 , Ui.spacing 4
                 , messageHtmlId messageIndex |> Dom.idToString |> Ui.id
                 ]
-                [ repliedToMessage maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
+                [ repliedToMessage isMobile maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
                     |> Ui.map (MessageViewMsg guildOrDmId)
                 , User.toString data.createdBy (LocalState.allUsers local)
@@ -1853,10 +1878,11 @@ messageViewNotThreadStarter :
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
-        { containerWidth, isEditing, highlight, isHovered } =
+        { containerWidth, isEditing, highlight, isHovered, isMobile } =
             messageViewDecode data
     in
     messageView
+        isMobile
         containerWidth
         False
         revealedSpoilers
@@ -1880,10 +1906,11 @@ messageViewThreadStarter :
     -> Element MessageViewMsg
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
-        { containerWidth, isEditing, highlight, isHovered } =
+        { containerWidth, isEditing, highlight, isHovered, isMobile } =
             messageViewDecode data
     in
     messageView
+        isMobile
         containerWidth
         False
         revealedSpoilers
@@ -1910,7 +1937,8 @@ profileImagePaddingRight =
 
 
 messageView :
-    Int
+    Bool
+    -> Int
     -> Bool
     -> SeqDict Int (NonemptySet Int)
     -> HighlightMessage
@@ -1922,7 +1950,7 @@ messageView :
     -> Int
     -> Message
     -> Element MessageViewMsg
-messageView containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
+messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
     let
         --_ =
         --    Debug.log "changed" messageIndex
@@ -1980,7 +2008,7 @@ messageView containerWidth isThreadStarter revealedSpoilers highlight isHovered 
                         )
                     , Ui.column
                         []
-                        [ repliedToMessage maybeRepliedTo revealedSpoilers allUsers
+                        [ repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers
                         , Ui.row
                             []
                             [ User.toString message2.createdBy allUsers
@@ -2099,14 +2127,16 @@ messageTimestamp createdAt timezone =
 
 
 repliedToMessage :
-    Maybe ( Int, Message )
+    Bool
+    -> Maybe ( Int, Message )
     -> SeqDict Int (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Element MessageViewMsg
-repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
+repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
     case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
             repliedToHeaderHelper
+                isMobile
                 repliedToIndex
                 (userTextMessagePreview
                     allUsers
@@ -2121,10 +2151,11 @@ repliedToMessage maybeRepliedTo revealedSpoilers allUsers =
                 )
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
-            repliedToHeaderHelper repliedToIndex (userJoinedContent userId allUsers)
+            repliedToHeaderHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
 
         Just ( repliedToIndex, DeletedMessage _ ) ->
             repliedToHeaderHelper
+                isMobile
                 repliedToIndex
                 (Ui.el
                     [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
@@ -2167,15 +2198,15 @@ messageHtmlIdPrefix =
     "guild_message_"
 
 
-repliedToHeaderHelper : Int -> Element MessageViewMsg -> Element MessageViewMsg
-repliedToHeaderHelper messageIndex content =
+repliedToHeaderHelper : Bool -> Int -> Element MessageViewMsg -> Element MessageViewMsg
+repliedToHeaderHelper isMobile messageIndex content =
     Ui.row
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
         , Ui.Input.button (MessageView_PressedReplyLink messageIndex)
         , Ui.Font.color MyUi.font3
-        , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         ]
         [ Ui.el
             [ Ui.width (Ui.px 18)
@@ -2554,7 +2585,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             , Ui.Font.color MyUi.font3
                             , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
                             , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
-                            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                             , if isSelected then
                                 Ui.Font.color MyUi.font1
 
@@ -2667,7 +2698,7 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 
                               else
                                 Ui.Font.color MyUi.font3
-                            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                             ]
                             (Ui.text name)
                         ]
@@ -2754,7 +2785,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
 
               else
                 Ui.Font.color MyUi.font3
-            , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+            , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
             ]
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
@@ -2765,7 +2796,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                 , Ui.height Ui.fill
                 , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
                 , Ui.Font.color MyUi.font3
-                , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+                , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                 , Ui.Input.button
                     (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                 ]
@@ -2776,8 +2807,8 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         ]
 
 
-friendsColumn : Maybe ( Id UserId, ThreadRoute ) -> LocalState -> Element FrontendMsg
-friendsColumn openedOtherUserId local =
+friendsColumn : Bool -> Maybe ( Id UserId, ThreadRoute ) -> LocalState -> Element FrontendMsg
+friendsColumn isMobile openedOtherUserId local =
     channelColumnContainer
         [ Ui.el
             [ Ui.Font.bold
@@ -2793,7 +2824,7 @@ friendsColumn openedOtherUserId local =
                 (\( otherUserId, _ ) ->
                     case LocalState.getUser otherUserId local.localUser of
                         Just otherUser ->
-                            Ui.Lazy.lazy3 friendLabel openedOtherUserId otherUserId otherUser |> Just
+                            Ui.Lazy.lazy4 friendLabel isMobile openedOtherUserId otherUserId otherUser |> Just
 
                         Nothing ->
                             Nothing
@@ -2803,8 +2834,8 @@ friendsColumn openedOtherUserId local =
         )
 
 
-friendLabel : Maybe ( Id UserId, ThreadRoute ) -> Id UserId -> FrontendUser -> Element FrontendMsg
-friendLabel openedOtherUserId otherUserId otherUser =
+friendLabel : Bool -> Maybe ( Id UserId, ThreadRoute ) -> Id UserId -> FrontendUser -> Element FrontendMsg
+friendLabel isMobile openedOtherUserId otherUserId otherUser =
     let
         isSelected : Bool
         isSelected =
@@ -2825,7 +2856,7 @@ friendLabel openedOtherUserId otherUserId otherUser =
              else
                 MyUi.font3
             )
-        , MyUi.hover [ Ui.Anim.fontColor MyUi.font1 ]
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
         [ User.profileImage otherUser.icon

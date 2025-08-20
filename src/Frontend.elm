@@ -4672,6 +4672,9 @@ view model =
                     windowWidth =
                         Coord.xRaw loaded.windowSize
 
+                    isMobile =
+                        MyUi.isMobile loaded
+
                     requiresLogin : (LoggedIn2 -> LocalState -> Element FrontendMsg) -> Html FrontendMsg
                     requiresLogin page =
                         case loaded.loginStatus of
@@ -4720,7 +4723,7 @@ view model =
                                     |> Ui.map LoginFormMsg
                                     |> layout loaded
                                         [ Ui.background MyUi.background3
-                                        , Ui.inFront (Pages.Home.header loaded.loginStatus)
+                                        , Ui.inFront (Pages.Home.header isMobile loaded.loginStatus)
                                         ]
                 in
                 case loaded.route of
@@ -4761,7 +4764,7 @@ view model =
 
                                 NotLoggedIn { loginForm } ->
                                     Ui.el
-                                        [ Ui.inFront (Pages.Home.header loaded.loginStatus)
+                                        [ Ui.inFront (Pages.Home.header isMobile loaded.loginStatus)
                                         , Ui.height Ui.fill
                                         ]
                                         (case loginForm of

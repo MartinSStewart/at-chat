@@ -13,18 +13,18 @@ tests =
             \_ ->
                 let
                     input =
-                        { containerWidth = 400, isEditing = True, highlight = MentionHighlight, isHovered = IsHovered }
+                        { isMobile = False, containerWidth = 400, isEditing = True, highlight = MentionHighlight, isHovered = IsHovered }
                 in
-                Pages.Guild.messageViewEncode input.isHovered input.containerWidth input.isEditing input.highlight
+                Pages.Guild.messageViewEncode input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight
                     |> Pages.Guild.messageViewDecode
                     |> Expect.equal input
         , Test.test "Round trip message view encoding 2" <|
             \_ ->
                 let
                     input =
-                        { containerWidth = 2000, isEditing = False, highlight = NoHighlight, isHovered = IsHoveredButNoMenu }
+                        { isMobile = True, containerWidth = 2000, isEditing = False, highlight = NoHighlight, isHovered = IsHoveredButNoMenu }
                 in
-                Pages.Guild.messageViewEncode input.isHovered input.containerWidth input.isEditing input.highlight
+                Pages.Guild.messageViewEncode input.isMobile input.isHovered input.containerWidth input.isEditing input.highlight
                     |> Pages.Guild.messageViewDecode
                     |> Expect.equal input
         ]

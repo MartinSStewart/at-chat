@@ -461,9 +461,13 @@ buttonShadows =
     ]
 
 
-hover : List Ui.Anim.Animated -> Ui.Attribute msg
-hover animated =
-    Ui.Anim.hovered (Ui.Anim.ms 10) animated
+hover : Bool -> List Ui.Anim.Animated -> Ui.Attribute msg
+hover isMobile2 animated =
+    if isMobile2 then
+        Ui.noAttr
+
+    else
+        Ui.Anim.hovered (Ui.Anim.ms 10) animated
 
 
 prewrap : Ui.Attribute msg

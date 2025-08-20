@@ -14,8 +14,8 @@ import Ui.Input
 import Ui.Shadow
 
 
-header : LoginStatus -> Element FrontendMsg
-header loginStatus =
+header : Bool -> LoginStatus -> Element FrontendMsg
+header isMobile loginStatus =
     Ui.el
         [ Ui.background MyUi.background2
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
@@ -42,16 +42,16 @@ header loginStatus =
                         ([ Ui.Input.button PressedShowLogin
                          , Dom.idToString loginButtonId |> Ui.id
                          ]
-                            ++ buttonAttributes
+                            ++ buttonAttributes isMobile
                         )
                         (Ui.text "Login/Signup")
             ]
         )
 
 
-buttonAttributes : List (Ui.Attribute msg)
-buttonAttributes =
-    [ MyUi.hover [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
+buttonAttributes : Bool -> List (Ui.Attribute msg)
+buttonAttributes isMobile =
+    [ MyUi.hover isMobile [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
     , Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
