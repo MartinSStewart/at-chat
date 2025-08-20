@@ -37,7 +37,6 @@ type alias BackendUser =
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict GuildOrDmId Int
-    , dmLastViewed : SeqDict (Id UserId) Int
     , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
     , icon : Maybe FileHash
     }

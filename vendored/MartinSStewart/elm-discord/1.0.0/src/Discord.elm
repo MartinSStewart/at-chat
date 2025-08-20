@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -823,6 +823,8 @@ getGuildMember authentication guildId userId =
   - limit: Max number of members to return (1-1000)
   - after: The highest user id in the previous page
 
+<https://discord.com/developers/docs/resources/guild#list-guild-members>
+
 -}
 listGuildMembers :
     Authentication
@@ -842,6 +844,31 @@ listGuildMembers authentication { guildId, limit, after } =
                         []
                )
         )
+
+
+{-| <https://discord.com/developers/docs/resources/guild#list-active-guild-threads>
+-}
+listActiveThreads : Authentication -> Id GuildId -> Task r HttpError ActiveThreads
+listActiveThreads authentication guildId =
+    httpGet
+        authentication
+        decodeActiveThreads
+        [ "guilds", Discord.Id.toString guildId, "threads", "active" ]
+        []
+
+
+type alias ActiveThreads =
+    { threads : List Channel
+    , members : List ThreadMember
+    }
+
+
+type alias ThreadMember =
+    { threadId : Id ChannelId
+    , userId : Id UserId
+    , joinTimestamp : Time.Posix
+    , flags : Int
+    }
 
 
 
@@ -2341,6 +2368,24 @@ type alias CreateGuildCategoryChannel =
 --- DECODERS ---
 
 
+decodeActiveThreads : JD.Decoder ActiveThreads
+decodeActiveThreads =
+    JD.map2
+        ActiveThreads
+        (JD.field "threads" (JD.list decodeChannel))
+        (JD.field "members" (JD.list decodeThreadMember))
+
+
+decodeThreadMember : JD.Decoder ThreadMember
+decodeThreadMember =
+    JD.map4
+        ThreadMember
+        (JD.field "id" Discord.Id.decodeId)
+        (JD.field "user_id" Discord.Id.decodeId)
+        (JD.field "join_timestamp" Iso8601.decoder)
+        (JD.field "flags" JD.int)
+
+
 decodeSessionId : JD.Decoder SessionId
 decodeSessionId =
     JD.string
@@ -3166,7 +3211,10 @@ decodeDispatchEvent eventName =
             JD.field "d" (JD.succeed ResumedEvent)
 
         "MESSAGE_CREATE" ->
-            JD.field "d" decodeMessage |> JD.map MessageCreateEvent
+            JD.map2
+                MessageCreateEvent
+                (JD.at [ "d", "channel_type" ] decodeChannelType)
+                (JD.field "d" decodeMessage)
 
         "MESSAGE_UPDATE" ->
             JD.field "d" decodeMessageUpdate |> JD.map MessageUpdateEvent
@@ -3204,6 +3252,9 @@ decodeDispatchEvent eventName =
         "GUILD_MEMBER_UPDATE" ->
             JD.field "d" decodeGuildMemberUpdate |> JD.map GuildMemberUpdateEvent
 
+        "THREAD_CREATE" ->
+            JD.field "d" decodeChannel |> JD.map ThreadCreatedOrUserAddedToThreadEvent
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -3213,7 +3264,7 @@ type alias MessageUpdate =
     , channelId : Id ChannelId
     , guildId : Id GuildId
     , author : User
-    , content : NonemptyString
+    , content : String
     , timestamp : Time.Posix
     }
 
@@ -3225,22 +3276,8 @@ decodeMessageUpdate =
         |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "author" decodeUser)
-        |> JD.andMap (JD.field "content" decodeNonemptyString)
+        |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
-
-
-decodeNonemptyString : JD.Decoder NonemptyString
-decodeNonemptyString =
-    JD.andThen
-        (\text ->
-            case String.Nonempty.fromString text of
-                Just nonempty ->
-                    JD.succeed nonempty
-
-                Nothing ->
-                    JD.fail "Expected nonempty string"
-        )
-        JD.string
 
 
 decodeGatewayEvent : JD.Decoder GatewayEvent
@@ -3303,13 +3340,14 @@ type GatewayEvent
 type OpDispatchEvent
     = ReadyEvent SessionId
     | ResumedEvent
-    | MessageCreateEvent Message
+    | MessageCreateEvent ChannelType Message
     | MessageUpdateEvent MessageUpdate
     | MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
     | MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
     | GuildMemberAddEvent (Id GuildId) GuildMember
     | GuildMemberRemoveEvent (Id GuildId) User
     | GuildMemberUpdateEvent GuildMemberUpdate
+    | ThreadCreatedOrUserAddedToThreadEvent Channel
 
 
 type GatewayCloseEventCode
@@ -3484,10 +3522,11 @@ type OutMsg connection
     | OpenHandle
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
-    | UserCreatedMessage Message
+    | UserCreatedMessage ChannelType Message
     | UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
     | UserEditedMessage MessageUpdate
     | FailedToParseWebsocketMessage JD.Error
+    | ThreadCreatedOrUserAddedToThread Channel
 
 
 type alias Model connection =
@@ -3512,7 +3551,7 @@ type Msg
 
 websocketGatewayUrl : String
 websocketGatewayUrl =
-    "wss://gateway.discord.gg/?v=8&encoding=json"
+    "wss://gateway.discord.gg/?v=9&encoding=json"
 
 
 createdHandle : connection -> Model connection -> Model connection
@@ -3591,8 +3630,8 @@ handleGateway authToken response model =
                         ResumedEvent ->
                             ( model, [] )
 
-                        MessageCreateEvent message ->
-                            ( model, [ UserCreatedMessage message ] )
+                        MessageCreateEvent channelType message ->
+                            ( model, [ UserCreatedMessage channelType message ] )
 
                         MessageUpdateEvent messageUpdate ->
                             ( model, [ UserEditedMessage messageUpdate ] )
@@ -3633,6 +3672,9 @@ handleGateway authToken response model =
 
                         GuildMemberUpdateEvent _ ->
                             ( model, [] )
+
+                        ThreadCreatedOrUserAddedToThreadEvent channel ->
+                            ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )

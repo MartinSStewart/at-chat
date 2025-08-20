@@ -31,8 +31,8 @@ type NotificationType
     | NewMessageForUser
 
 
-notificationView : Ui.Color -> NotificationType -> Ui.Attribute msg
-notificationView borderColor notification =
+notificationView : Int -> Int -> Ui.Color -> NotificationType -> Ui.Attribute msg
+notificationView xOffset yOffset borderColor notification =
     case notification of
         NoNotification ->
             Ui.noAttr
@@ -46,7 +46,7 @@ notificationView borderColor notification =
                     , Ui.height (Ui.px 14)
                     , Ui.border 2
                     , Ui.borderColor borderColor
-                    , Ui.move { x = 0, y = -3, z = 0 }
+                    , Ui.move { x = xOffset, y = yOffset, z = 0 }
                     , Ui.alignRight
                     ]
                     Ui.none
@@ -61,7 +61,7 @@ notificationView borderColor notification =
                     , Ui.height (Ui.px 14)
                     , Ui.border 2
                     , Ui.borderColor borderColor
-                    , Ui.move { x = 0, y = -3, z = 0 }
+                    , Ui.move { x = xOffset, y = yOffset, z = 0 }
                     , Ui.alignRight
                     ]
                     Ui.none
@@ -81,7 +81,7 @@ view mode guild =
                 Ui.noAttr
 
             Normal notification ->
-                notificationView MyUi.background1 notification
+                notificationView 0 -3 MyUi.background1 notification
         ]
         (case guild.icon of
             Just icon ->

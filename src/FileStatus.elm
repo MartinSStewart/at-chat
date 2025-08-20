@@ -32,7 +32,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId(..), Id)
+import Id exposing (GuildOrDmId(..), Id, ThreadRoute(..))
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -155,8 +155,8 @@ contentType a =
 uploadHelper : String -> Result Http.Error ( FileHash, Maybe (Coord units) )
 uploadHelper text =
     case String.split "," text of
-        [ fileHash2, width, height ] ->
-            ( fileHash fileHash2
+        [ fileHashValue, width, height ] ->
+            ( fileHash fileHashValue
             , case ( String.toInt width, String.toInt height ) of
                 ( Just width2, Just height2 ) ->
                     if width2 > 0 then
@@ -207,12 +207,29 @@ upload onResult sessionId guildOrDmId fileId file2 =
 uploadTrackerId : GuildOrDmId -> Id FileId -> String
 uploadTrackerId guildOrDmId fileId =
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            Id.toString guildId ++ "," ++ Id.toString channelId
+        GuildOrDmId_Guild guildId channelId threadRoute ->
+            Id.toString guildId
+                ++ ","
+                ++ Id.toString channelId
+                ++ (case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            ",t" ++ String.fromInt threadMessageIndex
 
-        GuildOrDmId_Dm otherUserId ->
+                        NoThread ->
+                            ""
+                   )
+
+        GuildOrDmId_Dm otherUserId threadRoute ->
             Id.toString otherUserId
+                ++ (case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            ",t" ++ String.fromInt threadMessageIndex
+
+                        NoThread ->
+                            ""
+                   )
     )
+        ++ "f"
         ++ Id.toString fileId
 
 
@@ -255,6 +272,7 @@ domain =
         "http://localhost:3000"
 
 
+previewSize : number
 previewSize =
     150
 

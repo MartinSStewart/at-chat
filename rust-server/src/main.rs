@@ -155,6 +155,7 @@ fn response_with_headers(status_code: StatusCode, body: String) -> Response<Stri
         .status(status_code)
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "text/plain")
         .body(body)
         .unwrap()
 }

@@ -4,7 +4,6 @@ module MessageMenu exposing
     , editMessageTextInputId
     , menuHeight
     , messageMenuSpeed
-    , miniView
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
     , view
@@ -17,10 +16,8 @@ import CssPixels exposing (CssPixels)
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
-import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId)
-import Json.Decode
+import Id exposing (GuildOrDmId, ThreadRoute(..))
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
@@ -30,7 +27,6 @@ import RichText
 import SeqDict
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
-import Ui.Events
 import Ui.Font
 import Ui.Input
 import User
@@ -96,7 +92,7 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
             let
                 itemCount : Float
                 itemCount =
-                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex Coord.origin local model |> List.length |> toFloat
+                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex False Coord.origin local model |> List.length |> toFloat
             in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
@@ -108,7 +104,7 @@ mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId messageIndex Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId messageIndex False Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -126,7 +122,7 @@ menuHeight :
 menuHeight extraOptions local model =
     let
         itemCount =
-            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model
+            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex False extraOptions.position local model
                 |> List.length
     in
     itemCount * buttonHeight False + 2
@@ -231,7 +227,15 @@ view model extraOptions local loggedIn =
                                         ]
                                         Ui.none
                                     )
-                                    (menuItems True extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
+                                    (menuItems
+                                        True
+                                        extraOptions.guildOrDmId
+                                        extraOptions.messageIndex
+                                        extraOptions.isThreadStarter
+                                        extraOptions.position
+                                        local
+                                        model
+                                    )
                        )
                 )
                 |> Ui.below
@@ -252,7 +256,15 @@ view model extraOptions local loggedIn =
             , Ui.rounded 8
             , MyUi.blockClickPropagation MessageMenu_PressedContainer
             ]
-            (menuItems False extraOptions.guildOrDmId extraOptions.messageIndex extraOptions.position local model)
+            (menuItems
+                False
+                extraOptions.guildOrDmId
+                extraOptions.messageIndex
+                extraOptions.isThreadStarter
+                extraOptions.position
+                local
+                model
+            )
 
 
 editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
@@ -278,52 +290,10 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-miniView : Bool -> Int -> Element FrontendMsg
-miniView canEdit messageIndex =
-    Ui.row
-        [ Ui.alignRight
-        , Ui.background MyUi.background1
-        , Ui.rounded 4
-        , Ui.borderColor MyUi.border1
-        , Ui.border 1
-        , Ui.move { x = -48, y = -16, z = 0 }
-        , Ui.height (Ui.px 32)
-        ]
-        [ miniButton (MessageMenu_PressedShowReactionEmojiSelector messageIndex) Icons.smile
-        , if canEdit then
-            miniButton (\_ -> MessageMenu_PressedEditMessage messageIndex) Icons.pencil
-
-          else
-            Ui.none
-        , miniButton (\_ -> MessageMenu_PressedReply messageIndex) Icons.reply
-        , miniButton (MessageMenu_PressedShowFullMenu messageIndex) Icons.dotDotDot
-        ]
-
-
-miniButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
-miniButton onPress svg =
-    Ui.el
-        [ Ui.width (Ui.px 32)
-        , Ui.paddingXY 4 3
-        , Ui.height Ui.fill
-        , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
-
-        --, Ui.Input.button onPress
-        , Ui.Events.stopPropagationOn "click"
-            (Json.Decode.map2
-                (\x y -> ( onPress (Coord.xy (round x) (round y)), True ))
-                (Json.Decode.field "clientX" Json.Decode.float)
-                (Json.Decode.field "clientY" Json.Decode.float)
-            )
-        , Ui.pointer
-        ]
-        (Ui.html svg)
-
-
-menuItems : Bool -> GuildOrDmId -> Int -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile guildOrDmId messageIndex position local model =
+menuItems : Bool -> GuildOrDmId -> Int -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model =
     case LocalState.getMessages guildOrDmId local of
-        Just messages ->
+        Just ( threadRoute, messages ) ->
             case Array.get messageIndex messages of
                 Just message ->
                     let
@@ -346,26 +316,36 @@ menuItems isMobile guildOrDmId messageIndex position local model =
                                     User.toString userId (LocalState.allUsers local)
                                         ++ " joined!"
 
-                                DeletedMessage ->
+                                DeletedMessage _ ->
                                     "Message deleted"
                     in
                     [ button
                         isMobile
                         Icons.smile
                         "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector messageIndex position)
+                        (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId messageIndex position)
                         |> Just
                     , if canEditAndDelete then
                         button
                             isMobile
                             Icons.pencil
                             "Edit message"
-                            (MessageMenu_PressedEditMessage messageIndex)
+                            (MessageMenu_PressedEditMessage guildOrDmId messageIndex)
                             |> Just
 
                       else
                         Nothing
-                    , button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
+                    , if isThreadStarter then
+                        Nothing
+
+                      else
+                        button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
+                    , case ( threadRoute, isThreadStarter ) of
+                        ( NoThread, False ) ->
+                            button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+
+                        _ ->
+                            Nothing
                     , button
                         isMobile
                         Icons.copyIcon

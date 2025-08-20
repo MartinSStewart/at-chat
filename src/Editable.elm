@@ -22,8 +22,6 @@ type Editing
     | Editing String
 
 
-{-| OpaqueVariants
--}
 type Msg value
     = Edit Model
     | PressedAcceptEdit value

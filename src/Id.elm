@@ -4,9 +4,11 @@ module Id exposing
     , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
+    , ThreadRoute(..)
     , UserId(..)
     , fromInt
     , fromString
+    , guildOrDmIdSetThreadRoute
     , nextId
     , toInt
     , toString
@@ -17,8 +19,23 @@ import SeqDict exposing (SeqDict)
 
 
 type GuildOrDmId
-    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_Dm (Id UserId)
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId) ThreadRoute
+    | GuildOrDmId_Dm (Id UserId) ThreadRoute
+
+
+guildOrDmIdSetThreadRoute : GuildOrDmId -> ThreadRoute -> GuildOrDmId
+guildOrDmIdSetThreadRoute guildOrDmId threadRoute =
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId _ ->
+            GuildOrDmId_Guild guildId channelId threadRoute
+
+        GuildOrDmId_Dm otherUserId _ ->
+            GuildOrDmId_Dm otherUserId threadRoute
+
+
+type ThreadRoute
+    = NoThread
+    | ViewThread Int
 
 
 type UserId
