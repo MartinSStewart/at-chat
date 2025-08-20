@@ -285,7 +285,7 @@ loggedInAsView local =
             , Ui.alignRight
             , Ui.Input.button PressedShowUserOption
             ]
-            (Ui.html Icons.gearIcon)
+            (Ui.html Icons.gear)
         ]
 
 
@@ -2525,7 +2525,6 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channel
                         , channelColumnThreads
                             isMobile
-                            channelNameHover
                             channelRoute
                             localUser
                             guildId
@@ -2575,7 +2574,6 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
 
 channelColumnThreads :
     Bool
-    -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> ChannelRoute
     -> LocalUser
     -> Id GuildId
@@ -2583,7 +2581,7 @@ channelColumnThreads :
     -> FrontendChannel
     -> SeqDict Int Thread
     -> Element FrontendMsg
-channelColumnThreads isMobile channelNameHover channelRoute localUser guildId channelId channel threads =
+channelColumnThreads isMobile channelRoute localUser guildId channelId channel threads =
     Ui.column
         []
         (SeqDict.toList threads
@@ -2602,10 +2600,6 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
 
                                 _ ->
                                     False
-
-                        isHover : Bool
-                        isHover =
-                            channelNameHover == Just ( guildId, channelId, NoThread )
 
                         name =
                             threadPreviewText threadMessageIndex channel localUser
@@ -2629,12 +2623,7 @@ channelColumnThreads isMobile channelNameHover channelRoute localUser guildId ch
                             , Ui.contentCenterY
                             , Ui.paddingWith
                                 { left = 28
-                                , right =
-                                    if isHover then
-                                        0
-
-                                    else
-                                        8
+                                , right = 8
                                 , top = 0
                                 , bottom = 0
                                 }
@@ -2772,7 +2761,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                 , Ui.Input.button
                     (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                 ]
-                (Ui.html Icons.gearIcon)
+                (Ui.html Icons.gear)
 
           else
             Ui.none

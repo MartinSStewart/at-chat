@@ -899,7 +899,7 @@ showOptionsButton =
         , Ui.width (Ui.px 36)
         , Ui.height (Ui.px 36)
         ]
-        (Ui.html Icons.gearIcon)
+        (Ui.html Icons.gear)
 
 
 optionsView : FrontendModel -> Element Msg
