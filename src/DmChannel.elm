@@ -11,7 +11,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord.Id
-import Id exposing (ChannelMessageId, Id(..), UserId)
+import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, UserId)
 import Message exposing (Message)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -30,7 +30,7 @@ type alias DmChannel =
 type alias Thread =
     { messages : Array Message
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     }
 
 

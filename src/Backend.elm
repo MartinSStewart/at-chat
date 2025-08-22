@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -533,21 +533,21 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        SentGuildMessageToDiscord messageId threadRoute result ->
+        SentGuildMessageToDiscord guildId channelId threadRoute result ->
             case result of
                 Ok message ->
                     ( { model
                         | guilds =
                             SeqDict.updateIfExists
-                                messageId.guildId
+                                guildId
                                 (\guild ->
                                     { guild
                                         | channels =
                                             SeqDict.updateIfExists
-                                                messageId.channelId
+                                                channelId
                                                 (\channel ->
                                                     case threadRoute of
-                                                        ViewThread threadMessageIndex ->
+                                                        ViewThreadWithMessage threadMessageIndex messageId ->
                                                             { channel
                                                                 | threads =
                                                                     SeqDict.update
@@ -562,7 +562,7 @@ update msg model =
                                                                                 | linkedMessageIds =
                                                                                     OneToOne.insert
                                                                                         message.id
-                                                                                        messageId.messageIndex
+                                                                                        messageId
                                                                                         thread.linkedMessageIds
                                                                             }
                                                                                 |> Just
@@ -575,12 +575,12 @@ update msg model =
                                                                         channel.linkedThreadIds
                                                             }
 
-                                                        NoThread ->
+                                                        NoThreadWithMessage messageId ->
                                                             { channel
                                                                 | linkedMessageIds =
                                                                     OneToOne.insert
                                                                         message.id
-                                                                        messageId.messageIndex
+                                                                        messageId
                                                                         channel.linkedMessageIds
                                                             }
                                                 )
@@ -604,7 +604,7 @@ update msg model =
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
-        SentDirectMessageToDiscord dmChannelId threadRoute messageIndex result ->
+        SentDirectMessageToDiscord dmChannelId threadRoute result ->
             case result of
                 Ok message ->
                     ( { model
@@ -613,7 +613,7 @@ update msg model =
                                 dmChannelId
                                 (\dmChannel ->
                                     case threadRoute of
-                                        ViewThread threadMessageIndex ->
+                                        ViewThreadWithMessage threadMessageIndex messageIndex ->
                                             { dmChannel
                                                 | threads =
                                                     SeqDict.updateIfExists
@@ -627,7 +627,7 @@ update msg model =
                                                         dmChannel.threads
                                             }
 
-                                        NoThread ->
+                                        NoThreadWithMessage messageIndex ->
                                             { dmChannel
                                                 | linkedMessageIds =
                                                     OneToOne.insert message.id messageIndex dmChannel.linkedMessageIds
@@ -2923,7 +2923,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                             Nothing ->
                                 Nothing
                     }
-                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId threadRoute messageIndex)
+                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId threadRoute)
 
             _ ->
                 Command.none

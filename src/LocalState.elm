@@ -347,13 +347,13 @@ createMessageHelper :
         { d
             | messages : Array Message
             , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
         }
     ->
         { d
             | messages : Array Message
             , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
         }
 createMessageHelper maybeDiscordMessageId message channel =
     { channel
@@ -361,7 +361,7 @@ createMessageHelper maybeDiscordMessageId message channel =
             case message of
                 UserTextMessage data ->
                     let
-                        previousIndex : Id ChannelMessageId
+                        previousIndex : Id messageId
                         previousIndex =
                             Array.length channel.messages - 1 |> Id.fromInt
                     in
@@ -608,17 +608,17 @@ memberIsEditTyping userId time channelId threadRoute messageIndex guild =
             Err ()
 
 
-getArray : Id ChannelMessageId -> Array Message -> Maybe Message
+getArray : Id messageId -> Array Message -> Maybe Message
 getArray id array =
     Array.get (Id.toInt id) array
 
 
-setArray : Id ChannelMessageId -> Message -> Array Message -> Array Message
+setArray : Id messageId -> Message -> Array Message -> Array Message
 setArray id message array =
     Array.set (Id.toInt id) message array
 
 
-updateArray : Id ChannelMessageId -> (Message -> Message) -> Array Message -> Array Message
+updateArray : Id messageId -> (Message -> Message) -> Array Message -> Array Message
 updateArray id updateFunc array =
     Array.Extra.update (Id.toInt id) updateFunc array
 

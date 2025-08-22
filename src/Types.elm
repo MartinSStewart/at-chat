@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadRoute, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
@@ -450,11 +450,11 @@ type BackendMsg
                 )
             )
         )
-    | SentGuildMessageToDiscord GuildChannelAndMessageId ThreadRoute (Result Discord.HttpError Discord.Message)
+    | SentGuildMessageToDiscord (Id GuildId) (Id ChannelId) ThreadRouteWithMessage (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
-    | SentDirectMessageToDiscord DmChannelId ThreadRoute (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
+    | SentDirectMessageToDiscord DmChannelId ThreadRouteWithMessage (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
 
 
