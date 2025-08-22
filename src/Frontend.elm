@@ -32,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, GuildOrDmId(..), Id, MessageId, ThreadRoute(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -1121,7 +1121,7 @@ updateLoaded msg model =
                                             Just messages ->
                                                 Local_SetLastViewed
                                                     guildOrDmId
-                                                    (Array.length messages - 1)
+                                                    (Array.length messages - 1 |> Id.fromInt)
                                                     |> Just
 
                                             Nothing ->
@@ -1594,7 +1594,7 @@ updateLoaded msg model =
                                                             Just messages ->
                                                                 Local_SetLastViewed
                                                                     guildOrDmId
-                                                                    (Array.length messages - 1)
+                                                                    (Array.length messages - 1 |> Id.fromInt)
                                                                     |> Just
 
                                                             Nothing ->
@@ -1862,17 +1862,18 @@ updateLoaded msg model =
                                 messageCount =
                                     Array.length messages
 
-                                mostRecentMessage : Maybe ( Int, UserTextMessageData )
+                                mostRecentMessage : Maybe ( Id MessageId, UserTextMessageData )
                                 mostRecentMessage =
                                     (if messageCount < 5 then
-                                        Array.toList messages |> List.indexedMap Tuple.pair
+                                        Array.toList messages
+                                            |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
 
                                      else
                                         Array.slice (messageCount - 5) messageCount messages
                                             |> Array.toList
                                             |> List.indexedMap
                                                 (\index message ->
-                                                    ( messageCount + index - 5, message )
+                                                    ( messageCount + index - 5 |> Id.fromInt, message )
                                                 )
                                     )
                                         |> List.reverse
@@ -2770,7 +2771,7 @@ updateLoaded msg model =
                             ( model, Command.none )
 
 
-pressedReply : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedReply guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2783,7 +2784,7 @@ pressedReply guildOrDmId messageIndex model =
         model
 
 
-pressedEditMessage : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedEditMessage guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2792,7 +2793,7 @@ pressedEditMessage guildOrDmId messageIndex model =
                 maybeMessage =
                     case LocalState.getMessages guildOrDmId local of
                         Just ( _, messages ) ->
-                            case Array.get messageIndex messages of
+                            case LocalState.getArray messageIndex messages of
                                 Just (UserTextMessage data) ->
                                     Just data
 
@@ -2857,7 +2858,7 @@ pressedEditMessage guildOrDmId messageIndex model =
         model
 
 
-showReactionEmojiSelector : GuildOrDmId -> Int -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2890,7 +2891,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 
 touchStart :
-    Maybe ( GuildOrDmId, Int, Bool )
+    Maybe ( GuildOrDmId, Id MessageId, Bool )
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
@@ -3088,7 +3089,7 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-handleAltPressedMessage : GuildOrDmId -> Int -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage : GuildOrDmId -> Id MessageId -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage guildOrDmId messageIndex isThreadStarter clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
@@ -3416,7 +3417,7 @@ changeUpdate localMsg local =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 guildOrDmId
-                                                                (Array.length channel.messages)
+                                                                (Array.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
                                             }
@@ -3460,7 +3461,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         guildOrDmId
-                                                        (Array.length dmChannel.messages - 1)
+                                                        (Array.length dmChannel.messages - 1 |> Id.fromInt)
                                                         user.lastViewed
                                             }
                                     }
@@ -3627,7 +3628,7 @@ changeUpdate localMsg local =
                                                             | lastViewed =
                                                                 SeqDict.insert
                                                                     guildOrDmId
-                                                                    (Array.length channel.messages)
+                                                                    (Array.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
 
@@ -3677,7 +3678,7 @@ changeUpdate localMsg local =
                                                     | lastViewed =
                                                         SeqDict.insert
                                                             guildOrDmId
-                                                            (Array.length dmChannel.messages - 1)
+                                                            (Array.length dmChannel.messages - 1 |> Id.fromInt)
                                                             user.lastViewed
                                                 }
 
@@ -3794,11 +3795,11 @@ changeUpdate localMsg local =
                                             SeqDict.updateIfExists
                                                 messageId.channelId
                                                 (\channel ->
-                                                    case Array.get messageId.messageIndex channel.messages of
+                                                    case LocalState.getArray messageId.messageIndex channel.messages of
                                                         Just (UserTextMessage data) ->
                                                             { channel
                                                                 | messages =
-                                                                    Array.set
+                                                                    LocalState.setArray
                                                                         messageId.messageIndex
                                                                         (DeletedMessage data.createdAt)
                                                                         channel.messages
@@ -3874,7 +3875,7 @@ memberTyping time userId guildOrDmId local =
             }
 
 
-addReactionEmoji : Id UserId -> GuildOrDmId -> Int -> Emoji -> LocalState -> LocalState
+addReactionEmoji : Id UserId -> GuildOrDmId -> Id MessageId -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId messageIndex emoji local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3899,7 +3900,7 @@ addReactionEmoji userId guildOrDmId messageIndex emoji local =
             }
 
 
-removeReactionEmoji : Id UserId -> GuildOrDmId -> Int -> Emoji -> LocalState -> LocalState
+removeReactionEmoji : Id UserId -> GuildOrDmId -> Id MessageId -> Emoji -> LocalState -> LocalState
 removeReactionEmoji userId guildOrDmId messageIndex emoji local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3924,7 +3925,7 @@ removeReactionEmoji userId guildOrDmId messageIndex emoji local =
             }
 
 
-memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Int -> LocalState -> LocalState
+memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Id MessageId -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3958,7 +3959,7 @@ editMessage :
     -> GuildOrDmId
     -> Nonempty RichText
     -> SeqDict (Id FileId) FileData
-    -> Int
+    -> Id MessageId
     -> LocalState
     -> LocalState
 editMessage time userId guildOrDmId newContent attachedFiles messageIndex local =
@@ -4005,7 +4006,7 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
             }
 
 
-deleteMessage : Id UserId -> GuildOrDmId -> Int -> LocalState -> LocalState
+deleteMessage : Id UserId -> GuildOrDmId -> Id MessageId -> LocalState -> LocalState
 deleteMessage userId guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -4406,7 +4407,7 @@ scrollToBottomOfChannel =
 
 playNotificationSound :
     Id UserId
-    -> Maybe Int
+    -> Maybe (Id MessageId)
     -> FrontendChannel
     -> LocalState
     -> Nonempty RichText
@@ -4832,11 +4833,11 @@ view model =
     }
 
 
-guildOrDmIdToMessage : GuildOrDmId -> Int -> LocalState -> Maybe UserTextMessageData
+guildOrDmIdToMessage : GuildOrDmId -> Id MessageId -> LocalState -> Maybe UserTextMessageData
 guildOrDmIdToMessage guildOrDmId messageIndex local =
     case guildOrDmIdToMessages guildOrDmId local of
         Just messages ->
-            case Array.get messageIndex messages of
+            case LocalState.getArray messageIndex messages of
                 Just (UserTextMessage data) ->
                     Just data
 

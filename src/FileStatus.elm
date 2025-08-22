@@ -213,7 +213,7 @@ uploadTrackerId guildOrDmId fileId =
                 ++ Id.toString channelId
                 ++ (case threadRoute of
                         ViewThread threadMessageIndex ->
-                            ",t" ++ String.fromInt threadMessageIndex
+                            ",t" ++ Id.toString threadMessageIndex
 
                         NoThread ->
                             ""
@@ -223,7 +223,7 @@ uploadTrackerId guildOrDmId fileId =
             Id.toString otherUserId
                 ++ (case threadRoute of
                         ViewThread threadMessageIndex ->
-                            ",t" ++ String.fromInt threadMessageIndex
+                            ",t" ++ Id.toString threadMessageIndex
 
                         NoThread ->
                             ""

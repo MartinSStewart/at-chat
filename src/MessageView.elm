@@ -7,6 +7,7 @@ import Emoji exposing (Emoji)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
+import Id exposing (Id, MessageId)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -16,20 +17,20 @@ import Ui.Events
 
 
 type MessageViewMsg
-    = MessageView_PressedSpoiler Int Int
-    | MessageView_MouseEnteredMessage Int
-    | MessageView_MouseExitedMessage Int
-    | MessageView_TouchStart Time.Posix Bool Int (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool Int (Coord CssPixels)
-    | MessageView_PressedReactionEmoji_Remove Int Emoji
-    | MessageView_PressedReactionEmoji_Add Int Emoji
+    = MessageView_PressedSpoiler (Id MessageId) Int
+    | MessageView_MouseEnteredMessage (Id MessageId)
+    | MessageView_MouseExitedMessage (Id MessageId)
+    | MessageView_TouchStart Time.Posix Bool (Id MessageId) (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool (Id MessageId) (Coord CssPixels)
+    | MessageView_PressedReactionEmoji_Remove (Id MessageId) Emoji
+    | MessageView_PressedReactionEmoji_Add (Id MessageId) Emoji
     | MessageView_NoOp
-    | MessageView_PressedReplyLink Int
-    | MessageViewMsg_PressedShowReactionEmojiSelector Int (Coord CssPixels)
-    | MessageViewMsg_PressedEditMessage Int
-    | MessageViewMsg_PressedReply Int
-    | MessageViewMsg_PressedShowFullMenu Bool Int (Coord CssPixels)
-    | MessageView_PressedViewThreadLink Int
+    | MessageView_PressedReplyLink (Id MessageId)
+    | MessageViewMsg_PressedShowReactionEmojiSelector (Id MessageId) (Coord CssPixels)
+    | MessageViewMsg_PressedEditMessage (Id MessageId)
+    | MessageViewMsg_PressedReply (Id MessageId)
+    | MessageViewMsg_PressedShowFullMenu Bool (Id MessageId) (Coord CssPixels)
+    | MessageView_PressedViewThreadLink (Id MessageId)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -78,7 +79,7 @@ isPressMsg msg =
             True
 
 
-miniView : Bool -> Bool -> Int -> Element MessageViewMsg
+miniView : Bool -> Bool -> Id MessageId -> Element MessageViewMsg
 miniView isThreadStarter canEdit messageIndex =
     Ui.row
         [ Ui.alignRight

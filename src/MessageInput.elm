@@ -19,7 +19,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildOrDmId(..), Id, UserId)
+import Id exposing (GuildOrDmId(..), Id, MessageId, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra

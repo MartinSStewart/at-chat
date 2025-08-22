@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, MessageId, ThreadRoute(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -760,7 +760,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                 Just ( channelId, channel ) ->
                     case OneToOne.second messageId channel.linkedMessageIds of
                         Just messageIndex ->
-                            case Array.get messageIndex channel.messages of
+                            case LocalState.getArray messageIndex channel.messages of
                                 Just (UserTextMessage data) ->
                                     ( { model
                                         | guilds =
@@ -772,7 +772,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                                                             channelId
                                                             { channel
                                                                 | messages =
-                                                                    Array.set
+                                                                    LocalState.setArray
                                                                         messageIndex
                                                                         (DeletedMessage data.createdAt)
                                                                         channel.messages
@@ -1141,7 +1141,7 @@ handleDiscordCreateMessage message model =
                         dmChannel =
                             Maybe.withDefault DmChannel.init (SeqDict.get dmChannelId model.dmChannels)
 
-                        replyTo : Maybe Int
+                        replyTo : Maybe (Id MessageId)
                         replyTo =
                             case message.referencedMessage of
                                 Discord.Referenced referenced ->
@@ -1263,7 +1263,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     case maybeData of
         Just { guildId, guild, channelId, channel, threadRoute } ->
             let
-                replyTo : Maybe Int
+                replyTo : Maybe (Id MessageId)
                 replyTo =
                     discordReplyTo message channel
             in
@@ -1307,7 +1307,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
             ( model, Command.none )
 
 
-discordReplyTo : Discord.Message -> BackendChannel -> Maybe Int
+discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id MessageId)
 discordReplyTo message channel =
     case message.referencedMessage of
         Discord.Referenced referenced ->
@@ -1324,7 +1324,7 @@ handleDiscordCreateGuildMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
     -> Discord.Id.Id Discord.Id.ChannelId
     -> ThreadRoute
-    -> Maybe Int
+    -> Maybe (Id MessageId)
     -> Id UserId
     -> Nonempty RichText
     -> Discord.Message
@@ -2471,10 +2471,9 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                     ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
                                     , SeqDict.get threadMessageIndex channel2.threads
                                     )
-                                        |> Debug.log "abc"
                                 of
                                     ( Just discordChannelId, Just thread ) ->
-                                        case OneToOne.first messageIndex thread.linkedMessageIds |> Debug.log "123" of
+                                        case OneToOne.first messageIndex thread.linkedMessageIds of
                                             Just discordMessageId ->
                                                 Discord.editMessage
                                                     (botTokenToAuth botToken)
@@ -2844,7 +2843,7 @@ sendDirectMessage :
     -> Id UserId
     -> ThreadRoute
     -> Nonempty RichText
-    -> Maybe Int
+    -> Maybe (Id MessageId)
     -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
@@ -2873,8 +2872,9 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                     )
                     threadRoute
 
+        messageIndex : Id MessageId
         messageIndex =
-            Array.length dmChannel.messages - 1
+            Array.length dmChannel.messages - 1 |> Id.fromInt
     in
     ( { model
         | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
@@ -2976,7 +2976,7 @@ sendGuildMessage :
     -> Id ChannelId
     -> ThreadRoute
     -> Nonempty RichText
-    -> Maybe Int
+    -> Maybe (Id MessageId)
     -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
@@ -3003,23 +3003,23 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                         threadRoute
                         channel
 
-                messageIndex : Int
+                messageIndex : Id MessageId
                 messageIndex =
                     case threadRoute of
                         ViewThread threadMessageIndex ->
                             case SeqDict.get threadMessageIndex channel2.threads of
                                 Just thread ->
-                                    Array.length thread.messages - 1
+                                    Array.length thread.messages - 1 |> Id.fromInt
 
                                 Nothing ->
                                     let
                                         _ =
                                             Debug.log "shouldn't happen" ()
                                     in
-                                    0
+                                    Id.fromInt 0
 
                         NoThread ->
-                            Array.length channel2.messages - 1
+                            Array.length channel2.messages - 1 |> Id.fromInt
             in
             ( { model
                 | guilds =

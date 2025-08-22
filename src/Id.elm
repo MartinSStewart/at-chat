@@ -4,11 +4,13 @@ module Id exposing
     , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
+    , MessageId
     , ThreadRoute(..)
     , UserId(..)
     , fromInt
     , fromString
     , guildOrDmIdSetThreadRoute
+    , increment
     , nextId
     , toInt
     , toString
@@ -35,7 +37,7 @@ guildOrDmIdSetThreadRoute guildOrDmId threadRoute =
 
 type ThreadRoute
     = NoThread
-    | ViewThread Int
+    | ViewThread (Id MessageId)
 
 
 type UserId
@@ -50,12 +52,21 @@ type ChannelId
     = ChannelId Never
 
 
+type MessageId
+    = MessageId Never
+
+
 type InviteLinkId
     = InviteLinkId Never
 
 
 type Id a
     = Id Int
+
+
+increment : Id a -> Id a
+increment (Id id) =
+    id + 1 |> Id
 
 
 nextId : SeqDict (Id a) b -> Id a

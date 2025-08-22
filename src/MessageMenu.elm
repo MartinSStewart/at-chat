@@ -10,14 +10,13 @@ module MessageMenu exposing
     , width
     )
 
-import Array
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (GuildOrDmId, ThreadRoute(..))
+import Id exposing (GuildOrDmId, Id, MessageId, ThreadRoute(..))
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
@@ -99,7 +98,7 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
         |> CssPixels.cssPixels
 
 
-mobileMenuOpeningOffset : GuildOrDmId -> Int -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuOpeningOffset : GuildOrDmId -> Id MessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
@@ -115,7 +114,7 @@ messageMenuSpeed =
 
 
 menuHeight :
-    { a | guildOrDmId : GuildOrDmId, messageIndex : Int, position : Coord CssPixels }
+    { a | guildOrDmId : GuildOrDmId, messageIndex : Id MessageId, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -143,7 +142,7 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmId -> Int -> LoggedIn2 -> Maybe EditMessage
+showEdit : GuildOrDmId -> Id MessageId -> LoggedIn2 -> Maybe EditMessage
 showEdit guildOrDmId messageIndex loggedIn =
     case SeqDict.get guildOrDmId loggedIn.editMessage of
         Just edit ->
@@ -290,11 +289,11 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmId -> Int -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> GuildOrDmId -> Id MessageId -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model =
     case LocalState.getMessages guildOrDmId local of
         Just ( threadRoute, messages ) ->
-            case Array.get messageIndex messages of
+            case LocalState.getArray messageIndex messages of
                 Just message ->
                     let
                         canEditAndDelete : Bool
