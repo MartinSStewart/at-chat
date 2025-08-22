@@ -454,7 +454,7 @@ type BackendMsg
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
-    | SentDirectMessageToDiscord DmChannelId ThreadRouteWithMessage (Result Discord.HttpError Discord.Message)
+    | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
 
 

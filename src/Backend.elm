@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -604,7 +604,7 @@ update msg model =
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
-        SentDirectMessageToDiscord dmChannelId threadRoute result ->
+        SentDirectMessageToDiscord dmChannelId messageId result ->
             case result of
                 Ok message ->
                     ( { model
@@ -612,26 +612,10 @@ update msg model =
                             SeqDict.updateIfExists
                                 dmChannelId
                                 (\dmChannel ->
-                                    case threadRoute of
-                                        ViewThreadWithMessage threadMessageIndex messageIndex ->
-                                            { dmChannel
-                                                | threads =
-                                                    SeqDict.updateIfExists
-                                                        threadMessageIndex
-                                                        (\thread ->
-                                                            { thread
-                                                                | linkedMessageIds =
-                                                                    OneToOne.insert message.id messageIndex thread.linkedMessageIds
-                                                            }
-                                                        )
-                                                        dmChannel.threads
-                                            }
-
-                                        NoThreadWithMessage messageIndex ->
-                                            { dmChannel
-                                                | linkedMessageIds =
-                                                    OneToOne.insert message.id messageIndex dmChannel.linkedMessageIds
-                                            }
+                                    { dmChannel
+                                        | linkedMessageIds =
+                                            OneToOne.insert message.id messageId dmChannel.linkedMessageIds
+                                    }
                                 )
                                 model.dmChannels
                       }
@@ -2422,6 +2406,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
 
+sendEditMessage :
+    ClientId
+    -> ChangeId
+    -> Time.Posix
+    -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
+    -> Id GuildId
+    -> Id ChannelId
+    -> Id ChannelMessageId
+    -> ThreadRoute
+    -> BackendModel
+    -> Id UserId
+    -> BackendGuild
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendEditMessage clientId changeId time newContent attachedFiles2 guildId channelId messageIndex threadRoute model2 userId guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
@@ -2871,64 +2869,109 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                         }
                     )
                     threadRoute
-
-        messageIndex : Id ChannelMessageId
-        messageIndex =
-            Array.length dmChannel.messages - 1 |> Id.fromInt
     in
-    ( { model
-        | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
-        , users =
-            NonemptyDict.insert
-                userId
-                { user
-                    | lastViewed = SeqDict.insert (GuildOrDmId_Dm otherUserId threadRoute) messageIndex user.lastViewed
-                }
-                model.users
-      }
-    , Command.batch
-        [ LocalChangeResponse
-            changeId
-            (Local_SendMessage time (GuildOrDmId_Dm otherUserId threadRoute) text repliedTo attachedFiles)
-            |> Lamdera.sendToFrontend clientId
-        , broadcastToDmChannel
-            clientId
-            userId
-            otherUserId
-            (\otherUserId2 ->
-                Server_SendMessage
+    case threadRoute of
+        ViewThread threadMessageIndex ->
+            let
+                thread : Thread
+                thread =
+                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault DmChannel.threadInit
+
+                messageIndex : Id ThreadMessageId
+                messageIndex =
+                    Array.length thread.messages - 1 |> Id.fromInt
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        userId
+                        { user
+                            | lastViewed = SeqDict.insert (GuildOrDmId_Dm otherUserId threadRoute) messageIndex user.lastViewed
+                        }
+                        model.users
+              }
+            , Command.batch
+                [ LocalChangeResponse
+                    changeId
+                    (Local_SendMessage time (GuildOrDmId_Dm otherUserId threadRoute) text repliedTo attachedFiles)
+                    |> Lamdera.sendToFrontend clientId
+                , broadcastToDmChannel
+                    clientId
                     userId
-                    time
-                    (GuildOrDmId_Dm otherUserId2 threadRoute)
-                    text
-                    repliedTo
-                    attachedFiles
+                    otherUserId
+                    (\otherUserId2 ->
+                        Server_SendMessage
+                            userId
+                            time
+                            (GuildOrDmId_Dm otherUserId2 threadRoute)
+                            text
+                            repliedTo
+                            attachedFiles
+                    )
+                    model
+                ]
             )
-            model
-        , case
-            ( OneToOne.first dmChannelId model.discordDms
-            , model.botToken
+
+        NoThread ->
+            let
+                messageIndex : Id ChannelMessageId
+                messageIndex =
+                    Array.length dmChannel.messages - 1 |> Id.fromInt
+            in
+            ( { model
+                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+                , users =
+                    NonemptyDict.insert
+                        userId
+                        { user
+                            | lastViewed = SeqDict.insert (GuildOrDmId_Dm otherUserId threadRoute) messageIndex user.lastViewed
+                        }
+                        model.users
+              }
+            , Command.batch
+                [ LocalChangeResponse
+                    changeId
+                    (Local_SendMessage time (GuildOrDmId_Dm otherUserId threadRoute) text repliedTo attachedFiles)
+                    |> Lamdera.sendToFrontend clientId
+                , broadcastToDmChannel
+                    clientId
+                    userId
+                    otherUserId
+                    (\otherUserId2 ->
+                        Server_SendMessage
+                            userId
+                            time
+                            (GuildOrDmId_Dm otherUserId2 threadRoute)
+                            text
+                            repliedTo
+                            attachedFiles
+                    )
+                    model
+                , case
+                    ( OneToOne.first dmChannelId model.discordDms
+                    , model.botToken
+                    )
+                  of
+                    ( Just discordChannelId, Just botToken ) ->
+                        Discord.createMessage
+                            (botTokenToAuth botToken)
+                            { channelId = discordChannelId
+                            , content = toDiscordContent model attachedFiles text
+                            , replyTo =
+                                case repliedTo of
+                                    Just index ->
+                                        OneToOne.first index dmChannel.linkedMessageIds
+
+                                    Nothing ->
+                                        Nothing
+                            }
+                            |> Task.attempt (SentDirectMessageToDiscord dmChannelId threadRoute)
+
+                    _ ->
+                        Command.none
+                ]
             )
-          of
-            ( Just discordChannelId, Just botToken ) ->
-                Discord.createMessage
-                    (botTokenToAuth botToken)
-                    { channelId = discordChannelId
-                    , content = toDiscordContent model attachedFiles text
-                    , replyTo =
-                        case repliedTo of
-                            Just index ->
-                                OneToOne.first index dmChannel.linkedMessageIds
-
-                            Nothing ->
-                                Nothing
-                    }
-                    |> Task.attempt (SentDirectMessageToDiscord dmChannelId threadRoute)
-
-            _ ->
-                Command.none
-        ]
-    )
 
 
 broadcastToDmChannel :
