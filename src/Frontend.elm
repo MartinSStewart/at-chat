@@ -32,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -119,7 +119,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _ _) ->
+                        GuildRoute _ (ChannelRoute _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -533,9 +533,20 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId _ maybeMessageIndex ->
+                ChannelRoute channelId threadRoute ->
                     updateLoggedIn
                         (\loggedIn ->
+                            let
+                                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+                                scrollToBottom =
+                                    if sameChannel then
+                                        Command.none
+
+                                    else
+                                        Process.sleep Duration.millisecond
+                                            |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                            |> Task.attempt (\_ -> ScrolledToBottom)
+                            in
                             handleLocalChange
                                 model3.time
                                 (Just (Local_ViewChannel guildId channelId))
@@ -547,19 +558,24 @@ routeRequest previousRoute newRoute model =
                                 )
                                 (Command.batch
                                     [ setFocus model3 Pages.Guild.channelTextInputId
-                                    , case maybeMessageIndex of
-                                        Just messageIndex ->
-                                            smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                                                |> Task.attempt (\_ -> ScrolledToMessage)
+                                    , case threadRoute of
+                                        ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+                                            case maybeMessageIndex of
+                                                Just messageIndex ->
+                                                    smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                                                        |> Task.attempt (\_ -> ScrolledToMessage)
 
-                                        Nothing ->
-                                            if sameChannel then
-                                                Command.none
+                                                Nothing ->
+                                                    scrollToBottom
 
-                                            else
-                                                Process.sleep Duration.millisecond
-                                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                                        NoThreadWithMaybeMessage maybeMessageIndex ->
+                                            case maybeMessageIndex of
+                                                Just messageIndex ->
+                                                    smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                                Nothing ->
+                                                    scrollToBottom
                                     ]
                                 )
                         )
@@ -629,7 +645,7 @@ routeRequest previousRoute newRoute model =
                                             model3
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                                (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
                                             )
 
                                     Nothing ->
@@ -640,7 +656,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
-        DmRoute _ _ maybeMessageIndex ->
+        DmRoute _ threadRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -656,18 +672,34 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+                        scrollToBottom =
+                            Process.sleep Duration.millisecond
+                                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                |> Task.attempt (\_ -> ScrolledToBottom)
+                    in
                     ( startOpeningChannelSidebar loggedIn
                     , Command.batch
                         [ setFocus model3 Pages.Guild.channelTextInputId
-                        , case maybeMessageIndex of
-                            Just messageIndex ->
-                                smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
+                        , case threadRoute of
+                            ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+                                case maybeMessageIndex of
+                                    Just messageIndex ->
+                                        smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                                            |> Task.attempt (\_ -> ScrolledToMessage)
 
-                            Nothing ->
-                                Process.sleep Duration.millisecond
-                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                                    Nothing ->
+                                        scrollToBottom
+
+                            NoThreadWithMaybeMessage maybeMessageIndex ->
+                                case maybeMessageIndex of
+                                    Just messageIndex ->
+                                        smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                                            |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                    Nothing ->
+                                        scrollToBottom
                         ]
                     )
                 )
@@ -689,7 +721,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DmRoute _ _ _ ->
+        DmRoute _ _ ->
             True
 
 
@@ -1279,7 +1311,7 @@ updateLoaded msg model =
                                 ( model2, routeCmd ) =
                                     routePush
                                         { model | loginStatus = LoggedIn loggedIn2 }
-                                        (GuildRoute guildId (ChannelRoute nextChannelId NoThread Nothing))
+                                        (GuildRoute guildId (ChannelRoute nextChannelId (NoThreadWithMaybeMessage Nothing)))
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
 
@@ -1351,7 +1383,7 @@ updateLoaded msg model =
                                             SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                     }
                         }
-                        (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1398,7 +1430,7 @@ updateLoaded msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                            (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
                                         )
 
                                 Nothing ->
@@ -1929,15 +1961,15 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId NoThread _), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage _)), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
+                        (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
 
-                ( DmRoute otherUserId NoThread _, LoggedIn loggedIn ) ->
+                ( DmRoute otherUserId (NoThreadWithMaybeMessage _), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (DmRoute otherUserId (ViewThread messageIndex) Nothing)
+                        (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
 
                 _ ->
                     ( model, Command.none )
@@ -2693,10 +2725,38 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedReplyLink messageIndex ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId threadRoute ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId threadRoute (Just messageIndex)))
+                            routePush
+                                model
+                                (GuildRoute guildId
+                                    (ChannelRoute
+                                        channelId
+                                        (case threadRoute of
+                                            ViewThread threadMessageId ->
+                                                ViewThreadWithMaybeMessage
+                                                    threadMessageId
+                                                    (Just (Id.changeType messageIndex))
+
+                                            NoThread ->
+                                                NoThreadWithMaybeMessage (Just messageIndex)
+                                        )
+                                    )
+                                )
 
                         GuildOrDmId_Dm otherUserId threadRoute ->
-                            routePush model (DmRoute otherUserId threadRoute (Just messageIndex))
+                            routePush
+                                model
+                                (DmRoute
+                                    otherUserId
+                                    (case threadRoute of
+                                        ViewThread threadMessageId ->
+                                            ViewThreadWithMaybeMessage
+                                                threadMessageId
+                                                (Just (Id.changeType messageIndex))
+
+                                        NoThread ->
+                                            NoThreadWithMaybeMessage (Just messageIndex)
+                                    )
+                                )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex _ ->
                     showReactionEmojiSelector guildOrDmId messageIndex model
@@ -2762,10 +2822,10 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedViewThreadLink messageIndex ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId NoThread ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
+                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
 
                         GuildOrDmId_Dm otherUserId NoThread ->
-                            routePush model (DmRoute otherUserId (ViewThread messageIndex) Nothing)
+                            routePush model (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
 
                         _ ->
                             ( model, Command.none )
@@ -4260,7 +4320,10 @@ updateLoadedFromBackend msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                            (ChannelRoute
+                                                (LocalState.announcementChannel guild)
+                                                (NoThreadWithMaybeMessage Nothing)
+                                            )
                                         )
 
                                 Nothing ->
@@ -4294,7 +4357,10 @@ updateLoadedFromBackend msg model =
                                             model
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                                (ChannelRoute
+                                                    (LocalState.announcementChannel guild)
+                                                    (NoThreadWithMaybeMessage Nothing)
+                                                )
                                             )
 
                                     else
@@ -4758,7 +4824,6 @@ view model =
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView
                                         Nothing
-                                        Nothing
                                         loaded
                                         loggedIn
                                         (Local.model loggedIn.localState)
@@ -4826,9 +4891,9 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
-                    DmRoute userId thread maybeMessageHighlight ->
+                    DmRoute userId thread ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) maybeMessageHighlight loaded)
+                            (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) loaded)
         ]
     }
 
@@ -4881,11 +4946,30 @@ guildOrDmIdToMessages guildOrDmId local =
 routeToGuildOrDmId : Route -> Maybe GuildOrDmId
 routeToGuildOrDmId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
-            GuildOrDmId_Guild guildId channelId threadRoute |> Just
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            GuildOrDmId_Guild
+                guildId
+                channelId
+                (case threadRoute of
+                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                        ViewThread threadMessageId
 
-        DmRoute otherUserId threadRoute _ ->
-            GuildOrDmId_Dm otherUserId threadRoute |> Just
+                    NoThreadWithMaybeMessage _ ->
+                        NoThread
+                )
+                |> Just
+
+        DmRoute otherUserId threadRoute ->
+            GuildOrDmId_Dm
+                otherUserId
+                (case threadRoute of
+                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                        ViewThread threadMessageId
+
+                    NoThreadWithMaybeMessage _ ->
+                        NoThread
+                )
+                |> Just
 
         _ ->
             Nothing

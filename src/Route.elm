@@ -7,7 +7,7 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -17,12 +17,12 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
-    | DmRoute (Id UserId) ThreadRoute (Maybe (Id ChannelMessageId))
+    | DmRoute (Id UserId) ThreadRouteWithMaybeMessage
     | AiChatRoute
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRoute (Maybe (Id ChannelMessageId))
+    = ChannelRoute (Id ChannelId) ThreadRouteWithMaybeMessage
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
@@ -61,8 +61,7 @@ decode url =
                                         guildId2
                                         (ChannelRoute
                                             channelId2
-                                            (stringToThread threadMessageIndex)
-                                            (Id.fromString messageIndex)
+                                            (stringToThread threadMessageIndex messageIndex)
                                         )
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -70,17 +69,16 @@ decode url =
                                         guildId2
                                         (ChannelRoute
                                             channelId2
-                                            (stringToThread threadMessageIndex)
-                                            Nothing
+                                            (stringToThread threadMessageIndex "")
                                         )
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
                                     GuildRoute
                                         guildId2
-                                        (ChannelRoute channelId2 NoThread (Id.fromString messageIndex))
+                                        (ChannelRoute channelId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex)))
 
                                 ( Just channelId2, [] ) ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2 NoThread Nothing)
+                                    GuildRoute guildId2 (ChannelRoute channelId2 (NoThreadWithMaybeMessage Nothing))
 
                                 ( Just channelId2, [ "edit" ] ) ->
                                     GuildRoute guildId2 (EditChannelRoute channelId2)
@@ -108,16 +106,16 @@ decode url =
                 Just userId2 ->
                     case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
-                            DmRoute userId2 (stringToThread threadMessageIndex) (Id.fromString messageIndex)
+                            DmRoute userId2 (stringToThread threadMessageIndex messageIndex)
 
                         [ "t", threadMessageIndex ] ->
-                            DmRoute userId2 (stringToThread threadMessageIndex) Nothing
+                            DmRoute userId2 (stringToThread threadMessageIndex "")
 
                         [ "m", messageIndex ] ->
-                            DmRoute userId2 NoThread (Id.fromString messageIndex)
+                            DmRoute userId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex))
 
                         _ ->
-                            DmRoute userId2 NoThread Nothing
+                            DmRoute userId2 (NoThreadWithMaybeMessage Nothing)
 
                 Nothing ->
                     HomePageRoute
@@ -126,14 +124,14 @@ decode url =
             HomePageRoute
 
 
-stringToThread : String -> ThreadRoute
-stringToThread text =
+stringToThread : String -> String -> ThreadRouteWithMaybeMessage
+stringToThread text maybeMessageIndex =
     case Id.fromString text of
         Just messageIndex ->
-            ViewThread messageIndex
+            ViewThreadWithMaybeMessage messageIndex (Id.fromString maybeMessageIndex)
 
         Nothing ->
-            NoThread
+            NoThreadWithMaybeMessage (Id.fromString maybeMessageIndex)
 
 
 encode : Route -> String
@@ -160,21 +158,15 @@ encode route =
                 GuildRoute guildId maybeChannelId ->
                     ( [ "g", Id.toString guildId ]
                         ++ (case maybeChannelId of
-                                ChannelRoute channelId thread maybeMessageIndex ->
+                                ChannelRoute channelId thread ->
                                     [ "c", Id.toString channelId ]
                                         ++ (case thread of
-                                                ViewThread threadMessageIndex ->
+                                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
                                                     [ "t", Id.toString threadMessageIndex ]
+                                                        ++ maybeMessageIdToString maybeMessageId
 
-                                                NoThread ->
-                                                    []
-                                           )
-                                        ++ (case maybeMessageIndex of
-                                                Just messageIndex ->
-                                                    [ "m", Id.toString messageIndex ]
-
-                                                Nothing ->
-                                                    []
+                                                NoThreadWithMaybeMessage maybeMessageId ->
+                                                    maybeMessageIdToString maybeMessageId
                                            )
 
                                 EditChannelRoute channelId ->
@@ -192,23 +184,26 @@ encode route =
                     , []
                     )
 
-                DmRoute userId thread maybeMessageIndex ->
+                DmRoute userId thread ->
                     ( [ "d", Id.toString userId ]
                         ++ (case thread of
-                                ViewThread threadMessageIndex ->
+                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
                                     [ "t", Id.toString threadMessageIndex ]
+                                        ++ maybeMessageIdToString maybeMessageId
 
-                                NoThread ->
-                                    []
-                           )
-                        ++ (case maybeMessageIndex of
-                                Just messageIndex ->
-                                    [ "m", Id.toString messageIndex ]
-
-                                Nothing ->
-                                    []
+                                NoThreadWithMaybeMessage maybeMessageId ->
+                                    maybeMessageIdToString maybeMessageId
                            )
                     , []
                     )
     in
     Url.Builder.absolute path query
+
+
+maybeMessageIdToString maybeMessageIndex =
+    case maybeMessageIndex of
+        Just messageIndex ->
+            [ "m", Id.toString messageIndex ]
+
+        Nothing ->
+            []

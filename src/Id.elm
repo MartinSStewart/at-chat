@@ -3,17 +3,22 @@ module Id exposing
     , ChannelMessageId
     , GuildId(..)
     , GuildOrDmId(..)
+    , GuildOrDmIdWithMaybeMessage(..)
     , Id(..)
     , InviteLinkId(..)
     , ThreadMessageId
     , ThreadRoute(..)
-    , ThreadRouteWithMessageId(..)
+    , ThreadRouteWithMaybeMessage(..)
+    , ThreadRouteWithMessage(..)
     , UserId(..)
+    , changeType
     , fromInt
     , fromString
     , guildOrDmIdSetThreadRoute
+    , guildOrDmIdWithoutMaybeMessage
     , increment
     , nextId
+    , threadWithoutMaybeMessage
     , toInt
     , toString
     )
@@ -25,6 +30,31 @@ import SeqDict exposing (SeqDict)
 type GuildOrDmId
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId) ThreadRoute
     | GuildOrDmId_Dm (Id UserId) ThreadRoute
+
+
+type GuildOrDmIdWithMaybeMessage
+    = GuildOrDmId_Guild_WithMaybeMessage (Id GuildId) (Id ChannelId) ThreadRouteWithMaybeMessage
+    | GuildOrDmId_Dm_WithMaybeMessage (Id UserId) ThreadRouteWithMaybeMessage
+
+
+guildOrDmIdWithoutMaybeMessage : GuildOrDmIdWithMaybeMessage -> GuildOrDmId
+guildOrDmIdWithoutMaybeMessage a =
+    case a of
+        GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute ->
+            GuildOrDmId_Guild guildId channelId (threadWithoutMaybeMessage threadRoute)
+
+        GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute ->
+            GuildOrDmId_Dm otherUserId (threadWithoutMaybeMessage threadRoute)
+
+
+threadWithoutMaybeMessage : ThreadRouteWithMaybeMessage -> ThreadRoute
+threadWithoutMaybeMessage a =
+    case a of
+        NoThreadWithMaybeMessage _ ->
+            NoThread
+
+        ViewThreadWithMaybeMessage channelMessageId _ ->
+            ViewThread channelMessageId
 
 
 guildOrDmIdSetThreadRoute : GuildOrDmId -> ThreadRoute -> GuildOrDmId
@@ -42,9 +72,14 @@ type ThreadRoute
     | ViewThread (Id ChannelMessageId)
 
 
-type ThreadRouteWithMessageId
-    = NoThreadWithMessageId (Id ChannelMessageId)
-    | ViewThreadWithMessageId (Id ChannelMessageId) (Id ThreadMessageId)
+type ThreadRouteWithMessage
+    = NoThreadWithMessage (Id ChannelMessageId)
+    | ViewThreadWithMessage (Id ChannelMessageId) (Id ThreadMessageId)
+
+
+type ThreadRouteWithMaybeMessage
+    = NoThreadWithMaybeMessage (Maybe (Id ChannelMessageId))
+    | ViewThreadWithMaybeMessage (Id ChannelMessageId) (Maybe (Id ThreadMessageId))
 
 
 type UserId
@@ -108,3 +143,8 @@ fromString string =
 toString : Id a -> String
 toString (Id a) =
     String.fromInt a
+
+
+changeType : Id a -> Id b
+changeType (Id a) =
+    Id a
