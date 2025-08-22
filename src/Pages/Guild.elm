@@ -32,7 +32,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, MessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -65,7 +65,7 @@ import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
 
 
-repliedToUserId : Maybe (Id MessageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
+repliedToUserId : Maybe (Id ChannelMessageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
 repliedToUserId maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->
@@ -294,7 +294,7 @@ loggedInAsView local =
 
 homePageLoggedInView :
     Maybe ( Id UserId, ThreadRoute )
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalState
@@ -386,7 +386,7 @@ homePageLoggedInView maybeOtherUserId maybeMessageHighlight model loggedIn local
                     ]
 
 
-dmChannelView : Id UserId -> ThreadRoute -> Maybe (Id MessageId) -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView : Id UserId -> ThreadRoute -> Maybe (Id ChannelMessageId) -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 dmChannelView otherUserId threadRoute maybeMessageHighlight loggedIn local model =
     case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
@@ -663,7 +663,7 @@ sidebarOffsetAttr loggedIn model =
         }
 
 
-threadPreviewText : Id MessageId -> { a | messages : Array Message } -> LocalUser -> String
+threadPreviewText : Id ChannelMessageId -> { a | messages : Array Message } -> LocalUser -> String
 threadPreviewText threadMessageIndex channel localUser =
     case LocalState.getArray threadMessageIndex channel.messages of
         Just message ->
@@ -891,7 +891,7 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-messageHover : GuildOrDmId -> Id MessageId -> LoggedIn2 -> IsHovered
+messageHover : GuildOrDmId -> Id ChannelMessageId -> LoggedIn2 -> IsHovered
 messageHover guildOrDmId messageIndex loggedIn =
     case loggedIn.messageHover of
         MessageMenu messageMenu ->
@@ -922,8 +922,8 @@ messageHover guildOrDmId messageIndex loggedIn =
 
 conversationViewHelper :
     GuildOrDmId
-    -> Maybe (Id MessageId)
-    -> SeqDict (Id MessageId) Thread
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id ChannelMessageId) Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> LoggedIn2
     -> LocalState
@@ -935,7 +935,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
         maybeEditing =
             SeqDict.get guildOrDmId loggedIn.editMessage
 
-        othersEditing : SeqSet (Id MessageId)
+        othersEditing : SeqSet (Id ChannelMessageId)
         othersEditing =
             SeqDict.remove local.localUser.userId channel.lastTypedAt
                 |> SeqDict.values
@@ -949,11 +949,11 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                     )
                 |> SeqSet.fromList
 
-        replyToIndex : Maybe (Id MessageId)
+        replyToIndex : Maybe (Id ChannelMessageId)
         replyToIndex =
             SeqDict.get guildOrDmId loggedIn.replyTo
 
-        revealedSpoilers : SeqDict (Id MessageId) (NonemptySet Int)
+        revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
             case loggedIn.revealedSpoilers of
                 Just revealed ->
@@ -966,7 +966,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                 Nothing ->
                     SeqDict.empty
 
-        lastViewedIndex : Id MessageId
+        lastViewedIndex : Id ChannelMessageId
         lastViewedIndex =
             SeqDict.get guildOrDmId local.localUser.user.lastViewed |> Maybe.withDefault (Id.fromInt -1)
 
@@ -981,11 +981,11 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
     Array.foldr
         (\message ( index, list ) ->
             let
-                messageId : Id MessageId
+                messageId : Id ChannelMessageId
                 messageId =
                     Id.fromInt index
 
-                threadId : Id MessageId
+                threadId : Id ChannelMessageId
                 threadId =
                     Id.fromInt index
 
@@ -1051,7 +1051,7 @@ conversationViewHelper guildOrDmId maybeMessageHighlight threads channel loggedI
                     else
                         []
 
-                maybeRepliedTo : Maybe ( Id MessageId, Message )
+                maybeRepliedTo : Maybe ( Id ChannelMessageId, Message )
                 maybeRepliedTo =
                     case message of
                         UserTextMessage data ->
@@ -1339,12 +1339,12 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
 
 conversationView :
     GuildOrDmId
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
     -> String
-    -> SeqDict (Id MessageId) Thread
+    -> SeqDict (Id ChannelMessageId) Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
     -> Element FrontendMsg
 conversationView guildOrDmId maybeMessageHighlight loggedIn model local name threads channel =
@@ -1353,7 +1353,7 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
         allUsers =
             LocalState.allUsers local
 
-        replyTo : Maybe (Id MessageId)
+        replyTo : Maybe (Id ChannelMessageId)
         replyTo =
             SeqDict.get guildOrDmId loggedIn.replyTo
 
@@ -1620,12 +1620,12 @@ conversationView guildOrDmId maybeMessageHighlight loggedIn model local name thr
 threadStarterMessage :
     Bool
     -> GuildOrDmId
-    -> Id MessageId
+    -> Id ChannelMessageId
     ->
         { a
             | messages : Array Message
             , -- Isn't used but is here to indicate this is a Channel or DmChannel type
-              threads : SeqDict (Id MessageId) Thread
+              threads : SeqDict (Id ChannelMessageId) Thread
         }
     -> LoggedIn2
     -> LocalState
@@ -1717,7 +1717,7 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-reactionEmojiView : Id MessageId -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
+reactionEmojiView : Id ChannelMessageId -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
 reactionEmojiView messageIndex currentUserId reactions =
     if SeqDict.isEmpty reactions then
         Nothing
@@ -1774,11 +1774,11 @@ reactionEmojiView messageIndex currentUserId reactions =
 messageEditingView :
     Bool
     -> GuildOrDmId
-    -> Id MessageId
+    -> Id ChannelMessageId
     -> Message
-    -> Maybe ( Id MessageId, Message )
+    -> Maybe ( Id ChannelMessageId, Message )
     -> Maybe Thread
-    -> SeqDict (Id MessageId) (NonemptySet Int)
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
     -> LocalState
@@ -1887,7 +1887,7 @@ type IsHovered
 
 messageViewNotThreadStarter :
     Int
-    -> SeqDict (Id MessageId) (NonemptySet Int)
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
     -> Message
@@ -1917,7 +1917,7 @@ messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message
 
 messageViewThreadStarter :
     Int
-    -> SeqDict (Id MessageId) (NonemptySet Int)
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
     -> Thread
@@ -1962,14 +1962,14 @@ messageView :
     Bool
     -> Int
     -> Bool
-    -> SeqDict (Id MessageId) (NonemptySet Int)
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> HighlightMessage
     -> IsHovered
     -> Bool
     -> LocalUser
-    -> Maybe ( Id MessageId, Message )
+    -> Maybe ( Id ChannelMessageId, Message )
     -> Maybe Thread
-    -> Id MessageId
+    -> Id ChannelMessageId
     -> Message
     -> Element MessageViewMsg
 messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
@@ -2150,8 +2150,8 @@ messageTimestamp createdAt timezone =
 
 repliedToMessage :
     Bool
-    -> Maybe ( Id MessageId, Message )
-    -> SeqDict (Id MessageId) (NonemptySet Int)
+    -> Maybe ( Id ChannelMessageId, Message )
+    -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Element MessageViewMsg
 repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
@@ -2210,7 +2210,7 @@ userTextMessagePreview allUsers revealedSpoilers message =
         |> Ui.html
 
 
-messageHtmlId : Id MessageId -> HtmlId
+messageHtmlId : Id ChannelMessageId -> HtmlId
 messageHtmlId messageIndex =
     messageHtmlIdPrefix ++ Id.toString messageIndex |> Dom.id
 
@@ -2220,7 +2220,7 @@ messageHtmlIdPrefix =
     "guild_message_"
 
 
-repliedToHeaderHelper : Bool -> Id MessageId -> Element MessageViewMsg -> Element MessageViewMsg
+repliedToHeaderHelper : Bool -> Id ChannelMessageId -> Element MessageViewMsg -> Element MessageViewMsg
 repliedToHeaderHelper isMobile messageIndex content =
     Ui.row
         [ Ui.Font.color MyUi.font1
@@ -2262,7 +2262,7 @@ messageContainer :
     -> Time.Zone
     -> SeqDict (Id UserId) FrontendUser
     -> HighlightMessage
-    -> Id MessageId
+    -> Id ChannelMessageId
     -> Bool
     -> Id UserId
     -> SeqDict Emoji (NonemptySet (Id UserId))
@@ -2378,7 +2378,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
         )
 
 
-threadStarterIndicator : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id MessageId -> Thread -> Element MessageViewMsg
+threadStarterIndicator : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id ChannelMessageId -> Thread -> Element MessageViewMsg
 threadStarterIndicator timezone allUsers messageIndex thread =
     let
         lastMessage =
@@ -2632,7 +2632,7 @@ channelColumnThreads :
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
-    -> SeqDict (Id MessageId) Thread
+    -> SeqDict (Id ChannelMessageId) Thread
     -> Element FrontendMsg
 channelColumnThreads isMobile channelRoute localUser guildId channelId channel threads =
     Ui.column

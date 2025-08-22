@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, GuildId, GuildOrDmId(..), Id, InviteLinkId, MessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -1141,7 +1141,7 @@ handleDiscordCreateMessage message model =
                         dmChannel =
                             Maybe.withDefault DmChannel.init (SeqDict.get dmChannelId model.dmChannels)
 
-                        replyTo : Maybe (Id MessageId)
+                        replyTo : Maybe (Id ChannelMessageId)
                         replyTo =
                             case message.referencedMessage of
                                 Discord.Referenced referenced ->
@@ -1263,7 +1263,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     case maybeData of
         Just { guildId, guild, channelId, channel, threadRoute } ->
             let
-                replyTo : Maybe (Id MessageId)
+                replyTo : Maybe (Id ChannelMessageId)
                 replyTo =
                     discordReplyTo message channel
             in
@@ -1307,7 +1307,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
             ( model, Command.none )
 
 
-discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id MessageId)
+discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id ChannelMessageId)
 discordReplyTo message channel =
     case message.referencedMessage of
         Discord.Referenced referenced ->
@@ -1324,7 +1324,7 @@ handleDiscordCreateGuildMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
     -> Discord.Id.Id Discord.Id.ChannelId
     -> ThreadRoute
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> Id UserId
     -> Nonempty RichText
     -> Discord.Message
@@ -2843,7 +2843,7 @@ sendDirectMessage :
     -> Id UserId
     -> ThreadRoute
     -> Nonempty RichText
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
@@ -2872,7 +2872,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRoute text repl
                     )
                     threadRoute
 
-        messageIndex : Id MessageId
+        messageIndex : Id ChannelMessageId
         messageIndex =
             Array.length dmChannel.messages - 1 |> Id.fromInt
     in
@@ -2976,7 +2976,7 @@ sendGuildMessage :
     -> Id ChannelId
     -> ThreadRoute
     -> Nonempty RichText
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id FileId) FileData
     -> Id UserId
     -> BackendUser
@@ -3003,7 +3003,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                         threadRoute
                         channel
 
-                messageIndex : Id MessageId
+                messageIndex : Id ChannelMessageId
                 messageIndex =
                     case threadRoute of
                         ViewThread threadMessageIndex ->

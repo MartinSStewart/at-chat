@@ -1,11 +1,13 @@
 module Id exposing
     ( ChannelId(..)
+    , ChannelMessageId
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
-    , MessageId
+    , ThreadMessageId
     , ThreadRoute(..)
+    , ThreadRouteWithMessageId(..)
     , UserId(..)
     , fromInt
     , fromString
@@ -37,7 +39,12 @@ guildOrDmIdSetThreadRoute guildOrDmId threadRoute =
 
 type ThreadRoute
     = NoThread
-    | ViewThread (Id MessageId)
+    | ViewThread (Id ChannelMessageId)
+
+
+type ThreadRouteWithMessageId
+    = NoThreadWithMessageId (Id ChannelMessageId)
+    | ViewThreadWithMessageId (Id ChannelMessageId) (Id ThreadMessageId)
 
 
 type UserId
@@ -52,8 +59,12 @@ type ChannelId
     = ChannelId Never
 
 
-type MessageId
-    = MessageId Never
+type ChannelMessageId
+    = ChannelMessageId Never
+
+
+type ThreadMessageId
+    = ThreadMessageId Never
 
 
 type InviteLinkId

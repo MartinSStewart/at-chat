@@ -17,7 +17,7 @@ module User exposing
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
-import Id exposing (ChannelId, GuildId, GuildOrDmId, Id, MessageId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -36,7 +36,7 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict GuildOrDmId (Id MessageId)
+    , lastViewed : SeqDict GuildOrDmId (Id ChannelMessageId)
     , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
     , icon : Maybe FileHash
     }

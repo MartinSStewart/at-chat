@@ -2,7 +2,7 @@ module Message exposing (Message(..), UserTextMessageData, addReactionEmoji, rem
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (Id, MessageId, UserId)
+import Id exposing (ChannelMessageId, Id, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
@@ -23,7 +23,7 @@ type alias UserTextMessageData =
     , content : Nonempty RichText
     , reactions : SeqDict Emoji (NonemptySet (Id UserId))
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id MessageId)
+    , repliedTo : Maybe (Id ChannelMessageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 

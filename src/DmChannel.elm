@@ -11,7 +11,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord.Id
-import Id exposing (Id(..), MessageId, UserId)
+import Id exposing (ChannelMessageId, Id(..), UserId)
 import Message exposing (Message)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -21,16 +21,16 @@ import Time
 type alias DmChannel =
     { messages : Array Message
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id MessageId)
-    , threads : SeqDict (Id MessageId) Thread
-    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id MessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , threads : SeqDict (Id ChannelMessageId) Thread
+    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelMessageId)
     }
 
 
 type alias Thread =
     { messages : Array Message
     , lastTypedAt : SeqDict (Id UserId) LastTypedAt
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id MessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     }
 
 
@@ -49,7 +49,7 @@ type DmChannelId
 
 
 type alias LastTypedAt =
-    { time : Time.Posix, messageIndex : Maybe (Id MessageId) }
+    { time : Time.Posix, messageIndex : Maybe (Id ChannelMessageId) }
 
 
 init : DmChannel

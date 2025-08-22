@@ -16,7 +16,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (GuildOrDmId, Id, MessageId, ThreadRoute(..))
+import Id exposing (ChannelMessageId, GuildOrDmId, Id, ThreadRoute(..))
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
@@ -98,7 +98,7 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
         |> CssPixels.cssPixels
 
 
-mobileMenuOpeningOffset : GuildOrDmId -> Id MessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuOpeningOffset : GuildOrDmId -> Id ChannelMessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuOpeningOffset guildOrDmId messageIndex local model =
     let
         itemCount : Float
@@ -114,7 +114,7 @@ messageMenuSpeed =
 
 
 menuHeight :
-    { a | guildOrDmId : GuildOrDmId, messageIndex : Id MessageId, position : Coord CssPixels }
+    { a | guildOrDmId : GuildOrDmId, messageIndex : Id ChannelMessageId, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -142,7 +142,7 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmId -> Id MessageId -> LoggedIn2 -> Maybe EditMessage
+showEdit : GuildOrDmId -> Id ChannelMessageId -> LoggedIn2 -> Maybe EditMessage
 showEdit guildOrDmId messageIndex loggedIn =
     case SeqDict.get guildOrDmId loggedIn.editMessage of
         Just edit ->
@@ -289,7 +289,7 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmId -> Id MessageId -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> GuildOrDmId -> Id ChannelMessageId -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model =
     case LocalState.getMessages guildOrDmId local of
         Just ( threadRoute, messages ) ->

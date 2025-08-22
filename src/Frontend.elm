@@ -32,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, GuildOrDmId(..), Id, MessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -1862,7 +1862,7 @@ updateLoaded msg model =
                                 messageCount =
                                     Array.length messages
 
-                                mostRecentMessage : Maybe ( Id MessageId, UserTextMessageData )
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageData )
                                 mostRecentMessage =
                                     (if messageCount < 5 then
                                         Array.toList messages
@@ -2771,7 +2771,7 @@ updateLoaded msg model =
                             ( model, Command.none )
 
 
-pressedReply : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedReply guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2784,7 +2784,7 @@ pressedReply guildOrDmId messageIndex model =
         model
 
 
-pressedEditMessage : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedEditMessage guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2858,7 +2858,7 @@ pressedEditMessage guildOrDmId messageIndex model =
         model
 
 
-showReactionEmojiSelector : GuildOrDmId -> Id MessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -2891,7 +2891,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 
 touchStart :
-    Maybe ( GuildOrDmId, Id MessageId, Bool )
+    Maybe ( GuildOrDmId, Id ChannelMessageId, Bool )
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
@@ -3089,7 +3089,7 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-handleAltPressedMessage : GuildOrDmId -> Id MessageId -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage : GuildOrDmId -> Id ChannelMessageId -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage guildOrDmId messageIndex isThreadStarter clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
@@ -3875,7 +3875,7 @@ memberTyping time userId guildOrDmId local =
             }
 
 
-addReactionEmoji : Id UserId -> GuildOrDmId -> Id MessageId -> Emoji -> LocalState -> LocalState
+addReactionEmoji : Id UserId -> GuildOrDmId -> Id ChannelMessageId -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId messageIndex emoji local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3900,7 +3900,7 @@ addReactionEmoji userId guildOrDmId messageIndex emoji local =
             }
 
 
-removeReactionEmoji : Id UserId -> GuildOrDmId -> Id MessageId -> Emoji -> LocalState -> LocalState
+removeReactionEmoji : Id UserId -> GuildOrDmId -> Id ChannelMessageId -> Emoji -> LocalState -> LocalState
 removeReactionEmoji userId guildOrDmId messageIndex emoji local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3925,7 +3925,7 @@ removeReactionEmoji userId guildOrDmId messageIndex emoji local =
             }
 
 
-memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Id MessageId -> LocalState -> LocalState
+memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Id ChannelMessageId -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -3959,7 +3959,7 @@ editMessage :
     -> GuildOrDmId
     -> Nonempty RichText
     -> SeqDict (Id FileId) FileData
-    -> Id MessageId
+    -> Id ChannelMessageId
     -> LocalState
     -> LocalState
 editMessage time userId guildOrDmId newContent attachedFiles messageIndex local =
@@ -4006,7 +4006,7 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
             }
 
 
-deleteMessage : Id UserId -> GuildOrDmId -> Id MessageId -> LocalState -> LocalState
+deleteMessage : Id UserId -> GuildOrDmId -> Id ChannelMessageId -> LocalState -> LocalState
 deleteMessage userId guildOrDmId messageIndex local =
     case guildOrDmId of
         GuildOrDmId_Guild guildId channelId threadRoute ->
@@ -4407,7 +4407,7 @@ scrollToBottomOfChannel =
 
 playNotificationSound :
     Id UserId
-    -> Maybe (Id MessageId)
+    -> Maybe (Id ChannelMessageId)
     -> FrontendChannel
     -> LocalState
     -> Nonempty RichText
@@ -4833,7 +4833,7 @@ view model =
     }
 
 
-guildOrDmIdToMessage : GuildOrDmId -> Id MessageId -> LocalState -> Maybe UserTextMessageData
+guildOrDmIdToMessage : GuildOrDmId -> Id ChannelMessageId -> LocalState -> Maybe UserTextMessageData
 guildOrDmIdToMessage guildOrDmId messageIndex local =
     case guildOrDmIdToMessages guildOrDmId local of
         Just messages ->

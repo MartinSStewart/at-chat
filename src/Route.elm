@@ -7,7 +7,7 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, MessageId, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -17,12 +17,12 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
-    | DmRoute (Id UserId) ThreadRoute (Maybe (Id MessageId))
+    | DmRoute (Id UserId) ThreadRoute (Maybe (Id ChannelMessageId))
     | AiChatRoute
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRoute (Maybe (Id MessageId))
+    = ChannelRoute (Id ChannelId) ThreadRoute (Maybe (Id ChannelMessageId))
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute

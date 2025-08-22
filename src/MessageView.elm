@@ -7,7 +7,7 @@ import Emoji exposing (Emoji)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (Id, MessageId)
+import Id exposing (ChannelMessageId, Id)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -17,20 +17,20 @@ import Ui.Events
 
 
 type MessageViewMsg
-    = MessageView_PressedSpoiler (Id MessageId) Int
-    | MessageView_MouseEnteredMessage (Id MessageId)
-    | MessageView_MouseExitedMessage (Id MessageId)
-    | MessageView_TouchStart Time.Posix Bool (Id MessageId) (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool (Id MessageId) (Coord CssPixels)
-    | MessageView_PressedReactionEmoji_Remove (Id MessageId) Emoji
-    | MessageView_PressedReactionEmoji_Add (Id MessageId) Emoji
+    = MessageView_PressedSpoiler (Id ChannelMessageId) Int
+    | MessageView_MouseEnteredMessage (Id ChannelMessageId)
+    | MessageView_MouseExitedMessage (Id ChannelMessageId)
+    | MessageView_TouchStart Time.Posix Bool (Id ChannelMessageId) (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool (Id ChannelMessageId) (Coord CssPixels)
+    | MessageView_PressedReactionEmoji_Remove (Id ChannelMessageId) Emoji
+    | MessageView_PressedReactionEmoji_Add (Id ChannelMessageId) Emoji
     | MessageView_NoOp
-    | MessageView_PressedReplyLink (Id MessageId)
-    | MessageViewMsg_PressedShowReactionEmojiSelector (Id MessageId) (Coord CssPixels)
-    | MessageViewMsg_PressedEditMessage (Id MessageId)
-    | MessageViewMsg_PressedReply (Id MessageId)
-    | MessageViewMsg_PressedShowFullMenu Bool (Id MessageId) (Coord CssPixels)
-    | MessageView_PressedViewThreadLink (Id MessageId)
+    | MessageView_PressedReplyLink (Id ChannelMessageId)
+    | MessageViewMsg_PressedShowReactionEmojiSelector (Id ChannelMessageId) (Coord CssPixels)
+    | MessageViewMsg_PressedEditMessage (Id ChannelMessageId)
+    | MessageViewMsg_PressedReply (Id ChannelMessageId)
+    | MessageViewMsg_PressedShowFullMenu Bool (Id ChannelMessageId) (Coord CssPixels)
+    | MessageView_PressedViewThreadLink (Id ChannelMessageId)
 
 
 isPressMsg : MessageViewMsg -> Bool
@@ -79,7 +79,7 @@ isPressMsg msg =
             True
 
 
-miniView : Bool -> Bool -> Id MessageId -> Element MessageViewMsg
+miniView : Bool -> Bool -> Id ChannelMessageId -> Element MessageViewMsg
 miniView isThreadStarter canEdit messageIndex =
     Ui.row
         [ Ui.alignRight
