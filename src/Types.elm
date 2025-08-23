@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
@@ -520,8 +520,8 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId (Id ChannelMessageId) (Nonempty RichText) (SeqDict (Id FileId) FileData)
-    | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmId (Id ChannelMessageId)
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DeleteMessage (Id UserId) GuildOrDmId (Id ChannelMessageId)
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
@@ -531,7 +531,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmId (Nonempty RichText) (Maybe (Id ChannelMessageId)) (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix GuildOrDmIdNoThread (Nonempty RichText) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -540,9 +540,9 @@ type LocalChange
     | Local_MemberTyping Time.Posix GuildOrDmId
     | Local_AddReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
     | Local_RemoveReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmId (Id ChannelMessageId) (Nonempty RichText) (SeqDict (Id FileId) FileData)
-    | Local_MemberEditTyping Time.Posix GuildOrDmId (Id ChannelMessageId)
-    | Local_SetLastViewed GuildOrDmId (Id ChannelMessageId)
+    | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmId (Id ChannelMessageId)
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
     | Local_SetName PersonName

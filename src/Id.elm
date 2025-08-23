@@ -3,6 +3,7 @@ module Id exposing
     , ChannelMessageId
     , GuildId(..)
     , GuildOrDmId(..)
+    , GuildOrDmIdNoThread(..)
     , GuildOrDmIdWithMaybeMessage(..)
     , Id(..)
     , InviteLinkId(..)
@@ -30,6 +31,11 @@ import SeqDict exposing (SeqDict)
 type GuildOrDmId
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId) ThreadRoute
     | GuildOrDmId_Dm (Id UserId) ThreadRoute
+
+
+type GuildOrDmIdNoThread
+    = GuildOrDmId_Guild_NoThread (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_Dm_NoThread (Id UserId)
 
 
 type GuildOrDmIdWithMaybeMessage
