@@ -944,8 +944,15 @@ addDiscordMessages threadRoute messages model channel =
                     handleDiscordCreateGuildMessageHelper
                         message.id
                         message.channelId
-                        threadRoute
-                        (discordReplyTo message channel2)
+                        (case threadRoute of
+                            ViewThread threadId ->
+                                ViewThreadWithMaybeMessage
+                                    threadId
+                                    (discordReplyTo message channel2 |> Maybe.map Id.changeType)
+
+                            NoThread ->
+                                NoThreadWithMaybeMessage (discordReplyTo message channel2)
+                        )
                         userId
                         (RichText.fromDiscord model.discordUsers message.content)
                         message
@@ -1200,7 +1207,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
         richText =
             RichText.fromDiscord model.discordUsers message.content
 
-        maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel, threadRoute : ThreadRoute }
+        maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel, threadRoute : ThreadRouteWithMaybeMessage }
         maybeData =
             case OneToOne.second discordGuildId model.discordGuilds of
                 Just guildId ->
@@ -1213,7 +1220,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                         , guild = guild
                                         , channelId = channelId
                                         , channel = channel
-                                        , threadRoute = NoThread
+                                        , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
                                         }
 
                                 Nothing ->
@@ -1229,7 +1236,10 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                                     , guild = guild
                                                     , channelId = channelId
                                                     , channel = channel
-                                                    , threadRoute = ViewThread messageIndex
+                                                    , threadRoute =
+                                                        ViewThreadWithMaybeMessage
+                                                            messageIndex
+                                                            (discordReplyTo message channel |> Maybe.map Id.changeType)
                                                     }
                                                         |> Just
 
@@ -1246,11 +1256,6 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     in
     case maybeData of
         Just { guildId, guild, channelId, channel, threadRoute } ->
-            let
-                replyTo : Maybe (Id ChannelMessageId)
-                replyTo =
-                    discordReplyTo message channel
-            in
             ( { model
                 | guilds =
                     SeqDict.insert
@@ -1263,7 +1268,6 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                         message.id
                                         message.channelId
                                         threadRoute
-                                        replyTo
                                         userId
                                         richText
                                         message
@@ -1278,9 +1282,9 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                 (Server_SendMessage
                     userId
                     message.timestamp
-                    (GuildOrDmId_Guild guildId channelId threadRoute)
+                    (GuildOrDmId_Guild_NoThread guildId channelId)
                     richText
-                    replyTo
+                    threadRoute
                     SeqDict.empty
                     |> ServerChange
                 )
@@ -1307,14 +1311,13 @@ discordReplyTo message channel =
 handleDiscordCreateGuildMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
     -> Discord.Id.Id Discord.Id.ChannelId
-    -> ThreadRoute
-    -> Maybe (Id ChannelMessageId)
+    -> ThreadRouteWithMaybeMessage
     -> Id UserId
     -> Nonempty RichText
     -> Discord.Message
     -> BackendChannel
     -> BackendChannel
-handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRoute replyTo userId richText message channel =
+handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRouteWithMaybeReplyTo userId richText message channel =
     LocalState.createMessage
         (Just ( discordMessageId, discordChannelId ))
         (UserTextMessage
@@ -1323,11 +1326,23 @@ handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRo
             , content = richText
             , reactions = SeqDict.empty
             , editedAt = Nothing
-            , repliedTo = replyTo
+            , repliedTo =
+                case threadRouteWithMaybeReplyTo of
+                    ViewThreadWithMaybeMessage _ replyTo ->
+                        Maybe.map Id.changeType replyTo
+
+                    NoThreadWithMaybeMessage replyTo ->
+                        replyTo
             , attachedFiles = SeqDict.empty
             }
         )
-        threadRoute
+        (case threadRouteWithMaybeReplyTo of
+            ViewThreadWithMaybeMessage threadMessageId _ ->
+                ViewThread threadMessageId
+
+            NoThreadWithMaybeMessage _ ->
+                NoThread
+        )
         channel
 
 
@@ -2862,22 +2877,9 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
         dmChannel =
             SeqDict.get dmChannelId model.dmChannels
                 |> Maybe.withDefault DmChannel.init
-                |> LocalState.createMessage
-                    Nothing
-                    (UserTextMessage
-                        { createdAt = time
-                        , createdBy = userId
-                        , content = text
-                        , reactions = SeqDict.empty
-                        , editedAt = Nothing
-                        , repliedTo = repliedTo
-                        , attachedFiles = attachedFiles
-                        }
-                    )
-                    threadRouteWithReplyTo
     in
     case threadRouteWithReplyTo of
-        ViewThreadWithMaybeMessage threadMessageIndex repliedTo ->
+        ViewThreadWithMaybeMessage threadMessageIndex _ ->
             let
                 thread : Thread
                 thread =
@@ -2910,9 +2912,9 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         Server_SendMessage
                             userId
                             time
-                            (GuildOrDmId_Dm otherUserId2 threadRouteWithReplyTo)
+                            (GuildOrDmId_Dm_NoThread otherUserId2)
                             text
-                            repliedTo
+                            threadRouteWithReplyTo
                             attachedFiles
                     )
                     model
@@ -2923,10 +2925,26 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
             let
                 messageIndex : Id ChannelMessageId
                 messageIndex =
-                    LocalState.latestMessageId dmChannel
+                    LocalState.latestMessageId dmChannel2
+
+                dmChannel2 : DmChannel
+                dmChannel2 =
+                    LocalState.createMessageHelper
+                        Nothing
+                        (UserTextMessage
+                            { createdAt = time
+                            , createdBy = userId
+                            , content = text
+                            , reactions = SeqDict.empty
+                            , editedAt = Nothing
+                            , repliedTo = repliedTo
+                            , attachedFiles = attachedFiles
+                            }
+                        )
+                        dmChannel
             in
             ( { model
-                | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
+                | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
                 , users =
                     NonemptyDict.insert
                         userId
@@ -2938,7 +2956,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
             , Command.batch
                 [ LocalChangeResponse
                     changeId
-                    (Local_SendMessage time (GuildOrDmId_Dm otherUserId threadRouteWithReplyTo) text repliedTo attachedFiles)
+                    (Local_SendMessage time (GuildOrDmId_Dm_NoThread otherUserId) text threadRouteWithReplyTo attachedFiles)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToDmChannel
                     clientId
@@ -2948,9 +2966,9 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         Server_SendMessage
                             userId
                             time
-                            (GuildOrDmId_Dm otherUserId2 threadRouteWithReplyTo)
+                            (GuildOrDmId_Dm_NoThread otherUserId2)
                             text
-                            repliedTo
+                            threadRouteWithReplyTo
                             attachedFiles
                     )
                     model
@@ -2963,7 +2981,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                             , replyTo =
                                 case repliedTo of
                                     Just index ->
-                                        OneToOne.first index dmChannel.linkedMessageIds
+                                        OneToOne.first index dmChannel2.linkedMessageIds
 
                                     Nothing ->
                                         Nothing
@@ -3026,7 +3044,7 @@ sendGuildMessage :
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId threadRoute text attachedFiles userId user guild =
+sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles userId user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
@@ -3040,30 +3058,24 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                             , content = text
                             , reactions = SeqDict.empty
                             , editedAt = Nothing
-                            , repliedTo = repliedTo
+                            , repliedTo =
+                                case threadRouteWithMaybeReplyTo of
+                                    ViewThreadWithMaybeMessage _ replyTo ->
+                                        Maybe.map Id.changeType replyTo
+
+                                    NoThreadWithMaybeMessage replyTo ->
+                                        replyTo
                             , attachedFiles = attachedFiles
                             }
                         )
-                        threadRoute
+                        (case threadRouteWithMaybeReplyTo of
+                            ViewThreadWithMaybeMessage threadMessageId _ ->
+                                ViewThread threadMessageId
+
+                            NoThreadWithMaybeMessage _ ->
+                                NoThread
+                        )
                         channel
-
-                messageIndex : Id ChannelMessageId
-                messageIndex =
-                    case threadRoute of
-                        ViewThread threadMessageIndex ->
-                            case SeqDict.get threadMessageIndex channel2.threads of
-                                Just thread ->
-                                    LocalState.latestThreadMessageId thread
-
-                                Nothing ->
-                                    let
-                                        _ =
-                                            Debug.log "shouldn't happen" ()
-                                    in
-                                    Id.fromInt 0
-
-                        NoThread ->
-                            LocalState.latestMessageId channel2
             in
             ( { model
                 | guilds =
@@ -3074,8 +3086,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                 , users =
                     NonemptyDict.insert
                         userId
-                        (case threadRoute of
-                            ViewThread threadMessageIndex ->
+                        (case threadRouteWithMaybeReplyTo of
+                            ViewThreadWithMaybeMessage threadMessageIndex _ ->
                                 { user
                                     | lastViewedThreads =
                                         SeqDict.insert
@@ -3087,7 +3099,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                                             user.lastViewedThreads
                                 }
 
-                            NoThread ->
+                            NoThreadWithMaybeMessage _ ->
                                 { user
                                     | lastViewed =
                                         SeqDict.insert
@@ -3101,17 +3113,17 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
             , Command.batch
                 [ LocalChangeResponse
                     changeId
-                    (Local_SendMessage time (GuildOrDmId_Guild guildId channelId threadRoute) text repliedTo attachedFiles)
+                    (Local_SendMessage time (GuildOrDmId_Guild_NoThread guildId channelId) text threadRouteWithMaybeReplyTo attachedFiles)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuildExcludingOne
                     clientId
                     guildId
-                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId threadRoute) text repliedTo attachedFiles
+                    (Server_SendMessage userId time (GuildOrDmId_Guild_NoThread guildId channelId) text threadRouteWithMaybeReplyTo attachedFiles
                         |> ServerChange
                     )
                     model
-                , case ( model.botToken, threadRoute ) of
-                    ( Just botToken, ViewThread threadMessageIndex ) ->
+                , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
+                    ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let
                             thread : Thread
                             thread =
@@ -3157,7 +3169,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                                     { channelId = discordThreadId
                                     , content = toDiscordContent model attachedFiles text
                                     , replyTo =
-                                        case repliedTo of
+                                        case maybeRepliedTo of
                                             Just index ->
                                                 OneToOne.first index thread.linkedMessageIds
 
@@ -3173,7 +3185,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                             _ ->
                                 Command.none
 
-                    ( Just botToken, NoThread ) ->
+                    ( Just botToken, NoThreadWithMaybeMessage maybeRepliedTo ) ->
                         case OneToOne.first channelId guild.linkedChannelIds of
                             Just discordChannelId ->
                                 Discord.createMessage
@@ -3181,7 +3193,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                                     { channelId = discordChannelId
                                     , content = toDiscordContent model attachedFiles text
                                     , replyTo =
-                                        case repliedTo of
+                                        case maybeRepliedTo of
                                             Just index ->
                                                 OneToOne.first index channel2.linkedMessageIds
 
@@ -3190,8 +3202,9 @@ sendGuildMessage model time clientId changeId guildId channelId threadRoute text
                                     }
                                     |> Task.attempt
                                         (SentGuildMessageToDiscord
-                                            { guildId = guildId, channelId = channelId, messageIndex = messageIndex }
-                                            threadRoute
+                                            guildId
+                                            channelId
+                                            (NoThreadWithMessage (LocalState.latestMessageId channel2))
                                         )
 
                             Nothing ->
