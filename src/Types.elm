@@ -312,7 +312,7 @@ type FrontendMsg
     | PressedLink Route
     | PressedTextInput
     | TypedMessage GuildOrDmId String
-    | PressedSendMessage GuildOrDmId
+    | PressedSendMessage GuildOrDmIdNoThread ThreadRoute
     | PressedAttachFiles GuildOrDmId
     | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm

@@ -33,7 +33,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -66,7 +66,7 @@ import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
 
 
-repliedToUserId : Maybe (Id ChannelMessageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
+repliedToUserId : Maybe (Id messageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
 repliedToUserId maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->
@@ -89,22 +89,11 @@ repliedToUserId maybeRepliedTo channel =
 
 channelOrThreadHasNotifications :
     Id UserId
-    -> BackendUser
-    -> GuildOrDmId
+    -> Id messageId
     -> { a | messages : Array Message }
     -> NotificationType
-channelOrThreadHasNotifications currentUserId currentUser guildOrDmId channel =
-    let
-        lastViewed : Int
-        lastViewed =
-            case SeqDict.get guildOrDmId currentUser.lastViewed of
-                Just id ->
-                    Id.toInt id + 1
-
-                Nothing ->
-                    0
-    in
-    Array.slice lastViewed (Array.length channel.messages) channel.messages
+channelOrThreadHasNotifications currentUserId lastViewed channel =
+    Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
         |> Array.toList
         |> List.foldl
             (\message state ->
@@ -154,12 +143,18 @@ guildHasNotifications currentUserId currentUser guildId guild =
                                             state2
 
                                         _ ->
+                                            let
+                                                lastViewed2 : Id ThreadMessageId
+                                                lastViewed2 =
+                                                    case SeqDict.get ( GuildOrDmId_Guild_NoThread guildId channelId, threadMessageIndex ) currentUser.lastViewedThreads of
+                                                        Just id ->
+                                                            Id.increment id
+
+                                                        Nothing ->
+                                                            Id.fromInt 0
+                                            in
                                             case
-                                                channelOrThreadHasNotifications
-                                                    currentUserId
-                                                    currentUser
-                                                    (GuildOrDmId_Guild guildId channelId (ViewThread threadMessageIndex))
-                                                    thread
+                                                channelOrThreadHasNotifications currentUserId lastViewed2 thread
                                             of
                                                 NoNotification ->
                                                     state2
@@ -169,14 +164,17 @@ guildHasNotifications currentUserId currentUser guildId guild =
                                 )
                                 state
                                 channel.threads
+
+                        lastViewed : Id ChannelMessageId
+                        lastViewed =
+                            case SeqDict.get (GuildOrDmId_Guild_NoThread guildId channelId) currentUser.lastViewed of
+                                Just id ->
+                                    Id.increment id
+
+                                Nothing ->
+                                    Id.fromInt 0
                     in
-                    case
-                        channelOrThreadHasNotifications
-                            currentUserId
-                            currentUser
-                            (GuildOrDmId_Guild guildId channelId NoThread)
-                            channel
-                    of
+                    case channelOrThreadHasNotifications currentUserId lastViewed channel of
                         NoNotification ->
                             state3
 
@@ -400,6 +398,12 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                     SeqDict.get threadMessageIndex dmChannel.threads
                         |> Maybe.withDefault DmChannel.threadInit
                         |> conversationView
+                            (SeqDict.get
+                                ( GuildOrDmId_Dm_NoThread otherUserId, threadMessageIndex )
+                                local.localUser.user.lastViewedThreads
+                                |> Maybe.withDefault (Id.fromInt -1)
+                                |> Id.changeType
+                            )
                             (GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute)
                             loggedIn
                             model
@@ -409,6 +413,11 @@ dmChannelView otherUserId threadRoute loggedIn local model =
 
                 NoThreadWithMaybeMessage _ ->
                     conversationView
+                        (SeqDict.get
+                            (GuildOrDmId_Dm_NoThread otherUserId)
+                            local.localUser.user.lastViewed
+                            |> Maybe.withDefault (Id.fromInt -1)
+                        )
                         (GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute)
                         loggedIn
                         model
@@ -694,6 +703,12 @@ channelView channelRoute guildId guild loggedIn local model =
                             SeqDict.get threadMessageIndex channel.threads
                                 |> Maybe.withDefault DmChannel.threadInit
                                 |> conversationView
+                                    (SeqDict.get
+                                        ( GuildOrDmId_Guild_NoThread guildId channelId, threadMessageIndex )
+                                        local.localUser.user.lastViewedThreads
+                                        |> Maybe.withDefault (Id.fromInt -1)
+                                        |> Id.changeType
+                                    )
                                     (GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute)
                                     loggedIn
                                     model
@@ -706,6 +721,11 @@ channelView channelRoute guildId guild loggedIn local model =
 
                         NoThreadWithMaybeMessage _ ->
                             conversationView
+                                (SeqDict.get
+                                    (GuildOrDmId_Guild_NoThread guildId channelId)
+                                    local.localUser.user.lastViewed
+                                    |> Maybe.withDefault (Id.fromInt -1)
+                                )
                                 (GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute)
                                 loggedIn
                                 model
@@ -916,14 +936,15 @@ messageHover guildOrDmId messageIndex loggedIn =
 
 
 conversationViewHelper :
-    GuildOrDmIdWithMaybeMessage
+    Id ChannelMessageId
+    -> GuildOrDmIdWithMaybeMessage
     -> SeqDict (Id ChannelMessageId) Thread
-    -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
+    -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper guildOrDmIdWithMaybeMessage threads channel loggedIn local model =
+conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads channel loggedIn local model =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
@@ -933,7 +954,7 @@ conversationViewHelper guildOrDmIdWithMaybeMessage threads channel loggedIn loca
         maybeEditing =
             SeqDict.get guildOrDmId loggedIn.editMessage
 
-        othersEditing : SeqSet (Id ChannelMessageId)
+        othersEditing : SeqSet (Id messageId)
         othersEditing =
             SeqDict.remove local.localUser.userId channel.lastTypedAt
                 |> SeqDict.values
@@ -964,10 +985,6 @@ conversationViewHelper guildOrDmIdWithMaybeMessage threads channel loggedIn loca
                 Nothing ->
                     SeqDict.empty
 
-        lastViewedIndex : Id ChannelMessageId
-        lastViewedIndex =
-            SeqDict.get guildOrDmId local.localUser.user.lastViewed |> Maybe.withDefault (Id.fromInt -1)
-
         containerWidth : Int
         containerWidth =
             conversationWidth model
@@ -993,7 +1010,7 @@ conversationViewHelper guildOrDmIdWithMaybeMessage threads channel loggedIn loca
 
                 otherUserIsEditing : Bool
                 otherUserIsEditing =
-                    SeqSet.member messageId othersEditing
+                    SeqSet.member (Id.changeType messageId) othersEditing
 
                 isEditing : Maybe EditMessage
                 isEditing =
@@ -1323,7 +1340,13 @@ messageInputConfig guildOrDmId =
     , textInputLostFocus = TextInputLostFocus
     , pressedTextInput = PressedTextInput
     , typedMessage = TypedMessage guildOrDmId
-    , pressedSendMessage = PressedSendMessage guildOrDmId
+    , pressedSendMessage =
+        case guildOrDmId of
+            GuildOrDmId_Guild guildId channelId threadRoute ->
+                PressedSendMessage (GuildOrDmId_Guild_NoThread guildId channelId) threadRoute
+
+            GuildOrDmId_Dm otherUserId threadRoute ->
+                PressedSendMessage (GuildOrDmId_Dm_NoThread otherUserId) threadRoute
     , pressedArrowInDropdown = PressedArrowInDropdown guildOrDmId
     , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput guildOrDmId
     , pressedPingUser = PressedPingUser guildOrDmId
@@ -1354,15 +1377,16 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
 
 
 conversationView :
-    GuildOrDmIdWithMaybeMessage
+    Id ChannelMessageId
+    -> GuildOrDmIdWithMaybeMessage
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
     -> String
     -> SeqDict (Id ChannelMessageId) Thread
-    -> { a | lastTypedAt : SeqDict (Id UserId) LastTypedAt, messages : Array Message }
+    -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
     -> Element FrontendMsg
-conversationView guildOrDmIdWithMaybeMessage loggedIn model local name threads channel =
+conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model local name threads channel =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
@@ -1501,6 +1525,7 @@ conversationView guildOrDmIdWithMaybeMessage loggedIn model local name threads c
                             )
                  )
                     :: conversationViewHelper
+                        lastViewedIndex
                         guildOrDmIdWithMaybeMessage
                         threads
                         channel
@@ -2709,8 +2734,13 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
                                    else
                                     channelOrThreadHasNotifications
                                         localUser.userId
-                                        localUser.user
-                                        (GuildOrDmId_Guild guildId channelId threadRoute)
+                                        (case SeqDict.get ( GuildOrDmId_Guild_NoThread guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads of
+                                            Just id ->
+                                                Id.increment id
+
+                                            Nothing ->
+                                                Id.fromInt 0
+                                        )
                                         thread
                                   )
                                     |> GuildIcon.notificationView 4 5 MyUi.background2
@@ -2809,8 +2839,13 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                    else
                     channelOrThreadHasNotifications
                         localUser.userId
-                        localUser.user
-                        (GuildOrDmId_Guild guildId channelId NoThread)
+                        (case SeqDict.get (GuildOrDmId_Guild_NoThread guildId channelId) localUser.user.lastViewed of
+                            Just id ->
+                                Id.increment id
+
+                            Nothing ->
+                                Id.fromInt 0
+                        )
                         channel
                   )
                     |> GuildIcon.notificationView 0 -3 MyUi.background2
