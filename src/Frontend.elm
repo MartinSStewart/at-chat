@@ -1232,21 +1232,22 @@ updateLoaded msg model =
         PressedSendMessage guildOrDmId threadRoute ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get guildOrDmId loggedIn.drafts of
+                    let
+                        guildOrDmIdWithThread : GuildOrDmId
+                        guildOrDmIdWithThread =
+                            case guildOrDmId of
+                                GuildOrDmId_Guild_NoThread guildId channelId ->
+                                    GuildOrDmId_Guild guildId channelId threadRoute
+
+                                GuildOrDmId_Dm_NoThread otherUserId ->
+                                    GuildOrDmId_Dm otherUserId threadRoute
+                    in
+                    case SeqDict.get guildOrDmIdWithThread loggedIn.drafts of
                         Just nonempty ->
                             let
                                 local : LocalState
                                 local =
                                     Local.model loggedIn.localState
-
-                                guildOrDmIdWithThread : GuildOrDmId
-                                guildOrDmIdWithThread =
-                                    case guildOrDmId of
-                                        GuildOrDmId_Guild_NoThread guildId channelId ->
-                                            GuildOrDmId_Guild guildId channelId threadRoute
-
-                                        GuildOrDmId_Dm_NoThread otherUserId ->
-                                            GuildOrDmId_Dm otherUserId threadRoute
                             in
                             handleLocalChange
                                 model.time
@@ -1785,18 +1786,30 @@ updateLoaded msg model =
                                 (if oldTypingDebouncer then
                                     --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
                                     case guildOrDmId of
-                                        GuildOrDmId_Guild guildId channelId _ ->
+                                        GuildOrDmId_Guild guildId channelId threadRoute ->
                                             Local_MemberEditTyping
                                                 model.time
                                                 (GuildOrDmId_Guild_NoThread guildId channelId)
-                                                edit.messageIndex
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                    NoThread ->
+                                                        NoThreadWithMessage edit.messageIndex
+                                                )
                                                 |> Just
 
-                                        GuildOrDmId_Dm otherUserId _ ->
+                                        GuildOrDmId_Dm otherUserId threadRoute ->
                                             Local_MemberEditTyping
                                                 model.time
                                                 (GuildOrDmId_Dm_NoThread otherUserId)
-                                                edit.messageIndex
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                    NoThread ->
+                                                        NoThreadWithMessage edit.messageIndex
+                                                )
                                                 |> Just
 
                                  else
