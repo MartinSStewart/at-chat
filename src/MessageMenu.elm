@@ -207,6 +207,7 @@ view model extraOptions local loggedIn =
                     :: (case showEdit guildOrDmId extraOptions.messageIndex loggedIn of
                             Just edit ->
                                 [ MessageInput.view
+                                    (Dom.id "messageMenu_editMobile")
                                     True
                                     True
                                     (editMessageTextInputConfig guildOrDmId)

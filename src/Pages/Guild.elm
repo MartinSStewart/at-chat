@@ -802,7 +802,9 @@ inviteLinkCreatorForm model guildId guild =
             , scrollable (canScroll model)
             ]
             [ channelHeader (MyUi.isMobile model) (Ui.text "Invite member to guild")
-            , Ui.el [ Ui.paddingXY 16 0 ] (submitButton (PressedCreateInviteLink guildId) "Create invite link")
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
             , if SeqDict.isEmpty guild.invites then
                 Ui.none
 
@@ -908,10 +910,11 @@ emojiSelector =
                     [ Ui.height (Ui.px 34) ]
                     (List.map
                         (\emoji ->
-                            Ui.el
+                            MyUi.elButton
+                                (Dom.id "guild_emojiSelectorEmoji")
+                                (PressedEmojiSelectorEmoji emoji)
                                 [ Ui.width (Ui.px 32)
                                 , Ui.contentCenterX
-                                , Ui.Input.button (PressedEmojiSelectorEmoji emoji)
                                 ]
                                 (Ui.text (Emoji.toString emoji))
                         )
@@ -1313,9 +1316,10 @@ channelHeader isMobile2 content =
         , MyUi.noShrinking
         ]
         (if isMobile2 then
-            [ Ui.el
-                [ Ui.Input.button PressedChannelHeaderBackButton
-                , Ui.width (Ui.px 36)
+            [ MyUi.elButton
+                (Dom.id "guild_headerBackButton")
+                PressedChannelHeaderBackButton
+                [ Ui.width (Ui.px 36)
                 , Ui.height Ui.fill
                 , Ui.Font.color MyUi.font3
                 , Ui.contentCenterY
@@ -1581,6 +1585,7 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                 Nothing ->
                     Ui.none
             , MessageInput.view
+                (Dom.id "messageMenu_channelInput")
                 (replyTo == Nothing)
                 (MyUi.isMobile model)
                 (messageInputConfig guildOrDmId)
@@ -1755,9 +1760,10 @@ replyToHeader onPress userId local =
         , Ui.borderWith { left = 1, right = 1, top = 1, bottom = 0 }
         , Ui.borderColor MyUi.border1
         , Ui.inFront
-            (Ui.el
-                [ Ui.Input.button onPress
-                , Ui.width (Ui.px 32)
+            (MyUi.elButton
+                (Dom.id "guild_closeReplyToHeader")
+                onPress
+                [ Ui.width (Ui.px 32)
                 , Ui.paddingWith { left = 4, right = 4, top = 4, bottom = 0 }
                 , Ui.alignRight
                 ]
@@ -1794,7 +1800,16 @@ reactionEmojiView messageIndex currentUserId reactions =
                         hasReactedTo =
                             NonemptySet.member currentUserId users
                     in
-                    Ui.row
+                    (if hasReactedTo then
+                        MyUi.rowButton
+                            (Dom.id "guild_removeReactionEmoji")
+                            (MessageView_PressedReactionEmoji_Remove messageIndex emoji)
+
+                     else
+                        MyUi.rowButton
+                            (Dom.id "guild_addReactionEmoji")
+                            (MessageView_PressedReactionEmoji_Add messageIndex emoji)
+                    )
                         [ Ui.rounded 8
                         , Ui.spacing 2
                         , Ui.background MyUi.background1
@@ -1816,13 +1831,6 @@ reactionEmojiView messageIndex currentUserId reactions =
                         , Ui.border 1
                         , Ui.width Ui.shrink
                         , Ui.Font.bold
-                        , Ui.Input.button
-                            (if hasReactedTo then
-                                MessageView_PressedReactionEmoji_Remove messageIndex emoji
-
-                             else
-                                MessageView_PressedReactionEmoji_Add messageIndex emoji
-                            )
                         ]
                         [ Emoji.view emoji, Ui.text (String.fromInt (NonemptySet.size users)) ]
                 )
@@ -1886,6 +1894,7 @@ messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo mayb
                             Ui.noAttr
                     ]
                     [ MessageInput.view
+                        (Dom.id "messageMenu_editDesktop")
                         True
                         False
                         (MessageMenu.editMessageTextInputConfig guildOrDmId)
@@ -1903,9 +1912,10 @@ messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo mayb
                         , MyUi.prewrap
                         ]
                         [ Ui.text "Press "
-                        , Ui.el
-                            [ Ui.Input.button (PressedCancelMessageEdit guildOrDmId)
-                            , Ui.Font.color MyUi.font1
+                        , MyUi.elButton
+                            (Dom.id "guild_exitEditMessage")
+                            (PressedCancelMessageEdit guildOrDmId)
+                            [ Ui.Font.color MyUi.font1
                             , Ui.width Ui.shrink
                             ]
                             (Ui.text "escape")
@@ -2281,12 +2291,13 @@ threadMessageHtmlId messageIndex =
 
 
 repliedToHeaderHelper : Bool -> Id ChannelMessageId -> Element MessageViewMsg -> Element MessageViewMsg
-repliedToHeaderHelper isMobile messageIndex content =
-    Ui.row
+repliedToHeaderHelper isMobile messageId content =
+    MyUi.rowButton
+        (Dom.id ("guild_replyLink_" ++ Id.toString messageId))
+        (MessageView_PressedReplyLink messageId)
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
-        , Ui.Input.button (MessageView_PressedReplyLink messageIndex)
         , Ui.Font.color MyUi.font3
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         ]
@@ -2980,9 +2991,10 @@ editChannelFormView guildId channelId channel form =
         , channelNameInput form |> Ui.map (EditChannelFormChanged guildId channelId)
         , Ui.row
             [ Ui.spacing 16 ]
-            [ Ui.el
-                [ Ui.Input.button (PressedCancelEditChannelChanges guildId channelId)
-                , Ui.paddingXY 16 8
+            [ MyUi.elButton
+                (Dom.id "guild_cancelEditChannel")
+                (PressedCancelEditChannelChanges guildId channelId)
+                [ Ui.paddingXY 16 8
                 , Ui.background MyUi.cancelButtonBackground
                 , Ui.width Ui.shrink
                 , Ui.rounded 8
@@ -2993,14 +3005,16 @@ editChannelFormView guildId channelId channel form =
                 ]
                 (Ui.text "Cancel")
             , submitButton
+                (Dom.id "guild_submitEditChannel")
                 (PressedSubmitEditChannelChanges guildId channelId form)
                 "Save changes"
             ]
 
         --, Ui.el [ Ui.height (Ui.px 1), Ui.background splitterColor ] Ui.none
-        , Ui.el
-            [ Ui.Input.button (PressedDeleteChannel guildId channelId)
-            , Ui.paddingXY 16 8
+        , MyUi.elButton
+            (Dom.id "guild_deleteChannel")
+            (PressedDeleteChannel guildId channelId)
+            [ Ui.paddingXY 16 8
             , Ui.background MyUi.deleteButtonBackground
             , Ui.width Ui.shrink
             , Ui.rounded 8
@@ -3021,16 +3035,17 @@ newChannelFormView isMobile2 guildId form =
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)
-            , submitButton (PressedSubmitNewChannel guildId form) "Create channel"
+            , submitButton (Dom.id "guild_createChannel") (PressedSubmitNewChannel guildId form) "Create channel"
             ]
         ]
 
 
-submitButton : msg -> String -> Element msg
-submitButton onPress text =
-    Ui.el
-        [ Ui.Input.button onPress
-        , Ui.paddingXY 16 8
+submitButton : HtmlId -> msg -> String -> Element msg
+submitButton htmlId onPress text =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.paddingXY 16 8
         , Ui.background MyUi.buttonBackground
         , Ui.width Ui.shrink
         , Ui.rounded 8
@@ -3089,9 +3104,10 @@ newGuildFormView form =
         , guildNameInput form |> Ui.map NewGuildFormChanged
         , Ui.row
             [ Ui.spacing 16 ]
-            [ Ui.el
-                [ Ui.Input.button PressedCancelNewGuild
-                , Ui.paddingXY 16 8
+            [ MyUi.elButton
+                (Dom.id "guild_cancelNewGuild")
+                PressedCancelNewGuild
+                [ Ui.paddingXY 16 8
                 , Ui.background MyUi.cancelButtonBackground
                 , Ui.width Ui.shrink
                 , Ui.rounded 8
@@ -3101,7 +3117,7 @@ newGuildFormView form =
                 , Ui.border 1
                 ]
                 (Ui.text "Cancel")
-            , submitButton (PressedSubmitNewGuild form) "Create guild"
+            , submitButton (Dom.id "guild_createGuild") (PressedSubmitNewGuild form) "Create guild"
             ]
         ]
 
