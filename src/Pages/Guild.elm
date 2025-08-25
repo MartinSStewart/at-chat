@@ -2605,9 +2605,9 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
-        , Ui.el
+        , elLinkButton
+            (GuildRoute guildId InviteLinkCreatorRoute)
             [ Ui.width Ui.shrink
-            , Ui.Input.button (PressedLink (GuildRoute guildId InviteLinkCreatorRoute))
             , Ui.Font.color MyUi.font2
             , Ui.width (Ui.px 40)
             , Ui.alignRight
@@ -2662,10 +2662,10 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             isSelected =
                                 channelRoute == NewChannelRoute
                         in
-                        Ui.row
+                        rowLinkButton
+                            (GuildRoute guildId NewChannelRoute)
                             [ Ui.paddingXY 4 8
                             , Ui.Font.color MyUi.font3
-                            , Ui.Input.button (PressedLink (GuildRoute guildId NewChannelRoute))
                             , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
                             , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
                             , if isSelected then
@@ -2731,12 +2731,9 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
                         , Ui.contentCenterY
                         , MyUi.noShrinking
                         ]
-                        [ Ui.el
-                            [ Ui.Input.button
-                                (PressedLink
-                                    (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing)))
-                                )
-                            , Ui.height Ui.fill
+                        [ elLinkButton
+                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing)))
+                            [ Ui.height Ui.fill
                             , Ui.contentCenterY
                             , Ui.paddingWith
                                 { left = 28
@@ -2834,9 +2831,9 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         , Ui.contentCenterY
         , MyUi.noShrinking
         ]
-        [ Ui.el
-            [ Ui.Input.button (PressedLink (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing))))
-            , Ui.height Ui.fill
+        [ elLinkButton
+            (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
+            [ Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.paddingWith
                 { left = 26
@@ -2881,7 +2878,8 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
             ]
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
-            Ui.el
+            elLinkButton
+                (GuildRoute guildId (EditChannelRoute channelId))
                 [ Ui.alignRight
                 , Ui.width (Ui.px 26)
                 , Ui.contentCenterY
@@ -2889,8 +2887,6 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
                 , Ui.paddingWith { left = 0, right = 2, top = 0, bottom = 0 }
                 , Ui.Font.color MyUi.font3
                 , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
-                , Ui.Input.button
-                    (PressedLink (GuildRoute guildId (EditChannelRoute channelId)))
                 ]
                 (Ui.html Icons.gear)
 
@@ -2941,11 +2937,11 @@ friendLabel isMobile openedOtherUserId otherUserId otherUser =
         _ =
             Debug.log "rerender friendLabel" ()
     in
-    Ui.row
+    rowLinkButton
+        (Route.DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
-        , Ui.Input.button (PressedLink (Route.DmRoute otherUserId (NoThreadWithMaybeMessage Nothing)))
         , Ui.Font.color
             (if isSelected then
                 MyUi.font1
