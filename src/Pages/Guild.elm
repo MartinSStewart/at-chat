@@ -285,6 +285,7 @@ loggedInAsView local =
             , Ui.paddingXY 4 0
             , Ui.alignRight
             , Ui.Input.button PressedShowUserOption
+            , Ui.id "guild_showUserOptions"
             ]
             (Ui.html Icons.gear)
         ]

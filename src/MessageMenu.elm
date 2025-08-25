@@ -341,7 +341,12 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                         button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
                     , case ( threadRoute, isThreadStarter ) of
                         ( NoThread, False ) ->
-                            button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+                            button
+                                isMobile
+                                Icons.hashtag
+                                "Start thread"
+                                (MessageMenu_PressedOpenThread messageIndex)
+                                |> Just
 
                         _ ->
                             Nothing
