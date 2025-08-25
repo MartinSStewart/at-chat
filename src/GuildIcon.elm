@@ -8,6 +8,7 @@ module GuildIcon exposing
     , view
     )
 
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileStatus
 import GuildName
 import Html
@@ -160,9 +161,11 @@ fullWidth =
     58
 
 
-addGuildButton : Bool -> msg -> Element msg
-addGuildButton isSelected onPress =
-    Ui.el
+addGuildButton : HtmlId -> Bool -> msg -> Element msg
+addGuildButton htmlId isSelected onPress =
+    MyUi.elButton
+        htmlId
+        onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.centerX
@@ -185,7 +188,6 @@ addGuildButton isSelected onPress =
         , Ui.height (Ui.px size)
         , Ui.padding 8
         , Ui.Font.color (Ui.rgb 20 20 20)
-        , Ui.Input.button onPress
         , MyUi.hoverText "Create new guild"
         ]
         (Ui.html Icons.plusIcon)
@@ -193,7 +195,9 @@ addGuildButton isSelected onPress =
 
 showFriendsButton : Bool -> msg -> Element msg
 showFriendsButton isSelected onPress =
-    Ui.el
+    MyUi.elButton
+        (Dom.id "guildIcon_showFriends")
+        onPress
         [ Ui.contentCenterX
         , Ui.contentCenterY
         , Ui.centerX
@@ -216,7 +220,6 @@ showFriendsButton isSelected onPress =
         , Ui.height (Ui.px size)
         , Ui.padding 8
         , Ui.Font.color (Ui.rgb 20 20 20)
-        , Ui.Input.button onPress
         , MyUi.hoverText "Show friends list"
         ]
         (Ui.html Icons.users)

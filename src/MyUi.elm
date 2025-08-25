@@ -19,6 +19,7 @@ module MyUi exposing
     , deleteButtonBackground
     , deleteButtonFont
     , disabledButtonBackground
+    , elButton
     , emailAddress
     , errorBox
     , errorColor
@@ -50,6 +51,7 @@ module MyUi exposing
     , primaryButton
     , radioRowWithSeparators
     , replyToColor
+    , rowButton
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
@@ -120,13 +122,11 @@ errorBox htmlId onPress error =
             , Ui.paddingWith { left = 4, right = 0, top = 2, bottom = 2 }
             ]
             (Ui.text error)
-        , Ui.row
+        , rowButton
+            htmlId
+            (onPress error)
             [ Ui.width Ui.shrink
             , Ui.paddingWith { left = 0, right = 4, top = 2, bottom = 2 }
-
-            -- We can't use touchPress here. iPads don't let you trigger clipboard copy on touch start.
-            , Ui.Input.button (onPress error)
-            , id htmlId
             ]
             [ Icons.copy, Ui.text "Copy" ]
         ]
@@ -452,6 +452,20 @@ button attrs text =
             ++ attrs
         )
         (Ui.text text)
+
+
+elButton : HtmlId -> msg -> List (Ui.Attribute msg) -> Element msg -> Element msg
+elButton htmlId onPress attributes content =
+    Ui.el
+        (Ui.id (Dom.idToString htmlId) :: Ui.Input.button onPress :: attributes)
+        content
+
+
+rowButton : HtmlId -> msg -> List (Ui.Attribute msg) -> List (Element msg) -> Element msg
+rowButton htmlId onPress attributes content =
+    Ui.row
+        (Ui.id (Dom.idToString htmlId) :: Ui.Input.button onPress :: attributes)
+        content
 
 
 buttonShadows : List { color : Ui.Color, x : Float, y : Float, blur : Float, size : Float }

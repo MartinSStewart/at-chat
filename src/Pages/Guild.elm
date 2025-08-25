@@ -234,20 +234,17 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
             (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
                     (\( guildId, guild ) ->
-                        Ui.el
-                            [ Ui.Input.button
-                                (PressedLink
-                                    (GuildRoute
-                                        guildId
-                                        (ChannelRoute
-                                            (SeqDict.get guildId currentUser.lastChannelViewed
-                                                |> Maybe.withDefault (LocalState.announcementChannel guild)
-                                            )
-                                            (NoThreadWithMaybeMessage Nothing)
-                                        )
+                        elLinkButton
+                            (GuildRoute
+                                guildId
+                                (ChannelRoute
+                                    (SeqDict.get guildId currentUser.lastChannelViewed
+                                        |> Maybe.withDefault (LocalState.announcementChannel guild)
                                     )
+                                    (NoThreadWithMaybeMessage Nothing)
                                 )
-                            ]
+                            )
+                            []
                             (GuildIcon.view
                                 (case route of
                                     GuildRoute a _ ->
@@ -265,9 +262,27 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                             )
                     )
                     (SeqDict.toList guilds)
-                ++ [ GuildIcon.addGuildButton False PressedCreateGuild ]
+                ++ [ GuildIcon.addGuildButton (Dom.id "guild_createGuild") False PressedCreateGuild ]
             )
         )
+
+
+elLinkButton : Route -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Element FrontendMsg
+elLinkButton route attributes content =
+    MyUi.elButton
+        (Route.encode route |> Dom.id)
+        (PressedLink route)
+        attributes
+        content
+
+
+rowLinkButton : Route -> List (Ui.Attribute FrontendMsg) -> List (Element FrontendMsg) -> Element FrontendMsg
+rowLinkButton route attributes content =
+    MyUi.rowButton
+        (Route.encode route |> Dom.id)
+        (PressedLink route)
+        attributes
+        content
 
 
 loggedInAsView : LocalState -> Element FrontendMsg
@@ -280,12 +295,12 @@ loggedInAsView local =
         , MyUi.htmlStyle "padding" ("4px 4px calc(" ++ MyUi.insetBottom ++ " + 4px) 4px")
         ]
         [ Ui.text (PersonName.toString local.localUser.user.name)
-        , Ui.el
+        , MyUi.elButton
+            (Dom.id "guild_showUserOptions")
+            PressedShowUserOption
             [ Ui.width (Ui.px 30)
             , Ui.paddingXY 4 0
             , Ui.alignRight
-            , Ui.Input.button PressedShowUserOption
-            , Ui.id "guild_showUserOptions"
             ]
             (Ui.html Icons.gear)
         ]
@@ -607,10 +622,10 @@ memberColumn isMobile localUser guildOwner guildMembers =
 
 memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
-    Ui.row
+    rowLinkButton
+        (DmRoute userId (NoThreadWithMaybeMessage Nothing))
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
-        , Ui.Input.button (PressedLink (DmRoute userId (NoThreadWithMaybeMessage Nothing)))
         , MyUi.hover
             isMobile
             [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
@@ -848,9 +863,10 @@ copyableText text model =
             , placeholder = Nothing
             , label = Ui.Input.labelHidden "Readonly text field"
             }
-        , Ui.el
-            [ Ui.Input.button (PressedCopyText text)
-            , Ui.Font.color MyUi.font2
+        , MyUi.elButton
+            (Dom.id "guild_copyText")
+            (PressedCopyText text)
+            [ Ui.Font.color MyUi.font2
             , Ui.roundedWith { topRight = 4, bottomRight = 4, topLeft = 0, bottomLeft = 0 }
             , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
             , Ui.borderColor MyUi.inputBorder

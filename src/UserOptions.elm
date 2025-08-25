@@ -45,10 +45,11 @@ view isMobile time local loggedIn model =
                     |> Ui.inFront
                 ]
                 [ Ui.el [ Ui.Font.size 20, Ui.paddingXY 16 0 ] (Ui.text "User settings")
-                , Ui.el
+                , MyUi.elButton
+                    (Dom.id "userOptions_closeUserOptions")
+                    PressedCloseUserOptions
                     [ Ui.padding 16
                     , Ui.width (Ui.px 56)
-                    , Ui.Input.button PressedCloseUserOptions
                     , Ui.alignRight
                     ]
                     (Ui.html Icons.x)
