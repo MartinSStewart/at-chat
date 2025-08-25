@@ -671,64 +671,68 @@ handleDiscordEditMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordEditMessage edit model =
-    case getGuildFromDiscordId edit.guildId model of
-        Just ( guildId, guild ) ->
-            case LocalState.linkedChannel edit.channelId guild of
-                Just ( channelId, channel ) ->
-                    case
-                        ( OneToOne.second edit.id channel.linkedMessageIds
-                        , OneToOne.second edit.author.id model.discordUsers
-                        )
-                    of
-                        ( Just messageIndex, Just userId ) ->
-                            let
-                                richText : Nonempty RichText
-                                richText =
-                                    RichText.fromDiscord model.discordUsers edit.content
-                            in
-                            case
-                                LocalState.editMessageHelper
-                                    edit.timestamp
-                                    userId
-                                    richText
-                                    SeqDict.empty
-                                    (NoThreadWithMessage messageIndex)
-                                    channel
-                            of
-                                Ok channel2 ->
-                                    ( { model
-                                        | guilds =
-                                            SeqDict.updateIfExists
-                                                guildId
-                                                (LocalState.updateChannel (\_ -> channel2) channelId)
-                                                model.guilds
-                                      }
-                                    , broadcastToGuild
-                                        guildId
-                                        (Server_SendEditMessage
-                                            edit.timestamp
-                                            userId
-                                            (GuildOrDmId_Guild_NoThread guildId channelId)
-                                            (NoThreadWithMessage messageIndex)
-                                            richText
-                                            SeqDict.empty
-                                            |> ServerChange
+    if Just edit.author.id == model.discordBotId then
+        ( model, Command.none )
+
+    else
+        case getGuildFromDiscordId edit.guildId model of
+            Just ( guildId, guild ) ->
+                case LocalState.linkedChannel edit.channelId guild of
+                    Just ( channelId, channel ) ->
+                        case
+                            ( OneToOne.second edit.id channel.linkedMessageIds
+                            , OneToOne.second edit.author.id model.discordUsers
+                            )
+                        of
+                            ( Just messageIndex, Just userId ) ->
+                                let
+                                    richText : Nonempty RichText
+                                    richText =
+                                        RichText.fromDiscord model.discordUsers edit.content
+                                in
+                                case
+                                    LocalState.editMessageHelper
+                                        edit.timestamp
+                                        userId
+                                        richText
+                                        SeqDict.empty
+                                        (NoThreadWithMessage messageIndex)
+                                        channel
+                                of
+                                    Ok channel2 ->
+                                        ( { model
+                                            | guilds =
+                                                SeqDict.updateIfExists
+                                                    guildId
+                                                    (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                    model.guilds
+                                          }
+                                        , broadcastToGuild
+                                            guildId
+                                            (Server_SendEditMessage
+                                                edit.timestamp
+                                                userId
+                                                (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                (NoThreadWithMessage messageIndex)
+                                                richText
+                                                SeqDict.empty
+                                                |> ServerChange
+                                            )
+                                            model
                                         )
-                                        model
-                                    )
 
-                                Err _ ->
-                                    ( model, Command.none )
+                                    Err _ ->
+                                        ( model, Command.none )
 
-                        _ ->
-                            -- TODO handle edit thread messages
-                            ( model, Command.none )
+                            _ ->
+                                -- TODO handle edit thread messages
+                                ( model, Command.none )
 
-                Nothing ->
-                    ( model, Command.none )
+                    Nothing ->
+                        ( model, Command.none )
 
-        Nothing ->
-            ( model, Command.none )
+            Nothing ->
+                ( model, Command.none )
 
 
 handleDiscordDeleteMessage :
