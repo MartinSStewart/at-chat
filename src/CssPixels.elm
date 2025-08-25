@@ -1,4 +1,4 @@
-module CssPixels exposing (CssPixels(..), cssPixels)
+module CssPixels exposing (CssPixels(..), cssPixels, inCssPixels)
 
 import Quantity exposing (Quantity)
 
@@ -12,3 +12,8 @@ type CssPixels
 cssPixels : number -> Quantity number CssPixels
 cssPixels =
     Quantity.unsafe
+
+
+inCssPixels : Quantity number CssPixels -> number
+inCssPixels =
+    Quantity.unwrap

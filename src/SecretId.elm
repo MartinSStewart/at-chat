@@ -1,10 +1,12 @@
-module SecretId exposing (SecretId, fromString, getShortUniqueId, getUniqueId, toString)
+module SecretId exposing (SecretId(..), fromString, getShortUniqueId, getUniqueId, toString)
 
 import Effect.Time as Time
 import Env
 import Sha256
 
 
+{-| OpaqueVariants
+-}
 type SecretId a
     = SecretId String
 

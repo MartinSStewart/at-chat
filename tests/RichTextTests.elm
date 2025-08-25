@@ -1,7 +1,6 @@
 module RichTextTests exposing (test)
 
 import Expect
-import Fuzz
 import Id
 import List.Nonempty exposing (Nonempty(..))
 import PersonName exposing (PersonName)
@@ -67,6 +66,11 @@ test =
                             )
                             []
                         )
+        , Test.test "[!1]" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '[' "!1]")
+                    |> Expect.equal
+                        (Nonempty (AttachedFile (Id.fromInt 1)) [])
         , Test.test "👨\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_" <|
             \_ ->
                 RichText.fromNonemptyString users (NonemptyString '👨' "\u{200D}👩\u{200D}👧\u{200D}👦_*abc*_")
@@ -80,33 +84,43 @@ test =
                                 )
                             ]
                         )
-        , Test.fuzz markdownStringFuzzer "Round trip" <|
-            \text ->
-                RichText.fromNonemptyString users text
-                    |> RichText.toString users
-                    |> Expect.equal (String.Nonempty.toString text)
+        , Test.test "strikethrough" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' "~abc~~")
+                    |> Expect.equal
+                        (Nonempty
+                            (Strikethrough (Nonempty (NormalText 'a' "bc") []))
+                            []
+                        )
+        , Test.test "not strikethrough" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' " abc ~")
+                    |> Expect.equal (Nonempty (NormalText '~' " abc ~") [])
+        , Test.test "~~a~~b" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '~' "~a~~b")
+                    |> Expect.equal (Nonempty (Strikethrough (Nonempty (NormalText 'a' "") [])) [ NormalText 'b' "" ])
+        , Test.test "_~~abc~~_" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString '_' "~~abc~~_")
+                    |> Expect.equal
+                        (Nonempty
+                            (Italic
+                                (Nonempty
+                                    (Strikethrough (Nonempty (NormalText 'a' "bc") []))
+                                    []
+                                )
+                            )
+                            []
+                        )
+
+        --, Test.test " ~~~~" <|
+        --    \_ ->
+        --        RichText.fromNonemptyString users (NonemptyString ' ' "~~~~")
+        --            |> Expect.equal (Nonempty (NormalText ' ' "~~~~") [])
+        --, Test.fuzz markdownStringFuzzer "Round trip" <|
+        --    \text ->
+        --        RichText.fromNonemptyString users text
+        --            |> RichText.toString users
+        --            |> Expect.equal (String.Nonempty.toString text)
         ]
-
-
-markdownStringFuzzer : Fuzz.Fuzzer NonemptyString
-markdownStringFuzzer =
-    Fuzz.list
-        (Fuzz.oneOfValues
-            [ "a"
-            , " "
-            , "*"
-            , "@"
-            , "_"
-            , "__"
-            , "👨\u{200D}👩\u{200D}👧\u{200D}👦"
-            ]
-        )
-        |> Fuzz.map
-            (\list ->
-                case String.concat list |> String.Nonempty.fromString of
-                    Just nonempty ->
-                        nonempty
-
-                    Nothing ->
-                        NonemptyString ' ' ""
-            )

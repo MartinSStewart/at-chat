@@ -3,55 +3,70 @@ module MyUi exposing
     , background1
     , background2
     , background3
+    , blockClickPropagation
     , border1
     , border2
     , buttonBackground
     , buttonBorder
     , buttonFontColor
     , cancelButtonBackground
+    , colorToStyle
     , column
-    , contentContainerAttributes
+    , container
     , css
     , datestamp
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
+    , disabledButtonBackground
+    , elButton
     , emailAddress
-    , emailAddressLink
     , errorBox
     , errorColor
+    , focusEffect
     , font1
     , font2
     , font3
     , gray
     , heightAttr
     , highlightedBorder
+    , hover
     , hoverAndMentionColor
     , hoverAndReplyToColor
     , hoverHighlight
     , hoverText
+    , htmlStyle
+    , id
     , inputBackground
     , inputBorder
+    , insetBottom
+    , insetTop
+    , isMobile
     , label
     , mentionColor
     , montserrat
     , noPointerEvents
-    , padding
+    , noShrinking
+    , prewrap
     , primaryButton
     , radioRowWithSeparators
     , replyToColor
-    , rounded
+    , rowButton
     , secondaryButton
     , secondaryGray
     , secondaryGrayBorder
+    , simpleButton
     , textLinkColor
     , timeElapsedView
-    , touchPress
+    , timestamp
     , userLabelHtml
     , white
     , widthAttr
     )
 
+import Color
+import Coord exposing (Coord)
+import CssPixels exposing (CssPixels)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
@@ -60,12 +75,15 @@ import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
 import Id exposing (Id, UserId)
+import Json.Decode
 import PersonName exposing (PersonName)
 import Quantity
 import Round
 import SeqDict exposing (SeqDict)
 import Time exposing (Month(..))
 import Ui exposing (Element)
+import Ui.Anim
+import Ui.Events
 import Ui.Font
 import Ui.Input
 import Ui.Shadow
@@ -76,19 +94,9 @@ rhythm =
     8
 
 
-padding : Ui.Attribute msg
-padding =
-    Ui.padding rhythm
-
-
 spacing : Ui.Attribute msg
 spacing =
     Ui.spacing rhythm
-
-
-rounded : Ui.Attribute msg
-rounded =
-    Ui.rounded rhythm
 
 
 {-| Column with preapplied standard spacing.
@@ -99,7 +107,7 @@ column attrs children =
 
 
 errorBox : HtmlId -> (String -> msg) -> String -> Element msg
-errorBox id onPress error =
+errorBox htmlId onPress error =
     Ui.row
         [ Ui.border 1
         , Ui.borderColor errorColor
@@ -114,13 +122,11 @@ errorBox id onPress error =
             , Ui.paddingWith { left = 4, right = 0, top = 2, bottom = 2 }
             ]
             (Ui.text error)
-        , Ui.row
+        , rowButton
+            htmlId
+            (onPress error)
             [ Ui.width Ui.shrink
             , Ui.paddingWith { left = 0, right = 4, top = 2, bottom = 2 }
-
-            -- We can't use touchPress here. iPads don't let you trigger clipboard copy on touch start.
-            , Ui.Input.button (onPress error)
-            , Dom.idToString id |> Ui.id
             ]
             [ Icons.copy, Ui.text "Copy" ]
         ]
@@ -152,9 +158,11 @@ datestamp time =
         ++ String.right 2 (String.fromInt (Time.toYear Time.utc time))
 
 
-
---++ ":"
---++ String.padLeft 2 '0' (String.fromInt (Time.toSecond Time.utc time))
+timestamp : Time.Posix -> Time.Zone -> String
+timestamp time zone =
+    String.padLeft 2 '0' (String.fromInt (Time.toHour zone time))
+        ++ ":"
+        ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute zone time))
 
 
 monthToInt : Month -> Int
@@ -330,7 +338,7 @@ green500Border =
 
 secondaryGray : Ui.Color
 secondaryGray =
-    Ui.rgb 245 245 245
+    Ui.rgb 240 240 240
 
 
 secondaryGrayBorder : Ui.Color
@@ -351,16 +359,6 @@ textLinkColor =
 emailAddress : EmailAddress -> Element msg
 emailAddress emailAddress2 =
     Ui.el [ Ui.Font.bold ] (Ui.text (EmailAddress.toString emailAddress2))
-
-
-emailAddressLink : EmailAddress -> Element msg
-emailAddressLink emailAddress2 =
-    Ui.el
-        [ Ui.link ("mailto:" ++ EmailAddress.toString emailAddress2)
-        , Ui.Font.color textLinkColor
-        , Ui.Font.underline
-        ]
-        (Ui.text (EmailAddress.toString emailAddress2))
 
 
 radioRowWithSeparators : List (Ui.Attribute msg) -> a -> (a -> msg) -> Element msg -> List (List ( a, String )) -> Element msg
@@ -425,7 +423,7 @@ radioRowWithSeparators attrs selected onPress separator children =
 
 noPointerEvents : Ui.Attribute msg
 noPointerEvents =
-    Html.Attributes.style "pointer-events" "none" |> Ui.htmlAttribute
+    htmlStyle "pointer-events" "none"
 
 
 
@@ -441,7 +439,7 @@ button : List (Ui.Attribute msg) -> String -> Element msg
 button attrs text =
     Ui.el
         ([ Ui.paddingXY 8 4
-         , rounded
+         , Ui.rounded 8
          , Ui.border 1
          , Ui.width Ui.shrink
          , Ui.background green500
@@ -456,6 +454,20 @@ button attrs text =
         (Ui.text text)
 
 
+elButton : HtmlId -> msg -> List (Ui.Attribute msg) -> Element msg -> Element msg
+elButton htmlId onPress attributes content =
+    Ui.el
+        (Ui.id (Dom.idToString htmlId) :: Ui.Input.button onPress :: attributes)
+        content
+
+
+rowButton : HtmlId -> msg -> List (Ui.Attribute msg) -> List (Element msg) -> Element msg
+rowButton htmlId onPress attributes content =
+    Ui.row
+        (Ui.id (Dom.idToString htmlId) :: Ui.Input.button onPress :: attributes)
+        content
+
+
 buttonShadows : List { color : Ui.Color, x : Float, y : Float, blur : Float, size : Float }
 buttonShadows =
     [ { color = Ui.rgba 0 0 0 0.1, x = 0, y = 2, blur = 4, size = -1 }
@@ -463,13 +475,91 @@ buttonShadows =
     ]
 
 
+hover : Bool -> List Ui.Anim.Animated -> Ui.Attribute msg
+hover isMobile2 animated =
+    if isMobile2 then
+        Ui.noAttr
+
+    else
+        Ui.Anim.hovered (Ui.Anim.ms 10) animated
+
+
+prewrap : Ui.Attribute msg
+prewrap =
+    htmlStyle "white-space" "pre-wrap"
+
+
+container : Bool -> String -> List (Element msg) -> Element msg
+container isMobile2 label2 contents =
+    let
+        paddingX =
+            if isMobile2 then
+                8
+
+            else
+                16
+    in
+    Ui.el
+        [ Ui.paddingWith
+            { left = paddingX
+            , right = paddingX
+            , top = 10
+            , bottom = 0
+            }
+        , Ui.text label2
+            |> Ui.el
+                [ Ui.Font.bold
+                , Ui.Font.size 14
+                , Ui.move
+                    { x = paddingX + 12
+                    , y = 0
+                    , z = 0
+                    }
+                , Ui.paddingXY 2 0
+                , Ui.width Ui.shrink
+                , Ui.background background1
+                ]
+            |> Ui.inFront
+        ]
+        (Ui.column
+            [ Ui.border 1
+            , Ui.rounded 4
+            , Ui.padding 16
+            ]
+            contents
+        )
+
+
 primaryButton : HtmlId -> msg -> String -> Element msg
-primaryButton id onPress text =
+primaryButton htmlId onPress text =
     button
         [ Ui.Input.button onPress
-        , Dom.idToString id |> Ui.id
+        , id htmlId
+        , focusEffect
         ]
         text
+
+
+simpleButton : HtmlId -> msg -> Element msg -> Element msg
+simpleButton htmlId onPress content =
+    Ui.el
+        [ Ui.Input.button onPress
+        , Ui.borderColor buttonBorder
+        , Ui.border 1
+        , Ui.background buttonBackground
+        , Ui.rounded 4
+        , id htmlId
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 8
+        , focusEffect
+        , Ui.Font.weight 500
+        ]
+        content
+
+
+focusEffect : Ui.Attribute msg
+focusEffect =
+    Ui.Anim.focused (Ui.Anim.ms 10) [ Ui.Anim.borderColor white ]
 
 
 touchPress : msg -> Ui.Attribute msg
@@ -477,12 +567,9 @@ touchPress onPress =
     Html.Events.Extra.Touch.onStart (\_ -> onPress) |> Ui.htmlAttribute
 
 
-contentContainerAttributes : List (Ui.Attribute msg)
-contentContainerAttributes =
-    [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }
-    , Ui.centerX
-    , Ui.widthMax 1000
-    ]
+htmlStyle : String -> String -> Ui.Attribute msg
+htmlStyle name value =
+    Ui.htmlAttribute (Html.Attributes.style name value)
 
 
 montserrat : Ui.Attribute msg
@@ -490,18 +577,21 @@ montserrat =
     Ui.Font.family [ Ui.Font.typeface "Montserrat", Ui.Font.typeface "Helvetica", Ui.Font.sansSerif ]
 
 
-secondaryButton : HtmlId -> List (Ui.Attribute msg) -> msg -> String -> Element msg
-secondaryButton id attrs onPress label2 =
-    button
-        ([ Ui.Input.button onPress
-         , Dom.idToString id |> Ui.id
-         , Ui.background secondaryGray
-         , Ui.borderColor secondaryGrayBorder
-         , Ui.Font.color (Ui.rgb 0 0 0)
-         ]
-            ++ attrs
-        )
-        label2
+secondaryButton : HtmlId -> msg -> String -> Element msg
+secondaryButton htmlId onPress label2 =
+    Ui.el
+        [ Ui.Input.button onPress
+        , id htmlId
+        , Ui.background secondaryGray
+        , focusEffect
+        , Ui.border 1
+        , Ui.Font.color (Ui.rgb 0 0 0)
+        , Ui.rounded 4
+        , Ui.width Ui.shrink
+        , Ui.paddingXY 16 8
+        , Ui.Font.weight 500
+        ]
+        (Ui.text label2)
 
 
 deleteButton : HtmlId -> msg -> Element msg
@@ -518,12 +608,17 @@ deleteButton htmlId onPress =
         , Ui.Shadow.shadows
             [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
         ]
-        Icons.delete
+        (Ui.html Icons.delete)
 
 
 hoverText : String -> Ui.Attribute msg
 hoverText text =
     Ui.htmlAttribute (Html.Attributes.title text)
+
+
+id : HtmlId -> Ui.Attribute msg
+id htmlId =
+    Ui.id (Dom.idToString htmlId)
 
 
 css : Html msg
@@ -569,10 +664,12 @@ a:visited {
   color: rgb(206,193,225);
 }
 html, body {
-  overscroll-behavior-x: none;
+  overscroll-behavior: none;
 }
 body {
   overflow: hidden;
+  height:100vh !important;
+  background-color:rgb(50,60,90);
 }
 """
             )
@@ -632,6 +729,53 @@ userLabel2Html user =
         [ Html.text ("@" ++ PersonName.toString user.name) ]
 
 
+blockClickPropagation : msg -> Ui.Attribute msg
+blockClickPropagation msg =
+    Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( msg, True ))
+
+
+insetTop : String
+insetTop =
+    --"40px"
+    "env(safe-area-inset-top)"
+
+
+insetBottom : String
+insetBottom =
+    --"40px"
+    "env(safe-area-inset-bottom)"
+
+
+isMobile : { a | windowSize : Coord CssPixels } -> Bool
+isMobile model =
+    Coord.xRaw model.windowSize < 700
+
+
+noShrinking : Ui.Attribute msg
+noShrinking =
+    htmlStyle "flex-shrink" "0"
+
+
+colorToStyle : Ui.Color -> String
+colorToStyle color =
+    let
+        { red, green, blue, alpha } =
+            Color.toRgba color
+
+        floatToInt value =
+            round (value * 255) |> String.fromInt
+    in
+    "rgba("
+        ++ floatToInt red
+        ++ ","
+        ++ floatToInt green
+        ++ ","
+        ++ floatToInt blue
+        ++ ","
+        ++ String.fromFloat alpha
+        ++ ")"
+
+
 background1 : Ui.Color
 background1 =
     Ui.rgb 14 20 40
@@ -659,7 +803,12 @@ inputBorder =
 
 buttonBackground : Ui.Color
 buttonBackground =
-    Ui.rgb 220 230 240
+    Ui.rgb 64 122 178
+
+
+disabledButtonBackground : Ui.Color
+disabledButtonBackground =
+    Ui.rgb 130 133 135
 
 
 cancelButtonBackground : Ui.Color
@@ -669,12 +818,12 @@ cancelButtonBackground =
 
 deleteButtonBackground : Ui.Color
 deleteButtonBackground =
-    Ui.rgb 255 240 250
+    Ui.rgb 180 50 40
 
 
 deleteButtonFont : Ui.Color
 deleteButtonFont =
-    Ui.rgb 255 0 0
+    Ui.rgb 255 240 250
 
 
 buttonBorder : Ui.Color
@@ -699,7 +848,7 @@ font2 =
 
 font3 : Ui.Color
 font3 =
-    Ui.rgb 200 200 200
+    Ui.rgb 160 180 200
 
 
 border1 : Ui.Color

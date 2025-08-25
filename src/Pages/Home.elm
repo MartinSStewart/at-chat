@@ -6,7 +6,6 @@ module Pages.Home exposing
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import MyUi
-import Route exposing (Route(..), UserOverviewRouteData(..))
 import Types exposing (FrontendMsg(..), LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
@@ -15,14 +14,14 @@ import Ui.Input
 import Ui.Shadow
 
 
-header : LoginStatus -> Element FrontendMsg
-header loginStatus =
+header : Bool -> LoginStatus -> Element FrontendMsg
+header isMobile loginStatus =
     Ui.el
         [ Ui.background MyUi.background2
         , Ui.Shadow.shadows [ { x = 0, y = 1, blur = 2, size = 0, color = Ui.rgba 0 0 0 0.05 } ]
         ]
         (Ui.row
-            [ Ui.paddingXY 16 0
+            [ MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 16px 0 16px")
             , Ui.contentCenterY
             , MyUi.montserrat
             , Ui.widthMax 1280
@@ -36,40 +35,21 @@ header loginStatus =
                 }
             , case loginStatus of
                 LoggedIn _ ->
-                    Ui.el
-                        (Ui.Input.button
-                            (PressedLink
-                                (UserOverviewRoute PersonalRoute)
-                            )
-                            :: MyUi.touchPress
-                                (PressedLink
-                                    (UserOverviewRoute PersonalRoute)
-                                )
-                            :: Ui.id (Dom.idToString openDashboardButtonId)
-                            :: buttonAttributes
-                        )
-                        (Ui.text "Open Dashboard")
+                    Ui.none
 
                 NotLoggedIn _ ->
-                    Ui.el
-                        ([ Ui.Input.button PressedShowLogin
-                         , Dom.idToString loginButtonId |> Ui.id
-                         ]
-                            ++ buttonAttributes
-                        )
+                    MyUi.elButton
+                        loginButtonId
+                        PressedShowLogin
+                        (buttonAttributes isMobile)
                         (Ui.text "Login/Signup")
             ]
         )
 
 
-openDashboardButtonId : HtmlId
-openDashboardButtonId =
-    Dom.id "homePage_openDashboardButton"
-
-
-buttonAttributes : List (Ui.Attribute msg)
-buttonAttributes =
-    [ Ui.Anim.hovered (Ui.Anim.ms 10) [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
+buttonAttributes : Bool -> List (Ui.Attribute msg)
+buttonAttributes isMobile =
+    [ MyUi.hover isMobile [ Ui.Anim.backgroundColor (Ui.rgb 69 83 124) ]
     , Ui.Font.weight 600
     , Ui.rounded 8
     , Ui.padding 8
@@ -87,7 +67,7 @@ view windowWidth =
     Ui.column
         [ MyUi.montserrat
         , if windowWidth < 800 then
-            Ui.paddingWith { left = 24, right = 24, top = 96, bottom = 48 }
+            Ui.paddingWith { left = 24, right = 24, top = 120, bottom = 48 }
 
           else
             Ui.paddingWith { left = 48, right = 48, top = 120, bottom = 48 }

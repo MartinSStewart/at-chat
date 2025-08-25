@@ -3,9 +3,9 @@ elm-stuff
 node_modules
 tests/RdSapTests
 public/cache
-overrides/packages/lamdera/program-test/2.0.0/endpoint.json
-overrides/packages/lamdera/program-test/pack.zip
+pack.zip
 elm-pkg-js/test-gen.js
 endpoint.json
-tests/var
-rust-server/target
+rust-server/target/
+rust-server/var/
+tests/var/

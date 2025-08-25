@@ -1,14 +1,13 @@
 module Route exposing
     ( ChannelRoute(..)
     , Route(..)
-    , UserOverviewRouteData(..)
     , decode
     , encode
     )
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -17,21 +16,17 @@ import Url.Builder
 type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
-    | UserOverviewRoute UserOverviewRouteData
     | GuildRoute (Id GuildId) ChannelRoute
+    | DmRoute (Id UserId) ThreadRouteWithMaybeMessage
+    | AiChatRoute
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId)
+    = ChannelRoute (Id ChannelId) ThreadRouteWithMaybeMessage
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
-
-
-type UserOverviewRouteData
-    = PersonalRoute
-    | SpecificUserRoute (Id UserId)
 
 
 decode : Url -> Route
@@ -52,35 +47,43 @@ decode url =
                             Nothing
                 }
 
-        [ "user-overview" ] ->
-            UserOverviewRoute PersonalRoute
-
-        [ "user-overview", userId ] ->
-            case Id.fromString userId of
-                Just userId2 ->
-                    UserOverviewRoute (SpecificUserRoute userId2)
-
-                Nothing ->
-                    HomePageRoute
+        [ "ai-chat" ] ->
+            AiChatRoute
 
         "g" :: guildId :: rest ->
             case Id.fromString guildId of
                 Just guildId2 ->
                     case rest of
-                        [ "c", channelId ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2)
+                        "c" :: channelId :: rest2 ->
+                            case ( Id.fromString channelId, rest2 ) of
+                                ( Just channelId2, [ "t", threadMessageIndex, "m", messageIndex ] ) ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute
+                                            channelId2
+                                            (stringToThread threadMessageIndex messageIndex)
+                                        )
 
-                                Nothing ->
-                                    HomePageRoute
+                                ( Just channelId2, [ "t", threadMessageIndex ] ) ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute
+                                            channelId2
+                                            (stringToThread threadMessageIndex "")
+                                        )
 
-                        [ "c", channelId, "edit" ] ->
-                            case Id.fromString channelId of
-                                Just channelId2 ->
+                                ( Just channelId2, [ "m", messageIndex ] ) ->
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute channelId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex)))
+
+                                ( Just channelId2, [] ) ->
+                                    GuildRoute guildId2 (ChannelRoute channelId2 (NoThreadWithMaybeMessage Nothing))
+
+                                ( Just channelId2, [ "edit" ] ) ->
                                     GuildRoute guildId2 (EditChannelRoute channelId2)
 
-                                Nothing ->
+                                _ ->
                                     HomePageRoute
 
                         [ "new" ] ->
@@ -98,8 +101,37 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
+        "d" :: userId :: rest ->
+            case Id.fromString userId of
+                Just userId2 ->
+                    case rest of
+                        [ "t", threadMessageIndex, "m", messageIndex ] ->
+                            DmRoute userId2 (stringToThread threadMessageIndex messageIndex)
+
+                        [ "t", threadMessageIndex ] ->
+                            DmRoute userId2 (stringToThread threadMessageIndex "")
+
+                        [ "m", messageIndex ] ->
+                            DmRoute userId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex))
+
+                        _ ->
+                            DmRoute userId2 (NoThreadWithMaybeMessage Nothing)
+
+                Nothing ->
+                    HomePageRoute
+
         _ ->
             HomePageRoute
+
+
+stringToThread : String -> String -> ThreadRouteWithMaybeMessage
+stringToThread text maybeMessageIndex =
+    case Id.fromString text of
+        Just messageIndex ->
+            ViewThreadWithMaybeMessage messageIndex (Id.fromString maybeMessageIndex)
+
+        Nothing ->
+            NoThreadWithMaybeMessage (Id.fromString maybeMessageIndex)
 
 
 encode : Route -> String
@@ -120,23 +152,22 @@ encode route =
                             []
                     )
 
-                UserOverviewRoute maybeUserId ->
-                    ( "user-overview"
-                        :: (case maybeUserId of
-                                SpecificUserRoute userId ->
-                                    [ idToPath userId ]
-
-                                PersonalRoute ->
-                                    []
-                           )
-                    , []
-                    )
+                AiChatRoute ->
+                    ( [ "ai-chat" ], [] )
 
                 GuildRoute guildId maybeChannelId ->
                     ( [ "g", Id.toString guildId ]
                         ++ (case maybeChannelId of
-                                ChannelRoute channelId ->
+                                ChannelRoute channelId thread ->
                                     [ "c", Id.toString channelId ]
+                                        ++ (case thread of
+                                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
+                                                    [ "t", Id.toString threadMessageIndex ]
+                                                        ++ maybeMessageIdToString maybeMessageId
+
+                                                NoThreadWithMaybeMessage maybeMessageId ->
+                                                    maybeMessageIdToString maybeMessageId
+                                           )
 
                                 EditChannelRoute channelId ->
                                     [ "c", Id.toString channelId, "edit" ]
@@ -152,10 +183,27 @@ encode route =
                            )
                     , []
                     )
+
+                DmRoute userId thread ->
+                    ( [ "d", Id.toString userId ]
+                        ++ (case thread of
+                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
+                                    [ "t", Id.toString threadMessageIndex ]
+                                        ++ maybeMessageIdToString maybeMessageId
+
+                                NoThreadWithMaybeMessage maybeMessageId ->
+                                    maybeMessageIdToString maybeMessageId
+                           )
+                    , []
+                    )
     in
     Url.Builder.absolute path query
 
 
-idToPath : Id a -> String
-idToPath id =
-    Id.toString id |> Url.percentEncode
+maybeMessageIdToString maybeMessageIndex =
+    case maybeMessageIndex of
+        Just messageIndex ->
+            [ "m", Id.toString messageIndex ]
+
+        Nothing ->
+            []

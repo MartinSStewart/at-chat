@@ -1,0 +1,241 @@
+module Editable exposing (Editing(..), Model, Msg(..), init, isPressMsg, view)
+
+import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Icons
+import MyUi
+import Ui exposing (Element)
+import Ui.Font
+import Ui.Input
+
+
+type alias Model =
+    { editing : Editing
+    , pressedSubmit : Bool
+    , showSecret : Bool
+    }
+
+
+{-| OpaqueVariants
+-}
+type Editing
+    = NotEditing
+    | Editing String
+
+
+type Msg value
+    = Edit Model
+    | PressedAcceptEdit value
+
+
+init : Model
+init =
+    { editing = NotEditing
+    , pressedSubmit = False
+    , showSecret = False
+    }
+
+
+isPressMsg : Msg a -> Bool
+isPressMsg msg =
+    case msg of
+        Edit _ ->
+            False
+
+        PressedAcceptEdit _ ->
+            True
+
+
+view :
+    HtmlId
+    -> Bool
+    -> String
+    -> (String -> Result String a)
+    -> (Msg a -> msg)
+    -> String
+    -> Model
+    -> Element msg
+view htmlId isSecret label validation msg value model =
+    let
+        htmlIdPrefix : String
+        htmlIdPrefix =
+            Dom.idToString htmlId
+
+        label2 : { element : Element msg, id : Ui.Input.Label }
+        label2 =
+            Ui.Input.label
+                (htmlIdPrefix ++ "_label")
+                [ Ui.Font.size 14, Ui.Font.bold ]
+                (Ui.text label)
+
+        result : Maybe (Result String a)
+        result =
+            case editing of
+                NotEditing ->
+                    Nothing
+
+                Editing text ->
+                    validation text |> Just
+
+        editing : Editing
+        editing =
+            case model.editing of
+                Editing editing2 ->
+                    if editing2 == value then
+                        NotEditing
+
+                    else
+                        model.editing
+
+                NotEditing ->
+                    model.editing
+    in
+    Ui.column
+        [ Ui.widthMax 400 ]
+        [ Ui.row
+            []
+            [ label2.element
+            , case result of
+                Just (Err error) ->
+                    Ui.el
+                        [ Ui.Font.color MyUi.errorColor
+                        , Ui.Font.size 14
+                        , Ui.paddingXY 8 0
+                        , Ui.alignRight
+                        , Ui.Font.bold
+                        ]
+                        (Ui.text error)
+
+                _ ->
+                    Ui.none
+            ]
+        , Ui.row
+            [ Ui.height (Ui.px 40)
+            ]
+            ((if isSecret then
+                Ui.Input.newPassword
+                    [ Ui.border 1
+                    , Ui.height Ui.fill
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                    , Ui.paddingXY 8 0
+                    ]
+                    { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
+                    , text =
+                        case editing of
+                            NotEditing ->
+                                value
+
+                            Editing text ->
+                                text
+                    , placeholder = Nothing
+                    , label = label2.id
+                    , show = model.showSecret
+                    }
+
+              else
+                Ui.Input.text
+                    [ Ui.border 1
+                    , Ui.height Ui.fill
+                    , Ui.borderColor MyUi.inputBorder
+                    , Ui.background MyUi.inputBackground
+                    , case editing of
+                        NotEditing ->
+                            Ui.rounded 4
+
+                        Editing _ ->
+                            Ui.roundedWith { topLeft = 4, topRight = 0, bottomLeft = 4, bottomRight = 0 }
+                    , Ui.paddingXY 8 0
+                    ]
+                    { onChange = \text2 -> { model | editing = Editing text2 } |> Edit |> msg
+                    , text =
+                        case editing of
+                            NotEditing ->
+                                value
+
+                            Editing text ->
+                                text
+                    , placeholder = Nothing
+                    , label = label2.id
+                    }
+             )
+                :: (if isSecret then
+                        [ MyUi.elButton
+                            (Dom.id (htmlIdPrefix ++ "_toggleSecret"))
+                            (Edit { model | showSecret = not model.showSecret } |> msg)
+                            [ Ui.width (Ui.px 40)
+                            , Ui.contentCenterX
+                            , Ui.contentCenterY
+                            , Ui.height Ui.fill
+                            , Ui.borderColor MyUi.inputBorder
+                            , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                            , Ui.background MyUi.inputBackground
+                            , if result == Nothing then
+                                Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+
+                              else
+                                Ui.noAttr
+                            ]
+                            (Ui.html
+                                (if model.showSecret then
+                                    Icons.openEye
+
+                                 else
+                                    Icons.closedEye
+                                )
+                            )
+                        ]
+
+                    else
+                        []
+                   )
+                ++ (case result of
+                        Just result2 ->
+                            [ MyUi.elButton
+                                (Dom.id (htmlIdPrefix ++ "_acceptEdit"))
+                                ((case result2 of
+                                    Ok ok ->
+                                        PressedAcceptEdit ok
+
+                                    Err _ ->
+                                        Edit { model | pressedSubmit = True }
+                                 )
+                                    |> msg
+                                )
+                                [ Ui.width (Ui.px 40)
+                                , Ui.paddingXY 5 0
+                                , Ui.height Ui.fill
+                                , Ui.contentCenterX
+                                , Ui.contentCenterY
+                                , Ui.borderColor MyUi.inputBorder
+                                , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 1 }
+                                , case result2 of
+                                    Ok _ ->
+                                        Ui.background MyUi.buttonBackground
+
+                                    Err _ ->
+                                        Ui.background MyUi.disabledButtonBackground
+                                ]
+                                (Ui.html Icons.checkmark)
+                            , MyUi.elButton
+                                (Dom.id (htmlIdPrefix ++ "_delete"))
+                                (Edit init |> msg)
+                                [ -- Is a little wider than the check button because it seems too skinny otherwise
+                                  Ui.width (Ui.px 42)
+                                , Ui.contentCenterX
+                                , Ui.contentCenterY
+                                , Ui.height Ui.fill
+                                , Ui.borderColor MyUi.inputBorder
+                                , Ui.border 1
+                                , Ui.background MyUi.deleteButtonBackground
+                                , Ui.Font.color MyUi.deleteButtonFont
+                                , Ui.roundedWith { topLeft = 0, topRight = 4, bottomLeft = 0, bottomRight = 4 }
+                                ]
+                                (Ui.html Icons.delete)
+                            ]
+
+                        Nothing ->
+                            []
+                   )
+            )
+        ]

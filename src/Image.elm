@@ -1,4 +1,4 @@
-module Image exposing (Error(..), Image(..), defaultSize, image, url)
+module Image exposing (Error(..), Image(..), defaultSize, image)
 
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
@@ -28,11 +28,6 @@ image data =
 
     else
         Image (String.dropLeft (String.length prefix) data) |> Ok
-
-
-url : Image -> String
-url (Image a) =
-    prefix ++ a
 
 
 defaultSize : Quantity Int Pixels

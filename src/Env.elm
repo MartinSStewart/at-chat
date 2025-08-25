@@ -58,3 +58,8 @@ vapidPublicKey =
 vapidPrivateKey : String
 vapidPrivateKey =
     "8k32wIygV7xXWed2zZ3aWTO23mJuDn9dvgh25f3zy5s"
+
+
+openRouterKey : String
+openRouterKey =
+    ""

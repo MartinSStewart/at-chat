@@ -6,15 +6,17 @@ module LoginForm exposing
     , EnterUserData2
     , LoginForm(..)
     , Msg(..)
-    , SubmitStatus
+    , SubmitStatus(..)
     , emailInputId
     , errorView
     , init
     , invalidCode
+    , isPressMsg
     , loginCodeInput
     , loginCodeInputId
     , loginCodeLength
     , maxLoginAttempts
+    , mobileWarning
     , needsTwoFactor
     , needsUserData
     , rateLimited
@@ -29,9 +31,12 @@ module LoginForm exposing
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import EmailAddress exposing (EmailAddress)
+import Html
 import Html.Attributes
+import Icons
 import MyUi
 import PersonName exposing (PersonName)
+import Ports exposing (PwaStatus(..))
 import SeqDict exposing (SeqDict)
 import Ui exposing (Element)
 import Ui.Events
@@ -51,6 +56,31 @@ type Msg
     | TypedTwoFactorCode String
     | TypedName String
     | PressedSubmitUserData
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        PressedSubmitEmail ->
+            True
+
+        PressedCancelLogin ->
+            True
+
+        TypedLoginFormEmail _ ->
+            False
+
+        TypedLoginCode _ ->
+            False
+
+        TypedTwoFactorCode _ ->
+            False
+
+        TypedName _ ->
+            False
+
+        PressedSubmitUserData ->
+            True
 
 
 {-| Opaque
@@ -85,6 +115,8 @@ type alias EnterUserData2 =
     { name : String, pressedSubmit : SubmitStatus }
 
 
+{-| OpaqueVariants
+-}
 type SubmitStatus
     = NotSubmitted Bool
     | Submitting
@@ -299,8 +331,42 @@ errorView errorMessage =
         (Ui.text errorMessage)
 
 
-view : LoginForm -> Element Msg
-view loginForm =
+mobileWarning : Element msg
+mobileWarning =
+    Ui.column
+        [ Ui.spacing 8 ]
+        [ --Ui.Prose.paragraph
+          --   [ Ui.Font.bold
+          --   , Ui.Font.color (Ui.rgb 204 153 0) -- Orange/brown text
+          --   ]
+          --   [ Ui.el [ Ui.width (Ui.px 48) ] (Ui.html Icons.addApp)
+          --   , Ui.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)"
+          --   ]
+          Html.div
+            []
+            [ Html.div
+                [ Html.Attributes.style "float" "left"
+                , Html.Attributes.style "width" "44px"
+                , Html.Attributes.style "height" "40px"
+                , Html.Attributes.style "margin-right" "8px"
+                , Html.Attributes.style "color" "rgb(179,128,0)"
+                ]
+                [ Icons.addApp ]
+            , Html.b
+                [ Html.Attributes.style "color" "rgb(204,153,0)" ]
+                [ Html.text "Please install this app from the browser menu (Add\u{00A0}to\u{00A0}Home\u{00A0}Screen)" ]
+            ]
+            |> Ui.html
+        , Ui.Prose.paragraph
+            [ Ui.Font.color (Ui.rgb 179 128 0) -- Darker orange/brown text
+            , Ui.Font.size 16
+            ]
+            [ Ui.text "You can still use it in a browser but you're not going to have a good time." ]
+        ]
+
+
+view : LoginForm -> Bool -> PwaStatus -> Element Msg
+view loginForm isMobile pwaStatus =
     Ui.column
         [ MyUi.montserrat
         , Ui.padding 16
@@ -310,7 +376,21 @@ view loginForm =
         , Ui.spacing 24
         , Ui.Font.color MyUi.font1
         ]
-        [ case loginForm of
+        [ -- PWA warning for mobile users not using installed PWA
+          if isMobile && pwaStatus == BrowserView then
+            Ui.el
+                [ Ui.background (Ui.rgba 255 242 204 0.1) -- Light yellow/orange background (0.1 alpha = 26)
+                , Ui.border 1
+                , Ui.borderColor (Ui.rgba 255 242 204 1) -- Light yellow/orange border (0.8 alpha = 204)
+                , Ui.rounded 8
+                , Ui.padding 16
+                , Ui.width Ui.fill
+                ]
+                mobileWarning
+
+          else
+            Ui.none
+        , case loginForm of
             EnterEmail enterEmail2 ->
                 enterEmailView enterEmail2
 
@@ -351,15 +431,17 @@ view loginForm =
                             _ ->
                                 Ui.none
                         ]
-                    , Ui.el
-                        [ Ui.Input.button PressedSubmitUserData
-                        , Ui.paddingXY 16 8
+                    , MyUi.elButton
+                        (Dom.id "loginForm_submit")
+                        PressedSubmitUserData
+                        [ Ui.paddingXY 16 8
                         , Ui.background MyUi.buttonBackground
                         , Ui.width Ui.shrink
                         , Ui.border 1
                         , Ui.borderColor MyUi.buttonBorder
                         , Ui.rounded 4
                         , Ui.Font.color MyUi.buttonFontColor
+                        , MyUi.focusEffect
                         ]
                         (Ui.text "Submit")
                     ]
@@ -434,7 +516,7 @@ loginCodeInput codeLength onInput loginCode label =
             [ Ui.Font.letterSpacing 26
             , Ui.paddingWith { left = 6, right = 0, top = 0, bottom = 8 }
             , inputFont
-            , Html.Attributes.attribute "inputmode" "numeric" |> Ui.htmlAttribute
+            , MyUi.htmlStyle "inputmode" "numeric"
             , Ui.border 0
             , Ui.background (Ui.rgba 0 0 0 0)
             , Ui.Font.color MyUi.font1
@@ -655,8 +737,8 @@ enterEmailView model =
             )
         , Ui.row
             [ Ui.spacing 16 ]
-            [ MyUi.secondaryButton cancelButtonId [] PressedCancelLogin "Cancel"
-            , MyUi.primaryButton submitEmailButtonId PressedSubmitEmail "Login"
+            [ MyUi.secondaryButton cancelButtonId PressedCancelLogin "Cancel"
+            , MyUi.simpleButton submitEmailButtonId PressedSubmitEmail (Ui.text "Login")
             ]
         , if model.rateLimited then
             errorView "Too many login attempts have been made. Please try again later."

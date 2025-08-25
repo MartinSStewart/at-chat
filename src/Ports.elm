@@ -3,16 +3,21 @@ port module Ports exposing
     , CropImageDataResponse
     , NotificationPermission(..)
     , PushSubscription
+    , PwaStatus(..)
     , checkNotificationPermission
     , checkNotificationPermissionResponse
+    , checkPwaStatus
+    , checkPwaStatusResponse
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , hapticFeedback
     , loadSounds
     , playSound
     , registerPushSubscription
     , registerPushSubscriptionToJs
     , requestNotificationPermission
+    , setFavicon
     , showNotification
     , textInputSelectAll
     )
@@ -55,6 +60,31 @@ port check_notification_permission_from_js : (Json.Encode.Value -> msg) -> Sub m
 
 
 port request_notification_permission : Json.Encode.Value -> Cmd msg
+
+
+port check_pwa_status_to_js : Json.Encode.Value -> Cmd msg
+
+
+port check_pwa_status_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
+
+
+port haptic_feedback : Json.Encode.Value -> Cmd msg
+
+
+setFavicon : String -> Command FrontendOnly toMsg msg
+setFavicon faviconPath =
+    Command.sendToJs
+        "martinsstewart_set_favicon_to_js"
+        martinsstewart_set_favicon_to_js
+        (Json.Encode.string faviconPath)
+
+
+hapticFeedback : Command FrontendOnly toMsg msg
+hapticFeedback =
+    Command.sendToJs "haptic_feedback" haptic_feedback Json.Encode.null
 
 
 port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
@@ -154,6 +184,39 @@ checkNotificationPermissionResponse msg =
                 )
                 json
                 |> Result.withDefault NotAsked
+                |> msg
+        )
+
+
+type PwaStatus
+    = InstalledPwa
+    | BrowserView
+
+
+checkPwaStatus : Command FrontendOnly toMsg msg
+checkPwaStatus =
+    Command.sendToJs "check_pwa_status_to_js" check_pwa_status_to_js Json.Encode.null
+
+
+checkPwaStatusResponse : (PwaStatus -> msg) -> Subscription FrontendOnly msg
+checkPwaStatusResponse msg =
+    Subscription.fromJs
+        "check_pwa_status_from_js"
+        check_pwa_status_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map
+                    (\isPwa ->
+                        if isPwa then
+                            InstalledPwa
+
+                        else
+                            BrowserView
+                    )
+                    Json.Decode.bool
+                )
+                json
+                |> Result.withDefault BrowserView
                 |> msg
         )
 

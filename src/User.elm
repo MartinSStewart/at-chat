@@ -2,19 +2,26 @@ module User exposing
     ( AdminUiSection(..)
     , BackendUser
     , EmailNotifications(..)
+    , EmailStatus(..)
     , FrontendUser
-    , allEmailNotifications
     , backendToFrontend
     , backendToFrontendForUser
+    , profileImage
+    , profileImageSize
     , sectionToString
+    , setLastChannelViewed
+    , setName
+    , toString
     )
 
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
-import Id exposing (ChannelId, GuildId, Id)
+import FileStatus exposing (FileHash)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Ui exposing (Element)
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -22,29 +29,37 @@ import SeqSet exposing (SeqSet)
 type alias BackendUser =
     { name : PersonName
     , isAdmin : Bool
-    , email : EmailAddress
+    , email : EmailStatus
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Int
     , expandedSections : SeqSet AdminUiSection
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
+    , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
+    , icon : Maybe FileHash
     }
+
+
+setLastChannelViewed : Id GuildId -> Id ChannelId -> BackendUser -> BackendUser
+setLastChannelViewed guildId channelId user =
+    { user | lastChannelViewed = SeqDict.insert guildId channelId user.lastChannelViewed }
+
+
+setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }
+setName name user =
+    { user | name = name }
+
+
+type EmailStatus
+    = RegisteredFromDiscord
+    | RegisteredDirectly EmailAddress
 
 
 type EmailNotifications
     = CheckEvery5Minutes
-    | CheckEveryHour
-    | NeverNotifyMe
-
-
-allEmailNotifications : List EmailNotifications
-allEmailNotifications =
-    [ CheckEvery5Minutes
-    , CheckEveryHour
-    , NeverNotifyMe
-    ]
 
 
 type AdminUiSection
@@ -68,6 +83,7 @@ type alias FrontendUser =
     { name : PersonName
     , isAdmin : Bool
     , createdAt : Time.Posix
+    , icon : Maybe FileHash
     }
 
 
@@ -78,6 +94,7 @@ backendToFrontend user =
     { name = user.name
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , icon = user.icon
     }
 
 
@@ -88,4 +105,45 @@ backendToFrontendForUser user =
     { name = user.name
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
+    , icon = user.icon
     }
+
+
+toString : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
+toString userId allUsers =
+    case SeqDict.get userId allUsers of
+        Just user ->
+            PersonName.toString user.name
+
+        Nothing ->
+            "<missing>"
+
+
+profileImageSize : number
+profileImageSize =
+    40
+
+
+profileImage : Maybe FileHash -> Element msg
+profileImage maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.rounded 8
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
+                , Ui.clip
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            Ui.el
+                [ Ui.background (Ui.rgb 100 100 100)
+                , Ui.rounded 8
+                , Ui.width (Ui.px profileImageSize)
+                , Ui.height (Ui.px profileImageSize)
+                ]
+                Ui.none

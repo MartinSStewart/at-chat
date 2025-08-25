@@ -29,4 +29,4 @@ rm -rf ~/.elm
 
 # Rebuild the pack.zip and endpoint.json for select overriden packages
 # rebuildPackZip "lamdera/codecs" "1.0.0"
-rebuildPackZip "lamdera/crypto" "1.0.0"
+rebuildPackZip "lamdera/program-test" "3.0.0"

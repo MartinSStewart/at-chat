@@ -1,12 +1,15 @@
 module Types exposing
     ( AdminStatusLoginData(..)
+    , BackendFileData
     , BackendModel
     , BackendMsg(..)
+    , ChannelSidebarMode(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
     , FrontendModel(..)
     , FrontendMsg(..)
+    , GuildChannelAndMessageId
     , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -18,56 +21,68 @@ module Types exposing
     , LoginResult(..)
     , LoginStatus(..)
     , LoginTokenData(..)
-    , MessageId
+    , MessageHover(..)
+    , MessageHoverMobileMode(..)
+    , MessageMenuExtraOptions
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
-    , ScreenCoordinate(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
-    , Touch
+    , UserOptionsModel
     , WaitingForLoginTokenData
+    , messageMenuMobileOffset
     )
 
+import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord
+import Discord.Id
+import DmChannel exposing (DmChannel, DmChannelId)
 import Duration exposing (Duration)
+import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility)
 import Effect.Browser.Navigation exposing (Key)
+import Effect.File exposing (File)
 import Effect.Http as Http
 import Effect.Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
+import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
+import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
+import MessageView
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
-import Pages.UserOverview
 import PersonName exposing (PersonName)
-import Point2d exposing (Point2d)
-import Ports exposing (NotificationPermission, PushSubscription)
+import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
+import Quantity exposing (Quantity)
 import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
-import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup)
+import Touch exposing (Touch)
+import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
@@ -86,6 +101,8 @@ type alias LoadingFrontend =
     , time : Maybe Time.Posix
     , loginStatus : LoadStatus
     , notificationPermission : NotificationPermission
+    , pwaStatus : PwaStatus
+    , timezone : Time.Zone
     }
 
 
@@ -99,19 +116,25 @@ type alias LoadedFrontend =
     { navigationKey : Key
     , route : Route
     , time : Time.Posix
+    , timezone : Time.Zone
     , windowSize : Coord CssPixels
+    , virtualKeyboardOpen : Bool
     , loginStatus : LoginStatus
     , elmUiState : Ui.Anim.State
     , lastCopied : Maybe { copiedAt : Time.Posix, copiedText : String }
     , textInputFocus : Maybe HtmlId
     , notificationPermission : NotificationPermission
+    , pwaStatus : PwaStatus
     , drag : Drag
+    , dragPrevious : Drag
+    , scrolledToBottomOfChannel : Bool
+    , aiChatModel : AiChat.FrontendModel
     }
 
 
 type Drag
     = NoDrag
-    | DragStart (NonemptyDict Int Touch)
+    | DragStart Time.Posix (NonemptyDict Int Touch)
     | Dragging { horizontalStart : Bool, touches : NonemptyDict Int Touch }
 
 
@@ -123,44 +146,97 @@ type LoginStatus
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
-    , userOverview : SeqDict (Id UserId) Pages.UserOverview.Model
-    , drafts : SeqDict ( Id GuildId, Id ChannelId ) NonemptyString
+    , drafts : SeqDict GuildOrDmId NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
-    , channelNameHover : Maybe ( Id GuildId, Id ChannelId )
+    , channelNameHover : Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
-    , messageHover : Maybe MessageId
+    , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
-    , editMessage : SeqDict ( Id GuildId, Id ChannelId ) EditMessage
-    , replyTo : SeqDict ( Id GuildId, Id ChannelId ) Int
+    , editMessage : SeqDict GuildOrDmId EditMessage
+    , replyTo : SeqDict GuildOrDmId (Id ChannelMessageId)
     , revealedSpoilers : Maybe RevealedSpoilers
-    , sidebarOffset : Float
-    , sidebarPreviousOffset : Float
+    , sidebarMode : ChannelSidebarMode
+    , userOptions : Maybe UserOptionsModel
+    , twoFactor : TwoFactorState
+    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
+    , -- Only should be use for making requests to the Rust server
+      sessionId : SessionId
+    , isReloading : Bool
     , vapidPublicKey : Maybe Bytes
     }
 
 
+type alias UserOptionsModel =
+    { name : Editable.Model, botToken : Editable.Model }
+
+
+type ChannelSidebarMode
+    = ChannelSidebarClosed
+    | ChannelSidebarOpened
+    | ChannelSidebarClosing { offset : Float }
+    | ChannelSidebarOpening { offset : Float }
+    | ChannelSidebarDragging { offset : Float, previousOffset : Float, time : Time.Posix }
+
+
+type MessageHover
+    = NoMessageHover
+    | MessageHover GuildOrDmId (Id ChannelMessageId)
+    | MessageMenu MessageMenuExtraOptions
+
+
+type alias MessageMenuExtraOptions =
+    { position : Coord CssPixels
+    , guildOrDmId : GuildOrDmId
+    , isThreadStarter : Bool
+    , messageIndex : Id ChannelMessageId
+    , mobileMode : MessageHoverMobileMode
+    }
+
+
+type MessageHoverMobileMode
+    = MessageMenuClosing (Quantity Float CssPixels)
+    | MessageMenuOpening { offset : Quantity Float CssPixels, targetOffset : Quantity Float CssPixels }
+    | MessageMenuDragging
+        { offset : Quantity Float CssPixels
+        , previousOffset : Quantity Float CssPixels
+        , time : Time.Posix
+        }
+    | MessageMenuFixed (Quantity Float CssPixels)
+
+
+messageMenuMobileOffset : MessageHoverMobileMode -> Quantity Float CssPixels
+messageMenuMobileOffset mobileMode =
+    case mobileMode of
+        MessageMenuClosing offset ->
+            offset
+
+        MessageMenuOpening { offset } ->
+            offset
+
+        MessageMenuDragging { offset } ->
+            offset
+
+        MessageMenuFixed offset ->
+            offset
+
+
 type alias RevealedSpoilers =
-    { guildId : Id GuildId
-    , channelId : Id ChannelId
-    , messages : SeqDict Int (NonemptySet Int)
+    { guildOrDmId : GuildOrDmId
+    , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
     }
 
 
 type alias EditMessage =
-    { messageIndex : Int, text : String }
+    { messageIndex : Id ChannelMessageId, text : String, attachedFiles : SeqDict (Id FileId) FileStatus }
 
 
 type EmojiSelector
     = EmojiSelectorHidden
-    | EmojiSelectorForReaction MessageId
+    | EmojiSelectorForReaction GuildOrDmId (Id ChannelMessageId)
     | EmojiSelectorForMessage
-
-
-type alias MessageId =
-    { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Int }
 
 
 type alias BackendModel =
@@ -176,8 +252,21 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
+    , discordModel : Discord.Model Websocket.Connection
+    , discordNotConnected : Bool
+    , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
+    , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
+    , dmChannels : SeqDict DmChannelId DmChannel
+    , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
+    , botToken : Maybe DiscordBotToken
+    , files : SeqDict FileHash BackendFileData
     , vapidKey : Maybe RawKeyPair
     }
+
+
+type alias BackendFileData =
+    { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
 
 type LastRequest
@@ -217,6 +306,7 @@ type FrontendMsg
     | UrlChanged Url
     | GotTime Time.Posix
     | GotWindowSize Int Int
+    | GotTimezone Time.Zone
     | LoginFormMsg LoginForm.Msg
     | PressedShowLogin
     | AdminPageMsg Pages.Admin.Msg
@@ -224,13 +314,15 @@ type FrontendMsg
     | ElmUiMsg Ui.Anim.Msg
     | ScrolledToLogSection
     | PressedLink Route
-    | UserOverviewMsg Pages.UserOverview.Msg
-    | TypedMessage (Id GuildId) (Id ChannelId) String
-    | PressedSendMessage (Id GuildId) (Id ChannelId)
+    | PressedTextInput
+    | TypedMessage GuildOrDmId String
+    | PressedSendMessage GuildOrDmIdNoThread ThreadRoute
+    | PressedAttachFiles GuildOrDmId
+    | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
-    | MouseEnteredChannelName (Id GuildId) (Id ChannelId)
-    | MouseExitedChannelName (Id GuildId) (Id ChannelId)
+    | MouseEnteredChannelName (Id GuildId) (Id ChannelId) ThreadRoute
+    | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm
@@ -244,48 +336,65 @@ type FrontendMsg
     | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
-    | PressedPingUser (Id GuildId) (Id ChannelId) Int
+    | PressedPingUser GuildOrDmId Int
     | SetFocus
-    | PressedArrowInDropdown (Id GuildId) Int
+    | RemoveFocus
+    | PressedArrowInDropdown GuildOrDmId Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | MouseEnteredMessage Int
-    | MouseExitedMessage Int
-    | PressedShowReactionEmojiSelector Int
-    | PressedEditMessage Int
+    | MessageMenu_PressedShowReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) (Coord CssPixels)
+    | MessageMenu_PressedEditMessage GuildOrDmId (Id ChannelMessageId)
     | PressedEmojiSelectorEmoji Emoji
-    | PressedReactionEmoji_Add Int Emoji
-    | PressedReactionEmoji_Remove Int Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
-    | TypedEditMessage (Id GuildId) (Id ChannelId) String
-    | PressedSendEditMessage (Id GuildId) (Id ChannelId)
-    | PressedArrowInDropdownForEditMessage (Id GuildId) Int
-    | PressedPingUserForEditMessage (Id GuildId) (Id ChannelId) Int
-    | PressedArrowUpInEmptyInput (Id GuildId) (Id ChannelId)
-    | PressedReply Int
-    | PressedCloseReplyTo (Id GuildId) (Id ChannelId)
-    | PressedSpoiler Int Int
+    | TypedEditMessage GuildOrDmId String
+    | PressedSendEditMessage GuildOrDmId
+    | PressedArrowInDropdownForEditMessage GuildOrDmId Int
+    | PressedPingUserForEditMessage GuildOrDmId Int
+    | PressedArrowUpInEmptyInput GuildOrDmId
+    | MessageMenu_PressedReply (Id ChannelMessageId)
+    | MessageMenu_PressedOpenThread (Id ChannelMessageId)
+    | PressedCloseReplyTo GuildOrDmId
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
-    | TouchStart (NonemptyDict Int Touch)
-    | TouchMoved (NonemptyDict Int Touch)
-    | TouchEnd
-    | TouchCancel
-    | OnAnimationFrameDelta Duration
+    | CheckedPwaStatus PwaStatus
+    | TouchStart (Maybe ( GuildOrDmId, Id ChannelMessageId, Bool )) Time.Posix (NonemptyDict Int Touch)
+    | TouchMoved Time.Posix (NonemptyDict Int Touch)
+    | TouchEnd Time.Posix
+    | TouchCancel Time.Posix
+    | ChannelSidebarAnimated Duration
+    | MessageMenuAnimated Duration
     | ScrolledToBottom
     | PressedChannelHeaderBackButton
+    | UserScrolled { scrolledToBottomOfChannel : Bool }
+    | PressedBody
+    | PressedReactionEmojiContainer
+    | MessageMenu_PressedDeleteMessage GuildOrDmId (Id ChannelMessageId)
+    | ScrolledToMessage
+    | MessageMenu_PressedClose
+    | MessageMenu_PressedContainer
+    | PressedCancelMessageEdit GuildOrDmId
+    | PressedPingDropdownContainer
+    | PressedEditMessagePingDropdownContainer
+    | CheckMessageAltPress Time.Posix GuildOrDmId (Id ChannelMessageId) Bool
+    | PressedShowUserOption
+    | PressedCloseUserOptions
+    | TwoFactorMsg TwoFactorAuthentication.Msg
+    | AiChatMsg AiChat.Msg
+    | UserNameEditableMsg (Editable.Msg PersonName)
+    | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
+    | OneFrameAfterDragEnd
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
+    | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedAttachFiles GuildOrDmId
+    | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
+    | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
+    | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
+    | PastedFiles GuildOrDmId (Nonempty File)
+    | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
+    | MessageViewMsg GuildOrDmId MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
-
-
-type ScreenCoordinate
-    = ScreenCoordinate Never
-
-
-type alias Touch =
-    { client : Point2d CssPixels ScreenCoordinate
-    , target : HtmlId
-    }
 
 
 type alias NewChannelForm =
@@ -300,6 +409,10 @@ type alias NewGuildForm =
     }
 
 
+type alias GuildChannelAndMessageId =
+    { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Id ChannelMessageId }
+
+
 type ToBackend
     = CheckLoginRequest
     | LoginWithTokenRequest Int
@@ -308,18 +421,47 @@ type ToBackend
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
-    | UserOverviewToBackend Pages.UserOverview.ToBackend
+    | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest PersonName
+    | AiChatToBackend AiChat.ToBackend
+    | ReloadDataRequest
     | RegisterPushSubscriptionRequest PushSubscription
 
 
 type BackendMsg
     = SentLoginEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | Connected SessionId ClientId
-    | Disconnected SessionId ClientId
+    | UserConnected SessionId ClientId
+    | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
+    | WebsocketCreatedHandle Websocket.Connection
+    | WebsocketSentData (Result Websocket.SendError ())
+    | WebsocketClosedByBackend Bool
+    | DiscordWebsocketMsg Discord.Msg
+    | GotCurrentUserGuilds Time.Posix DiscordBotToken (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
+    | GotDiscordGuilds
+        Time.Posix
+        (Discord.Id.Id Discord.Id.UserId)
+        (Result
+            Discord.HttpError
+            (List
+                ( Discord.Id.Id Discord.Id.GuildId
+                , { guild : Discord.Guild
+                  , members : List Discord.GuildMember
+                  , channels : List ( Discord.Channel2, List Discord.Message )
+                  , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
+                  , threads : List ( Discord.Channel, List Discord.Message )
+                  }
+                )
+            )
+        )
+    | SentGuildMessageToDiscord (Id GuildId) (Id ChannelId) ThreadRouteWithMessage (Result Discord.HttpError Discord.Message)
+    | DeletedDiscordMessage
+    | EditedDiscordMessage
+    | AiChatBackendMsg AiChat.BackendMsg
+    | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | PushedMessage (Result Http.Error ())
     | GeneratedVapidKey (Result {} RawKeyPair)
     | GotVapidDetails (Result Vapid.NotificationError String)
@@ -340,7 +482,10 @@ type ToFrontend
     | AdminToFrontend Pages.Admin.ToFrontend
     | LocalChangeResponse ChangeId LocalChange
     | ChangeBroadcast LocalMsg
-    | UserOverviewToFrontend Pages.UserOverview.ToFrontend
+    | TwoFactorAuthenticationToFrontend TwoFactorAuthentication.ToFrontend
+    | AiChatToFrontend AiChat.ToFrontend
+    | YouConnected
+    | ReloadDataResponse (Result () LoginData)
 
 
 type alias LoginData =
@@ -348,8 +493,10 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
+    , dmChannels : SeqDict (Id UserId) DmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , sessionId : SessionId
     , vapidPublicKey : Maybe Bytes
     }
 
@@ -365,7 +512,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmIdNoThread (Nonempty RichText) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -380,28 +527,35 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
-    | Server_MemberTyping Time.Posix (Id UserId) (Id GuildId) (Id ChannelId)
-    | Server_AddReactionEmoji (Id UserId) MessageId Emoji
-    | Server_RemoveReactionEmoji (Id UserId) MessageId Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) MessageId (Nonempty RichText)
-    | Server_MemberEditTyping Time.Posix (Id UserId) MessageId
+    | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
+    | Server_AddReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
+    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Server_DeleteMessage (Id UserId) GuildOrDmId (Id ChannelMessageId)
+    | Server_DiscordDeleteMessage GuildChannelAndMessageId
+    | Server_SetName (Id UserId) PersonName
+    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
 
 
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix (Id GuildId) (Id ChannelId) (Nonempty RichText) (Maybe Int)
+    | Local_SendMessage Time.Posix GuildOrDmIdNoThread (Nonempty RichText) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
-    | Local_MemberTyping Time.Posix (Id GuildId) (Id ChannelId)
-    | Local_AddReactionEmoji MessageId Emoji
-    | Local_RemoveReactionEmoji MessageId Emoji
-    | Local_SendEditMessage Time.Posix MessageId (Nonempty RichText)
-    | Local_MemberEditTyping Time.Posix MessageId
-    | Local_SetLastViewed (Id GuildId) (Id ChannelId) Int
+    | Local_MemberTyping Time.Posix GuildOrDmId
+    | Local_AddReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
+    | Local_RemoveReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
+    | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_DeleteMessage GuildOrDmId (Id ChannelMessageId)
+    | Local_ViewChannel (Id GuildId) (Id ChannelId)
+    | Local_SetName PersonName
 
 
 type ToBeFilledInByBackend a

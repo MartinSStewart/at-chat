@@ -1,1 +1,0 @@
-Use `npm run make` to check for compile errors.

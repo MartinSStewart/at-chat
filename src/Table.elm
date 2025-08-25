@@ -185,11 +185,17 @@ tableConfig id showAll onMsg getModel userColumns =
                                     if columnIndex == 3 then
                                         Ui.el
                                             [ Ui.paddingXY 0 16 ]
-                                            (MyUi.secondaryButton
-                                                (Dom.idToString id ++ "_showAll" |> Dom.id)
-                                                [ Ui.width Ui.fill, Ui.Font.center ]
-                                                (onMsg PressedShowAll)
-                                                "Show all"
+                                            (Ui.el
+                                                [ Ui.Input.button (onMsg PressedShowAll)
+                                                , Dom.idToString id ++ "_showAll" |> Ui.id
+                                                , Ui.background MyUi.secondaryGray
+                                                , MyUi.focusEffect
+                                                , Ui.Font.color (Ui.rgb 0 0 0)
+                                                , Ui.rounded 4
+                                                , Ui.width Ui.fill
+                                                , Ui.Font.center
+                                                ]
+                                                (Ui.text "Show all")
                                             )
 
                                     else

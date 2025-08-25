@@ -19,5 +19,8 @@
   "resolutions": {
     "**/wrap-ansi": "^7.0.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.43"
+  }
 }

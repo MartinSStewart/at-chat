@@ -33,7 +33,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, LocalState, LogWithTime)
+import LocalState exposing (AdminData, DiscordBotToken, LocalState, LogWithTime)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -53,7 +53,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser)
+import User exposing (AdminUiSection(..), BackendUser, EmailStatus(..))
 
 
 type Msg
@@ -120,6 +120,7 @@ type alias InitAdminData =
     , users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
+    , botToken : Maybe DiscordBotToken
     }
 
 
@@ -134,6 +135,7 @@ type AdminChange
     | CollapseSection AdminUiSection
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
+    | SetDiscordBotToken (Maybe DiscordBotToken)
 
 
 type alias EditedBackendUser =
@@ -213,6 +215,9 @@ updateAdmin changedBy change adminData =
 
         SetEmailNotificationsEnabled isEnabled ->
             { adminData | emailNotificationsEnabled = isEnabled }
+
+        SetDiscordBotToken botToken ->
+            { adminData | botToken = botToken }
 
 
 update :
@@ -691,7 +696,13 @@ previousUserColumn column =
 userToEditUser : BackendUser -> EditedBackendUser
 userToEditUser user =
     { name = PersonName.toString user.name
-    , email = EmailAddress.toString user.email
+    , email =
+        case user.email of
+            RegisteredDirectly email ->
+                EmailAddress.toString email
+
+            RegisteredFromDiscord ->
+                ""
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
     }
@@ -770,11 +781,10 @@ userSection user adminData model =
         , Ui.Lazy.lazy3 userTableView model.userTable adminData.users adminData.twoFactorAuthentication
         , Ui.row
             [ Ui.spacing 16 ]
-            (MyUi.secondaryButton
+            (MyUi.simpleButton
                 addUserRowButtonId
-                [ Ui.background MyUi.white ]
                 PressedAddUserRow
-                "Add new user"
+                (Ui.text "Add new user")
                 :: (if
                         SeqDict.isEmpty model.userTable.changedUsers
                             && Array.isEmpty model.userTable.newUsers
@@ -783,11 +793,10 @@ userSection user adminData model =
                         []
 
                     else
-                        [ MyUi.secondaryButton
+                        [ MyUi.simpleButton
                             (Dom.id "Admin_resetUserChanges")
-                            [ Ui.background MyUi.white ]
                             PressedResetUserChanges
-                            "Reset"
+                            (Ui.text "Reset")
                         , MyUi.primaryButton saveUserChangesButtonId PressedSaveUserChanges "Save changes"
                         , case model.submitError of
                             Just error ->
@@ -1294,8 +1303,8 @@ section expandedSections section2 content =
     in
     MyUi.column
         [ Ui.background MyUi.secondaryGray
-        , MyUi.rounded
-        , MyUi.padding
+        , Ui.rounded 8
+        , Ui.padding 8
         ]
         (if SeqSet.member section2 expandedSections then
             Ui.el
@@ -1397,7 +1406,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))
-                                (LocalState.createNewUser time name email a.isAdmin)
+                                (LocalState.createNewUser time name (RegisteredDirectly email) a.isAdmin)
                                 dict
                                 |> Ok
 
@@ -1427,7 +1436,15 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             emailAddresses : Set String
                             emailAddresses =
                                 SeqDict.values allUsers
-                                    |> List.map (\user -> EmailAddress.toString user.email)
+                                    |> List.map
+                                        (\user ->
+                                            case user.email of
+                                                RegisteredDirectly email ->
+                                                    EmailAddress.toString email
+
+                                                RegisteredFromDiscord ->
+                                                    ""
+                                        )
                                     |> Set.fromList
                         in
                         case ( NonemptyDict.fromSeqDict allUsers, Set.size emailAddresses == SeqDict.size allUsers ) of
@@ -1458,10 +1475,18 @@ applyChangeToBackendUser :
     -> BackendUser
     -> Result () BackendUser
 applyChangeToBackendUser change user =
+    let
+        emailStatus =
+            if change.email == "" then
+                Just RegisteredFromDiscord
+
+            else
+                EmailAddress.fromString change.email |> Maybe.map RegisteredDirectly
+    in
     case
         T2
             (PersonName.fromString change.name)
-            (EmailAddress.fromString change.email)
+            emailStatus
     of
         T2 (Ok name) (Just email) ->
             { user
