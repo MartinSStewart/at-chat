@@ -21,6 +21,7 @@ import Array.Extra
 import Bitwise
 import ChannelName
 import Coord
+import Date exposing (Date)
 import DmChannel exposing (DmChannel, LastTypedAt, Thread)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -1014,7 +1015,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
             MyUi.isMobile model
     in
     Array.foldr
-        (\message ( index, list ) ->
+        (\message ( index, lastDate, list ) ->
             let
                 messageId : Id ChannelMessageId
                 messageId =
@@ -1125,9 +1126,52 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
 
                         DeletedMessage _ ->
                             Nothing
+
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
+
+                        UserJoinedMessage posix id seqDict ->
+                            posix
+
+                        DeletedMessage posix ->
+                            posix
+                    )
+                        |> Date.fromPosix local.localUser.timezone
             in
             ( index - 1
+            , date
             , newLine
+                ++ (if date == lastDate then
+                        []
+
+                    else
+                        [ Ui.el
+                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                            , Ui.borderColor MyUi.alertColor
+                            , Ui.inFront
+                                (Ui.el
+                                    [ Ui.Font.color MyUi.font1
+                                    , Ui.background MyUi.alertColor
+                                    , Ui.width Ui.shrink
+                                    , Ui.paddingXY 4 0
+                                    , Ui.alignRight
+                                    , Ui.Font.size 12
+                                    , Ui.contentCenterY
+                                    , Ui.Font.bold
+                                    , Ui.height (Ui.px 15)
+                                    , Ui.roundedWith
+                                        { bottomLeft = 8, bottomRight = 0, topLeft = 8, topRight = 0 }
+                                    , Ui.move { x = 0, y = -8, z = 0 }
+                                    ]
+                                    (Ui.text (MyUi.datestampDate lastDate))
+                                )
+                            ]
+                            Ui.none
+                        ]
+                   )
                 ++ (case isEditing of
                         Just editing ->
                             if MyUi.isMobile model then
@@ -1223,9 +1267,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                 :: list
             )
         )
-        ( Array.length channel.messages - 1, [] )
+        ( Array.length channel.messages - 1, Date.fromRataDie 0, [] )
         channel.messages
-        |> Tuple.second
+        |> (\( _, _, a ) -> a)
 
 
 messageViewEncode : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
