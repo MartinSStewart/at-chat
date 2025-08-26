@@ -9,7 +9,69 @@ async function loadAudio(url, context, sounds) {
     }
 }
 
-exports.init = async function init(app) {
+exports.init = async function init(app)
+{
+    // Register a Service Worker.
+
+    const serviceWorkerJs = '/service-worker.js';
+
+    app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+        console.log("register");
+        navigator.serviceWorker.register(serviceWorkerJs);
+
+        navigator.serviceWorker.ready
+        .then(function(registration) {
+            console.log(registration)
+            // Use the PushManager to get the user's subscription to the push service.
+            return registration.pushManager.getSubscription()
+            .then(async function(subscription)
+            {
+                // If a subscription was found, return it.
+                if (subscription) {
+                    return subscription;
+                }
+                console.log("register3");
+
+                // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
+                // send notifications that don't have a visible effect for the user).
+                return registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: publicKey
+                });
+            });
+        }).then(function(subscription) {
+          // Send the subscription details to the server using the Fetch API.
+          console.log("register2");
+          console.log(subscription);
+          console.log(subscription.toJSON());
+          app.ports.register_push_subscription_from_js.send(subscription.toJSON());
+        });
+    });
+
+    app.ports.is_push_subscription_registered_to_js.subscribe((a) => {
+        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+            if (registration) {
+                app.ports.is_push_subscription_registered_from_js.send(true);
+            } else {
+                app.ports.is_push_subscription_registered_from_js.send(false);
+            }
+        });
+    });
+
+    app.ports.unregister_push_subscription_to_js.subscribe((a) => {
+        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+            if (registration) {
+                console.log("unregistered");
+                registration
+                    .unregister()
+                    .then((isSuccessful) => {
+                      console.log(isSuccessful);
+                   });
+            }
+        });
+    });
+
+
     let context = null;
     let sounds = {};
     app.ports.load_sounds_to_js.subscribe((a) => {

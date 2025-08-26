@@ -56,9 +56,14 @@ view :
     -> Element msg
 view htmlId isSecret label validation msg value model =
     let
+        htmlIdPrefix : String
+        htmlIdPrefix =
+            Dom.idToString htmlId
+
+        label2 : { element : Element msg, id : Ui.Input.Label }
         label2 =
             Ui.Input.label
-                (Dom.idToString htmlId)
+                (htmlIdPrefix ++ "_label")
                 [ Ui.Font.size 14, Ui.Font.bold ]
                 (Ui.text label)
 
@@ -155,9 +160,10 @@ view htmlId isSecret label validation msg value model =
                     }
              )
                 :: (if isSecret then
-                        [ Ui.el
-                            [ Ui.Input.button (Edit { model | showSecret = not model.showSecret } |> msg)
-                            , Ui.width (Ui.px 40)
+                        [ MyUi.elButton
+                            (Dom.id (htmlIdPrefix ++ "_toggleSecret"))
+                            (Edit { model | showSecret = not model.showSecret } |> msg)
+                            [ Ui.width (Ui.px 40)
                             , Ui.contentCenterX
                             , Ui.contentCenterY
                             , Ui.height Ui.fill
@@ -185,18 +191,18 @@ view htmlId isSecret label validation msg value model =
                    )
                 ++ (case result of
                         Just result2 ->
-                            [ Ui.el
-                                [ Ui.Input.button
-                                    ((case result2 of
-                                        Ok ok ->
-                                            PressedAcceptEdit ok
+                            [ MyUi.elButton
+                                (Dom.id (htmlIdPrefix ++ "_acceptEdit"))
+                                ((case result2 of
+                                    Ok ok ->
+                                        PressedAcceptEdit ok
 
-                                        Err _ ->
-                                            Edit { model | pressedSubmit = True }
-                                     )
-                                        |> msg
-                                    )
-                                , Ui.width (Ui.px 40)
+                                    Err _ ->
+                                        Edit { model | pressedSubmit = True }
+                                 )
+                                    |> msg
+                                )
+                                [ Ui.width (Ui.px 40)
                                 , Ui.paddingXY 5 0
                                 , Ui.height Ui.fill
                                 , Ui.contentCenterX
@@ -211,9 +217,10 @@ view htmlId isSecret label validation msg value model =
                                         Ui.background MyUi.disabledButtonBackground
                                 ]
                                 (Ui.html Icons.checkmark)
-                            , Ui.el
-                                [ Ui.Input.button (Edit init |> msg)
-                                , -- Is a little wider than the check button because it seems too skinny otherwise
+                            , MyUi.elButton
+                                (Dom.id (htmlIdPrefix ++ "_delete"))
+                                (Edit init |> msg)
+                                [ -- Is a little wider than the check button because it seems too skinny otherwise
                                   Ui.width (Ui.px 42)
                                 , Ui.contentCenterX
                                 , Ui.contentCenterY

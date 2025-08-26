@@ -8,14 +8,14 @@ import MyUi
 import PersonName
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn model =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -45,10 +45,11 @@ view isMobile time local loggedIn model =
                     |> Ui.inFront
                 ]
                 [ Ui.el [ Ui.Font.size 20, Ui.paddingXY 16 0 ] (Ui.text "User settings")
-                , Ui.el
+                , MyUi.elButton
+                    (Dom.id "userOptions_closeUserOptions")
+                    PressedCloseUserOptions
                     [ Ui.padding 16
                     , Ui.width (Ui.px 56)
-                    , Ui.Input.button PressedCloseUserOptions
                     , Ui.alignRight
                     ]
                     (Ui.html Icons.x)
@@ -105,7 +106,7 @@ view isMobile time local loggedIn model =
                 |> Ui.map TwoFactorMsg
             , MyUi.container
                 isMobile
-                "Appearance"
+                "Miscellaneous"
                 [ Editable.view
                     (Dom.id "userOptions_name")
                     False
@@ -114,6 +115,21 @@ view isMobile time local loggedIn model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
+                , let
+                    enablePushNotificationsLabel =
+                        Ui.Input.label "" [ Ui.padding 8 ] (Ui.text "Enable push notifications")
+                  in
+                  Ui.row
+                    []
+                    [ Ui.Input.checkbox
+                        [ Ui.padding 8 ]
+                        { onChange = ToggledEnablePushNotifications
+                        , icon = Nothing
+                        , checked = loaded.enabledPushNotifications
+                        , label = enablePushNotificationsLabel.id
+                        }
+                    , enablePushNotificationsLabel.element
+                    ]
                 ]
             , Ui.el
                 [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]

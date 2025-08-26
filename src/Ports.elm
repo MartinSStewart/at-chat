@@ -2,6 +2,7 @@ port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
     , NotificationPermission(..)
+    , PushSubscription
     , PwaStatus(..)
     , checkNotificationPermission
     , checkNotificationPermissionResponse
@@ -11,23 +12,31 @@ port module Ports exposing
     , cropImageFromJs
     , cropImageToJs
     , hapticFeedback
+    , isPushNotificationsRegistered
+    , isPushNotificationsRegisteredSubscription
     , loadSounds
     , playSound
+    , registerPushSubscription
+    , registerPushSubscriptionToJs
     , requestNotificationPermission
     , setFavicon
     , showNotification
     , textInputSelectAll
+    , unregisterPushSubscriptionToJs
     )
 
+import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
+import Env
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
+import Url exposing (Url)
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -77,6 +86,92 @@ setFavicon faviconPath =
 hapticFeedback : Command FrontendOnly toMsg msg
 hapticFeedback =
     Command.sendToJs "haptic_feedback" haptic_feedback Json.Encode.null
+
+
+port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
+
+
+port unregister_push_subscription_to_js : Json.Encode.Value -> Cmd msg
+
+
+port is_push_subscription_registered_to_js : Json.Encode.Value -> Cmd msg
+
+
+port is_push_subscription_registered_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+registerPushSubscriptionToJs : String -> Command FrontendOnly toMsg msg
+registerPushSubscriptionToJs publicKey =
+    Command.sendToJs
+        "register_push_subscription_to_js"
+        register_push_subscription_to_js
+        (Json.Encode.string publicKey)
+
+
+unregisterPushSubscriptionToJs : Command FrontendOnly toMsg msg
+unregisterPushSubscriptionToJs =
+    Command.sendToJs
+        "unregister_push_subscription_to_js"
+        unregister_push_subscription_to_js
+        Json.Encode.null
+
+
+isPushNotificationsRegistered : Command FrontendOnly toMsg msg
+isPushNotificationsRegistered =
+    Command.sendToJs
+        "is_push_subscription_registered_to_js"
+        is_push_subscription_registered_to_js
+        Json.Encode.null
+
+
+isPushNotificationsRegisteredSubscription : (Bool -> msg) -> Subscription FrontendOnly msg
+isPushNotificationsRegisteredSubscription msg =
+    Subscription.fromJs
+        "is_push_subscription_registered_from_js"
+        is_push_subscription_registered_from_js
+        (\json ->
+            Json.Decode.decodeValue (Json.Decode.map msg Json.Decode.bool) json
+                |> Result.withDefault (msg False)
+        )
+
+
+type alias PushSubscription =
+    { endpoint : Url
+    , auth : String
+    , p256dh : String
+    }
+
+
+registerPushSubscription : (Result String PushSubscription -> msg) -> Subscription FrontendOnly msg
+registerPushSubscription msg =
+    Subscription.fromJs
+        "register_push_subscription_from_js"
+        register_push_subscription_from_js
+        (\json ->
+            Json.Decode.decodeValue
+                (Json.Decode.map3
+                    PushSubscription
+                    (Json.Decode.field "endpoint" Json.Decode.string
+                        |> Json.Decode.andThen
+                            (\text ->
+                                case Url.fromString text of
+                                    Just url ->
+                                        Json.Decode.succeed url
+
+                                    Nothing ->
+                                        Json.Decode.fail "Invalid endpoint"
+                            )
+                    )
+                    (Json.Decode.at [ "keys", "auth" ] Json.Decode.string)
+                    (Json.Decode.at [ "keys", "p256dh" ] Json.Decode.string)
+                )
+                json
+                |> Result.mapError Json.Decode.errorToString
+                |> msg
+        )
 
 
 requestNotificationPermission : Command FrontendOnly toMsg msg

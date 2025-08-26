@@ -644,44 +644,50 @@ parserHelper state =
             Array.empty
 
 
-mentionsUser : Id UserId -> Nonempty RichText -> Bool
-mentionsUser userId nonempty =
-    List.Nonempty.any
-        (\richText ->
+mentionsUser : Nonempty RichText -> SeqSet (Id UserId)
+mentionsUser nonempty =
+    mentionsUserHelper SeqSet.empty nonempty
+
+
+mentionsUserHelper : SeqSet (Id UserId) -> Nonempty RichText -> SeqSet (Id UserId)
+mentionsUserHelper set nonempty =
+    List.Nonempty.foldl
+        (\richText set2 ->
             case richText of
                 NormalText _ _ ->
-                    False
+                    set2
 
                 UserMention mentionedUser ->
-                    userId == mentionedUser
+                    SeqSet.insert mentionedUser set2
 
                 Bold nonempty2 ->
-                    mentionsUser userId nonempty2
+                    mentionsUserHelper set2 nonempty2
 
                 Italic nonempty2 ->
-                    mentionsUser userId nonempty2
+                    mentionsUserHelper set2 nonempty2
 
                 Underline nonempty2 ->
-                    mentionsUser userId nonempty2
+                    mentionsUserHelper set2 nonempty2
 
                 Strikethrough nonempty2 ->
-                    mentionsUser userId nonempty2
+                    mentionsUserHelper set2 nonempty2
 
                 Spoiler nonempty2 ->
-                    mentionsUser userId nonempty2
+                    mentionsUserHelper set2 nonempty2
 
                 Hyperlink _ _ ->
-                    False
+                    set2
 
                 InlineCode _ _ ->
-                    False
+                    set2
 
                 CodeBlock _ _ ->
-                    False
+                    set2
 
                 AttachedFile _ ->
-                    False
+                    set2
         )
+        set
         nonempty
 
 

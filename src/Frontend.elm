@@ -32,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId(..), Id, ThreadRoute(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -56,6 +56,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -112,6 +113,7 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
+        , Ports.isPushNotificationsRegisteredSubscription GotIsPushNotificationsRegistered
         , case model of
             Loading _ ->
                 Subscription.none
@@ -119,7 +121,7 @@ subscriptions model =
             Loaded loaded ->
                 Subscription.batch
                     [ case loaded.route of
-                        GuildRoute _ (ChannelRoute _ _ _) ->
+                        GuildRoute _ (ChannelRoute _ _) ->
                             Effect.Browser.Events.onVisibilityChange VisibilityChanged
 
                         _ ->
@@ -190,6 +192,7 @@ subscriptions model =
                         NotLoggedIn _ ->
                             Subscription.none
                     ]
+        , Ports.registerPushSubscription GotRegisterPushSubscription
         ]
 
 
@@ -219,6 +222,7 @@ init url key =
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
+        , enabledPushNotifications = False
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -229,6 +233,7 @@ init url key =
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
+        , Ports.isPushNotificationsRegistered
         ]
     )
 
@@ -274,6 +279,7 @@ initLoadedFrontend loading time loginResult =
             , dragPrevious = NoDrag
             , scrolledToBottomOfChannel = True
             , aiChatModel = aiChatModel
+            , enabledPushNotifications = loading.enabledPushNotifications
             }
 
         ( model2, cmdA ) =
@@ -355,6 +361,7 @@ loadedInitHelper time timezone loginData loading =
             , filesToUpload = SeqDict.empty
             , sessionId = loginData.sessionId
             , isReloading = False
+            , vapidPublicKey = loginData.vapidPublicKey
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -458,6 +465,9 @@ update msg model =
                 GotTimezone timezone ->
                     ( Loading { loading | timezone = timezone }, Command.none )
 
+                GotIsPushNotificationsRegistered isEnabled ->
+                    tryInitLoadedFrontend { loading | enabledPushNotifications = isEnabled }
+
                 _ ->
                     ( model, Command.none )
 
@@ -533,9 +543,20 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId _ maybeMessageIndex ->
+                ChannelRoute channelId threadRoute ->
                     updateLoggedIn
                         (\loggedIn ->
+                            let
+                                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+                                scrollToBottom =
+                                    if sameChannel then
+                                        Command.none
+
+                                    else
+                                        Process.sleep Duration.millisecond
+                                            |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                            |> Task.attempt (\_ -> ScrolledToBottom)
+                            in
                             handleLocalChange
                                 model3.time
                                 (Just (Local_ViewChannel guildId channelId))
@@ -547,19 +568,24 @@ routeRequest previousRoute newRoute model =
                                 )
                                 (Command.batch
                                     [ setFocus model3 Pages.Guild.channelTextInputId
-                                    , case maybeMessageIndex of
-                                        Just messageIndex ->
-                                            smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                                                |> Task.attempt (\_ -> ScrolledToMessage)
+                                    , case threadRoute of
+                                        ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+                                            case maybeMessageIndex of
+                                                Just messageIndex ->
+                                                    smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                                                        |> Task.attempt (\_ -> ScrolledToMessage)
 
-                                        Nothing ->
-                                            if sameChannel then
-                                                Command.none
+                                                Nothing ->
+                                                    scrollToBottom
 
-                                            else
-                                                Process.sleep Duration.millisecond
-                                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                                        NoThreadWithMaybeMessage maybeMessageIndex ->
+                                            case maybeMessageIndex of
+                                                Just messageIndex ->
+                                                    smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                                                        |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                                Nothing ->
+                                                    scrollToBottom
                                     ]
                                 )
                         )
@@ -629,7 +655,7 @@ routeRequest previousRoute newRoute model =
                                             model3
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                                (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
                                             )
 
                                     Nothing ->
@@ -640,7 +666,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
-        DmRoute _ _ maybeMessageIndex ->
+        DmRoute _ threadRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -656,18 +682,34 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+                        scrollToBottom =
+                            Process.sleep Duration.millisecond
+                                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                                |> Task.attempt (\_ -> ScrolledToBottom)
+                    in
                     ( startOpeningChannelSidebar loggedIn
                     , Command.batch
                         [ setFocus model3 Pages.Guild.channelTextInputId
-                        , case maybeMessageIndex of
-                            Just messageIndex ->
-                                smoothScroll (Pages.Guild.messageHtmlId messageIndex)
-                                    |> Task.attempt (\_ -> ScrolledToMessage)
+                        , case threadRoute of
+                            ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+                                case maybeMessageIndex of
+                                    Just messageIndex ->
+                                        smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                                            |> Task.attempt (\_ -> ScrolledToMessage)
 
-                            Nothing ->
-                                Process.sleep Duration.millisecond
-                                    |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                    |> Task.attempt (\_ -> ScrolledToBottom)
+                                    Nothing ->
+                                        scrollToBottom
+
+                            NoThreadWithMaybeMessage maybeMessageIndex ->
+                                case maybeMessageIndex of
+                                    Just messageIndex ->
+                                        smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                                            |> Task.attempt (\_ -> ScrolledToMessage)
+
+                                    Nothing ->
+                                        scrollToBottom
                         ]
                     )
                 )
@@ -689,7 +731,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DmRoute _ _ _ ->
+        DmRoute _ _ ->
             True
 
 
@@ -732,7 +774,7 @@ isPressMsg msg =
         TypedMessage _ _ ->
             False
 
-        PressedSendMessage _ ->
+        PressedSendMessage _ _ ->
             True
 
         NewChannelFormChanged _ _ ->
@@ -972,6 +1014,15 @@ isPressMsg msg =
         MessageViewMsg _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
+        GotRegisterPushSubscription result ->
+            False
+
+        ToggledEnablePushNotifications bool ->
+            True
+
+        GotIsPushNotificationsRegistered bool ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -983,15 +1034,6 @@ updateLoaded msg model =
                         route : Route
                         route =
                             Route.decode url
-
-                        notificationRequest : Command FrontendOnly toMsg msg
-                        notificationRequest =
-                            case model.notificationPermission of
-                                Ports.NotAsked ->
-                                    Ports.requestNotificationPermission
-
-                                _ ->
-                                    Command.none
                     in
                     ( model
                     , Command.batch
@@ -1000,7 +1042,6 @@ updateLoaded msg model =
 
                           else
                             BrowserNavigation.pushUrl model.navigationKey (Route.encode route)
-                        , notificationRequest
                         ]
                     )
 
@@ -1115,13 +1156,19 @@ updateLoaded msg model =
                         (\loggedIn ->
                             handleLocalChange
                                 model.time
-                                (case routeToGuildOrDmId model.route of
-                                    Just guildOrDmId ->
-                                        case guildOrDmIdToMessages guildOrDmId (Local.model loggedIn.localState) of
+                                (case routeToGuildOrDmIdNoThread model.route of
+                                    Just ( guildOrDmId, threadRoute ) ->
+                                        case guildOrDmIdNoThreadToMessages guildOrDmId threadRoute (Local.model loggedIn.localState) of
                                             Just messages ->
                                                 Local_SetLastViewed
                                                     guildOrDmId
-                                                    (Array.length messages - 1 |> Id.fromInt)
+                                                    (case threadRoute of
+                                                        ViewThreadWithMaybeMessage threadMessageId _ ->
+                                                            ViewThreadWithMessage threadMessageId (Array.length messages - 1 |> Id.fromInt)
+
+                                                        NoThreadWithMaybeMessage _ ->
+                                                            NoThreadWithMessage (Array.length messages - 1 |> Id.fromInt)
+                                                    )
                                                     |> Just
 
                                             Nothing ->
@@ -1138,7 +1185,13 @@ updateLoaded msg model =
                 ( model3, routeCmd ) =
                     routePush model2 route
             in
-            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
+            ( model3
+            , Command.batch
+                [ cmd
+                , routeCmd
+                , notificationRequest
+                ]
+            )
 
         TypedMessage guildOrDmId text ->
             updateLoggedIn
@@ -1191,10 +1244,20 @@ updateLoaded msg model =
                 (\loggedIn -> ( { loggedIn | typingDebouncer = True }, Command.none ))
                 model
 
-        PressedSendMessage guildOrDmId ->
+        PressedSendMessage guildOrDmId threadRoute ->
             updateLoggedIn
                 (\loggedIn ->
-                    case SeqDict.get guildOrDmId loggedIn.drafts of
+                    let
+                        guildOrDmIdWithThread : GuildOrDmId
+                        guildOrDmIdWithThread =
+                            case guildOrDmId of
+                                GuildOrDmId_Guild_NoThread guildId channelId ->
+                                    GuildOrDmId_Guild guildId channelId threadRoute
+
+                                GuildOrDmId_Dm_NoThread otherUserId ->
+                                    GuildOrDmId_Dm otherUserId threadRoute
+                    in
+                    case SeqDict.get guildOrDmIdWithThread loggedIn.drafts of
                         Just nonempty ->
                             let
                                 local : LocalState
@@ -1207,8 +1270,17 @@ updateLoaded msg model =
                                     model.time
                                     guildOrDmId
                                     (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
-                                    (SeqDict.get guildOrDmId loggedIn.replyTo)
-                                    (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                                    (case threadRoute of
+                                        ViewThread threadId ->
+                                            ViewThreadWithMaybeMessage
+                                                threadId
+                                                (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+
+                                        NoThread ->
+                                            NoThreadWithMaybeMessage
+                                                (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                    )
+                                    (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
                                         Just dict ->
                                             NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
@@ -1218,9 +1290,9 @@ updateLoaded msg model =
                                     |> Just
                                 )
                                 { loggedIn
-                                    | drafts = SeqDict.remove guildOrDmId loggedIn.drafts
-                                    , replyTo = SeqDict.remove guildOrDmId loggedIn.replyTo
-                                    , filesToUpload = SeqDict.remove guildOrDmId loggedIn.filesToUpload
+                                    | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
+                                    , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
+                                    , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
                                 }
                                 scrollToBottomOfChannel
 
@@ -1279,7 +1351,7 @@ updateLoaded msg model =
                                 ( model2, routeCmd ) =
                                     routePush
                                         { model | loginStatus = LoggedIn loggedIn2 }
-                                        (GuildRoute guildId (ChannelRoute nextChannelId NoThread Nothing))
+                                        (GuildRoute guildId (ChannelRoute nextChannelId (NoThreadWithMaybeMessage Nothing)))
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
 
@@ -1351,7 +1423,7 @@ updateLoaded msg model =
                                             SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                     }
                         }
-                        (GuildRoute guildId (ChannelRoute channelId NoThread Nothing))
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1398,7 +1470,7 @@ updateLoaded msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                            (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
                                         )
 
                                 Nothing ->
@@ -1592,10 +1664,36 @@ updateLoaded msg model =
                                                                 (Local.model loggedIn2.localState)
                                                          of
                                                             Just messages ->
-                                                                Local_SetLastViewed
-                                                                    guildOrDmId
-                                                                    (Array.length messages - 1 |> Id.fromInt)
-                                                                    |> Just
+                                                                case guildOrDmId of
+                                                                    GuildOrDmId_Guild guildId channelId threadRoute ->
+                                                                        Local_SetLastViewed
+                                                                            (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                                            (case threadRoute of
+                                                                                ViewThread threadId ->
+                                                                                    ViewThreadWithMessage
+                                                                                        threadId
+                                                                                        (Array.length messages - 1 |> Id.fromInt)
+
+                                                                                NoThread ->
+                                                                                    NoThreadWithMessage
+                                                                                        (Array.length messages - 1 |> Id.fromInt)
+                                                                            )
+                                                                            |> Just
+
+                                                                    GuildOrDmId_Dm otherUserId threadRoute ->
+                                                                        Local_SetLastViewed
+                                                                            (GuildOrDmId_Dm_NoThread otherUserId)
+                                                                            (case threadRoute of
+                                                                                ViewThread threadId ->
+                                                                                    ViewThreadWithMessage
+                                                                                        threadId
+                                                                                        (Array.length messages - 1 |> Id.fromInt)
+
+                                                                                NoThread ->
+                                                                                    NoThreadWithMessage
+                                                                                        (Array.length messages - 1 |> Id.fromInt)
+                                                                            )
+                                                                            |> Just
 
                                                             Nothing ->
                                                                 Nothing
@@ -1701,7 +1799,33 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (if oldTypingDebouncer then
-                                    Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
+                                    --Local_MemberEditTyping model.time guildOrDmId edit.messageIndex |> Just
+                                    case guildOrDmId of
+                                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                                            Local_MemberEditTyping
+                                                model.time
+                                                (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                    NoThread ->
+                                                        NoThreadWithMessage edit.messageIndex
+                                                )
+                                                |> Just
+
+                                        GuildOrDmId_Dm otherUserId threadRoute ->
+                                            Local_MemberEditTyping
+                                                model.time
+                                                (GuildOrDmId_Dm_NoThread otherUserId)
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                    NoThread ->
+                                                        NoThreadWithMessage edit.messageIndex
+                                                )
+                                                |> Just
 
                                  else
                                     Nothing
@@ -1768,13 +1892,43 @@ updateLoaded msg model =
                                             Nothing
 
                                         else
-                                            Local_SendEditMessage
-                                                model.time
-                                                guildOrDmId
-                                                edit.messageIndex
-                                                richText
-                                                (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                |> Just
+                                            --Local_SendEditMessage
+                                            --    model.time
+                                            --    guildOrDmId
+                                            --    edit.messageIndex
+                                            --    richText
+                                            --    (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                            --    |> Just
+                                            case guildOrDmId of
+                                                GuildOrDmId_Guild guildId channelId threadRoute ->
+                                                    Local_SendEditMessage
+                                                        model.time
+                                                        (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                        (case threadRoute of
+                                                            ViewThread threadId ->
+                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                            NoThread ->
+                                                                NoThreadWithMessage edit.messageIndex
+                                                        )
+                                                        richText
+                                                        (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                        |> Just
+
+                                                GuildOrDmId_Dm otherUserId threadRoute ->
+                                                    Local_SendEditMessage
+                                                        model.time
+                                                        (GuildOrDmId_Dm_NoThread otherUserId)
+                                                        (case threadRoute of
+                                                            ViewThread threadId ->
+                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+
+                                                            NoThread ->
+                                                                NoThreadWithMessage edit.messageIndex
+                                                        )
+                                                        richText
+                                                        (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                        |> Just
 
                                     _ ->
                                         Nothing
@@ -1929,15 +2083,15 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId NoThread _), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage _)), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
+                        (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
 
-                ( DmRoute otherUserId NoThread _, LoggedIn loggedIn ) ->
+                ( DmRoute otherUserId (NoThreadWithMaybeMessage _), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (DmRoute otherUserId (ViewThread messageIndex) Nothing)
+                        (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
 
                 _ ->
                     ( model, Command.none )
@@ -2693,10 +2847,38 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedReplyLink messageIndex ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId threadRoute ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId threadRoute (Just messageIndex)))
+                            routePush
+                                model
+                                (GuildRoute guildId
+                                    (ChannelRoute
+                                        channelId
+                                        (case threadRoute of
+                                            ViewThread threadMessageId ->
+                                                ViewThreadWithMaybeMessage
+                                                    threadMessageId
+                                                    (Just (Id.changeType messageIndex))
+
+                                            NoThread ->
+                                                NoThreadWithMaybeMessage (Just messageIndex)
+                                        )
+                                    )
+                                )
 
                         GuildOrDmId_Dm otherUserId threadRoute ->
-                            routePush model (DmRoute otherUserId threadRoute (Just messageIndex))
+                            routePush
+                                model
+                                (DmRoute
+                                    otherUserId
+                                    (case threadRoute of
+                                        ViewThread threadMessageId ->
+                                            ViewThreadWithMaybeMessage
+                                                threadMessageId
+                                                (Just (Id.changeType messageIndex))
+
+                                        NoThread ->
+                                            NoThreadWithMaybeMessage (Just messageIndex)
+                                    )
+                                )
 
                 MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex _ ->
                     showReactionEmojiSelector guildOrDmId messageIndex model
@@ -2762,13 +2944,46 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedViewThreadLink messageIndex ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId NoThread ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThread messageIndex) Nothing))
+                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
 
                         GuildOrDmId_Dm otherUserId NoThread ->
-                            routePush model (DmRoute otherUserId (ViewThread messageIndex) Nothing)
+                            routePush model (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
 
                         _ ->
                             ( model, Command.none )
+
+        GotRegisterPushSubscription result ->
+            let
+                _ =
+                    Debug.log "Got register PushSubscription" result
+            in
+            ( model
+            , case result of
+                Ok endpoint ->
+                    Lamdera.sendToBackend (RegisterPushSubscriptionRequest endpoint)
+
+                Err _ ->
+                    Command.none
+            )
+
+        ToggledEnablePushNotifications isEnabled ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( loggedIn
+                    , if isEnabled then
+                        Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
+
+                      else
+                        Command.batch
+                            [ Ports.unregisterPushSubscriptionToJs
+                            , Lamdera.sendToBackend UnregisterPushSubscriptionRequest
+                            ]
+                    )
+                )
+                { model | enabledPushNotifications = isEnabled }
+
+        GotIsPushNotificationsRegistered isEnabled ->
+            ( { model | enabledPushNotifications = isEnabled }, Command.none )
 
 
 pressedReply : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3372,9 +3587,9 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
-                Local_SendMessage createdAt guildOrDmId text repliedTo attachedFiles ->
+                Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( guild, channel ) ->
                                     let
@@ -3400,11 +3615,23 @@ changeUpdate localMsg local =
                                                                     , content = text
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
-                                                                    , repliedTo = repliedTo
+                                                                    , repliedTo =
+                                                                        case threadRouteWithRepliedTo of
+                                                                            ViewThreadWithMaybeMessage _ replyTo ->
+                                                                                Maybe.map Id.changeType replyTo
+
+                                                                            NoThreadWithMaybeMessage replyTo ->
+                                                                                replyTo
                                                                     , attachedFiles = attachedFiles
                                                                     }
                                                                 )
-                                                                threadRoute
+                                                                (case threadRouteWithRepliedTo of
+                                                                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                                                                        ViewThread threadMessageId
+
+                                                                    NoThreadWithMaybeMessage _ ->
+                                                                        NoThread
+                                                                )
                                                                 channel
                                                             )
                                                             guild.channels
@@ -3426,7 +3653,7 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             let
                                 user =
                                     local.localUser.user
@@ -3446,11 +3673,23 @@ changeUpdate localMsg local =
                                                 , content = text
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
-                                                , repliedTo = repliedTo
+                                                , repliedTo =
+                                                    case threadRouteWithRepliedTo of
+                                                        ViewThreadWithMaybeMessage _ replyTo ->
+                                                            Maybe.map Id.changeType replyTo
+
+                                                        NoThreadWithMaybeMessage replyTo ->
+                                                            replyTo
                                                 , attachedFiles = attachedFiles
                                                 }
                                             )
-                                            threadRoute
+                                            (case threadRouteWithRepliedTo of
+                                                ViewThreadWithMaybeMessage threadMessageId _ ->
+                                                    ViewThread threadMessageId
+
+                                                NoThreadWithMaybeMessage _ ->
+                                                    NoThread
+                                            )
                             in
                             { local
                                 | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
@@ -3533,13 +3772,13 @@ changeUpdate localMsg local =
                 Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
                     removeReactionEmoji local.localUser.userId guildOrDmId messageIndex emoji local
 
-                Local_SendEditMessage time guildOrDmId messageIndex newContent attachedFiles ->
-                    editMessage time local.localUser.userId guildOrDmId newContent attachedFiles messageIndex local
+                Local_SendEditMessage time guildOrDmId threadRoute newContent attachedFiles ->
+                    editMessage time local.localUser.userId guildOrDmId newContent attachedFiles threadRoute local
 
-                Local_MemberEditTyping time guildOrDmId messageIndex ->
-                    memberEditTyping time local.localUser.userId guildOrDmId messageIndex local
+                Local_MemberEditTyping time guildOrDmId threadRoute ->
+                    memberEditTyping time local.localUser.userId guildOrDmId threadRoute local
 
-                Local_SetLastViewed guildOrDmId messageIndex ->
+                Local_SetLastViewed guildOrDmId threadRoute ->
                     let
                         user =
                             local.localUser.user
@@ -3547,16 +3786,30 @@ changeUpdate localMsg local =
                         localUser =
                             local.localUser
                     in
-                    { local
-                        | localUser =
-                            { localUser
-                                | user =
-                                    { user
-                                        | lastViewed =
-                                            SeqDict.insert guildOrDmId messageIndex user.lastViewed
+                    case threadRoute of
+                        ViewThreadWithMessage threadMessageId messageId ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            { user
+                                                | lastViewedThreads =
+                                                    SeqDict.insert ( guildOrDmId, threadMessageId ) messageId user.lastViewedThreads
+                                            }
                                     }
                             }
-                    }
+
+                        NoThreadWithMessage messageId ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            { user
+                                                | lastViewed =
+                                                    SeqDict.insert guildOrDmId messageId user.lastViewed
+                                            }
+                                    }
+                            }
 
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.userId guildOrDmId messageIndex local
@@ -3580,9 +3833,9 @@ changeUpdate localMsg local =
 
         ServerChange serverChange ->
             case serverChange of
-                Server_SendMessage userId createdAt guildOrDmId text repliedTo attachedFiles ->
+                Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             case LocalState.getGuildAndChannel guildId channelId local of
                                 Just ( guild, channel ) ->
                                     let
@@ -3610,11 +3863,23 @@ changeUpdate localMsg local =
                                                                     , content = text
                                                                     , reactions = SeqDict.empty
                                                                     , editedAt = Nothing
-                                                                    , repliedTo = repliedTo
+                                                                    , repliedTo =
+                                                                        case threadRouteWithRepliedTo of
+                                                                            ViewThreadWithMaybeMessage _ replyTo ->
+                                                                                Maybe.map Id.changeType replyTo
+
+                                                                            NoThreadWithMaybeMessage replyTo ->
+                                                                                replyTo
                                                                     , attachedFiles = attachedFiles
                                                                     }
                                                                 )
-                                                                threadRoute
+                                                                (case threadRouteWithRepliedTo of
+                                                                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                                                                        ViewThread threadMessageId
+
+                                                                    NoThreadWithMaybeMessage _ ->
+                                                                        NoThread
+                                                                )
                                                                 channel
                                                             )
                                                             guild.channels
@@ -3640,7 +3905,7 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             let
                                 localUser : LocalUser
                                 localUser =
@@ -3662,11 +3927,23 @@ changeUpdate localMsg local =
                                                 , content = text
                                                 , reactions = SeqDict.empty
                                                 , editedAt = Nothing
-                                                , repliedTo = repliedTo
+                                                , repliedTo =
+                                                    case threadRouteWithRepliedTo of
+                                                        ViewThreadWithMaybeMessage _ replyTo ->
+                                                            Maybe.map Id.changeType replyTo
+
+                                                        NoThreadWithMaybeMessage replyTo ->
+                                                            replyTo
                                                 , attachedFiles = attachedFiles
                                                 }
                                             )
-                                            threadRoute
+                                            (case threadRouteWithRepliedTo of
+                                                ViewThreadWithMaybeMessage threadMessageId _ ->
+                                                    ViewThread threadMessageId
+
+                                                NoThreadWithMaybeMessage _ ->
+                                                    NoThread
+                                            )
                             in
                             { local
                                 | dmChannels = SeqDict.insert otherUserId dmChannel local.dmChannels
@@ -3925,28 +4202,28 @@ removeReactionEmoji userId guildOrDmId messageIndex emoji local =
             }
 
 
-memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmId -> Id ChannelMessageId -> LocalState -> LocalState
-memberEditTyping time userId guildOrDmId messageIndex local =
+memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
+memberEditTyping time userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId threadRoute ->
+        GuildOrDmId_Guild_NoThread guildId channelId ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            LocalState.memberIsEditTyping userId time channelId threadRoute messageIndex guild
+                            LocalState.memberIsEditTyping userId time channelId threadRoute guild
                                 |> Result.withDefault guild
                         )
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId threadRoute ->
+        GuildOrDmId_Dm_NoThread otherUserId ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
                         (\dmChannel ->
-                            LocalState.memberIsEditTypingHelper time userId messageIndex threadRoute dmChannel
+                            LocalState.memberIsEditTypingHelper time userId threadRoute dmChannel
                                 |> Result.withDefault dmChannel
                         )
                         local.dmChannels
@@ -3956,15 +4233,15 @@ memberEditTyping time userId guildOrDmId messageIndex local =
 editMessage :
     Time.Posix
     -> Id UserId
-    -> GuildOrDmId
+    -> GuildOrDmIdNoThread
     -> Nonempty RichText
     -> SeqDict (Id FileId) FileData
-    -> Id ChannelMessageId
+    -> ThreadRouteWithMessage
     -> LocalState
     -> LocalState
-editMessage time userId guildOrDmId newContent attachedFiles messageIndex local =
+editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId threadRoute ->
+        GuildOrDmId_Guild_NoThread guildId channelId ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -3976,7 +4253,6 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                                     userId
                                     newContent
                                     attachedFiles
-                                    messageIndex
                                     threadRoute
                                     channel
                                     |> Result.withDefault channel
@@ -3986,7 +4262,7 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId threadRoute ->
+        GuildOrDmId_Dm_NoThread otherUserId ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -3997,7 +4273,6 @@ editMessage time userId guildOrDmId newContent attachedFiles messageIndex local 
                                 userId
                                 newContent
                                 attachedFiles
-                                messageIndex
                                 threadRoute
                                 dmChannel
                                 |> Result.withDefault dmChannel
@@ -4260,7 +4535,10 @@ updateLoadedFromBackend msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                            (ChannelRoute
+                                                (LocalState.announcementChannel guild)
+                                                (NoThreadWithMaybeMessage Nothing)
+                                            )
                                         )
 
                                 Nothing ->
@@ -4294,7 +4572,10 @@ updateLoadedFromBackend msg model =
                                             model
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute (LocalState.announcementChannel guild) NoThread Nothing)
+                                                (ChannelRoute
+                                                    (LocalState.announcementChannel guild)
+                                                    (NoThreadWithMaybeMessage Nothing)
+                                                )
                                             )
 
                                     else
@@ -4305,7 +4586,7 @@ updateLoadedFromBackend msg model =
 
                         ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _) ->
                             case guildOrDmId of
-                                GuildOrDmId_Guild guildId channelId _ ->
+                                GuildOrDmId_Guild_NoThread guildId channelId ->
                                     case LocalState.getGuildAndChannel guildId channelId local of
                                         Just ( _, channel ) ->
                                             Command.batch
@@ -4326,7 +4607,7 @@ updateLoadedFromBackend msg model =
                                         Nothing ->
                                             Command.none
 
-                                GuildOrDmId_Dm _ _ ->
+                                GuildOrDmId_Dm_NoThread _ ->
                                     Command.none
 
                         _ ->
@@ -4407,17 +4688,27 @@ scrollToBottomOfChannel =
 
 playNotificationSound :
     Id UserId
-    -> Maybe (Id ChannelMessageId)
+    -> ThreadRouteWithMaybeMessage
     -> FrontendChannel
     -> LocalState
     -> Nonempty RichText
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
-playNotificationSound senderId maybeRepliedTo channel local content model =
+playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
+    let
+        repliedToUserId : Maybe (Id UserId)
+        repliedToUserId =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage _ maybeRepliedTo ->
+                    Pages.Guild.repliedToUserId maybeRepliedTo channel
+
+                NoThreadWithMaybeMessage maybeRepliedTo ->
+                    Pages.Guild.repliedToUserId maybeRepliedTo channel
+    in
     if
         (senderId /= local.localUser.userId)
-            && ((Pages.Guild.repliedToUserId maybeRepliedTo channel == Just local.localUser.userId)
-                    || RichText.mentionsUser local.localUser.userId content
+            && ((repliedToUserId == Just local.localUser.userId)
+                    || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
                )
     then
         Command.batch
@@ -4693,6 +4984,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -4745,6 +5037,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -4757,7 +5050,6 @@ view model =
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView
-                                        Nothing
                                         Nothing
                                         loaded
                                         loggedIn
@@ -4826,9 +5118,9 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
-                    DmRoute userId thread maybeMessageHighlight ->
+                    DmRoute userId thread ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) maybeMessageHighlight loaded)
+                            (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) loaded)
         ]
     }
 
@@ -4878,14 +5170,76 @@ guildOrDmIdToMessages guildOrDmId local =
                     Nothing
 
 
+guildOrDmIdNoThreadToMessages : GuildOrDmIdNoThread -> ThreadRouteWithMaybeMessage -> LocalState -> Maybe (Array Message)
+guildOrDmIdNoThreadToMessages guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId_Guild_NoThread guildId channelId ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                            SeqDict.get threadMessageIndex channel.threads |> Maybe.map .messages
+
+                        NoThreadWithMaybeMessage _ ->
+                            Just channel.messages
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm_NoThread otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                            SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.map .messages
+
+                        NoThreadWithMaybeMessage _ ->
+                            Just dmChannel.messages
+
+                Nothing ->
+                    Nothing
+
+
 routeToGuildOrDmId : Route -> Maybe GuildOrDmId
 routeToGuildOrDmId route =
     case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute _) ->
-            GuildOrDmId_Guild guildId channelId threadRoute |> Just
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            GuildOrDmId_Guild
+                guildId
+                channelId
+                (case threadRoute of
+                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                        ViewThread threadMessageId
 
-        DmRoute otherUserId threadRoute _ ->
-            GuildOrDmId_Dm otherUserId threadRoute |> Just
+                    NoThreadWithMaybeMessage _ ->
+                        NoThread
+                )
+                |> Just
+
+        DmRoute otherUserId threadRoute ->
+            GuildOrDmId_Dm
+                otherUserId
+                (case threadRoute of
+                    ViewThreadWithMaybeMessage threadMessageId _ ->
+                        ViewThread threadMessageId
+
+                    NoThreadWithMaybeMessage _ ->
+                        NoThread
+                )
+                |> Just
+
+        _ ->
+            Nothing
+
+
+routeToGuildOrDmIdNoThread : Route -> Maybe ( GuildOrDmIdNoThread, ThreadRouteWithMaybeMessage )
+routeToGuildOrDmIdNoThread route =
+    case route of
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            ( GuildOrDmId_Guild_NoThread guildId channelId, threadRoute ) |> Just
+
+        DmRoute otherUserId threadRoute ->
+            ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute ) |> Just
 
         _ ->
             Nothing

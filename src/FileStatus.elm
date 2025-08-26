@@ -8,6 +8,7 @@ module FileStatus exposing
     , addFileHash
     , contentType
     , contentTypeType
+    , domain
     , fileHash
     , fileUploadPreview
     , fileUrl
@@ -22,6 +23,7 @@ module FileStatus exposing
 import Bytes exposing (Bytes)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
@@ -40,7 +42,6 @@ import SeqDict exposing (SeqDict)
 import StringExtra
 import Ui
 import Ui.Font
-import Ui.Input
 import Ui.Shadow
 
 
@@ -302,10 +303,11 @@ fileUploadPreview onPressDelete filesToUpload2 =
                     , Ui.borderColor MyUi.background1
                     , Ui.border 1
                     , Ui.rounded 8
-                    , Ui.el
+                    , MyUi.elButton
+                        (Dom.id ("fileStatus_" ++ Id.toString fileStatusId))
+                        (onPressDelete fileStatusId)
                         [ Ui.width (Ui.px 42)
                         , Ui.height (Ui.px 42)
-                        , Ui.Input.button (onPressDelete fileStatusId)
                         , Ui.rounded 16
                         , Ui.move { x = -3, y = -3, z = 0 }
                         ]

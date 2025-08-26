@@ -50,6 +50,16 @@ adminEmail =
     "a@a.se"
 
 
+vapidPublicKey : String
+vapidPublicKey =
+    "BLtGPhDzvIl38Gr9mdFrI20Q3BLhcsDEUGhj0Pymt3FZKEj52PShLqqsjXwiUaggbhxxWHgX4QOx_85sx7SuzEc"
+
+
+vapidPrivateKey : String
+vapidPrivateKey =
+    "vq66Ns5Tc88lSllOpvM5xmqspURDSBnntDcNroOfmw4"
+
+
 openRouterKey : String
 openRouterKey =
     ""

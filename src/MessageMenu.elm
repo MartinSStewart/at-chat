@@ -190,10 +190,10 @@ view model extraOptions local loggedIn =
                     )
                 , MyUi.blockClickPropagation MessageMenu_PressedContainer
                 ]
-                (Ui.el
-                    [ Ui.height (Ui.px mobileCloseButton)
-                    , Ui.Input.button MessageMenu_PressedClose
-                    ]
+                (MyUi.elButton
+                    (Dom.id "messageMenu_close")
+                    MessageMenu_PressedClose
+                    [ Ui.height (Ui.px mobileCloseButton) ]
                     (Ui.el
                         [ Ui.background (Ui.rgb 40 50 60)
                         , Ui.rounded 99
@@ -207,6 +207,7 @@ view model extraOptions local loggedIn =
                     :: (case showEdit guildOrDmId extraOptions.messageIndex loggedIn of
                             Just edit ->
                                 [ MessageInput.view
+                                    (Dom.id "messageMenu_editMobile")
                                     True
                                     True
                                     (editMessageTextInputConfig guildOrDmId)
@@ -320,6 +321,7 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                     in
                     [ button
                         isMobile
+                        (Dom.id "messageMenu_addReaction")
                         Icons.smile
                         "Add reaction emoji"
                         (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId messageIndex position)
@@ -327,6 +329,7 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                     , if canEditAndDelete then
                         button
                             isMobile
+                            (Dom.id "messageMenu_editMessage")
                             Icons.pencil
                             "Edit message"
                             (MessageMenu_PressedEditMessage guildOrDmId messageIndex)
@@ -338,15 +341,22 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                         Nothing
 
                       else
-                        button isMobile Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
+                        button isMobile (Dom.id "messageMenu_replyTo") Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
                     , case ( threadRoute, isThreadStarter ) of
                         ( NoThread, False ) ->
-                            button isMobile Icons.hashtag "Start thread" (MessageMenu_PressedOpenThread messageIndex) |> Just
+                            button
+                                isMobile
+                                (Dom.id "messageMenu_openThread")
+                                Icons.hashtag
+                                "Start thread"
+                                (MessageMenu_PressedOpenThread messageIndex)
+                                |> Just
 
                         _ ->
                             Nothing
                     , button
                         isMobile
+                        (Dom.id "messageMenu_copy")
                         Icons.copyIcon
                         (case model.lastCopied of
                             Just lastCopied ->
@@ -366,6 +376,7 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                             [ Ui.Font.color MyUi.errorColor ]
                             (button
                                 isMobile
+                                (Dom.id "messageMenu_deleteMessage")
                                 Icons.delete
                                 "Delete message"
                                 (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
@@ -384,11 +395,12 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
             []
 
 
-button : Bool -> Html msg -> String -> msg -> Element msg
-button isMobile icon text msg =
-    Ui.row
-        [ Ui.Input.button msg
-        , Ui.spacing 8
+button : Bool -> HtmlId -> Html msg -> String -> msg -> Element msg
+button isMobile htmlId icon text msg =
+    MyUi.rowButton
+        htmlId
+        msg
+        [ Ui.spacing 8
         , Ui.contentCenterY
         , Ui.paddingXY 8 0
         , buttonHeight isMobile |> Ui.px |> Ui.height

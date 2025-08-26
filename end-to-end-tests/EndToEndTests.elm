@@ -7,6 +7,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
+import Env
 import Frontend
 import Json.Decode
 import Json.Encode
@@ -24,7 +25,7 @@ import Unsafe
 import Url exposing (Url)
 
 
-setup : T.ViewerWith (List (T.Instructions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
 
@@ -71,7 +72,7 @@ handlePortToJs { currentRequest } =
 
 windowSize : { width : number, height : number }
 windowSize =
-    { width = 1000, height = 1000 }
+    { width = 1000, height = 600 }
 
 
 parseLoginCode : Parser.Parser Int
@@ -155,10 +156,10 @@ sessionId0 =
 handleLogin :
     EmailAddress
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Instructions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-    -> T.Instructions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 handleLogin emailAddress client =
-    [ client.input 100 LoginForm.emailInputId (EmailAddress.toString emailAddress)
+    [ client.click 100 Pages.Home.loginButtonId
+    , client.input 100 LoginForm.emailInputId (EmailAddress.toString emailAddress)
     , client.click 100 LoginForm.submitEmailButtonId
     , T.andThen
         100
@@ -179,7 +180,12 @@ startTime =
     Time.millisToPosix 0
 
 
-tests : List (T.Instructions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+adminEmail : EmailAddress
+adminEmail =
+    Unsafe.emailAddress Env.adminEmail
+
+
+tests : List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests =
     let
         handleHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
@@ -243,10 +249,11 @@ tests =
         [ T.connectFrontend
             100
             sessionId0
-            "/user-overview"
+            "/"
             windowSize
             (\user ->
-                [ handleLogin Backend.adminUser.email user
+                [ handleLogin adminEmail user
+                , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
                 , user.snapshotView 100 { name = "2FA setup" }
                 , user.input 100 (Dom.id "userOverview_twoFactorCodeInput") "123123"
@@ -287,16 +294,16 @@ tests =
                             Nothing ->
                                 [ T.checkState 100 (\_ -> Err "User not found") ]
                     )
-                , user.click 100 (Dom.id "toolbar_logout")
+                , user.click 100 (Dom.id "options_logout")
                 ]
             )
         , T.connectFrontend
             100
             sessionId0
-            "/user-overview"
+            "/"
             windowSize
             (\user ->
-                [ handleLogin Backend.adminUser.email user
+                [ handleLogin adminEmail user
                 , user.snapshotView 100 { name = "2FA login step" }
                 , T.andThen
                     100
@@ -315,11 +322,11 @@ tests =
                                                         |> String.fromInt
                                                         |> String.padLeft LoginForm.twoFactorCodeLength '0'
                                                     )
+                                                , user.click 100 (Dom.id "guild_showUserOptions")
                                                 , user.checkView
                                                     100
                                                     (Test.Html.Query.has
-                                                        [ Test.Html.Selector.exactText "Logged in as"
-                                                        , Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
+                                                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
                                                         , Test.Html.Selector.exactText "Two factor authentication was enabled "
                                                         ]
                                                     )
@@ -351,7 +358,7 @@ tests =
                     openLoginAndSubmitEmail delay =
                         T.group
                             [ user.click delay Pages.Home.loginButtonId
-                            , user.input 100 LoginForm.emailInputId (EmailAddress.toString Backend.adminUser.email)
+                            , user.input 100 LoginForm.emailInputId (EmailAddress.toString adminEmail)
                             , user.click 100 LoginForm.submitEmailButtonId
                             ]
 
@@ -377,7 +384,7 @@ tests =
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (isLoginEmail Backend.adminUser.email) data.httpRequests of
+                        case List.filterMap (isLoginEmail adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ user.input 100 LoginForm.loginCodeInputId (String.fromInt loginCode) ]
 
@@ -402,7 +409,7 @@ tests =
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (isLoginEmail Backend.adminUser.email) data.httpRequests of
+                        case List.filterMap (isLoginEmail adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ user.input 100 LoginForm.loginCodeInputId (String.fromInt loginCode) ]
 
@@ -412,8 +419,7 @@ tests =
                 , user.checkView
                     100
                     (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "Logged in as"
-                        , Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
+                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
                         ]
                     )
                 ]
@@ -448,13 +454,13 @@ tests =
                 , client.input 100 LoginForm.emailInputId "asdf123"
                 , client.click 100 LoginForm.submitEmailButtonId
                 , client.snapshotView 100 { name = "invalid email" }
-                , client.input 100 LoginForm.emailInputId (EmailAddress.toString Backend.adminUser.email)
+                , client.input 100 LoginForm.emailInputId (EmailAddress.toString adminEmail)
                 , client.snapshotView 100 { name = "valid email" }
                 , client.click 100 LoginForm.submitEmailButtonId
                 , T.andThen
                     100
                     (\data ->
-                        case List.filterMap (isLoginEmail Backend.adminUser.email) data.httpRequests of
+                        case List.filterMap (isLoginEmail adminEmail) data.httpRequests of
                             loginCode :: _ ->
                                 [ client.input 100 LoginForm.loginCodeInputId "12345678"
                                 , client.snapshotView 100 { name = "invalid code" }
@@ -472,8 +478,8 @@ tests =
     ]
 
 
-checkNoErrorLogs : T.Instructions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel -> T.Instructions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-checkNoErrorLogs instructions =
+checkNoErrorLogs : T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+checkNoErrorLogs =
     T.checkState
         100
         (\data ->
@@ -484,4 +490,3 @@ checkNoErrorLogs instructions =
                 errors ->
                     "Error logs detected: " ++ String.join ", " errors |> Err
         )
-        instructions

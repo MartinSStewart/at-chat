@@ -38,12 +38,10 @@ header isMobile loginStatus =
                     Ui.none
 
                 NotLoggedIn _ ->
-                    Ui.el
-                        ([ Ui.Input.button PressedShowLogin
-                         , Dom.idToString loginButtonId |> Ui.id
-                         ]
-                            ++ buttonAttributes isMobile
-                        )
+                    MyUi.elButton
+                        loginButtonId
+                        PressedShowLogin
+                        (buttonAttributes isMobile)
                         (Ui.text "Login/Signup")
             ]
         )

@@ -10,8 +10,10 @@ use axum::{
     routing::post,
 };
 use imagesize::blob_size;
+use serde::Serialize;
 use sha2::{Digest, Sha224};
 use std::fs;
+use web_push::SubscriptionInfo;
 
 #[tokio::main]
 async fn main() {
@@ -20,6 +22,7 @@ async fn main() {
             "/file/upload",
             post(upload_endpoint).options(options_endpoint),
         )
+        .route("/file/push-notification", post(push_notification_endpoint))
         // .route(
         //     "/file/upload-url",
         //     post(upload_url_endpoint).options(options_endpoint),
@@ -40,29 +43,115 @@ fn filepath(hash: String) -> String {
     String::from("./var/lib/atchat/") + &hash
 }
 
-// async fn upload_url_endpoint(request: Request) -> Response<String> {
-//     let session_id: Option<String> = match request.headers().get("sid") {
-//         Some(header_value) => match header_value.to_str() {
-//             Ok(s) => Some(s.to_string()),
-//             Err(_) => None,
-//         },
-//         None => None,
-//     };
+async fn push_notification_endpoint(request: Request) -> Response<String> {
+    let headers = request.headers();
+    match (
+        headers.get("endpoint").map(|a| a.to_str()),
+        headers.get("p256dh").map(|a| a.to_str()),
+        headers.get("auth").map(|a| a.to_str()),
+        headers.get("private-key").map(|a| a.to_str()),
+        headers.get("title").map(|a| a.to_str()),
+        headers.get("body").map(|a| a.to_str()),
+        headers.get("icon").map(|a| a.to_str()),
+    ) {
+        (
+            Some(Ok(endpoint)),
+            Some(Ok(p256dh)),
+            Some(Ok(auth)),
+            Some(Ok(private_key)),
+            Some(Ok(title)),
+            Some(Ok(body)),
+            Some(Ok(icon)),
+        ) => {
+            // You would likely get this by deserializing a browser `pushSubscription` object.
+            let subscription_info: SubscriptionInfo = SubscriptionInfo::new(endpoint, p256dh, auth);
 
-//     match (session_id, request.extract::<String, _>().await) {
-//         (Some(session_id2), Ok(url)) => match reqwest::get(url).await {
-//             Ok(response) => match response.bytes().await {
-//                 Ok(bytes) => upload_helper(session_id2, bytes).await,
-//                 Err(_) => {
-//                     response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request"))
-//                 }
-//             },
-//             Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request")),
-//         },
+            let content: Notification<u8> = Notification::new(
+                title.to_string(),
+                "https://at-chat.app".to_string(),
+                Some(body.to_string()),
+                Some(icon.to_string()),
+            );
 
-//         _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request")),
-//     }
-// }
+            match (
+                web_push::VapidSignatureBuilder::from_base64(private_key, &subscription_info),
+                content.to_payload(),
+            ) {
+                (Ok(key), Ok(content2)) => {
+                    match key.build() {
+                        Ok(sig_builder) => {
+                            let mut builder: web_push::WebPushMessageBuilder<'_> =
+                                web_push::WebPushMessageBuilder::new(&subscription_info);
+
+                            builder.set_payload(web_push::ContentEncoding::Aes128Gcm, &content2);
+                            builder.set_vapid_signature(sig_builder);
+
+                            match web_push::IsahcWebPushClient::new() {
+                                Ok(client) => {
+                                    match builder.build() {
+                                        Ok(builder2) => {
+                                            match web_push::WebPushClient::send(&client, builder2).await {
+                                        Ok(()) => {
+                                            response_with_headers(StatusCode::OK, String::from(""))
+                                        }
+                                        Err(error) => response_with_headers(
+                                            StatusCode::BAD_REQUEST,
+                                            String::from(match error {
+                                                web_push::WebPushError::Unspecified => "Error 5",
+                                                web_push::WebPushError::Unauthorized(_) => "Error 6",
+                                                web_push::WebPushError::BadRequest(_) => "Error 7",
+                                                web_push::WebPushError::ServerError { retry_after: _, info: _ } => "Error 8",
+                                                web_push::WebPushError::NotImplemented(_) => "Error 9",
+                                                web_push::WebPushError::InvalidUri => "Error 10",
+                                                web_push::WebPushError::EndpointNotValid(_) => "Error 11",
+                                                web_push::WebPushError::EndpointNotFound(_) => "Error 12",
+                                                web_push::WebPushError::PayloadTooLarge => "Error 13",
+                                                web_push::WebPushError::Io(_) => "Error 14",
+                                                web_push::WebPushError::InvalidPackageName => "Error 15",
+                                                web_push::WebPushError::InvalidTtl => "Error 16",
+                                                web_push::WebPushError::InvalidTopic => "Error 17",
+                                                web_push::WebPushError::MissingCryptoKeys => "Error 18",
+                                                web_push::WebPushError::InvalidCryptoKeys => "Error 19",
+                                                web_push::WebPushError::InvalidResponse => "Error 20",
+                                                web_push::WebPushError::InvalidClaims => "Error 21",
+                                                web_push::WebPushError::ResponseTooLarge => "Error 22",
+                                                web_push::WebPushError::Other(_) => "Error 23",
+                                            }),
+                                        ),
+                                    }
+                                        }
+                                        Err(_) => response_with_headers(
+                                            StatusCode::BAD_REQUEST,
+                                            String::from("Error 4"),
+                                        ),
+                                    }
+                                }
+                                Err(_) => response_with_headers(
+                                    StatusCode::BAD_REQUEST,
+                                    String::from("Error 3"),
+                                ),
+                            }
+                        }
+                        Err(_) => {
+                            response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2"))
+                        }
+                    }
+                }
+
+                _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
+            }
+        }
+        _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 0")),
+    }
+
+    // // Finally, send the notification!
+    // client.send(builder.build()?).await?;
+
+    // response_with_headers(
+    //     StatusCode::UNAUTHORIZED,
+    //     String::from("Invalid permissions 2"),
+    // )
+}
 
 async fn upload_endpoint(request: Request) -> Response<String> {
     let session_id: Option<String> = match request.headers().get("sid") {
@@ -945,3 +1034,111 @@ const CONTENT_TYPES: [&'static str; 686] = [
     "test/mimetyp",
     "x-conference/x-cooltalk",
 ];
+
+/// Declarative notification that can be used to populate the payload of a web push.
+///
+/// See https://webkit.org/blog/16535/meet-declarative-web-push
+#[derive(Debug, Serialize)]
+pub struct Notification<D: Serialize> {
+    pub title: String,
+    pub navigate: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibrate: Option<Vec<u32>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub renotify: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silent: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requireInteraction")]
+    pub require_interaction: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<D>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<NotificationAction>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NotificationAction {
+    pub title: String,
+    pub action: String,
+    pub navigate: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+impl<D: Serialize> Notification<D> {
+    pub fn new(
+        title: String,
+        navigate: String,
+        body: Option<String>,
+        icon: Option<String>,
+    ) -> Self {
+        Notification {
+            title,
+            navigate,
+            lang: None,
+            dir: None,
+            tag: None,
+            body: body,
+            icon: icon,
+            image: None,
+            badge: None,
+            vibrate: None,
+            timestamp: None,
+            renotify: None,
+            silent: None,
+            require_interaction: None,
+            data: None,
+            actions: None,
+        }
+    }
+
+    pub fn to_payload(&self) -> serde_json::Result<Vec<u8>> {
+        serde_json::to_vec(&DeclarativePushPayload::new(self))
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct DeclarativePushPayload<'a, D: Serialize> {
+    web_push: u16,
+    pub notification: &'a Notification<D>,
+}
+
+impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
+    pub fn new(notification: &'a Notification<D>) -> Self {
+        DeclarativePushPayload {
+            web_push: 8030,
+            notification,
+        }
+    }
+}

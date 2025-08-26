@@ -68,7 +68,8 @@ type alias MsgConfig msg =
 
 
 view :
-    Bool
+    HtmlId
+    -> Bool
     -> Bool
     -> MsgConfig msg
     -> HtmlId
@@ -78,7 +79,12 @@ view :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element msg
-view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+    let
+        htmlIdPrefix : String
+        htmlIdPrefix =
+            Dom.idToString htmlId
+    in
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
@@ -214,7 +220,9 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
         |> Ui.el
             [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
             , Ui.inFront
-                (Ui.el
+                (MyUi.elButton
+                    (Dom.id (htmlIdPrefix ++ "_uploadFile"))
+                    msgConfig.pressedUploadFile
                     [ Ui.alignLeft
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
@@ -224,14 +232,14 @@ view roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderTe
                     , Ui.move { x = 2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
-                    , Ui.Input.button msgConfig.pressedUploadFile
                     ]
                     (Ui.html Icons.attachment)
                 )
             , Ui.inFront
-                (Ui.el
-                    [ Ui.Input.button msgConfig.pressedSendMessage
-                    , Ui.alignRight
+                (MyUi.elButton
+                    (Dom.id (htmlIdPrefix ++ "_sendMessage"))
+                    msgConfig.pressedSendMessage
+                    [ Ui.alignRight
                     , Ui.width Ui.shrink
                     , Ui.rounded 4
                     , Ui.paddingXY 4 0
@@ -488,10 +496,10 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownInd
             []
             (List.indexedMap
                 (\index ( _, user ) ->
-                    Ui.el
-                        [ Ui.Input.button (msgConfig.pressedPingUser index)
-                        , Ui.id (Dom.idToString (dropdownButtonId index))
-                        , Ui.paddingXY 8 4
+                    MyUi.elButton
+                        (dropdownButtonId index)
+                        (msgConfig.pressedPingUser index)
+                        [ Ui.paddingXY 8 4
                         , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
                         , if dropdownIndex == index then
                             Ui.background MyUi.background3

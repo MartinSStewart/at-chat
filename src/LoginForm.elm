@@ -431,9 +431,10 @@ view loginForm isMobile pwaStatus =
                             _ ->
                                 Ui.none
                         ]
-                    , Ui.el
-                        [ Ui.Input.button PressedSubmitUserData
-                        , Ui.paddingXY 16 8
+                    , MyUi.elButton
+                        (Dom.id "loginForm_submit")
+                        PressedSubmitUserData
+                        [ Ui.paddingXY 16 8
                         , Ui.background MyUi.buttonBackground
                         , Ui.width Ui.shrink
                         , Ui.border 1
