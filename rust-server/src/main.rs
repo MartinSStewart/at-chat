@@ -10,6 +10,7 @@ use axum::{
     routing::post,
 };
 use imagesize::blob_size;
+use serde::Serialize;
 use sha2::{Digest, Sha224};
 use std::fs;
 use web_push::SubscriptionInfo;
@@ -42,30 +43,6 @@ fn filepath(hash: String) -> String {
     String::from("./var/lib/atchat/") + &hash
 }
 
-// async fn upload_url_endpoint(request: Request) -> Response<String> {
-//     let session_id: Option<String> = match request.headers().get("sid") {
-//         Some(header_value) => match header_value.to_str() {
-//             Ok(s) => Some(s.to_string()),
-//             Err(_) => None,
-//         },
-//         None => None,
-//     };
-
-//     match (session_id, request.extract::<String, _>().await) {
-//         (Some(session_id2), Ok(url)) => match reqwest::get(url).await {
-//             Ok(response) => match response.bytes().await {
-//                 Ok(bytes) => upload_helper(session_id2, bytes).await,
-//                 Err(_) => {
-//                     response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request"))
-//                 }
-//             },
-//             Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request")),
-//         },
-
-//         _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Bad request")),
-//     }
-// }
-
 async fn push_notification_endpoint(request: Request) -> Response<String> {
     let headers = request.headers();
     match (
@@ -78,16 +55,20 @@ async fn push_notification_endpoint(request: Request) -> Response<String> {
             // You would likely get this by deserializing a browser `pushSubscription` object.
             let subscription_info: SubscriptionInfo = SubscriptionInfo::new(endpoint, p256dh, auth);
 
-            match web_push::VapidSignatureBuilder::from_base64(private_key, &subscription_info) {
-                Ok(key) => {
+            let content: Notification<u8> =
+                Notification::new("at-chat".to_string(), "https://at-chat.app".to_string());
+
+            match (
+                web_push::VapidSignatureBuilder::from_base64(private_key, &subscription_info),
+                content.to_payload(),
+            ) {
+                (Ok(key), Ok(content2)) => {
                     match key.build() {
                         Ok(sig_builder) => {
-                            // Now add payload and encrypt.
-                            let mut builder =
+                            let mut builder: web_push::WebPushMessageBuilder<'_> =
                                 web_push::WebPushMessageBuilder::new(&subscription_info);
-                            let content =
-                                "Encrypted payload to be sent in the notification".as_bytes();
-                            builder.set_payload(web_push::ContentEncoding::Aes128Gcm, content);
+
+                            builder.set_payload(web_push::ContentEncoding::Aes128Gcm, &content2);
                             builder.set_vapid_signature(sig_builder);
 
                             match web_push::IsahcWebPushClient::new() {
@@ -142,7 +123,7 @@ async fn push_notification_endpoint(request: Request) -> Response<String> {
                     }
                 }
 
-                Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
+                _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
             }
         }
         _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 0")),
@@ -1038,3 +1019,106 @@ const CONTENT_TYPES: [&'static str; 686] = [
     "test/mimetyp",
     "x-conference/x-cooltalk",
 ];
+
+/// Declarative notification that can be used to populate the payload of a web push.
+///
+/// See https://webkit.org/blog/16535/meet-declarative-web-push
+#[derive(Debug, Serialize)]
+pub struct Notification<D: Serialize> {
+    pub title: String,
+    pub navigate: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vibrate: Option<Vec<u32>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub renotify: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silent: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requireInteraction")]
+    pub require_interaction: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<D>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<NotificationAction>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NotificationAction {
+    pub title: String,
+    pub action: String,
+    pub navigate: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+impl<D: Serialize> Notification<D> {
+    pub fn new(title: String, navigate: String) -> Self {
+        Notification {
+            title,
+            navigate,
+            lang: None,
+            dir: None,
+            tag: None,
+            body: None,
+            icon: None,
+            image: None,
+            badge: None,
+            vibrate: None,
+            timestamp: None,
+            renotify: None,
+            silent: None,
+            require_interaction: None,
+            data: None,
+            actions: None,
+        }
+    }
+
+    pub fn to_payload(&self) -> serde_json::Result<Vec<u8>> {
+        serde_json::to_vec(&DeclarativePushPayload::new(self))
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct DeclarativePushPayload<'a, D: Serialize> {
+    web_push: u16,
+    pub notification: &'a Notification<D>,
+}
+
+impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
+    pub fn new(notification: &'a Notification<D>) -> Self {
+        DeclarativePushPayload {
+            web_push: 8030,
+            notification,
+        }
+    }
+}
