@@ -86,7 +86,6 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser)
-import Vapid exposing (NotificationError, RawKeyPair)
 
 
 type FrontendModel
@@ -261,7 +260,8 @@ type alias BackendModel =
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
     , files : SeqDict FileHash BackendFileData
-    , vapidKey : RawKeyPair
+    , privateVapidKey : String
+    , publicVapidKey : String
     }
 
 

@@ -55,15 +55,12 @@ import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
-import Task as RegularTask
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import UInt64
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
-import Vapid
-import VendoredBase64
 
 
 app :
@@ -173,7 +170,8 @@ init =
       , discordDms = OneToOne.empty
       , botToken = Nothing
       , files = SeqDict.empty
-      , vapidKey = { publicKey = Env.vapidPublicKey, privateKey = Env.vapidPrivateKey }
+      , publicVapidKey = Env.vapidPublicKey
+      , privateVapidKey = Env.vapidPrivateKey
       }
     , Command.none
     )
@@ -1405,7 +1403,7 @@ getLoginData sessionId userId user model =
                 )
             |> SeqDict.fromList
     , sessionId = sessionId
-    , vapidPublicKey = model.vapidKey.publicKey
+    , vapidPublicKey = model.publicVapidKey
     }
 
 
@@ -2450,7 +2448,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
                     , Http.header "p256dh" pushSubscription.p256dh
                     , Http.header "auth" pushSubscription.auth
-                    , Http.header "private-key" model.vapidKey.privateKey
+                    , Http.header "private-key" model.privateVapidKey
                     ]
                 , url = FileStatus.domain ++ "/file/push-notification"
                 , body = Http.emptyBody

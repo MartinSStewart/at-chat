@@ -34,7 +34,6 @@ import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url exposing (Url)
-import Vapid
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
