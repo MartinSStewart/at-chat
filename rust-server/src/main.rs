@@ -50,13 +50,28 @@ async fn push_notification_endpoint(request: Request) -> Response<String> {
         headers.get("p256dh").map(|a| a.to_str()),
         headers.get("auth").map(|a| a.to_str()),
         headers.get("private-key").map(|a| a.to_str()),
+        headers.get("title").map(|a| a.to_str()),
+        headers.get("body").map(|a| a.to_str()),
+        headers.get("icon").map(|a| a.to_str()),
     ) {
-        (Some(Ok(endpoint)), Some(Ok(p256dh)), Some(Ok(auth)), Some(Ok(private_key))) => {
+        (
+            Some(Ok(endpoint)),
+            Some(Ok(p256dh)),
+            Some(Ok(auth)),
+            Some(Ok(private_key)),
+            Some(Ok(title)),
+            Some(Ok(body)),
+            Some(Ok(icon)),
+        ) => {
             // You would likely get this by deserializing a browser `pushSubscription` object.
             let subscription_info: SubscriptionInfo = SubscriptionInfo::new(endpoint, p256dh, auth);
 
-            let content: Notification<u8> =
-                Notification::new("at-chat".to_string(), "https://at-chat.app".to_string());
+            let content: Notification<u8> = Notification::new(
+                title.to_string(),
+                "https://at-chat.app".to_string(),
+                Some(body.to_string()),
+                Some(icon.to_string()),
+            );
 
             match (
                 web_push::VapidSignatureBuilder::from_base64(private_key, &subscription_info),
@@ -1082,15 +1097,20 @@ pub struct NotificationAction {
 }
 
 impl<D: Serialize> Notification<D> {
-    pub fn new(title: String, navigate: String) -> Self {
+    pub fn new(
+        title: String,
+        navigate: String,
+        body: Option<String>,
+        icon: Option<String>,
+    ) -> Self {
         Notification {
             title,
             navigate,
             lang: None,
             dir: None,
             tag: None,
-            body: None,
-            icon: None,
+            body: body,
+            icon: icon,
             image: None,
             badge: None,
             vibrate: None,

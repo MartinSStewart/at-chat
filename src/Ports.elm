@@ -12,6 +12,8 @@ port module Ports exposing
     , cropImageFromJs
     , cropImageToJs
     , hapticFeedback
+    , isPushNotificationsRegistered
+    , isPushNotificationsRegisteredSubscription
     , loadSounds
     , playSound
     , registerPushSubscription
@@ -20,6 +22,7 @@ port module Ports exposing
     , setFavicon
     , showNotification
     , textInputSelectAll
+    , unregisterPushSubscriptionToJs
     )
 
 import Bytes exposing (Bytes)
@@ -91,12 +94,48 @@ port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
 
 
+port unregister_push_subscription_to_js : Json.Encode.Value -> Cmd msg
+
+
+port is_push_subscription_registered_to_js : Json.Encode.Value -> Cmd msg
+
+
+port is_push_subscription_registered_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
 registerPushSubscriptionToJs : String -> Command FrontendOnly toMsg msg
 registerPushSubscriptionToJs publicKey =
     Command.sendToJs
         "register_push_subscription_to_js"
         register_push_subscription_to_js
         (Json.Encode.string publicKey)
+
+
+unregisterPushSubscriptionToJs : Command FrontendOnly toMsg msg
+unregisterPushSubscriptionToJs =
+    Command.sendToJs
+        "unregister_push_subscription_to_js"
+        unregister_push_subscription_to_js
+        Json.Encode.null
+
+
+isPushNotificationsRegistered : Command FrontendOnly toMsg msg
+isPushNotificationsRegistered =
+    Command.sendToJs
+        "is_push_subscription_registered_to_js"
+        is_push_subscription_registered_to_js
+        Json.Encode.null
+
+
+isPushNotificationsRegisteredSubscription : (Bool -> msg) -> Subscription FrontendOnly msg
+isPushNotificationsRegisteredSubscription msg =
+    Subscription.fromJs
+        "is_push_subscription_registered_from_js"
+        is_push_subscription_registered_from_js
+        (\json ->
+            Json.Decode.decodeValue (Json.Decode.map msg Json.Decode.bool) json
+                |> Result.withDefault (msg False)
+        )
 
 
 type alias PushSubscription =

@@ -13,11 +13,11 @@ exports.init = async function init(app)
 {
     // Register a Service Worker.
 
-
+    const serviceWorkerJs = '/service-worker.js';
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
         console.log("register");
-        navigator.serviceWorker.register('/service-worker.js');
+        navigator.serviceWorker.register(serviceWorkerJs);
 
         navigator.serviceWorker.ready
         .then(function(registration) {
@@ -48,6 +48,28 @@ exports.init = async function init(app)
         });
     });
 
+    app.ports.is_push_subscription_registered_to_js.subscribe((a) => {
+        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+            if (registration) {
+                app.ports.is_push_subscription_registered_from_js.send(true);
+            } else {
+                app.ports.is_push_subscription_registered_from_js.send(false);
+            }
+        });
+    });
+
+    app.ports.unregister_push_subscription_to_js.subscribe((a) => {
+        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+            if (registration) {
+                console.log("unregistered");
+                registration
+                    .unregister()
+                    .then((isSuccessful) => {
+                      console.log(isSuccessful);
+                   });
+            }
+        });
+    });
 
 
     let context = null;

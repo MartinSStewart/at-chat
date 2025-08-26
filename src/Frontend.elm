@@ -112,6 +112,7 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
+        , Ports.isPushNotificationsRegisteredSubscription GotIsPushNotificationsRegistered
         , case model of
             Loading _ ->
                 Subscription.none
@@ -220,6 +221,7 @@ init url key =
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
+        , enabledPushNotifications = False
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -230,6 +232,7 @@ init url key =
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
+        , Ports.isPushNotificationsRegistered
         ]
     )
 
@@ -275,6 +278,7 @@ initLoadedFrontend loading time loginResult =
             , dragPrevious = NoDrag
             , scrolledToBottomOfChannel = True
             , aiChatModel = aiChatModel
+            , enabledPushNotifications = loading.enabledPushNotifications
             }
 
         ( model2, cmdA ) =
@@ -459,6 +463,9 @@ update msg model =
 
                 GotTimezone timezone ->
                     ( Loading { loading | timezone = timezone }, Command.none )
+
+                GotIsPushNotificationsRegistered isEnabled ->
+                    tryInitLoadedFrontend { loading | enabledPushNotifications = isEnabled }
 
                 _ ->
                     ( model, Command.none )
@@ -1009,6 +1016,12 @@ isPressMsg msg =
         GotRegisterPushSubscription result ->
             False
 
+        ToggledEnablePushNotifications bool ->
+            True
+
+        GotIsPushNotificationsRegistered bool ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1176,12 +1189,6 @@ updateLoaded msg model =
                 [ cmd
                 , routeCmd
                 , notificationRequest
-                , case model.loginStatus of
-                    LoggedIn loggedIn ->
-                        Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
-
-                    NotLoggedIn _ ->
-                        Command.none
                 ]
             )
 
@@ -2957,6 +2964,22 @@ updateLoaded msg model =
                 Err _ ->
                     Command.none
             )
+
+        ToggledEnablePushNotifications isEnabled ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( loggedIn
+                    , if isEnabled then
+                        Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
+
+                      else
+                        Ports.unregisterPushSubscriptionToJs
+                    )
+                )
+                { model | enabledPushNotifications = isEnabled }
+
+        GotIsPushNotificationsRegistered isEnabled ->
+            ( { model | enabledPushNotifications = isEnabled }, Command.none )
 
 
 pressedReply : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4957,6 +4980,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -5009,6 +5033,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 

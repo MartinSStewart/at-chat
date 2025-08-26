@@ -102,6 +102,7 @@ type alias LoadingFrontend =
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , timezone : Time.Zone
+    , enabledPushNotifications : Bool
     }
 
 
@@ -128,6 +129,7 @@ type alias LoadedFrontend =
     , dragPrevious : Drag
     , scrolledToBottomOfChannel : Bool
     , aiChatModel : AiChat.FrontendModel
+    , enabledPushNotifications : Bool
     }
 
 
@@ -395,6 +397,8 @@ type FrontendMsg
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
     | MessageViewMsg GuildOrDmId MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
+    | ToggledEnablePushNotifications Bool
+    | GotIsPushNotificationsRegistered Bool
 
 
 type alias NewChannelForm =

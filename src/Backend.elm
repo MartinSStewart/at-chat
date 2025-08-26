@@ -2449,6 +2449,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , Http.header "p256dh" pushSubscription.p256dh
                     , Http.header "auth" pushSubscription.auth
                     , Http.header "private-key" model.privateVapidKey
+                    , Http.header "title" "Success!"
+                    , Http.header "body" "Push notifications enabled"
+                    , Http.header "icon" "https://at-chat.app/at-logo-no-background.png"
                     ]
                 , url = FileStatus.domain ++ "/file/push-notification"
                 , body = Http.emptyBody
