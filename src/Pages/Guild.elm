@@ -2923,7 +2923,19 @@ friendsColumn isMobile openedOtherUserId local =
                 (\( otherUserId, _ ) ->
                     case LocalState.getUser otherUserId local.localUser of
                         Just otherUser ->
-                            Ui.Lazy.lazy4 friendLabel isMobile openedOtherUserId otherUserId otherUser |> Just
+                            Ui.Lazy.lazy4
+                                friendLabel
+                                isMobile
+                                (case openedOtherUserId of
+                                    Just ( a, _ ) ->
+                                        a == otherUserId
+
+                                    Nothing ->
+                                        False
+                                )
+                                otherUserId
+                                otherUser
+                                |> Just
 
                         Nothing ->
                             Nothing
@@ -2933,18 +2945,9 @@ friendsColumn isMobile openedOtherUserId local =
         )
 
 
-friendLabel : Bool -> Maybe ( Id UserId, ThreadRouteWithMaybeMessage ) -> Id UserId -> FrontendUser -> Element FrontendMsg
-friendLabel isMobile openedOtherUserId otherUserId otherUser =
+friendLabel : Bool -> Bool -> Id UserId -> FrontendUser -> Element FrontendMsg
+friendLabel isMobile isSelected otherUserId otherUser =
     let
-        isSelected : Bool
-        isSelected =
-            case openedOtherUserId of
-                Just ( openedOtherUserId2, _ ) ->
-                    openedOtherUserId2 == otherUserId
-
-                Nothing ->
-                    False
-
         _ =
             Debug.log "rerender friendLabel" ()
     in
