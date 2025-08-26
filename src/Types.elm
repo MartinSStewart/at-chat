@@ -264,6 +264,7 @@ type alias BackendModel =
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : String
     , publicVapidKey : String
+    , pushSubscriptions : SeqDict SessionId PushSubscription
     }
 
 
@@ -431,6 +432,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest
     | RegisterPushSubscriptionRequest PushSubscription
+    | UnregisterPushSubscriptionRequest
 
 
 type BackendMsg

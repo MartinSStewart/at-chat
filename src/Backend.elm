@@ -47,6 +47,7 @@ import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pagination
 import PersonName
+import Ports exposing (PushSubscription)
 import Postmark
 import Quantity
 import RichText exposing (RichText)
@@ -172,6 +173,7 @@ init =
       , files = SeqDict.empty
       , publicVapidKey = Env.vapidPublicKey
       , privateVapidKey = Env.vapidPrivateKey
+      , pushSubscriptions = SeqDict.empty
       }
     , Command.none
     )
@@ -2441,25 +2443,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         RegisterPushSubscriptionRequest pushSubscription ->
-            ( model
-            , Http.request
-                { method = "POST"
-                , headers =
-                    [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
-                    , Http.header "p256dh" pushSubscription.p256dh
-                    , Http.header "auth" pushSubscription.auth
-                    , Http.header "private-key" model.privateVapidKey
-                    , Http.header "title" "Success!"
-                    , Http.header "body" "Push notifications enabled"
-                    , Http.header "icon" "https://at-chat.app/at-logo-no-background.png"
-                    ]
-                , url = FileStatus.domain ++ "/file/push-notification"
-                , body = Http.emptyBody
-                , expect = Http.expectWhatever SentNotification
-                , timeout = Duration.seconds 30 |> Just
-                , tracker = Nothing
-                }
+            ( { model | pushSubscriptions = SeqDict.insert sessionId pushSubscription model.pushSubscriptions }
+            , pushNotification
+                "Success!"
+                "Push notifications enabled"
+                "https://at-chat.app/at-logo-no-background.png"
+                pushSubscription
+                model
             )
+
+        UnregisterPushSubscriptionRequest ->
+            ( { model | pushSubscriptions = SeqDict.remove sessionId model.pushSubscriptions }, Command.none )
+
+
+pushNotification : String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification title body icon pushSubscription model =
+    Http.request
+        { method = "POST"
+        , headers =
+            [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
+            , Http.header "p256dh" pushSubscription.p256dh
+            , Http.header "auth" pushSubscription.auth
+            , Http.header "private-key" model.privateVapidKey
+            , Http.header "title" title
+            , Http.header "body" body
+            , Http.header "icon" icon
+            ]
+        , url = FileStatus.domain ++ "/file/push-notification"
+        , body = Http.emptyBody
+        , expect = Http.expectWhatever SentNotification
+        , timeout = Duration.seconds 30 |> Just
+        , tracker = Nothing
+        }
 
 
 sendEditMessage :
@@ -2931,26 +2946,11 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         }
                         model.users
               }
-            , Command.batch
-                [ LocalChangeResponse
-                    changeId
-                    (Local_SendMessage time (GuildOrDmId_Dm_NoThread otherUserId) text threadRouteWithReplyTo attachedFiles)
-                    |> Lamdera.sendToFrontend clientId
-                , broadcastToDmChannel
-                    clientId
-                    userId
-                    otherUserId
-                    (\otherUserId2 ->
-                        Server_SendMessage
-                            userId
-                            time
-                            (GuildOrDmId_Dm_NoThread otherUserId2)
-                            text
-                            threadRouteWithReplyTo
-                            attachedFiles
-                    )
-                    model
-                ]
+            , if userId == otherUserId then
+                Command.none
+
+              else
+                broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
             )
 
         NoThreadWithMaybeMessage repliedTo ->
@@ -2986,24 +2986,11 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         model.users
               }
             , Command.batch
-                [ LocalChangeResponse
-                    changeId
-                    (Local_SendMessage time (GuildOrDmId_Dm_NoThread otherUserId) text threadRouteWithReplyTo attachedFiles)
-                    |> Lamdera.sendToFrontend clientId
-                , broadcastToDmChannel
-                    clientId
-                    userId
-                    otherUserId
-                    (\otherUserId2 ->
-                        Server_SendMessage
-                            userId
-                            time
-                            (GuildOrDmId_Dm_NoThread otherUserId2)
-                            text
-                            threadRouteWithReplyTo
-                            attachedFiles
-                    )
-                    model
+                [ if userId == otherUserId then
+                    Command.none
+
+                  else
+                    broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
                 , case ( OneToOne.first dmChannelId model.discordDms, model.botToken ) of
                     ( Just discordChannelId, Just botToken ) ->
                         Discord.createMessage
@@ -3024,6 +3011,82 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         Command.none
                 ]
             )
+
+
+broadcastDm :
+    ChangeId
+    -> Time.Posix
+    -> ClientId
+    -> Id UserId
+    -> Id UserId
+    -> Nonempty RichText
+    -> ThreadRouteWithMaybeMessage
+    -> SeqDict (Id FileId) FileData
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model =
+    Command.batch
+        [ LocalChangeResponse
+            changeId
+            (Local_SendMessage time (GuildOrDmId_Dm_NoThread otherUserId) text threadRouteWithReplyTo attachedFiles)
+            |> Lamdera.sendToFrontend clientId
+        , broadcastToDmChannel
+            clientId
+            userId
+            otherUserId
+            (\otherUserId2 ->
+                Server_SendMessage
+                    userId
+                    time
+                    (GuildOrDmId_Dm_NoThread otherUserId2)
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+            )
+            model
+        , case NonemptyDict.get otherUserId model.users of
+            Just otherUser ->
+                broadcastNotification
+                    otherUserId
+                    otherUser
+                    (RichText.toString (NonemptyDict.toSeqDict model.users) text)
+                    model
+
+            Nothing ->
+                Command.none
+        ]
+
+
+broadcastNotification : Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
+broadcastNotification userId user text model =
+    SeqDict.foldl
+        (\sessionId userIdKey cmds ->
+            if userIdKey == userId then
+                case SeqDict.get sessionId model.pushSubscriptions of
+                    Just pushSubscription ->
+                        pushNotification
+                            (PersonName.toString user.name)
+                            text
+                            (case user.icon of
+                                Just icon ->
+                                    FileStatus.fileUrl FileStatus.pngContent icon
+
+                                Nothing ->
+                                    Env.domain ++ "/at-logo-no-background.png"
+                            )
+                            pushSubscription
+                            model
+                            :: cmds
+
+                    Nothing ->
+                        cmds
+
+            else
+                cmds
+        )
+        []
+        model.sessions
+        |> Command.batch
 
 
 broadcastToDmChannel :
@@ -3108,6 +3171,10 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 NoThread
                         )
                         channel
+
+                plainText : String
+                plainText =
+                    RichText.toString (NonemptyDict.toSeqDict model.users) text
             in
             ( { model
                 | guilds =
@@ -3154,6 +3221,19 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
+                , RichText.mentionsUser text
+                    |> SeqSet.remove userId
+                    |> SeqSet.foldl
+                        (\userId2 cmds ->
+                            case NonemptyDict.get userId2 model.users of
+                                Just user2 ->
+                                    broadcastNotification userId2 user2 plainText model :: cmds
+
+                                Nothing ->
+                                    cmds
+                        )
+                        []
+                    |> Command.batch
                 , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let

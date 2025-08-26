@@ -56,6 +56,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -2973,7 +2974,10 @@ updateLoaded msg model =
                         Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
 
                       else
-                        Ports.unregisterPushSubscriptionToJs
+                        Command.batch
+                            [ Ports.unregisterPushSubscriptionToJs
+                            , Lamdera.sendToBackend UnregisterPushSubscriptionRequest
+                            ]
                     )
                 )
                 { model | enabledPushNotifications = isEnabled }
@@ -4704,7 +4708,7 @@ playNotificationSound senderId threadRouteWithRepliedTo channel local content mo
     if
         (senderId /= local.localUser.userId)
             && ((repliedToUserId == Just local.localUser.userId)
-                    || RichText.mentionsUser local.localUser.userId content
+                    || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
                )
     then
         Command.batch

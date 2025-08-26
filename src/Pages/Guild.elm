@@ -109,7 +109,7 @@ channelOrThreadHasNotifications currentUserId lastViewed channel =
 
                                 else if
                                     (repliedToUserId data.repliedTo channel == Just currentUserId)
-                                        || RichText.mentionsUser currentUserId data.content
+                                        || SeqSet.member currentUserId (RichText.mentionsUser data.content)
                                 then
                                     NewMessageForUser
 
@@ -1434,7 +1434,7 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
             (case guildOrDmId of
                 GuildOrDmId_Dm otherUserId _ ->
                     Ui.row
-                        [ Ui.Font.color MyUi.font1 ]
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.userId then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
@@ -2058,7 +2058,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if RichText.mentionsUser localUser.userId message2.content then
+                        if SeqSet.member localUser.userId (RichText.mentionsUser message2.content) then
                             MentionHighlight
 
                         else
