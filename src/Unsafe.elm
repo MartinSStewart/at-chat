@@ -1,19 +1,16 @@
 module Unsafe exposing
-    ( base64Decode
-    , channelName
+    ( channelName
     , emailAddress
     , guildName
     , personName
     , url
     )
 
-import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
 import Url exposing (Url)
-import VendoredBase64
 
 
 url : String -> Url
@@ -61,16 +58,6 @@ emailAddress a =
     case EmailAddress.fromString a of
         Just b ->
             b
-
-        Nothing ->
-            unreachable 0
-
-
-base64Decode : String -> Bytes
-base64Decode string =
-    case VendoredBase64.toBytes string of
-        Just bytes ->
-            bytes
 
         Nothing ->
             unreachable 0
