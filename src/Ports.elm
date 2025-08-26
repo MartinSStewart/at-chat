@@ -35,7 +35,6 @@ import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url exposing (Url)
 import Vapid
-import VendoredBase64
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -93,16 +92,12 @@ port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
 
 
-registerPushSubscriptionToJs : Bytes -> Command FrontendOnly toMsg msg
+registerPushSubscriptionToJs : String -> Command FrontendOnly toMsg msg
 registerPushSubscriptionToJs publicKey =
-    let
-        publicKey2 =
-            Debug.log "register_push_subscription_to_js" (Vapid.urlSafeBase64 publicKey)
-    in
     Command.sendToJs
         "register_push_subscription_to_js"
         register_push_subscription_to_js
-        (Json.Encode.string publicKey2)
+        (Json.Encode.string publicKey)
 
 
 type alias PushSubscription =

@@ -1006,6 +1006,9 @@ isPressMsg msg =
         MessageViewMsg _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
+        GotRegisterPushSubscription result ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1168,7 +1171,19 @@ updateLoaded msg model =
                 ( model3, routeCmd ) =
                     routePush model2 route
             in
-            ( model3, Command.batch [ cmd, routeCmd, notificationRequest ] )
+            ( model3
+            , Command.batch
+                [ cmd
+                , routeCmd
+                , notificationRequest
+                , case model.loginStatus of
+                    LoggedIn loggedIn ->
+                        Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
+
+                    NotLoggedIn _ ->
+                        Command.none
+                ]
+            )
 
         TypedMessage guildOrDmId text ->
             updateLoggedIn
@@ -2928,6 +2943,20 @@ updateLoaded msg model =
 
                         _ ->
                             ( model, Command.none )
+
+        GotRegisterPushSubscription result ->
+            let
+                _ =
+                    Debug.log "Got register PushSubscription" result
+            in
+            ( model
+            , case result of
+                Ok endpoint ->
+                    Lamdera.sendToBackend (RegisterPushSubscriptionRequest endpoint)
+
+                Err _ ->
+                    Command.none
+            )
 
 
 pressedReply : GuildOrDmId -> Id ChannelMessageId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

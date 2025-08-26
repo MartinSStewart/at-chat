@@ -16,6 +16,7 @@ exports.init = async function init(app)
 
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
+        console.log("register");
         navigator.serviceWorker.register('/service-worker.js');
 
         navigator.serviceWorker.ready
@@ -29,6 +30,7 @@ exports.init = async function init(app)
                 if (subscription) {
                     return subscription;
                 }
+                console.log("register3");
 
                 // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
                 // send notifications that don't have a visible effect for the user).
@@ -39,6 +41,7 @@ exports.init = async function init(app)
             });
         }).then(function(subscription) {
           // Send the subscription details to the server using the Fetch API.
+          console.log("register2");
           console.log(subscription);
           console.log(subscription.toJSON());
           app.ports.register_push_subscription_from_js.send(subscription.toJSON());

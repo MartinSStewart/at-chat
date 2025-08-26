@@ -60,7 +60,10 @@ import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import UInt64
 import Unsafe
+import Url
 import User exposing (BackendUser, EmailStatus(..))
+import Vapid
+import VendoredBase64
 
 
 app :
@@ -170,6 +173,7 @@ init =
       , discordDms = OneToOne.empty
       , botToken = Nothing
       , files = SeqDict.empty
+      , vapidKey = { publicKey = Env.vapidPublicKey, privateKey = Env.vapidPrivateKey }
       }
     , Command.none
     )
@@ -650,6 +654,9 @@ update msg model =
 
                 Err _ ->
                     ( model, Command.none )
+
+        SentNotification result ->
+            ( model, Command.none )
 
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
@@ -1398,6 +1405,7 @@ getLoginData sessionId userId user model =
                 )
             |> SeqDict.fromList
     , sessionId = sessionId
+    , vapidPublicKey = model.vapidKey.publicKey
     }
 
 
@@ -2432,6 +2440,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Nothing ->
                     Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
+            )
+
+        RegisterPushSubscriptionRequest pushSubscription ->
+            ( model
+            , Http.request
+                { method = "POST"
+                , headers =
+                    [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
+                    , Http.header "p256dh" pushSubscription.p256dh
+                    , Http.header "auth" pushSubscription.auth
+                    , Http.header "private-key" model.vapidKey.privateKey
+                    ]
+                , url = FileStatus.domain ++ "/file/push-notification"
+                , body = Http.emptyBody
+                , expect = Http.expectWhatever SentNotification
+                , timeout = Duration.seconds 30 |> Just
+                , tracker = Nothing
+                }
             )
 
 

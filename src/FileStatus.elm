@@ -8,6 +8,7 @@ module FileStatus exposing
     , addFileHash
     , contentType
     , contentTypeType
+    , domain
     , fileHash
     , fileUploadPreview
     , fileUrl

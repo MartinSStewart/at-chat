@@ -73,7 +73,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PwaStatus)
+import Ports exposing (NotificationPermission, PushSubscription, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
 import RichText exposing (RichText)
@@ -165,7 +165,7 @@ type alias LoggedIn2 =
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
     , isReloading : Bool
-    , vapidPublicKey : Maybe Bytes
+    , vapidPublicKey : String
     }
 
 
@@ -261,7 +261,7 @@ type alias BackendModel =
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
     , files : SeqDict FileHash BackendFileData
-    , vapidKey : Maybe RawKeyPair
+    , vapidKey : RawKeyPair
     }
 
 
@@ -462,9 +462,7 @@ type BackendMsg
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
-    | PushedMessage (Result Http.Error ())
-    | GeneratedVapidKey (Result {} RawKeyPair)
-    | GotVapidDetails (Result Vapid.NotificationError String)
+    | SentNotification (Result Http.Error ())
 
 
 type LoginResult
@@ -497,7 +495,7 @@ type alias LoginData =
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
-    , vapidPublicKey : Maybe Bytes
+    , vapidPublicKey : String
     }
 
 
