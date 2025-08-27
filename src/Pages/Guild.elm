@@ -21,6 +21,7 @@ import Array.Extra
 import Bitwise
 import ChannelName
 import Coord
+import Date exposing (Date)
 import DmChannel exposing (DmChannel, LastTypedAt, Thread)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -1014,7 +1015,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
             MyUi.isMobile model
     in
     Array.foldr
-        (\message ( index, list ) ->
+        (\message ( index, maybeLastDate, list ) ->
             let
                 messageId : Id ChannelMessageId
                 messageId =
@@ -1076,33 +1077,54 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
 
                 newLine : List (Element msg)
                 newLine =
-                    if Id.increment lastViewedIndex == messageId then
-                        [ Ui.el
-                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                            , Ui.borderColor MyUi.alertColor
-                            , Ui.inFront
-                                (Ui.el
-                                    [ Ui.Font.color MyUi.font1
-                                    , Ui.background MyUi.alertColor
-                                    , Ui.width Ui.shrink
-                                    , Ui.paddingXY 4 0
-                                    , Ui.alignRight
-                                    , Ui.Font.size 12
-                                    , Ui.contentCenterY
-                                    , Ui.Font.bold
-                                    , Ui.height (Ui.px 15)
-                                    , Ui.roundedWith
-                                        { bottomLeft = 8, bottomRight = 0, topLeft = 8, topRight = 0 }
-                                    , Ui.move { x = 0, y = -8, z = 0 }
+                    case maybeLastDate of
+                        Just lastDate ->
+                            case ( lastViewedIndex == messageId, date == lastDate ) of
+                                ( True, True ) ->
+                                    [ Ui.el
+                                        ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                         , Ui.borderColor MyUi.alertColor
+                                         ]
+                                            ++ newContentLabel
+                                        )
+                                        Ui.none
                                     ]
-                                    (Ui.text "New")
-                                )
-                            ]
-                            Ui.none
-                        ]
 
-                    else
-                        []
+                                ( False, False ) ->
+                                    [ Ui.el
+                                        [ Ui.paddingXY 8 0
+                                        , Ui.height (Ui.px 36)
+                                        , Ui.contentCenterY
+                                        , MyUi.noShrinking
+                                        ]
+                                        (Ui.el
+                                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                            , Ui.borderColor MyUi.font3
+                                            , dateDivider date lastDate
+                                            ]
+                                            Ui.none
+                                        )
+                                    ]
+
+                                ( True, False ) ->
+                                    [ Ui.el
+                                        [ Ui.height (Ui.px 36), Ui.contentCenterY, MyUi.noShrinking ]
+                                        (Ui.el
+                                            ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                             , Ui.borderColor MyUi.alertColor
+                                             , dateDivider date lastDate
+                                             ]
+                                                ++ newContentLabel
+                                            )
+                                            Ui.none
+                                        )
+                                    ]
+
+                                ( False, True ) ->
+                                    []
+
+                        Nothing ->
+                            []
 
                 maybeRepliedTo : Maybe ( Id ChannelMessageId, Message )
                 maybeRepliedTo =
@@ -1125,107 +1147,170 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
 
                         DeletedMessage _ ->
                             Nothing
+
+                date : Date
+                date =
+                    (case message of
+                        UserTextMessage data ->
+                            data.createdAt
+
+                        UserJoinedMessage posix id seqDict ->
+                            posix
+
+                        DeletedMessage posix ->
+                            posix
+                    )
+                        |> Date.fromPosix local.localUser.timezone
             in
             ( index - 1
-            , newLine
-                ++ (case isEditing of
-                        Just editing ->
-                            if MyUi.isMobile model then
-                                -- On mobile, we show the editor at the bottom instead
-                                messageView
-                                    isMobile
-                                    containerWidth
-                                    True
-                                    revealedSpoilers
-                                    highlight
-                                    messageHover2
-                                    otherUserIsEditing
-                                    local.localUser
-                                    maybeRepliedTo
-                                    (SeqDict.get threadId threads)
-                                    messageId
-                                    message
-                                    |> Ui.map (MessageViewMsg guildOrDmId)
+            , Just date
+            , (case isEditing of
+                Just editing ->
+                    if MyUi.isMobile model then
+                        -- On mobile, we show the editor at the bottom instead
+                        messageView
+                            isMobile
+                            containerWidth
+                            True
+                            revealedSpoilers
+                            highlight
+                            messageHover2
+                            otherUserIsEditing
+                            local.localUser
+                            maybeRepliedTo
+                            (SeqDict.get threadId threads)
+                            messageId
+                            message
+                            |> Ui.map (MessageViewMsg guildOrDmId)
 
-                            else
-                                messageEditingView
-                                    isMobile
-                                    guildOrDmId
-                                    messageId
-                                    message
-                                    maybeRepliedTo
-                                    (SeqDict.get threadId threads)
-                                    revealedSpoilers
-                                    editing
-                                    loggedIn.pingUser
-                                    local
+                    else
+                        messageEditingView
+                            isMobile
+                            guildOrDmId
+                            messageId
+                            message
+                            maybeRepliedTo
+                            (SeqDict.get threadId threads)
+                            revealedSpoilers
+                            editing
+                            loggedIn.pingUser
+                            local
 
+                Nothing ->
+                    case SeqDict.get threadId threads of
                         Nothing ->
-                            case SeqDict.get threadId threads of
+                            case maybeRepliedTo of
+                                Just _ ->
+                                    messageView
+                                        isMobile
+                                        containerWidth
+                                        True
+                                        revealedSpoilers
+                                        highlight
+                                        messageHover2
+                                        otherUserIsEditing
+                                        local.localUser
+                                        maybeRepliedTo
+                                        Nothing
+                                        messageId
+                                        message
+                                        |> Ui.map (MessageViewMsg guildOrDmId)
+
                                 Nothing ->
-                                    case maybeRepliedTo of
-                                        Just _ ->
-                                            messageView
-                                                isMobile
-                                                containerWidth
-                                                True
-                                                revealedSpoilers
-                                                highlight
-                                                messageHover2
-                                                otherUserIsEditing
-                                                local.localUser
-                                                maybeRepliedTo
-                                                Nothing
-                                                messageId
-                                                message
-                                                |> Ui.map (MessageViewMsg guildOrDmId)
+                                    Ui.Lazy.lazy5
+                                        messageViewNotThreadStarter
+                                        (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                        SeqDict.empty
+                                        --revealedSpoilers
+                                        local.localUser
+                                        index
+                                        message
+                                        |> Ui.map (MessageViewMsg guildOrDmId)
 
-                                        Nothing ->
-                                            Ui.Lazy.lazy5
-                                                messageViewNotThreadStarter
-                                                (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                SeqDict.empty
-                                                --revealedSpoilers
-                                                local.localUser
-                                                index
-                                                message
-                                                |> Ui.map (MessageViewMsg guildOrDmId)
+                        Just thread ->
+                            case maybeRepliedTo of
+                                Just _ ->
+                                    messageView
+                                        isMobile
+                                        containerWidth
+                                        True
+                                        revealedSpoilers
+                                        highlight
+                                        messageHover2
+                                        otherUserIsEditing
+                                        local.localUser
+                                        maybeRepliedTo
+                                        (Just thread)
+                                        messageId
+                                        message
+                                        |> Ui.map (MessageViewMsg guildOrDmId)
 
-                                Just thread ->
-                                    case maybeRepliedTo of
-                                        Just _ ->
-                                            messageView
-                                                isMobile
-                                                containerWidth
-                                                True
-                                                revealedSpoilers
-                                                highlight
-                                                messageHover2
-                                                otherUserIsEditing
-                                                local.localUser
-                                                maybeRepliedTo
-                                                (Just thread)
-                                                messageId
-                                                message
-                                                |> Ui.map (MessageViewMsg guildOrDmId)
-
-                                        Nothing ->
-                                            Ui.Lazy.lazy6
-                                                messageViewThreadStarter
-                                                (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                                revealedSpoilers
-                                                local.localUser
-                                                index
-                                                thread
-                                                message
-                                                |> Ui.map (MessageViewMsg guildOrDmId)
-                   )
-                :: list
+                                Nothing ->
+                                    Ui.Lazy.lazy6
+                                        messageViewThreadStarter
+                                        (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
+                                        revealedSpoilers
+                                        local.localUser
+                                        index
+                                        thread
+                                        message
+                                        |> Ui.map (MessageViewMsg guildOrDmId)
+              )
+                :: newLine
+                ++ list
             )
         )
-        ( Array.length channel.messages - 1, [] )
+        ( Array.length channel.messages - 1, Nothing, [] )
         channel.messages
-        |> Tuple.second
+        |> (\( _, _, a ) -> a)
+
+
+dateDivider : Date -> Date -> Ui.Attribute msg
+dateDivider laterDate newDate =
+    Ui.inFront
+        (Ui.column
+            [ Ui.Font.color MyUi.font3
+            , Ui.width Ui.shrink
+            , Ui.centerX
+            , Ui.Font.size 14
+            , Ui.Font.center
+            , Ui.Font.bold
+            , Ui.move { x = 0, y = -20, z = 0 }
+            , Ui.rounded 4
+            , Ui.paddingXY 4 0
+            ]
+            [ Ui.text (MyUi.datestampDate laterDate)
+            , Ui.text (MyUi.datestampDate newDate)
+            ]
+        )
+
+
+newContentLabel : List (Ui.Attribute msg)
+newContentLabel =
+    [ Ui.inFront
+        (Ui.el
+            [ Ui.move { x = -6, y = -11, z = 0 }
+            , Ui.alignRight
+            , Ui.width Ui.shrink
+            , Ui.Font.bold
+            , Ui.Font.size 14
+            ]
+            (Ui.text "new")
+        )
+    , Ui.inFront
+        (Ui.el
+            [ Ui.Font.color MyUi.font1
+            , Ui.background MyUi.alertColor
+            , Ui.width (Ui.px 42)
+            , Ui.alignRight
+            , Ui.height (Ui.px 15)
+            , Ui.roundedWith
+                { bottomLeft = 8, bottomRight = 0, topLeft = 8, topRight = 0 }
+            , Ui.move { x = 0, y = -8, z = 0 }
+            ]
+            Ui.none
+        )
+    ]
 
 
 messageViewEncode : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int

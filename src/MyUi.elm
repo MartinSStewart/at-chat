@@ -15,6 +15,7 @@ module MyUi exposing
     , container
     , css
     , datestamp
+    , datestampDate
     , deleteButton
     , deleteButtonBackground
     , deleteButtonFont
@@ -67,6 +68,7 @@ module MyUi exposing
 import Color
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Date exposing (Date)
 import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress exposing (EmailAddress)
@@ -156,6 +158,51 @@ datestamp time =
         ++ String.padLeft 2 '0' (String.fromInt (monthToInt (Time.toMonth Time.utc time)))
         ++ "/"
         ++ String.right 2 (String.fromInt (Time.toYear Time.utc time))
+
+
+datestampDate : Date -> String
+datestampDate date =
+    (case Date.month date of
+        Jan ->
+            "January"
+
+        Feb ->
+            "February"
+
+        Mar ->
+            "March"
+
+        Apr ->
+            "April"
+
+        May ->
+            "May"
+
+        Jun ->
+            "June"
+
+        Jul ->
+            "July"
+
+        Aug ->
+            "August"
+
+        Sep ->
+            "September"
+
+        Oct ->
+            "October"
+
+        Nov ->
+            "November"
+
+        Dec ->
+            "December"
+    )
+        ++ " "
+        ++ String.fromInt (Date.day date)
+        ++ ", "
+        ++ String.fromInt (Date.year date)
 
 
 timestamp : Time.Posix -> Time.Zone -> String
