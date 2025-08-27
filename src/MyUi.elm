@@ -164,10 +164,10 @@ datestampDate : Date -> String
 datestampDate date =
     (case Date.month date of
         Jan ->
-            "Jan"
+            "January"
 
         Feb ->
-            "Feb"
+            "February"
 
         Mar ->
             "March"
@@ -185,45 +185,24 @@ datestampDate date =
             "July"
 
         Aug ->
-            "Aug"
+            "August"
 
         Sep ->
-            "Sep"
+            "September"
 
         Oct ->
-            "Oct"
+            "October"
 
         Nov ->
-            "Nov"
+            "November"
 
         Dec ->
-            "Dec"
+            "December"
     )
-        ++ (case Date.day date of
-                1 ->
-                    "1st"
-
-                2 ->
-                    "2nd"
-
-                3 ->
-                    "3rd"
-
-                21 ->
-                    "21st"
-
-                22 ->
-                    "22nd"
-
-                23 ->
-                    "23rd"
-
-                31 ->
-                    "31st"
-
-                value ->
-                    String.fromInt value ++ "th"
-           )
+        ++ " "
+        ++ String.fromInt (Date.day date)
+        ++ ", "
+        ++ String.fromInt (Date.year date)
 
 
 timestamp : Time.Posix -> Time.Zone -> String
