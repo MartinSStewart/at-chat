@@ -1082,16 +1082,21 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                             case ( lastViewedIndex == messageId, date == lastDate ) of
                                 ( True, True ) ->
                                     [ Ui.el
-                                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        , Ui.borderColor MyUi.alertColor
-                                        , newContentLabel
-                                        ]
+                                        ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                         , Ui.borderColor MyUi.alertColor
+                                         ]
+                                            ++ newContentLabel
+                                        )
                                         Ui.none
                                     ]
 
                                 ( False, False ) ->
                                     [ Ui.el
-                                        [ Ui.paddingXY 8 0, Ui.height (Ui.px 36), Ui.contentCenterY ]
+                                        [ Ui.paddingXY 8 0
+                                        , Ui.height (Ui.px 36)
+                                        , Ui.contentCenterY
+                                        , MyUi.noShrinking
+                                        ]
                                         (Ui.el
                                             [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
                                             , Ui.borderColor MyUi.font3
@@ -1103,13 +1108,14 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
 
                                 ( True, False ) ->
                                     [ Ui.el
-                                        [ Ui.height (Ui.px 36), Ui.contentCenterY ]
+                                        [ Ui.height (Ui.px 36), Ui.contentCenterY, MyUi.noShrinking ]
                                         (Ui.el
-                                            [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                            , Ui.borderColor MyUi.alertColor
-                                            , dateDivider date lastDate
-                                            , newContentLabel
-                                            ]
+                                            ([ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                             , Ui.borderColor MyUi.alertColor
+                                             , dateDivider date lastDate
+                                             ]
+                                                ++ newContentLabel
+                                            )
                                             Ui.none
                                         )
                                     ]
@@ -1279,25 +1285,32 @@ dateDivider laterDate newDate =
         )
 
 
-newContentLabel : Ui.Attribute msg
+newContentLabel : List (Ui.Attribute msg)
 newContentLabel =
-    Ui.inFront
+    [ Ui.inFront
+        (Ui.el
+            [ Ui.move { x = -6, y = -11, z = 0 }
+            , Ui.alignRight
+            , Ui.width Ui.shrink
+            , Ui.Font.bold
+            , Ui.Font.size 14
+            ]
+            (Ui.text "new")
+        )
+    , Ui.inFront
         (Ui.el
             [ Ui.Font.color MyUi.font1
             , Ui.background MyUi.alertColor
-            , Ui.width Ui.shrink
-            , Ui.paddingXY 4 0
+            , Ui.width (Ui.px 42)
             , Ui.alignRight
-            , Ui.Font.size 14
-            , Ui.contentCenterY
-            , Ui.Font.bold
             , Ui.height (Ui.px 15)
             , Ui.roundedWith
                 { bottomLeft = 8, bottomRight = 0, topLeft = 8, topRight = 0 }
             , Ui.move { x = 0, y = -8, z = 0 }
             ]
-            (Ui.el [ Ui.move { x = 1, y = -1, z = 0 } ] (Ui.text "new"))
+            Ui.none
         )
+    ]
 
 
 messageViewEncode : Bool -> IsHovered -> Int -> Bool -> HighlightMessage -> Int
