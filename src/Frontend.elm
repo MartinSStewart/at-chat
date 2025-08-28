@@ -361,7 +361,6 @@ loadedInitHelper time timezone loginData loading =
             , filesToUpload = SeqDict.empty
             , sessionId = loginData.sessionId
             , isReloading = False
-            , vapidPublicKey = loginData.vapidPublicKey
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -411,6 +410,7 @@ loginDataToLocalState timezone loginData =
                     , emailNotificationsEnabled = adminData.emailNotificationsEnabled
                     , twoFactorAuthentication = adminData.twoFactorAuthentication
                     , botToken = adminData.botToken
+                    , privateVapidKey = adminData.privateVapidKey
                     }
 
             IsNotAdminLoginData ->
@@ -424,6 +424,7 @@ loginDataToLocalState timezone loginData =
         , otherUsers = loginData.otherUsers
         , timezone = timezone
         }
+    , publicVapidKey = loginData.publicVapidKey
     }
 
 
@@ -966,6 +967,9 @@ isPressMsg msg =
         BotTokenEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
+        PublicVapidKeyEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
+
         OneFrameAfterDragEnd ->
             False
 
@@ -1022,6 +1026,9 @@ isPressMsg msg =
 
         GotIsPushNotificationsRegistered bool ->
             False
+
+        PrivateVapidKeyEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -2450,11 +2457,7 @@ updateLoaded msg model =
         PressedShowUserOption ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions = Just { name = Editable.init, botToken = Editable.init }
-                      }
-                    , Command.none
-                    )
+                    ( { loggedIn | userOptions = Just UserOptions.init }, Command.none )
                 )
                 model
 
@@ -2522,6 +2525,52 @@ updateLoaded msg model =
                                         model.time
                                         (Just (Local_Admin (Pages.Admin.SetDiscordBotToken value)))
                                         { loggedIn | userOptions = Just { userOptions | botToken = Editable.init } }
+                                        Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PublicVapidKeyEditableMsg editableMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case editableMsg of
+                                Editable.Edit editable ->
+                                    ( { loggedIn | userOptions = Just { userOptions | publicVapidKey = editable } }
+                                    , Command.none
+                                    )
+
+                                Editable.PressedAcceptEdit value ->
+                                    handleLocalChange
+                                        model.time
+                                        (Just (Local_Admin (Pages.Admin.SetPublicVapidKey value)))
+                                        { loggedIn | userOptions = Just { userOptions | publicVapidKey = Editable.init } }
+                                        Command.none
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
+
+        PrivateVapidKeyEditableMsg editableMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case editableMsg of
+                                Editable.Edit editable ->
+                                    ( { loggedIn | userOptions = Just { userOptions | privateVapidKey = editable } }
+                                    , Command.none
+                                    )
+
+                                Editable.PressedAcceptEdit value ->
+                                    handleLocalChange
+                                        model.time
+                                        (Just (Local_Admin (Pages.Admin.SetPrivateVapidKey value)))
+                                        { loggedIn | userOptions = Just { userOptions | privateVapidKey = Editable.init } }
                                         Command.none
 
                         Nothing ->
@@ -2971,7 +3020,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( loggedIn
                     , if isEnabled then
-                        Ports.registerPushSubscriptionToJs loggedIn.vapidPublicKey
+                        Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
 
                       else
                         Command.batch
@@ -3579,10 +3628,7 @@ changeUpdate localMsg local =
                 Local_Admin adminChange ->
                     case local.adminData of
                         IsAdmin adminData ->
-                            { local
-                                | adminData =
-                                    Pages.Admin.updateAdmin changedBy adminChange adminData |> IsAdmin
-                            }
+                            Pages.Admin.updateAdmin changedBy adminChange adminData local
 
                         IsNotAdmin ->
                             local
@@ -4128,6 +4174,9 @@ changeUpdate localMsg local =
                                 )
                                 local.dmChannels
                     }
+
+                Server_PushNotificationsReset publicVapidKey ->
+                    { local | publicVapidKey = publicVapidKey }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
@@ -4758,6 +4807,12 @@ pendingChangesText localChange =
 
                 Pages.Admin.SetDiscordBotToken _ ->
                     "Set Discord bot token"
+
+                Pages.Admin.SetPrivateVapidKey string ->
+                    "Set private vapid key"
+
+                Pages.Admin.SetPublicVapidKey string ->
+                    "Set public vapid key"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"

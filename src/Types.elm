@@ -166,12 +166,15 @@ type alias LoggedIn2 =
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
     , isReloading : Bool
-    , vapidPublicKey : String
     }
 
 
 type alias UserOptionsModel =
-    { name : Editable.Model, botToken : Editable.Model }
+    { name : Editable.Model
+    , botToken : Editable.Model
+    , publicVapidKey : Editable.Model
+    , privateVapidKey : Editable.Model
+    }
 
 
 type ChannelSidebarMode
@@ -386,6 +389,8 @@ type FrontendMsg
     | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
+    | PublicVapidKeyEditableMsg (Editable.Msg String)
+    | PrivateVapidKeyEditableMsg (Editable.Msg String)
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
@@ -501,7 +506,7 @@ type alias LoginData =
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
-    , vapidPublicKey : String
+    , publicVapidKey : String
     }
 
 
@@ -540,6 +545,7 @@ type ServerChange
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
+    | Server_PushNotificationsReset String
 
 
 type LocalChange

@@ -572,6 +572,7 @@ container isMobile2 label2 contents =
             [ Ui.border 1
             , Ui.rounded 4
             , Ui.padding 16
+            , Ui.spacing 8
             ]
             contents
         )

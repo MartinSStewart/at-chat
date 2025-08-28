@@ -83,6 +83,7 @@ type alias LocalState =
     , dmChannels : SeqDict (Id UserId) DmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
+    , publicVapidKey : String
     }
 
 
@@ -225,6 +226,7 @@ type alias AdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
+    , privateVapidKey : String
     }
 
 

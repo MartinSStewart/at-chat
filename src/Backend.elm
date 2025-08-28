@@ -156,12 +156,7 @@ init =
       , lastErrorLogEmail = Time.millisToPosix -10000000000
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
-      , guilds =
-            SeqDict.fromList
-                [ ( Id.fromInt 0
-                  , guild
-                  )
-                ]
+      , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
       , discordModel = Discord.init
       , discordNotConnected = True
       , discordGuilds = OneToOne.empty
@@ -171,8 +166,8 @@ init =
       , discordDms = OneToOne.empty
       , botToken = Nothing
       , files = SeqDict.empty
-      , publicVapidKey = Env.vapidPublicKey
-      , privateVapidKey = Env.vapidPrivateKey
+      , publicVapidKey = ""
+      , privateVapidKey = ""
       , pushSubscriptions = SeqDict.empty
       }
     , Command.none
@@ -186,6 +181,7 @@ adminData model lastLogPageViewed =
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , botToken = model.botToken
+    , privateVapidKey = model.privateVapidKey
     }
 
 
@@ -1405,7 +1401,7 @@ getLoginData sessionId userId user model =
                 )
             |> SeqDict.fromList
     , sessionId = sessionId
-    , vapidPublicKey = model.publicVapidKey
+    , publicVapidKey = model.publicVapidKey
     }
 
 
@@ -2894,6 +2890,22 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 --, broadcastToOtherAdmins clientId model (Server_SetWebsocketToggled isEnabled |> ServerChange)
                 ]
+            )
+
+        Pages.Admin.SetPrivateVapidKey privateKey ->
+            ( { model | privateVapidKey = privateKey, pushSubscriptions = SeqDict.empty }
+            , Server_PushNotificationsReset model.publicVapidKey
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.broadcast
+            )
+
+        Pages.Admin.SetPublicVapidKey publicKey ->
+            ( { model | publicVapidKey = publicKey, pushSubscriptions = SeqDict.empty }
+            , Server_PushNotificationsReset model.publicVapidKey
+                |> ServerChange
+                |> ChangeBroadcast
+                |> Lamdera.broadcast
             )
 
 

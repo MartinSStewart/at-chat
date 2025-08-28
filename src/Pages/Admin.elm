@@ -33,7 +33,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, DiscordBotToken, LocalState, LogWithTime)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordBotToken, LocalState, LogWithTime)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -121,6 +121,7 @@ type alias InitAdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
+    , privateVapidKey : String
     }
 
 
@@ -136,6 +137,8 @@ type AdminChange
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
     | SetDiscordBotToken (Maybe DiscordBotToken)
+    | SetPrivateVapidKey String
+    | SetPublicVapidKey String
 
 
 type alias EditedBackendUser =
@@ -178,46 +181,78 @@ init logs { highlightLog } =
     )
 
 
-updateAdmin : Id UserId -> AdminChange -> AdminData -> AdminData
-updateAdmin changedBy change adminData =
+updateAdmin : Id UserId -> AdminChange -> AdminData -> LocalState -> LocalState
+updateAdmin changedBy change adminData local =
     case change of
         ChangeUsers changes ->
-            case applyChangesToBackendUsers changedBy changes adminData.users of
-                Ok newUsers ->
-                    { adminData | users = newUsers }
+            { local
+                | adminData =
+                    IsAdmin
+                        (case applyChangesToBackendUsers changedBy changes adminData.users of
+                            Ok newUsers ->
+                                { adminData | users = newUsers }
 
-                Err _ ->
-                    adminData
+                            Err _ ->
+                                adminData
+                        )
+            }
 
         ExpandSection section2 ->
-            { adminData
-                | users =
-                    NonemptyDict.updateIfExists
-                        changedBy
-                        (\user -> { user | expandedSections = SeqSet.insert section2 user.expandedSections })
-                        adminData.users
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedSections = SeqSet.insert section2 user.expandedSections })
+                                    adminData.users
+                        }
             }
 
         CollapseSection section2 ->
-            { adminData
-                | users =
-                    NonemptyDict.updateIfExists
-                        changedBy
-                        (\user -> { user | expandedSections = SeqSet.remove section2 user.expandedSections })
-                        adminData.users
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedSections = SeqSet.remove section2 user.expandedSections })
+                                    adminData.users
+                        }
             }
 
         LogPageChanged logPageIndex ->
-            { adminData
-                | users =
-                    NonemptyDict.updateIfExists changedBy (\user -> { user | lastLogPageViewed = logPageIndex }) adminData.users
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists changedBy (\user -> { user | lastLogPageViewed = logPageIndex }) adminData.users
+                        }
             }
 
         SetEmailNotificationsEnabled isEnabled ->
-            { adminData | emailNotificationsEnabled = isEnabled }
+            { local
+                | adminData =
+                    IsAdmin { adminData | emailNotificationsEnabled = isEnabled }
+            }
 
         SetDiscordBotToken botToken ->
-            { adminData | botToken = botToken }
+            { local
+                | adminData =
+                    IsAdmin { adminData | botToken = botToken }
+            }
+
+        SetPrivateVapidKey privateVapidKey ->
+            { local
+                | adminData =
+                    IsAdmin { adminData | privateVapidKey = privateVapidKey }
+            }
+
+        SetPublicVapidKey publicVapidKey ->
+            { local | publicVapidKey = publicVapidKey }
 
 
 update :

@@ -1,4 +1,4 @@
-module UserOptions exposing (view)
+module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
@@ -12,6 +12,15 @@ import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsMo
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+
+
+init : UserOptionsModel
+init =
+    { name = Editable.init
+    , botToken = Editable.init
+    , publicVapidKey = Editable.init
+    , privateVapidKey = Editable.init
+    }
 
 
 view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
@@ -98,6 +107,22 @@ view isMobile time local loggedIn loaded model =
                             BotTokenEditableMsg
                             botToken
                             model.botToken
+                        , Editable.view
+                            (Dom.id "userOptions_publicVapidKey")
+                            True
+                            "Public VAPID key"
+                            (\text -> String.trim text |> Ok)
+                            PublicVapidKeyEditableMsg
+                            local.publicVapidKey
+                            model.publicVapidKey
+                        , Editable.view
+                            (Dom.id "userOptions_privateVapidKey")
+                            True
+                            "Private VAPID key"
+                            (\text -> String.trim text |> Ok)
+                            PrivateVapidKeyEditableMsg
+                            adminData2.privateVapidKey
+                            model.privateVapidKey
                         ]
 
                 IsNotAdmin ->
