@@ -2894,18 +2894,24 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetPrivateVapidKey privateKey ->
             ( { model | privateVapidKey = privateKey, pushSubscriptions = SeqDict.empty }
-            , Server_PushNotificationsReset model.publicVapidKey
-                |> ServerChange
-                |> ChangeBroadcast
-                |> Lamdera.broadcast
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Server_PushNotificationsReset model.publicVapidKey
+                    |> ServerChange
+                    |> ChangeBroadcast
+                    |> Lamdera.broadcast
+                ]
             )
 
         Pages.Admin.SetPublicVapidKey publicKey ->
             ( { model | publicVapidKey = publicKey, pushSubscriptions = SeqDict.empty }
-            , Server_PushNotificationsReset model.publicVapidKey
-                |> ServerChange
-                |> ChangeBroadcast
-                |> Lamdera.broadcast
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Server_PushNotificationsReset model.publicVapidKey
+                    |> ServerChange
+                    |> ChangeBroadcast
+                    |> Lamdera.broadcast
+                ]
             )
 
 
