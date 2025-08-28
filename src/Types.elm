@@ -63,7 +63,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import MessageInput exposing (MentionUserDropdown)
@@ -257,7 +257,7 @@ type alias BackendModel =
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
     , discordModel : Discord.Model Websocket.Connection
-    , discordNotConnected : Bool
+    , backendInitialized : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
@@ -265,7 +265,7 @@ type alias BackendModel =
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
     , files : SeqDict FileHash BackendFileData
-    , privateVapidKey : String
+    , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , pushSubscriptions : SeqDict SessionId PushSubscription
     }
@@ -390,7 +390,7 @@ type FrontendMsg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
-    | PrivateVapidKeyEditableMsg (Editable.Msg String)
+    | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
@@ -474,6 +474,7 @@ type BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification (Result Http.Error ())
+    | GotVapidKeys (Result Http.Error String)
 
 
 type LoginResult

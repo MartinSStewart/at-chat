@@ -12,6 +12,7 @@ module LocalState exposing
     , LocalState
     , LocalUser
     , LogWithTime
+    , PrivateVapidKey(..)
     , addInvite
     , addMember
     , addReactionEmoji
@@ -226,8 +227,12 @@ type alias AdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
-    , privateVapidKey : String
+    , privateVapidKey : PrivateVapidKey
     }
+
+
+type PrivateVapidKey
+    = PrivateVapidKey String
 
 
 type DiscordBotToken

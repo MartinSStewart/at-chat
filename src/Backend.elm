@@ -38,7 +38,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -158,7 +158,7 @@ init =
       , twoFactorAuthenticationSetup = SeqDict.empty
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
       , discordModel = Discord.init
-      , discordNotConnected = True
+      , backendInitialized = True
       , discordGuilds = OneToOne.empty
       , discordUsers = OneToOne.empty
       , discordBotId = Nothing
@@ -167,7 +167,7 @@ init =
       , botToken = Nothing
       , files = SeqDict.empty
       , publicVapidKey = ""
-      , privateVapidKey = ""
+      , privateVapidKey = PrivateVapidKey ""
       , pushSubscriptions = SeqDict.empty
       }
     , Command.none
@@ -653,6 +653,24 @@ update msg model =
 
         SentNotification result ->
             ( model, Command.none )
+
+        GotVapidKeys result ->
+            ( case result of
+                Ok keys ->
+                    case String.split "," keys of
+                        [ publicKey, privateKey ] ->
+                            { model
+                                | publicVapidKey = publicKey
+                                , privateVapidKey = PrivateVapidKey privateKey
+                            }
+
+                        _ ->
+                            model
+
+                Err _ ->
+                    model
+            , Command.none
+            )
 
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
@@ -1439,10 +1457,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         Nothing ->
                             CheckLoginResponse (Err ()) |> Lamdera.sendToFrontend clientId
             in
-            if model2.discordNotConnected then
-                ( { model2 | discordNotConnected = False }
+            if model2.backendInitialized then
+                ( { model2 | backendInitialized = False }
                 , Command.batch
                     [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
+                    , Http.get
+                        { url = FileStatus.domain ++ "/file/vapid"
+                        , expect = Http.expectString GotVapidKeys
+                        }
                     , cmd
                     ]
                 )
@@ -2460,7 +2482,7 @@ pushNotification title body icon pushSubscription model =
             [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
             , Http.header "p256dh" pushSubscription.p256dh
             , Http.header "auth" pushSubscription.auth
-            , Http.header "private-key" model.privateVapidKey
+            , Http.header "private-key" (model.privateVapidKey |> (\(PrivateVapidKey a) -> a))
             , Http.header "title" title
             , Http.header "body" body
             , Http.header "icon" icon
@@ -3004,11 +3026,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         model.users
               }
             , Command.batch
-                [ if userId == otherUserId then
-                    Command.none
-
-                  else
-                    broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                [ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
                 , case ( OneToOne.first dmChannelId model.discordDms, model.botToken ) of
                     ( Just discordChannelId, Just botToken ) ->
                         Discord.createMessage
@@ -3062,16 +3080,20 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                     attachedFiles
             )
             model
-        , case NonemptyDict.get otherUserId model.users of
-            Just otherUser ->
-                broadcastNotification
-                    otherUserId
-                    otherUser
-                    (RichText.toString (NonemptyDict.toSeqDict model.users) text)
-                    model
+        , if userId == otherUserId then
+            Command.none
 
-            Nothing ->
-                Command.none
+          else
+            case NonemptyDict.get otherUserId model.users of
+                Just otherUser ->
+                    broadcastNotification
+                        otherUserId
+                        otherUser
+                        (RichText.toString (NonemptyDict.toSeqDict model.users) text)
+                        model
+
+                Nothing ->
+                    Command.none
         ]
 
 

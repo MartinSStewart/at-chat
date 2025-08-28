@@ -3,7 +3,7 @@ module UserOptions exposing (init, view)
 import Editable
 import Effect.Browser.Dom as Dom
 import Icons
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState)
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
 import MyUi
 import PersonName
 import Time
@@ -119,9 +119,9 @@ view isMobile time local loggedIn loaded model =
                             (Dom.id "userOptions_privateVapidKey")
                             True
                             "Private VAPID key"
-                            (\text -> String.trim text |> Ok)
+                            (\text -> String.trim text |> PrivateVapidKey |> Ok)
                             PrivateVapidKeyEditableMsg
-                            adminData2.privateVapidKey
+                            (adminData2.privateVapidKey |> (\(PrivateVapidKey a) -> a))
                             model.privateVapidKey
                         ]
 

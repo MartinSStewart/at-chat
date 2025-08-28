@@ -13,6 +13,7 @@ use imagesize::blob_size;
 use serde::Serialize;
 use sha2::{Digest, Sha224};
 use std::fs;
+use vapid;
 use web_push::SubscriptionInfo;
 
 #[tokio::main]
@@ -23,6 +24,7 @@ async fn main() {
             post(upload_endpoint).options(options_endpoint),
         )
         .route("/file/push-notification", post(push_notification_endpoint))
+        .route("/file/vapid", get(vapid_endpoint))
         // .route(
         //     "/file/upload-url",
         //     post(upload_url_endpoint).options(options_endpoint),
@@ -41,6 +43,19 @@ async fn options_endpoint() -> Response<String> {
 
 fn filepath(hash: String) -> String {
     String::from("./var/lib/atchat/") + &hash
+}
+
+async fn vapid_endpoint(_request: Request) -> Response<String> {
+    match vapid::Key::generate() {
+        Ok(key) => response_with_headers(
+            StatusCode::OK,
+            key.to_public_raw() + "," + &key.to_private_raw(),
+        ),
+        Err(_) => response_with_headers(
+            StatusCode::BAD_REQUEST,
+            String::from("Failed to generate keys"),
+        ),
+    }
 }
 
 async fn push_notification_endpoint(request: Request) -> Response<String> {

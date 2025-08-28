@@ -33,7 +33,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminStatus(..), DiscordBotToken, LocalState, LogWithTime)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordBotToken, LocalState, LogWithTime, PrivateVapidKey)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -121,7 +121,7 @@ type alias InitAdminData =
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
-    , privateVapidKey : String
+    , privateVapidKey : PrivateVapidKey
     }
 
 
@@ -137,7 +137,7 @@ type AdminChange
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
     | SetDiscordBotToken (Maybe DiscordBotToken)
-    | SetPrivateVapidKey String
+    | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
 
 

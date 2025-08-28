@@ -4744,37 +4744,37 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
-    let
-        repliedToUserId : Maybe (Id UserId)
-        repliedToUserId =
-            case threadRouteWithRepliedTo of
-                ViewThreadWithMaybeMessage _ maybeRepliedTo ->
-                    Pages.Guild.repliedToUserId maybeRepliedTo channel
-
-                NoThreadWithMaybeMessage maybeRepliedTo ->
-                    Pages.Guild.repliedToUserId maybeRepliedTo channel
-    in
-    if
-        (senderId /= local.localUser.userId)
-            && ((repliedToUserId == Just local.localUser.userId)
-                    || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
-               )
-    then
-        Command.batch
-            [ Ports.playSound "pop"
-            , Ports.setFavicon "/favicon-red.ico"
-            , case model.notificationPermission of
-                Ports.Granted ->
-                    Ports.showNotification
-                        (User.toString senderId (LocalState.allUsers local))
-                        (RichText.toString (LocalState.allUsers local) content)
-
-                _ ->
-                    Command.none
-            ]
-
-    else
-        Command.none
+    --let
+    --    repliedToUserId : Maybe (Id UserId)
+    --    repliedToUserId =
+    --        case threadRouteWithRepliedTo of
+    --            ViewThreadWithMaybeMessage _ maybeRepliedTo ->
+    --                Pages.Guild.repliedToUserId maybeRepliedTo channel
+    --
+    --            NoThreadWithMaybeMessage maybeRepliedTo ->
+    --                Pages.Guild.repliedToUserId maybeRepliedTo channel
+    --in
+    --if
+    --    (senderId /= local.localUser.userId)
+    --        && ((repliedToUserId == Just local.localUser.userId)
+    --                || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
+    --           )
+    --then
+    --    Command.batch
+    --        [ Ports.playSound "pop"
+    --        , Ports.setFavicon "/favicon-red.ico"
+    --        , case model.notificationPermission of
+    --            Ports.Granted ->
+    --                Ports.showNotification
+    --                    (User.toString senderId (LocalState.allUsers local))
+    --                    (RichText.toString (LocalState.allUsers local) content)
+    --
+    --            _ ->
+    --                Command.none
+    --        ]
+    --
+    --else
+    Command.none
 
 
 pendingChangesText : LocalChange -> String
