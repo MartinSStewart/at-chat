@@ -56,6 +56,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -107,7 +108,7 @@ subscriptions : FrontendModel -> Subscription FrontendOnly FrontendMsg
 subscriptions model =
     Subscription.batch
         [ Effect.Browser.Events.onResize GotWindowSize
-        , Time.every Duration.second GotTime
+        , Time.every (Duration.seconds 2) GotTime
         , Effect.Browser.Events.onKeyDown (Json.Decode.field "key" Json.Decode.string |> Json.Decode.map KeyDown)
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
@@ -4743,37 +4744,41 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
-    --let
-    --    repliedToUserId : Maybe (Id UserId)
-    --    repliedToUserId =
-    --        case threadRouteWithRepliedTo of
-    --            ViewThreadWithMaybeMessage _ maybeRepliedTo ->
-    --                Pages.Guild.repliedToUserId maybeRepliedTo channel
-    --
-    --            NoThreadWithMaybeMessage maybeRepliedTo ->
-    --                Pages.Guild.repliedToUserId maybeRepliedTo channel
-    --in
-    --if
-    --    (senderId /= local.localUser.userId)
-    --        && ((repliedToUserId == Just local.localUser.userId)
-    --                || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
-    --           )
-    --then
-    --    Command.batch
-    --        [ Ports.playSound "pop"
-    --        , Ports.setFavicon "/favicon-red.ico"
-    --        , case model.notificationPermission of
-    --            Ports.Granted ->
-    --                Ports.showNotification
-    --                    (User.toString senderId (LocalState.allUsers local))
-    --                    (RichText.toString (LocalState.allUsers local) content)
-    --
-    --            _ ->
-    --                Command.none
-    --        ]
-    --
-    --else
-    Command.none
+    if False then
+        let
+            repliedToUserId : Maybe (Id UserId)
+            repliedToUserId =
+                case threadRouteWithRepliedTo of
+                    ViewThreadWithMaybeMessage _ maybeRepliedTo ->
+                        Pages.Guild.repliedToUserId maybeRepliedTo channel
+
+                    NoThreadWithMaybeMessage maybeRepliedTo ->
+                        Pages.Guild.repliedToUserId maybeRepliedTo channel
+        in
+        if
+            (senderId /= local.localUser.userId)
+                && ((repliedToUserId == Just local.localUser.userId)
+                        || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
+                   )
+        then
+            Command.batch
+                [ Ports.playSound "pop"
+                , Ports.setFavicon "/favicon-red.ico"
+                , case model.notificationPermission of
+                    Ports.Granted ->
+                        Ports.showNotification
+                            (User.toString senderId (LocalState.allUsers local))
+                            (RichText.toString (LocalState.allUsers local) content)
+
+                    _ ->
+                        Command.none
+                ]
+
+        else
+            Command.none
+
+    else
+        Command.none
 
 
 pendingChangesText : LocalChange -> String

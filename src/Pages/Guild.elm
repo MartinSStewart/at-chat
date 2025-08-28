@@ -12,6 +12,7 @@ module Pages.Guild exposing
     , messageViewDecode
     , messageViewEncode
     , newGuildFormInit
+    , repliedToUserId
     , threadMessageHtmlId
     )
 
