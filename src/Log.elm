@@ -20,6 +20,7 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError Http.Error
+    | RegisteredPushNotificationRequest (Id UserId)
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -39,6 +40,9 @@ shouldNotifyAdmin log =
 
         PushNotificationError _ ->
             Just "PushNotificationError"
+
+        RegisteredPushNotificationRequest _ ->
+            Nothing
 
 
 addLog :
@@ -186,6 +190,13 @@ logContent log =
                 []
                 [ Ui.text "PushNotificationError "
                 , Ui.text (httpErrorToString error)
+                ]
+
+        RegisteredPushNotificationRequest userId ->
+            Ui.Prose.paragraph
+                []
+                [ Ui.text "RegisteredPushNotificationRequest"
+                , Ui.text (Id.toString userId)
                 ]
 
 

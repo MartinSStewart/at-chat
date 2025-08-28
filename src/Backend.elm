@@ -2466,18 +2466,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         RegisterPushSubscriptionRequest pushSubscription ->
-            ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
-            , pushNotification
-                time
-                "Success!"
-                "Push notifications enabled"
-                "https://at-chat.app/at-logo-no-background.png"
-                pushSubscription
+            asUser
                 model2
-            )
+                sessionId
+                (\userId _ ->
+                    ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
+                    , pushNotification
+                        time
+                        "Success!"
+                        "Push notifications enabled"
+                        "https://at-chat.app/at-logo-no-background.png"
+                        pushSubscription
+                        model2
+                    )
+                        |> addLogWithCmd time (Log.RegisteredPushNotificationRequest userId)
+                )
 
         UnregisterPushSubscriptionRequest ->
-            ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }, Command.none )
+            ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }
+            , Command.none
+            )
 
 
 pushNotification : Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
@@ -3850,3 +3858,12 @@ addLog time log model =
 
         _ ->
             ( model2, Command.none )
+
+
+addLogWithCmd : Time.Posix -> Log -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addLogWithCmd time log ( model, cmd ) =
+    let
+        ( model2, cmd2 ) =
+            addLog time log model
+    in
+    ( model2, Command.batch [ cmd, cmd2 ] )
