@@ -1,13 +1,13 @@
 module Id exposing
     ( ChannelId(..)
-    , ChannelMessageId
+    , ChannelMessageId(..)
     , GuildId(..)
     , GuildOrDmId(..)
     , GuildOrDmIdNoThread(..)
     , GuildOrDmIdWithMaybeMessage(..)
     , Id(..)
     , InviteLinkId(..)
-    , ThreadMessageId
+    , ThreadMessageId(..)
     , ThreadRoute(..)
     , ThreadRouteWithMaybeMessage(..)
     , ThreadRouteWithMessage(..)
