@@ -195,7 +195,7 @@ logContent log =
         RegisteredPushNotificationRequest userId ->
             Ui.Prose.paragraph
                 []
-                [ Ui.text "RegisteredPushNotificationRequest"
+                [ Ui.text "RegisteredPushNotificationRequest "
                 , Ui.text (Id.toString userId)
                 ]
 
