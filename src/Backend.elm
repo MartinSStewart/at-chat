@@ -651,8 +651,13 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        SentNotification _ ->
-            ( model, Command.none )
+        SentNotification time result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.PushNotificationError error) model
 
         GotVapidKeys result ->
             ( case result of
@@ -2463,6 +2468,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
         RegisterPushSubscriptionRequest pushSubscription ->
             ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
             , pushNotification
+                time
                 "Success!"
                 "Push notifications enabled"
                 "https://at-chat.app/at-logo-no-background.png"
@@ -2474,8 +2480,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }, Command.none )
 
 
-pushNotification : String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
-pushNotification title body icon pushSubscription model =
+pushNotification : Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification time title body icon pushSubscription model =
     Http.request
         { method = "POST"
         , headers =
@@ -2489,7 +2495,7 @@ pushNotification title body icon pushSubscription model =
             ]
         , url = FileStatus.domain ++ "/file/push-notification"
         , body = Http.emptyBody
-        , expect = Http.expectWhatever SentNotification
+        , expect = Http.expectWhatever (SentNotification time)
         , timeout = Duration.seconds 30 |> Just
         , tracker = Nothing
         }
@@ -3087,6 +3093,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
             case NonemptyDict.get otherUserId model.users of
                 Just otherUser ->
                     broadcastNotification
+                        time
                         otherUserId
                         otherUser
                         (RichText.toString (NonemptyDict.toSeqDict model.users) text)
@@ -3097,14 +3104,15 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
         ]
 
 
-broadcastNotification : Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
-broadcastNotification userId user text model =
+broadcastNotification : Time.Posix -> Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
+broadcastNotification time userId user text model =
     SeqDict.foldl
         (\sessionId userIdKey cmds ->
             if userIdKey == userId then
                 case SeqDict.get sessionId model.pushSubscriptions of
                     Just pushSubscription ->
                         pushNotification
+                            time
                             (PersonName.toString user.name)
                             text
                             (case user.icon of
@@ -3267,7 +3275,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         (\userId2 cmds ->
                             case NonemptyDict.get userId2 model.users of
                                 Just user2 ->
-                                    broadcastNotification userId2 user2 plainText model :: cmds
+                                    broadcastNotification time userId2 user2 plainText model :: cmds
 
                                 Nothing ->
                                     cmds

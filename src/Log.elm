@@ -1,6 +1,7 @@
 module Log exposing (Log(..), addLog, shouldNotifyAdmin, view)
 
 import Array exposing (Array)
+import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Icons
 import Id exposing (Id, UserId)
@@ -18,6 +19,7 @@ type Log
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
+    | PushNotificationError Http.Error
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -34,6 +36,9 @@ shouldNotifyAdmin log =
 
         SendLogErrorEmailFailed _ _ ->
             Nothing
+
+        PushNotificationError _ ->
+            Just "PushNotificationError"
 
 
 addLog :
@@ -175,6 +180,32 @@ logContent log =
                     )
                     :: sendEmailErrorToString error
                 )
+
+        PushNotificationError error ->
+            Ui.Prose.paragraph
+                []
+                [ Ui.text "PushNotificationError "
+                , Ui.text (httpErrorToString error)
+                ]
+
+
+httpErrorToString : Http.Error -> String
+httpErrorToString error =
+    case error of
+        Http.BadBody body ->
+            body
+
+        Http.BadUrl string ->
+            "bad url " ++ string
+
+        Http.Timeout ->
+            "timeout"
+
+        Http.NetworkError ->
+            "network error"
+
+        Http.BadStatus int ->
+            "bad status " ++ String.fromInt int
 
 
 sendEmailErrorToString : Postmark.SendEmailError -> List (Element msg)

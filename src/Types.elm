@@ -472,7 +472,7 @@ type BackendMsg
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
-    | SentNotification (Result Http.Error ())
+    | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
 
 
