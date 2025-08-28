@@ -2,7 +2,7 @@ module RoutingTests exposing (roundtrip)
 
 import Expect
 import Fuzz exposing (Fuzzer)
-import Id exposing (Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
+import Id exposing (Id, ThreadRouteWithMaybeMessage(..))
 import Route exposing (ChannelRoute(..), Route(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)

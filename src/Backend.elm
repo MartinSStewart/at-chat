@@ -3904,7 +3904,7 @@ addLog time log model =
 addLogWithCmd : Time.Posix -> Log -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addLogWithCmd time log ( model, cmd ) =
     let
-        ( model2, cmd2 ) =
+        ( model2, logCmd ) =
             addLog time log model
     in
-    ( model2, Command.batch [ cmd, cmd2 ] )
+    ( model2, Command.batch [ cmd, logCmd ] )
