@@ -2503,7 +2503,26 @@ pushNotification time title body icon pushSubscription model =
             ]
         , url = FileStatus.domain ++ "/file/push-notification"
         , body = Http.emptyBody
-        , expect = Http.expectWhatever (SentNotification time)
+        , expect =
+            Http.expectStringResponse
+                (SentNotification time)
+                (\response ->
+                    case response of
+                        Http.BadUrl_ url ->
+                            Http.BadUrl url |> Err
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata text ->
+                            Http.BadBody (String.fromInt metadata.statusCode ++ " " ++ text) |> Err
+
+                        Http.GoodStatus_ _ _ ->
+                            Ok ()
+                )
         , timeout = Duration.seconds 30 |> Just
         , tracker = Nothing
         }
