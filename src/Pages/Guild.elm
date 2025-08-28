@@ -503,6 +503,7 @@ guildView model guildId channelRoute loggedIn local =
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
                                     , sidebarOffsetAttr loggedIn model
+                                    , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
                             ]

@@ -23,12 +23,11 @@ async fn main() {
             "/file/upload",
             post(upload_endpoint).options(options_endpoint),
         )
-        .route("/file/push-notification", post(push_notification_endpoint))
+        .route(
+            "/file/push-notification",
+            post(push_notification_endpoint).options(options_endpoint),
+        )
         .route("/file/vapid", get(vapid_endpoint))
-        // .route(
-        //     "/file/upload-url",
-        //     post(upload_url_endpoint).options(options_endpoint),
-        // )
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .fallback(fallback);

@@ -94,25 +94,25 @@ monthToString month =
             "12"
 
 
-timeToString : Bool -> Time.Posix -> String
-timeToString includeYear time =
-    String.padLeft 2 '0' (String.fromInt (Time.toHour Time.utc time))
+timeToString : Time.Zone -> Bool -> Time.Posix -> String
+timeToString timezone includeYear time =
+    String.padLeft 2 '0' (String.fromInt (Time.toHour timezone time))
         ++ ":"
-        ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute Time.utc time))
+        ++ String.padLeft 2 '0' (String.fromInt (Time.toMinute timezone time))
         ++ "\u{00A0}"
-        ++ String.fromInt (Time.toDay Time.utc time)
+        ++ String.fromInt (Time.toDay timezone time)
         ++ "/"
-        ++ monthToString (Time.toMonth Time.utc time)
+        ++ monthToString (Time.toMonth timezone time)
         ++ (if includeYear then
-                "/" ++ String.fromInt (Time.toYear Time.utc time)
+                "/" ++ String.fromInt (Time.toYear timezone time)
 
             else
                 ""
            )
 
 
-view : msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view onPressCopyLink isCopied isHighlighted { time, log } =
+view : Time.Zone -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
+view timezone onPressCopyLink isCopied isHighlighted { time, log } =
     Ui.row
         [ Ui.spacingWith { horizontal = 16, vertical = 2 }
         , Ui.attrIf isHighlighted (Ui.background (Ui.rgb 255 246 207))
@@ -133,7 +133,7 @@ view onPressCopyLink isCopied isHighlighted { time, log } =
                 , Ui.id "Log_copyLink"
                 ]
                 [ Ui.el [ Ui.move (Ui.up 1) ] Icons.link
-                , timeToString False time |> Ui.text
+                , timeToString timezone False time |> Ui.text
                 ]
             , if isCopied then
                 Ui.text "Link copied!"

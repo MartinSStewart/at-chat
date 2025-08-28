@@ -90,7 +90,7 @@ view isMobile time local loggedIn loaded model =
                         isMobile
                         "Admin"
                         [ Editable.view
-                            (Dom.id "userOptions_name")
+                            (Dom.id "userOptions_botToken")
                             True
                             "Bot token"
                             (\text ->

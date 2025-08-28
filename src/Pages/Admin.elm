@@ -772,8 +772,8 @@ deleteUserButtonId userTableId =
     "Admin_deleteUserButton_" ++ userTableIdToDomId userTableId |> Dom.id
 
 
-view : AdminData -> BackendUser -> Model -> Element Msg
-view adminData user model =
+view : Time.Zone -> AdminData -> BackendUser -> Model -> Element Msg
+view timezone adminData user model =
     Ui.el
         (if Env.isProduction then
             [ Ui.borderWith { left = 6, right = 0, top = 0, bottom = 0 }, Ui.borderColor MyUi.errorColor ]
@@ -784,7 +784,7 @@ view adminData user model =
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
-            , logSection user model
+            , logSection timezone user model
             ]
         )
 
@@ -1253,8 +1253,8 @@ userTableColumns tableState twoFactorAuthentication =
         ]
 
 
-logSection : BackendUser -> Model -> Element Msg
-logSection user model =
+logSection : Time.Zone -> BackendUser -> Model -> Element Msg
+logSection timezone user model =
     case Pagination.currentPage model.logs of
         Just logs ->
             let
@@ -1276,6 +1276,7 @@ logSection user model =
                                 Pagination.pageSize * pageIndex + index
                         in
                         Log.view
+                            timezone
                             (PressedCopyLogLink logIndex)
                             (Just logIndex == model.copiedLogLink)
                             (Just logIndex == model.highlightLog)

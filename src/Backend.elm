@@ -1135,7 +1135,7 @@ addDiscordGuilds time guilds model =
 handleDiscordCreateMessage :
     Discord.Message
     -> BackendModel
-    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordCreateMessage message model =
     case ( Just message.author.id == model.discordBotId, message.type_ ) of
         ( True, _ ) ->
@@ -1206,13 +1206,26 @@ handleDiscordCreateMessage message model =
                                 model.dmChannels
                         , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
                       }
-                    , broadcastToUser
-                        Nothing
-                        adminUserId
-                        (Server_DiscordDirectMessage message.timestamp message.id userId richText replyTo
-                            |> ServerChange
-                        )
-                        model
+                    , Command.batch
+                        [ broadcastToUser
+                            Nothing
+                            adminUserId
+                            (Server_DiscordDirectMessage message.timestamp message.id userId richText replyTo
+                                |> ServerChange
+                            )
+                            model
+                        , case NonemptyDict.get userId model.users of
+                            Just user ->
+                                broadcastNotification
+                                    message.timestamp
+                                    adminUserId
+                                    user
+                                    (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
+                                    model
+
+                            Nothing ->
+                                Command.none
+                        ]
                     )
 
                 ( Just userId, Included discordGuildId ) ->
@@ -1231,7 +1244,7 @@ handleDiscordCreateGuildMessage :
     -> Discord.Id.Id Discord.Id.GuildId
     -> Discord.Message
     -> BackendModel
-    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordCreateGuildMessage userId discordGuildId message model =
     let
         richText : Nonempty RichText
@@ -1308,18 +1321,21 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                         }
                         model.guilds
               }
-            , broadcastToGuild
-                guildId
-                (Server_SendMessage
-                    userId
-                    message.timestamp
-                    (GuildOrDmId_Guild_NoThread guildId channelId)
-                    richText
-                    threadRoute
-                    SeqDict.empty
-                    |> ServerChange
-                )
-                model
+            , Command.batch
+                [ broadcastToGuild
+                    guildId
+                    (Server_SendMessage
+                        userId
+                        message.timestamp
+                        (GuildOrDmId_Guild_NoThread guildId channelId)
+                        richText
+                        threadRoute
+                        SeqDict.empty
+                        |> ServerChange
+                    )
+                    model
+                , broadcastMessageNotification message.timestamp userId richText model
+                ]
             )
 
         _ ->
@@ -3132,17 +3148,17 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
 
 
 broadcastNotification : Time.Posix -> Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
-broadcastNotification time userId user text model =
+broadcastNotification time userToNotify sender text model =
     SeqDict.foldl
         (\sessionId userIdKey cmds ->
-            if userIdKey == userId then
+            if userIdKey == userToNotify then
                 case SeqDict.get sessionId model.pushSubscriptions of
                     Just pushSubscription ->
                         pushNotification
                             time
-                            (PersonName.toString user.name)
+                            (PersonName.toString sender.name)
                             text
-                            (case user.icon of
+                            (case sender.icon of
                                 Just icon ->
                                     FileStatus.fileUrl FileStatus.pngContent icon
 
@@ -3200,6 +3216,28 @@ validateAttachedFiles uploadedFiles dict =
         dict
 
 
+broadcastMessageNotification : Time.Posix -> Id UserId -> Nonempty RichText -> BackendModel -> Command restriction toMsg BackendMsg
+broadcastMessageNotification time sender text model =
+    let
+        plainText : String
+        plainText =
+            RichText.toString (NonemptyDict.toSeqDict model.users) text
+    in
+    RichText.mentionsUser text
+        |> SeqSet.remove sender
+        |> SeqSet.foldl
+            (\userId2 cmds ->
+                case NonemptyDict.get userId2 model.users of
+                    Just user2 ->
+                        broadcastNotification time userId2 user2 plainText model :: cmds
+
+                    Nothing ->
+                        cmds
+            )
+            []
+        |> Command.batch
+
+
 sendGuildMessage :
     BackendModel
     -> Time.Posix
@@ -3246,10 +3284,6 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 NoThread
                         )
                         channel
-
-                plainText : String
-                plainText =
-                    RichText.toString (NonemptyDict.toSeqDict model.users) text
             in
             ( { model
                 | guilds =
@@ -3296,19 +3330,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
-                , RichText.mentionsUser text
-                    |> SeqSet.remove userId
-                    |> SeqSet.foldl
-                        (\userId2 cmds ->
-                            case NonemptyDict.get userId2 model.users of
-                                Just user2 ->
-                                    broadcastNotification time userId2 user2 plainText model :: cmds
-
-                                Nothing ->
-                                    cmds
-                        )
-                        []
-                    |> Command.batch
+                , broadcastMessageNotification time userId text model
                 , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let

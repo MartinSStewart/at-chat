@@ -5136,6 +5136,7 @@ view model =
                                         case NonemptyDict.get local.localUser.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
+                                                    loaded.timezone
                                                     adminData
                                                     user
                                                     admin
