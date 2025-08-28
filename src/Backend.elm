@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -651,7 +651,7 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        SentNotification result ->
+        SentNotification _ ->
             ( model, Command.none )
 
         GotVapidKeys result ->
@@ -2461,17 +2461,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         RegisterPushSubscriptionRequest pushSubscription ->
-            ( { model | pushSubscriptions = SeqDict.insert sessionId pushSubscription model.pushSubscriptions }
+            ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
             , pushNotification
                 "Success!"
                 "Push notifications enabled"
                 "https://at-chat.app/at-logo-no-background.png"
                 pushSubscription
-                model
+                model2
             )
 
         UnregisterPushSubscriptionRequest ->
-            ( { model | pushSubscriptions = SeqDict.remove sessionId model.pushSubscriptions }, Command.none )
+            ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }, Command.none )
 
 
 pushNotification : String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg

@@ -19,7 +19,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelMessageId, GuildOrDmId(..), Id, UserId)
+import Id exposing (GuildOrDmId(..), Id, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
@@ -33,7 +33,6 @@ import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import Ui.Input
 import User exposing (FrontendUser)
 
 

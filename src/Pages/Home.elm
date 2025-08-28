@@ -10,7 +10,6 @@ import Types exposing (FrontendMsg(..), LoginStatus(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import Ui.Input
 import Ui.Shadow
 
 

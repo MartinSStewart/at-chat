@@ -19,7 +19,6 @@ module Id exposing
     , guildOrDmIdWithoutMaybeMessage
     , increment
     , nextId
-    , threadWithoutMaybeMessage
     , toInt
     , toString
     )

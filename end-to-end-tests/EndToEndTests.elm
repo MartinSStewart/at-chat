@@ -195,7 +195,16 @@ tests =
                     response
 
                 Nothing ->
-                    if currentRequest.url == "https://api.postmarkapp.com/email" then
+                    if currentRequest.url == "http://localhost:3000/file/vapid" then
+                        StringHttpResponse
+                            { url = currentRequest.url
+                            , statusCode = 200
+                            , statusText = "OK"
+                            , headers = RegularDict.empty
+                            }
+                            "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
+
+                    else if currentRequest.url == "https://api.postmarkapp.com/email" then
                         case currentRequest.body of
                             T.JsonBody json ->
                                 case Json.Decode.decodeValue (Json.Decode.field "To" Json.Decode.string) json of

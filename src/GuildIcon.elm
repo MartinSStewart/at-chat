@@ -18,7 +18,6 @@ import LocalState exposing (FrontendGuild)
 import MyUi
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Input
 
 
 type Mode

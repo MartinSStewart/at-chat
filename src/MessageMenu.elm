@@ -27,7 +27,6 @@ import SeqDict
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Input
 import User
 
 

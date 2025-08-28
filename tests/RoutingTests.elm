@@ -2,7 +2,7 @@ module RoutingTests exposing (roundtrip)
 
 import Expect
 import Fuzz exposing (Fuzzer)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), UserId)
+import Id exposing (Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..))
 import Route exposing (ChannelRoute(..), Route(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
@@ -46,7 +46,7 @@ routeFuzzer =
         , Fuzz.map AdminRoute (Fuzz.map (\highlightLog -> { highlightLog = highlightLog }) (Fuzz.maybe Fuzz.int))
         , Fuzz.constant AiChatRoute
         , Fuzz.map2 GuildRoute idFuzzer channelRouteFuzzer
-        , Fuzz.map3 DmRoute idFuzzer threadRouteFuzzer (Fuzz.maybe idFuzzer)
+        , Fuzz.map2 DmRoute idFuzzer threadRouteFuzzer
         ]
 
 
@@ -60,18 +60,18 @@ secretIdFuzzer =
     Fuzz.map SecretId.fromString (Fuzz.map String.fromList (Fuzz.listOfLength 16 (Fuzz.oneOf (List.map Fuzz.constant (String.toList "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")))))
 
 
-threadRouteFuzzer : Fuzzer ThreadRoute
+threadRouteFuzzer : Fuzzer ThreadRouteWithMaybeMessage
 threadRouteFuzzer =
     Fuzz.oneOf
-        [ Fuzz.constant NoThread
-        , Fuzz.map ViewThread idFuzzer
+        [ Fuzz.map NoThreadWithMaybeMessage (Fuzz.maybe idFuzzer)
+        , Fuzz.map2 ViewThreadWithMaybeMessage idFuzzer (Fuzz.maybe idFuzzer)
         ]
 
 
 channelRouteFuzzer : Fuzzer ChannelRoute
 channelRouteFuzzer =
     Fuzz.oneOf
-        [ Fuzz.map3 ChannelRoute idFuzzer threadRouteFuzzer (Fuzz.maybe idFuzzer)
+        [ Fuzz.map2 ChannelRoute idFuzzer threadRouteFuzzer
         , Fuzz.constant NewChannelRoute
         , Fuzz.map EditChannelRoute idFuzzer
         , Fuzz.constant InviteLinkCreatorRoute

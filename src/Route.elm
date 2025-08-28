@@ -7,7 +7,7 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, GuildId, Id, InviteLinkId, ThreadRouteWithMaybeMessage(..), UserId)
 import SecretId exposing (SecretId)
 import Url exposing (Url)
 import Url.Builder
@@ -200,6 +200,7 @@ encode route =
     Url.Builder.absolute path query
 
 
+maybeMessageIdToString : Maybe (Id a) -> List String
 maybeMessageIdToString maybeMessageIndex =
     case maybeMessageIndex of
         Just messageIndex ->

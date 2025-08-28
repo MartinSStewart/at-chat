@@ -12,7 +12,6 @@ module Pages.Guild exposing
     , messageViewDecode
     , messageViewEncode
     , newGuildFormInit
-    , repliedToUserId
     , threadMessageHtmlId
     )
 
@@ -1154,7 +1153,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                         UserTextMessage data ->
                             data.createdAt
 
-                        UserJoinedMessage posix id seqDict ->
+                        UserJoinedMessage posix _ _ ->
                             posix
 
                         DeletedMessage posix ->

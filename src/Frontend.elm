@@ -56,7 +56,6 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
-import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -1018,13 +1017,13 @@ isPressMsg msg =
         MessageViewMsg _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
-        GotRegisterPushSubscription result ->
+        GotRegisterPushSubscription _ ->
             False
 
-        ToggledEnablePushNotifications bool ->
+        ToggledEnablePushNotifications _ ->
             True
 
-        GotIsPushNotificationsRegistered bool ->
+        GotIsPushNotificationsRegistered _ ->
             False
 
         PrivateVapidKeyEditableMsg editableMsg ->
@@ -4808,10 +4807,10 @@ pendingChangesText localChange =
                 Pages.Admin.SetDiscordBotToken _ ->
                     "Set Discord bot token"
 
-                Pages.Admin.SetPrivateVapidKey string ->
+                Pages.Admin.SetPrivateVapidKey _ ->
                     "Set private vapid key"
 
-                Pages.Admin.SetPublicVapidKey string ->
+                Pages.Admin.SetPublicVapidKey _ ->
                     "Set public vapid key"
 
         Local_SendMessage _ _ _ _ _ ->
