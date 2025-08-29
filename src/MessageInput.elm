@@ -174,6 +174,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
             , Html.Attributes.style "padding" "0 9px 0 9px"
             , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
             , Html.Attributes.style "white-space" "pre-wrap"
+            , Html.Attributes.style "overflow-wrap" "anywhere"
             , Html.Attributes.style "color"
                 (if text == "" then
                     "rgb(180,180,180)"
