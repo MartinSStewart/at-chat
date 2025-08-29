@@ -20,6 +20,7 @@ import Array exposing (Array)
 import Coord
 import Discord.Id
 import Discord.Markdown
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import FileName
 import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
@@ -692,17 +693,18 @@ mentionsUserHelper set nonempty =
 
 
 view :
-    Int
+    HtmlId
+    -> Int
     -> (Int -> msg)
     -> SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Html msg)
-view containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
+view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
         (Just containerWidth)
-        pressedSpoiler
+        (Just ( htmlIdPrefix, pressedSpoiler ))
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
@@ -713,16 +715,15 @@ view containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty
 
 
 preview :
-    (Int -> msg)
-    -> SeqSet Int
+    SeqSet Int
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Html msg)
-preview pressedSpoiler revealedSpoilers users attachedFiles nonempty =
+preview revealedSpoilers users attachedFiles nonempty =
     viewHelper
         Nothing
-        pressedSpoiler
+        Nothing
         0
         { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
@@ -747,7 +748,7 @@ normalTextView text state =
 
 viewHelper :
     Maybe Int
-    -> (Int -> msg)
+    -> Maybe ( HtmlId, Int -> msg )
     -> Int
     -> RichTextState
     -> SeqSet Int
@@ -755,7 +756,7 @@ viewHelper :
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> ( Int, List (Html msg) )
-viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
+viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl
         (\item ( spoilerIndex2, currentList ) ->
             case item of
@@ -772,7 +773,7 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                         ( spoilerIndex3, list ) =
                             viewHelper
                                 containerWidth
-                                pressedSpoiler
+                                maybePressedSpoiler
                                 spoilerIndex2
                                 { state | italic = True }
                                 revealedSpoilers
@@ -787,7 +788,7 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                         ( spoilerIndex3, list ) =
                             viewHelper
                                 containerWidth
-                                pressedSpoiler
+                                maybePressedSpoiler
                                 spoilerIndex2
                                 { state | underline = True }
                                 revealedSpoilers
@@ -802,7 +803,7 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                         ( spoilerIndex3, list ) =
                             viewHelper
                                 containerWidth
-                                pressedSpoiler
+                                maybePressedSpoiler
                                 spoilerIndex2
                                 { state | bold = True }
                                 revealedSpoilers
@@ -817,7 +818,7 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                         ( spoilerIndex3, list ) =
                             viewHelper
                                 containerWidth
-                                pressedSpoiler
+                                maybePressedSpoiler
                                 spoilerIndex2
                                 { state | strikethrough = True }
                                 revealedSpoilers
@@ -836,7 +837,7 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                         ( _, list ) =
                             viewHelper
                                 containerWidth
-                                pressedSpoiler
+                                maybePressedSpoiler
                                 spoilerIndex2
                                 (if revealed then
                                     state
@@ -859,10 +860,18 @@ viewHelper containerWidth pressedSpoiler spoilerIndex state revealedSpoilers all
                                             [ Html.Attributes.style "background" "rgb(30,30,30)" ]
 
                                         else
-                                            [ Html.Events.onClick (pressedSpoiler spoilerIndex2)
-                                            , Html.Attributes.style "cursor" "pointer"
+                                            [ Html.Attributes.style "cursor" "pointer"
                                             , Html.Attributes.style "background" "rgb(0,0,0)"
                                             ]
+                                                ++ (case maybePressedSpoiler of
+                                                        Just ( htmlIdPrefix, pressedSpoiler ) ->
+                                                            [ Html.Events.onClick (pressedSpoiler spoilerIndex2)
+                                                            , Html.Attributes.id (Dom.idToString htmlIdPrefix ++ "_" ++ String.fromInt spoilerIndex2)
+                                                            ]
+
+                                                        Nothing ->
+                                                            []
+                                                   )
                                        )
                                 )
                                 list

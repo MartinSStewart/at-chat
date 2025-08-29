@@ -2192,6 +2192,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
+                                (Dom.id ("spoiler_" ++ Id.toString messageIndex))
                                 containerWidth
                                 (MessageView_PressedSpoiler messageIndex)
                                 (case SeqDict.get messageIndex revealedSpoilers of
@@ -2351,7 +2352,6 @@ userTextMessagePreview allUsers revealedSpoilers message =
             ]
             [ Html.text (User.toString message.createdBy allUsers) ]
             :: RichText.preview
-                (\_ -> MessageView_NoOp)
                 revealedSpoilers
                 allUsers
                 message.attachedFiles
@@ -2588,7 +2588,6 @@ threadStarterIndicator timezone allUsers messageId thread =
                                     ]
                                     [ Html.text (User.toString data.createdBy allUsers) ]
                                     :: RichText.preview
-                                        (\_ -> MessageView_NoOp)
                                         SeqSet.empty
                                         allUsers
                                         data.attachedFiles

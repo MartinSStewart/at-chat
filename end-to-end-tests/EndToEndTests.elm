@@ -3,13 +3,14 @@ module EndToEndTests exposing (main, setup)
 import Backend
 import Dict as RegularDict
 import Duration
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
-import Id exposing (ThreadRouteWithMaybeMessage(..))
+import Html.Attributes
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -302,6 +303,103 @@ andThenFrontend delay user func =
         )
 
 
+connectTwoUsers :
+    (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+     -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+     -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+    )
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+connectTwoUsers continueFunc =
+    T.connectFrontend
+        100
+        sessionId0
+        "/"
+        windowSize
+        (\admin ->
+            [ handleLogin adminEmail admin
+            , admin.click 100 (Dom.id "guild_createGuild")
+            , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+            , admin.click 100 (Dom.id "guild_createGuildSubmit")
+            , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+            , admin.click 100 (Dom.id "guild_createInviteLink")
+            , admin.click 100 (Dom.id "guild_copyText")
+            , T.andThen
+                100
+                (\data ->
+                    case
+                        List.Extra.findMap
+                            (\request ->
+                                if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
+                                    Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                else
+                                    Nothing
+                            )
+                            data.portRequests
+                    of
+                        Just text ->
+                            [ T.connectFrontend
+                                100
+                                sessionId1
+                                (dropPrefix Env.domain text)
+                                windowSize
+                                (\user ->
+                                    [ handleLoginFromLoginPage userEmail user
+                                    , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
+                                    , user.click 100 (Dom.id "loginForm_submit")
+                                    , user.click 100 (Dom.id "guild_openChannel_0")
+                                    , enableNotifications user
+                                    , checkNotification "Push notifications enabled"
+                                    , admin.click 100 (Dom.id "guild_openChannel_0")
+                                    , T.group (continueFunc admin user)
+                                    ]
+                                )
+                            ]
+
+                        Nothing ->
+                            [ T.checkState 0 (\_ -> Err "Clipboard text not found") ]
+                )
+            ]
+        )
+
+
+writeMessage user text =
+    T.group
+        [ user.input 100 (Dom.id "channel_textinput") text
+        , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+        ]
+
+
+createThread : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> Id ChannelMessageId -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+createThread user messageId =
+    T.group
+        [ user.mouseEnter 100 (Dom.id ("guild_message_" ++ Id.toString messageId)) ( 10, 10 ) []
+        , user.custom
+            100
+            (Dom.id "miniView_showFullMenu")
+            "click"
+            (Json.Encode.object
+                [ ( "clientX", Json.Encode.int 500 )
+                , ( "clientY", Json.Encode.int 300 )
+                ]
+            )
+        , user.click 100 (Dom.id "messageMenu_openThread")
+        ]
+
+
+clickSpoiler :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> HtmlId
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+clickSpoiler user htmlId =
+    T.group
+        [ user.click 100 htmlId
+        , user.checkView
+            100
+            (Test.Html.Query.hasNot [ Test.Html.Selector.attribute (Html.Attributes.id (Dom.idToString htmlId)) ])
+        ]
+
+
 tests : List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests =
     let
@@ -379,114 +477,90 @@ tests =
                 homepageUrl
     in
     [ T.start
+        "spoilers"
+        startTime
+        config
+        [ connectTwoUsers
+            (\admin user ->
+                [ writeMessage admin "This message is ||very|| ||secret||"
+                , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                , admin.custom
+                    100
+                    (Dom.id "miniView_reply")
+                    "click"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.int 300 )
+                        , ( "clientY", Json.Encode.int 300 )
+                        ]
+                    )
+                , writeMessage admin "Another ||*super*|| *||secret||* message"
+                , clickSpoiler user (Dom.id "spoiler_1_0")
+                , clickSpoiler user (Dom.id "spoiler_1_1")
+                , clickSpoiler user (Dom.id "spoiler_2_1")
+                , clickSpoiler user (Dom.id "spoiler_2_0")
+                , createThread admin (Id.fromInt 2)
+                , clickSpoiler admin (Dom.id "spoiler_2_0")
+                , clickSpoiler admin (Dom.id "spoiler_2_1")
+                , writeMessage admin "||*super*|| ||duper|| *||secret||* text"
+                , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                , clickSpoiler admin (Dom.id "spoiler_0_0")
+                , clickSpoiler admin (Dom.id "spoiler_0_2")
+                ]
+            )
+        ]
+    , T.start
         "Notifications"
         startTime
         config
-        [ T.connectFrontend
-            100
-            sessionId0
-            "/"
-            windowSize
-            (\admin ->
-                [ handleLogin adminEmail admin
-                , admin.click 100 (Dom.id "guild_createGuild")
-                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
-                , admin.click 100 (Dom.id "guild_createGuildSubmit")
-                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
-                , admin.click 100 (Dom.id "guild_createInviteLink")
-                , admin.click 100 (Dom.id "guild_copyText")
-                , T.andThen
+        [ connectTwoUsers
+            (\admin user ->
+                [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
+                , user.checkView
                     100
-                    (\data ->
-                        case
-                            List.Extra.findMap
-                                (\request ->
-                                    if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
-                                        Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
-
-                                    else
-                                        Nothing
-                                )
-                                data.portRequests
-                        of
-                            Just text ->
-                                [ T.connectFrontend
-                                    100
-                                    sessionId1
-                                    (dropPrefix Env.domain text)
-                                    windowSize
-                                    (\user ->
-                                        [ handleLoginFromLoginPage userEmail user
-                                        , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
-                                        , user.click 100 (Dom.id "loginForm_submit")
-                                        , user.click 100 (Dom.id "guild_openChannel_0")
-                                        , enableNotifications user
-                                        , checkNotification "Push notifications enabled"
-                                        , admin.click 100 (Dom.id "guild_openChannel_0")
-                                        , admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
-                                        , user.checkView
-                                            100
-                                            (Test.Html.Query.has
-                                                [ Test.Html.Selector.exactText "AT is typing..." ]
-                                            )
-                                        , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                                        , user.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.exactText "AT is typing..." ]
-                                            )
-                                        , checkNotification "@Stevie Steve Hi!"
-                                        , enableNotifications admin
-                                        , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
-                                        , user.custom
-                                            100
-                                            (Dom.id "miniView_reply")
-                                            "click"
-                                            (Json.Encode.object
-                                                [ ( "clientX", Json.Encode.int 300 )
-                                                , ( "clientY", Json.Encode.int 300 )
-                                                ]
-                                            )
-                                        , user.input 100 (Dom.id "channel_textinput") "Hello admin!"
-                                        , admin.checkView
-                                            100
-                                            (Test.Html.Query.has
-                                                [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
-                                            )
-                                        , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
-                                        , admin.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
-                                            )
-                                        , checkNotification "Hello admin!"
-                                        , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
-                                        , admin.custom
-                                            100
-                                            (Dom.id "miniView_showFullMenu")
-                                            "click"
-                                            (Json.Encode.object
-                                                [ ( "clientX", Json.Encode.int 500 )
-                                                , ( "clientY", Json.Encode.int 300 )
-                                                ]
-                                            )
-                                        , admin.click 100 (Dom.id "messageMenu_openThread")
-                                        , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
-                                        , user.checkView
-                                            100
-                                            (Test.Html.Query.hasNot
-                                                [ Test.Html.Selector.exactText "AT is typing..." ]
-                                            )
-                                        , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
-                                        , checkNotification "Lets move this to a thread..."
-                                        , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                                        ]
-                                    )
-                                ]
-
-                            Nothing ->
-                                [ T.checkState 0 (\_ -> Err "Clipboard text not found") ]
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "AT is typing..." ]
+                    )
+                , checkNotification "@Stevie Steve Hi!"
+                , enableNotifications admin
+                , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                , user.custom
+                    100
+                    (Dom.id "miniView_reply")
+                    "click"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.int 300 )
+                        , ( "clientY", Json.Encode.int 300 )
+                        ]
+                    )
+                , user.input 100 (Dom.id "channel_textinput") "Hello admin!"
+                , admin.checkView
+                    100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
+                    )
+                , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                , admin.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
+                    )
+                , checkNotification "Hello admin!"
+                , createThread admin (Id.fromInt 2)
+                , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
+                , user.checkView
+                    100
+                    (Test.Html.Query.hasNot
+                        [ Test.Html.Selector.exactText "AT is typing..." ]
+                    )
+                , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                , checkNotification "Lets move this to a thread..."
+                , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 ]
             )
         ]
