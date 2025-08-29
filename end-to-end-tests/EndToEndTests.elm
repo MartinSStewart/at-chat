@@ -260,13 +260,13 @@ checkNotification body =
                     data.httpRequests
             of
                 _ :: _ :: _ ->
-                    Err ("Multiple notifications found for " ++ body)
+                    Err ("Multiple notifications found for \"" ++ body ++ "\"")
 
                 [ _ ] ->
                     Ok ()
 
                 [] ->
-                    Err ("Notification not found for " ++ body)
+                    Err ("Notification not found for \"" ++ body ++ "\"")
         )
 
 
@@ -460,6 +460,26 @@ tests =
                                                 [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
                                             )
                                         , checkNotification "Hello admin!"
+                                        , admin.mouseEnter 100 (Dom.id "guild_message_2") ( 10, 10 ) []
+                                        , admin.custom
+                                            100
+                                            (Dom.id "miniView_showFullMenu")
+                                            "click"
+                                            (Json.Encode.object
+                                                [ ( "clientX", Json.Encode.int 500 )
+                                                , ( "clientY", Json.Encode.int 300 )
+                                                ]
+                                            )
+                                        , admin.click 100 (Dom.id "messageMenu_openThread")
+                                        , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
+                                        , user.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.exactText "AT is typing..." ]
+                                            )
+                                        , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                                        , checkNotification "Lets move this to a thread..."
+                                        , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                                         ]
                                     )
                                 ]

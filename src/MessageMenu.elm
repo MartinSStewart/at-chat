@@ -341,8 +341,8 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
 
                       else
                         button isMobile (Dom.id "messageMenu_replyTo") Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
-                    , case ( threadRoute, isThreadStarter ) of
-                        ( NoThread, False ) ->
+                    , case threadRoute of
+                        NoThread ->
                             button
                                 isMobile
                                 (Dom.id "messageMenu_openThread")
@@ -351,7 +351,7 @@ menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model
                                 (MessageMenu_PressedOpenThread messageIndex)
                                 |> Just
 
-                        _ ->
+                        ViewThread _ ->
                             Nothing
                     , button
                         isMobile

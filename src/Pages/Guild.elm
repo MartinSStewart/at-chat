@@ -2530,12 +2530,12 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
 
 
 threadStarterIndicator : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id ChannelMessageId -> Thread -> Element MessageViewMsg
-threadStarterIndicator timezone allUsers messageIndex thread =
+threadStarterIndicator timezone allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
     in
-    Html.div
+    Html.button
         [ Html.Attributes.style "white-space" "nowrap"
         , Html.Attributes.style "text-overflow" "ellipsis"
         , Html.Attributes.style "overflow" "hidden"
@@ -2545,7 +2545,11 @@ threadStarterIndicator timezone allUsers messageIndex thread =
         , Html.Attributes.style "width" "fit-content"
         , Html.Attributes.style "max-width" "calc(min(100% - 16px, 800px))"
         , Html.Attributes.style "min-width" "250px"
-        , Html.Events.onClick (MessageView_PressedViewThreadLink messageIndex)
+        , Html.Attributes.style "margin" "0"
+        , Html.Attributes.style "color" "inherit"
+        , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.id ("guild_threadStarterIndicator_" ++ Id.toString messageId)
+        , Html.Events.onClick (MessageView_PressedViewThreadLink messageId)
         , Html.Attributes.style "cursor" "pointer"
         ]
         (Html.div
