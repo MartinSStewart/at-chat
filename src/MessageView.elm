@@ -2,6 +2,7 @@ module MessageView exposing (MessageViewMsg(..), isPressMsg, miniView)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import Html exposing (Html)
@@ -90,9 +91,15 @@ miniView isThreadStarter canEdit messageIndex =
         , Ui.move { x = -48, y = -16, z = 0 }
         , Ui.height (Ui.px 32)
         ]
-        [ miniButton (MessageViewMsg_PressedShowReactionEmojiSelector messageIndex) Icons.smile
+        [ miniButton
+            (Dom.id "miniView_showReactionEmojiSelector")
+            (MessageViewMsg_PressedShowReactionEmojiSelector messageIndex)
+            Icons.smile
         , if canEdit then
-            miniButton (\_ -> MessageViewMsg_PressedEditMessage messageIndex) Icons.pencil
+            miniButton
+                (Dom.id "miniView_editMessage")
+                (\_ -> MessageViewMsg_PressedEditMessage messageIndex)
+                Icons.pencil
 
           else
             Ui.none
@@ -100,20 +107,25 @@ miniView isThreadStarter canEdit messageIndex =
             Ui.none
 
           else
-            miniButton (\_ -> MessageViewMsg_PressedReply messageIndex) Icons.reply
-        , miniButton (MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex) Icons.dotDotDot
+            miniButton
+                (Dom.id "miniView_reply")
+                (\_ -> MessageViewMsg_PressedReply messageIndex)
+                Icons.reply
+        , miniButton
+            (Dom.id "miniView_showFullMenu")
+            (MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex)
+            Icons.dotDotDot
         ]
 
 
-miniButton : (Coord CssPixels -> msg) -> Html msg -> Element msg
-miniButton onPress svg =
+miniButton : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
+miniButton htmlId onPress svg =
     Ui.el
         [ Ui.width (Ui.px 32)
         , Ui.paddingXY 4 3
         , Ui.height Ui.fill
         , Ui.htmlAttribute (Html.Attributes.attribute "role" "button")
-
-        --, Ui.Input.button onPress
+        , Ui.id (Dom.idToString htmlId)
         , Ui.Events.stopPropagationOn "click"
             (Json.Decode.map2
                 (\x y -> ( onPress (Coord.xy (round x) (round y)), True ))

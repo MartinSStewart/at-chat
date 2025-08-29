@@ -142,7 +142,7 @@ view isMobile time local loggedIn loaded model =
                     model.name
                 , let
                     enablePushNotificationsLabel =
-                        Ui.Input.label "" [ Ui.padding 8 ] (Ui.text "Enable push notifications")
+                        Ui.Input.label "userOptions_togglePushNotifications" [ Ui.padding 8 ] (Ui.text "Enable push notifications")
                   in
                   Ui.row
                     []

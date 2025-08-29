@@ -236,6 +236,7 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                 :: List.map
                     (\( guildId, guild ) ->
                         elLinkButton
+                            (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
                             (GuildRoute
                                 guildId
                                 (ChannelRoute
@@ -268,22 +269,14 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
         )
 
 
-elLinkButton : Route -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Element FrontendMsg
-elLinkButton route attributes content =
-    MyUi.elButton
-        (Route.encode route |> Dom.id)
-        (PressedLink route)
-        attributes
-        content
+elLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Element FrontendMsg
+elLinkButton htmlId route attributes content =
+    MyUi.elButton htmlId (PressedLink route) attributes content
 
 
-rowLinkButton : Route -> List (Ui.Attribute FrontendMsg) -> List (Element FrontendMsg) -> Element FrontendMsg
-rowLinkButton route attributes content =
-    MyUi.rowButton
-        (Route.encode route |> Dom.id)
-        (PressedLink route)
-        attributes
-        content
+rowLinkButton : HtmlId -> Route -> List (Ui.Attribute FrontendMsg) -> List (Element FrontendMsg) -> Element FrontendMsg
+rowLinkButton htmlId route attributes content =
+    MyUi.rowButton htmlId (PressedLink route) attributes content
 
 
 loggedInAsView : LocalState -> Element FrontendMsg
@@ -625,6 +618,7 @@ memberColumn isMobile localUser guildOwner guildMembers =
 memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
     rowLinkButton
+        (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute userId (NoThreadWithMaybeMessage Nothing))
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
@@ -2703,6 +2697,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
         , elLinkButton
+            (Dom.id "guild_inviteLinkCreatorRoute")
             (GuildRoute guildId InviteLinkCreatorRoute)
             [ Ui.width Ui.shrink
             , Ui.Font.color MyUi.font2
@@ -2760,6 +2755,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                                 channelRoute == NewChannelRoute
                         in
                         rowLinkButton
+                            (Dom.id "guild_newChannel")
                             (GuildRoute guildId NewChannelRoute)
                             [ Ui.paddingXY 4 8
                             , Ui.Font.color MyUi.font3
@@ -2829,6 +2825,7 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
                         , MyUi.noShrinking
                         ]
                         [ elLinkButton
+                            (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
                             (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing)))
                             [ Ui.height Ui.fill
                             , Ui.contentCenterY
@@ -2929,6 +2926,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         , MyUi.noShrinking
         ]
         [ elLinkButton
+            (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
             (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
             [ Ui.height Ui.fill
             , Ui.contentCenterY
@@ -2976,6 +2974,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
             (Ui.text (ChannelName.toString channel.name))
         , if isHover then
             elLinkButton
+                (Dom.id ("guild_editChannel_" ++ Id.toString channelId))
                 (GuildRoute guildId (EditChannelRoute channelId))
                 [ Ui.alignRight
                 , Ui.width (Ui.px 26)
@@ -3038,6 +3037,7 @@ friendLabel isMobile isSelected otherUserId otherUser =
             Debug.log "rerender friendLabel" ()
     in
     rowLinkButton
+        (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
@@ -3206,7 +3206,7 @@ newGuildFormView form =
                 , Ui.border 1
                 ]
                 (Ui.text "Cancel")
-            , submitButton (Dom.id "guild_createGuild") (PressedSubmitNewGuild form) "Create guild"
+            , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]
         ]
 

@@ -5,22 +5,25 @@ import Dict as RegularDict
 import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
+import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
+import Id exposing (ThreadRouteWithMaybeMessage(..))
 import Json.Decode
 import Json.Encode
+import List.Extra
 import LoginForm
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import Route
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel(..), FrontendMsg, LoadedFrontend, LoginTokenData(..), ToBackend, ToFrontend)
 import Unsafe
 import Url exposing (Url)
 
@@ -44,30 +47,57 @@ handlePortToJs :
     { currentRequest : T.PortToJs, data : T.Data FrontendModel BackendModel }
     -> Maybe ( String, Json.Decode.Value )
 handlePortToJs { currentRequest } =
-    if currentRequest.portName == "get_window_size" then
-        Just
-            ( "got_window_size"
+    case currentRequest.portName of
+        "get_window_size" ->
+            Just
+                ( "got_window_size"
+                , Json.Encode.object
+                    [ ( "width", Json.Encode.float windowSize.width )
+                    , ( "height", Json.Encode.float windowSize.height )
+                    ]
+                )
+
+        "text_input_select_all_to_js" ->
+            Nothing
+
+        "check_notification_permission_to_js" ->
+            Nothing
+
+        "check_pwa_status_to_js" ->
+            Just ( "check_pwa_status_from_js", Json.Encode.bool False )
+
+        "is_push_subscription_registered_to_js" ->
+            Just ( "is_push_subscription_registered_from_js", Json.Encode.bool False )
+
+        "load_sounds_to_js" ->
+            Nothing
+
+        "load_user_settings_to_js" ->
+            Just ( "load_user_settings_from_js", Json.Encode.string "" )
+
+        "copy_to_clipboard_to_js" ->
+            Nothing
+
+        "register_push_subscription_to_js" ->
+            ( "register_push_subscription_from_js"
             , Json.Encode.object
-                [ ( "width", Json.Encode.float windowSize.width )
-                , ( "height", Json.Encode.float windowSize.height )
+                [ ( "endpoint", Json.Encode.string "https://vapidserver.com/" )
+                , ( "keys"
+                  , Json.Encode.object
+                        [ ( "auth", Json.Encode.string "123" )
+                        , ( "p256dh", Json.Encode.string "abc" )
+                        ]
+                  )
                 ]
             )
+                |> Just
 
-    else if currentRequest.portName == "elm_device_pixel_ratio_to_js" then
-        Just ( "elm_device_pixel_ratio_from_js", Json.Encode.float 1 )
-
-    else if currentRequest.portName == "text_input_select_all_to_js" then
-        Nothing
-
-    else if currentRequest.portName == "set_overscroll" then
-        Nothing
-
-    else
-        let
-            _ =
-                Debug.log "port request" currentRequest
-        in
-        Nothing
+        _ ->
+            let
+                _ =
+                    Debug.log "port request" currentRequest
+            in
+            Nothing
 
 
 windowSize : { width : number, height : number }
@@ -153,13 +183,28 @@ sessionId0 =
     Lamdera.sessionIdFromString "sessionId0"
 
 
+sessionId1 : SessionId
+sessionId1 =
+    Lamdera.sessionIdFromString "sessionId1"
+
+
 handleLogin :
     EmailAddress
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
 handleLogin emailAddress client =
     [ client.click 100 Pages.Home.loginButtonId
-    , client.input 100 LoginForm.emailInputId (EmailAddress.toString emailAddress)
+    , handleLoginFromLoginPage emailAddress client
+    ]
+        |> T.group
+
+
+handleLoginFromLoginPage :
+    EmailAddress
+    -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+    -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
+handleLoginFromLoginPage emailAddress client =
+    [ client.input 100 LoginForm.emailInputId (EmailAddress.toString emailAddress)
     , client.click 100 LoginForm.submitEmailButtonId
     , T.andThen
         100
@@ -185,6 +230,78 @@ adminEmail =
     Unsafe.emailAddress Env.adminEmail
 
 
+userEmail : EmailAddress
+userEmail =
+    Unsafe.emailAddress "user@mail.com"
+
+
+enableNotifications : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+enableNotifications user =
+    [ user.click 100 (Dom.id "guild_showUserOptions")
+    , user.click 100 (Dom.id "userOptions_togglePushNotifications")
+    , user.click 100 (Dom.id "userOptions_closeUserOptions")
+    ]
+        |> T.group
+
+
+checkNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNotification body =
+    T.checkState
+        100
+        (\data ->
+            case
+                List.filter
+                    (\request ->
+                        List.any
+                            (\( name, value ) -> name == "body" && value == body)
+                            request.headers
+                            && (request.url == "http://localhost:3000/file/push-notification")
+                    )
+                    data.httpRequests
+            of
+                _ :: _ :: _ ->
+                    Err ("Multiple notifications found for " ++ body)
+
+                [ _ ] ->
+                    Ok ()
+
+                [] ->
+                    Err ("Notification not found for " ++ body)
+        )
+
+
+dropPrefix : String -> String -> String
+dropPrefix prefix text =
+    if String.startsWith prefix text then
+        String.dropLeft (String.length prefix) text
+
+    else
+        text
+
+
+andThenFrontend :
+    T.DelayInMs
+    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> (LoadedFrontend -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+andThenFrontend delay user func =
+    T.andThen
+        delay
+        (\data ->
+            case SeqDict.get user.clientId data.frontends of
+                Just frontend ->
+                    case frontend of
+                        Loaded loaded ->
+                            func loaded
+
+                        Loading _ ->
+                            [ T.checkState 0 (\_ -> Err "Frontend loading") ]
+
+                Nothing ->
+                    [ T.checkState 0 (\_ -> Err "Frontend missing") ]
+        )
+
+
 tests : List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests =
     let
@@ -203,6 +320,15 @@ tests =
                             , headers = RegularDict.empty
                             }
                             "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
+
+                    else if currentRequest.url == "http://localhost:3000/file/push-notification" then
+                        StringHttpResponse
+                            { url = currentRequest.url
+                            , statusCode = 200
+                            , statusText = "OK"
+                            , headers = RegularDict.empty
+                            }
+                            ""
 
                     else if currentRequest.url == "https://api.postmarkapp.com/email" then
                         case currentRequest.body of
@@ -252,7 +378,100 @@ tests =
                 handleMultiFileUpload
                 homepageUrl
     in
-    [ T.start "Enable 2FA"
+    [ T.start
+        "Notifications"
+        startTime
+        config
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            windowSize
+            (\admin ->
+                [ handleLogin adminEmail admin
+                , admin.click 100 (Dom.id "guild_createGuild")
+                , admin.input 100 (Dom.id "newGuildName") "My new guild!"
+                , admin.click 100 (Dom.id "guild_createGuildSubmit")
+                , admin.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , admin.click 100 (Dom.id "guild_createInviteLink")
+                , admin.click 100 (Dom.id "guild_copyText")
+                , T.andThen
+                    100
+                    (\data ->
+                        case
+                            List.Extra.findMap
+                                (\request ->
+                                    if request.clientId == admin.clientId && request.portName == "copy_to_clipboard_to_js" then
+                                        Json.Decode.decodeValue Json.Decode.string request.value |> Result.toMaybe
+
+                                    else
+                                        Nothing
+                                )
+                                data.portRequests
+                        of
+                            Just text ->
+                                [ T.connectFrontend
+                                    100
+                                    sessionId1
+                                    (dropPrefix Env.domain text)
+                                    windowSize
+                                    (\user ->
+                                        [ handleLoginFromLoginPage userEmail user
+                                        , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
+                                        , user.click 100 (Dom.id "loginForm_submit")
+                                        , user.click 100 (Dom.id "guild_openChannel_0")
+                                        , enableNotifications user
+                                        , checkNotification "Push notifications enabled"
+                                        , admin.click 100 (Dom.id "guild_openChannel_0")
+                                        , admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
+                                        , user.checkView
+                                            100
+                                            (Test.Html.Query.has
+                                                [ Test.Html.Selector.exactText "AT is typing..." ]
+                                            )
+                                        , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+                                        , user.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.exactText "AT is typing..." ]
+                                            )
+                                        , checkNotification "@Stevie Steve Hi!"
+                                        , enableNotifications admin
+                                        , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
+                                        , user.custom
+                                            100
+                                            (Dom.id "miniView_reply")
+                                            "click"
+                                            (Json.Encode.object
+                                                [ ( "clientX", Json.Encode.int 300 )
+                                                , ( "clientY", Json.Encode.int 300 )
+                                                ]
+                                            )
+                                        , user.input 100 (Dom.id "channel_textinput") "Hello admin!"
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.has
+                                                [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
+                                            )
+                                        , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
+                                        , admin.checkView
+                                            100
+                                            (Test.Html.Query.hasNot
+                                                [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
+                                            )
+                                        , checkNotification "Hello admin!"
+                                        ]
+                                    )
+                                ]
+
+                            Nothing ->
+                                [ T.checkState 0 (\_ -> Err "Clipboard text not found") ]
+                    )
+                ]
+            )
+        ]
+    , T.start
+        "Enable 2FA"
         startTime
         config
         [ T.connectFrontend
