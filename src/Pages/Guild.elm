@@ -12,7 +12,6 @@ module Pages.Guild exposing
     , messageViewDecode
     , messageViewEncode
     , newGuildFormInit
-    , repliedToUserId
     , threadMessageHtmlId
     )
 
@@ -67,27 +66,6 @@ import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
 
 
-repliedToUserId : Maybe (Id messageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
-repliedToUserId maybeRepliedTo channel =
-    case maybeRepliedTo of
-        Just repliedTo ->
-            case LocalState.getArray repliedTo channel.messages of
-                Just (UserTextMessage repliedToData) ->
-                    Just repliedToData.createdBy
-
-                Just (UserJoinedMessage _ joinedUser _) ->
-                    Just joinedUser
-
-                Just (DeletedMessage _) ->
-                    Nothing
-
-                Nothing ->
-                    Nothing
-
-        Nothing ->
-            Nothing
-
-
 channelOrThreadHasNotifications :
     Id UserId
     -> Id messageId
@@ -109,7 +87,7 @@ channelOrThreadHasNotifications currentUserId lastViewed channel =
                                     state
 
                                 else if
-                                    (repliedToUserId data.repliedTo channel == Just currentUserId)
+                                    (LocalState.repliedToUserId data.repliedTo channel == Just currentUserId)
                                         || SeqSet.member currentUserId (RichText.mentionsUser data.content)
                                 then
                                     NewMessageForUser

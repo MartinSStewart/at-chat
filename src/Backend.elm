@@ -1334,7 +1334,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                         |> ServerChange
                     )
                     model
-                , broadcastMessageNotification message.timestamp userId richText model
+                , broadcastMessageNotification message.timestamp userId threadRoute channel richText model
                 ]
             )
 
@@ -3220,15 +3220,21 @@ validateAttachedFiles uploadedFiles dict =
         dict
 
 
-broadcastMessageNotification : Time.Posix -> Id UserId -> Nonempty RichText -> BackendModel -> Command restriction toMsg BackendMsg
-broadcastMessageNotification time sender text model =
+broadcastMessageNotification :
+    Time.Posix
+    -> Id UserId
+    -> ThreadRouteWithMaybeMessage
+    -> BackendChannel
+    -> Nonempty RichText
+    -> BackendModel
+    -> Command restriction toMsg BackendMsg
+broadcastMessageNotification time sender threadRouteWithRepliedTo channel text model =
     let
         plainText : String
         plainText =
             RichText.toString (NonemptyDict.toSeqDict model.users) text
     in
-    RichText.mentionsUser text
-        |> SeqSet.remove sender
+    LocalState.usersToNotify sender threadRouteWithRepliedTo channel text
         |> SeqSet.foldl
             (\userId2 cmds ->
                 case NonemptyDict.get userId2 model.users of
@@ -3334,7 +3340,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
-                , broadcastMessageNotification time userId text model
+                , broadcastMessageNotification time userId threadRouteWithMaybeReplyTo channel text model
                 , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let

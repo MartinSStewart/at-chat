@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (DmChannel)
+import DmChannel exposing (DmChannel, Thread)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -40,6 +40,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
+import Maybe.Extra
 import Message exposing (Message(..), UserTextMessageData)
 import MessageInput
 import MessageMenu
@@ -56,7 +57,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -4775,21 +4776,10 @@ playNotificationSound :
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
     if False then
-        let
-            repliedToUserId : Maybe (Id UserId)
-            repliedToUserId =
-                case threadRouteWithRepliedTo of
-                    ViewThreadWithMaybeMessage _ maybeRepliedTo ->
-                        Pages.Guild.repliedToUserId maybeRepliedTo channel
-
-                    NoThreadWithMaybeMessage maybeRepliedTo ->
-                        Pages.Guild.repliedToUserId maybeRepliedTo channel
-        in
         if
-            (senderId /= local.localUser.userId)
-                && ((repliedToUserId == Just local.localUser.userId)
-                        || SeqSet.member local.localUser.userId (RichText.mentionsUser content)
-                   )
+            SeqSet.member
+                local.localUser.userId
+                (LocalState.usersToNotify senderId threadRouteWithRepliedTo channel content)
         then
             Command.batch
                 [ Ports.playSound "pop"
