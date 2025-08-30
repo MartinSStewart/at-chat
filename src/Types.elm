@@ -59,7 +59,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
@@ -229,6 +229,7 @@ messageMenuMobileOffset mobileMode =
 type alias RevealedSpoilers =
     { guildOrDmId : GuildOrDmId
     , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+    , threadMessages : SeqDict ( Id ChannelMessageId, Id ThreadMessageId ) (NonemptySet Int)
     }
 
 
@@ -400,7 +401,7 @@ type FrontendMsg
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
-    | MessageViewMsg GuildOrDmId MessageView.MessageViewMsg
+    | MessageViewMsg GuildOrDmIdNoThread ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool

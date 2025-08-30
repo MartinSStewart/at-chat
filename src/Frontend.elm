@@ -1015,7 +1015,7 @@ isPressMsg msg =
         MessageMenu_PressedOpenThread _ ->
             True
 
-        MessageViewMsg _ messageViewMsg ->
+        MessageViewMsg _ _ messageViewMsg ->
             MessageView.isPressMsg messageViewMsg
 
         GotRegisterPushSubscription _ ->
@@ -2771,9 +2771,45 @@ updateLoaded msg model =
                 )
                 model
 
-        MessageViewMsg guildOrDmId messageViewMsg ->
+        MessageViewMsg guildOrDmId threadRoute messageViewMsg ->
+            let
+                messageIndex : Id ChannelMessageId
+                messageIndex =
+                    case threadRoute of
+                        ViewThreadWithMessage _ messageId ->
+                            Id.changeType messageId
+
+                        NoThreadWithMessage messageId ->
+                            messageId
+
+                guildOrDmIdWithThread : GuildOrDmId
+                guildOrDmIdWithThread =
+                    case guildOrDmId of
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
+                            GuildOrDmId_Guild
+                                guildId
+                                channelId
+                                (case threadRoute of
+                                    ViewThreadWithMessage threadId _ ->
+                                        ViewThread threadId
+
+                                    NoThreadWithMessage _ ->
+                                        NoThread
+                                )
+
+                        GuildOrDmId_Dm_NoThread otherUserId ->
+                            GuildOrDmId_Dm
+                                otherUserId
+                                (case threadRoute of
+                                    ViewThreadWithMessage threadId _ ->
+                                        ViewThread threadId
+
+                                    NoThreadWithMessage _ ->
+                                        NoThread
+                                )
+            in
             case messageViewMsg of
-                MessageView.MessageView_PressedSpoiler messageIndex spoilerIndex ->
+                MessageView.MessageView_PressedSpoiler spoilerIndex ->
                     updateLoggedIn
                         (\loggedIn ->
                             let
@@ -2781,41 +2817,68 @@ updateLoaded msg model =
                                 revealedSpoilers =
                                     case loggedIn.revealedSpoilers of
                                         Just a ->
-                                            if a.guildOrDmId == guildOrDmId then
+                                            if a.guildOrDmId == guildOrDmIdWithThread then
                                                 a
 
                                             else
-                                                { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
+                                                { guildOrDmId = guildOrDmIdWithThread
+                                                , messages = SeqDict.empty
+                                                , threadMessages = SeqDict.empty
+                                                }
 
                                         Nothing ->
-                                            { guildOrDmId = guildOrDmId, messages = SeqDict.empty }
+                                            { guildOrDmId = guildOrDmIdWithThread
+                                            , messages = SeqDict.empty
+                                            , threadMessages = SeqDict.empty
+                                            }
                             in
                             ( { loggedIn
                                 | revealedSpoilers =
-                                    Just
-                                        { revealedSpoilers
-                                            | messages =
-                                                SeqDict.update
-                                                    messageIndex
-                                                    (\maybe ->
-                                                        (case maybe of
-                                                            Just revealed ->
-                                                                NonemptySet.insert spoilerIndex revealed
+                                    (case threadRoute of
+                                        ViewThreadWithMessage threadMessageIndex messageId ->
+                                            { revealedSpoilers
+                                                | threadMessages =
+                                                    SeqDict.update
+                                                        ( threadMessageIndex, messageId )
+                                                        (\maybe ->
+                                                            (case maybe of
+                                                                Just revealed ->
+                                                                    NonemptySet.insert spoilerIndex revealed
 
-                                                            Nothing ->
-                                                                NonemptySet.singleton spoilerIndex
+                                                                Nothing ->
+                                                                    NonemptySet.singleton spoilerIndex
+                                                            )
+                                                                |> Just
                                                         )
-                                                            |> Just
-                                                    )
-                                                    revealedSpoilers.messages
-                                        }
+                                                        revealedSpoilers.threadMessages
+                                            }
+
+                                        NoThreadWithMessage messageId ->
+                                            { revealedSpoilers
+                                                | messages =
+                                                    SeqDict.update
+                                                        messageId
+                                                        (\maybe ->
+                                                            (case maybe of
+                                                                Just revealed ->
+                                                                    NonemptySet.insert spoilerIndex revealed
+
+                                                                Nothing ->
+                                                                    NonemptySet.singleton spoilerIndex
+                                                            )
+                                                                |> Just
+                                                        )
+                                                        revealedSpoilers.messages
+                                            }
+                                    )
+                                        |> Just
                               }
                             , Command.none
                             )
                         )
                         model
 
-                MessageView.MessageView_MouseEnteredMessage messageIndex ->
+                MessageView.MessageView_MouseEnteredMessage ->
                     if MyUi.isMobile model then
                         ( model, Command.none )
 
@@ -2827,18 +2890,18 @@ updateLoaded msg model =
                                         loggedIn
 
                                     _ ->
-                                        { loggedIn | messageHover = MessageHover guildOrDmId messageIndex }
+                                        { loggedIn | messageHover = MessageHover guildOrDmIdWithThread messageIndex }
                                 , Command.none
                                 )
                             )
                             model
 
-                MessageView.MessageView_MouseExitedMessage messageIndex ->
+                MessageView.MessageView_MouseExitedMessage ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
                                 | messageHover =
-                                    if MessageHover guildOrDmId messageIndex == loggedIn.messageHover then
+                                    if MessageHover guildOrDmIdWithThread messageIndex == loggedIn.messageHover then
                                         NoMessageHover
 
                                     else
@@ -2849,14 +2912,14 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_TouchStart time isThreadStarter messageIndex touches ->
-                    touchStart (Just ( guildOrDmId, messageIndex, isThreadStarter )) time touches model
+                MessageView.MessageView_TouchStart time isThreadStarter touches ->
+                    touchStart (Just ( guildOrDmIdWithThread, messageIndex, isThreadStarter )) time touches model
 
-                MessageView.MessageView_AltPressedMessage isThreadStarter messageIndex clickedAt ->
+                MessageView.MessageView_AltPressedMessage isThreadStarter clickedAt ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( handleAltPressedMessage
-                                guildOrDmId
+                                guildOrDmIdWithThread
                                 messageIndex
                                 isThreadStarter
                                 clickedAt
@@ -2868,77 +2931,87 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedReactionEmoji_Remove messageIndex emoji ->
+                MessageView.MessageView_PressedReactionEmoji_Remove emoji ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
                                 model.time
-                                (Local_RemoveReactionEmoji guildOrDmId messageIndex emoji |> Just)
+                                (Local_RemoveReactionEmoji guildOrDmIdWithThread messageIndex emoji |> Just)
                                 loggedIn
                                 Command.none
                         )
                         model
 
-                MessageView.MessageView_PressedReactionEmoji_Add messageIndex emoji ->
+                MessageView.MessageView_PressedReactionEmoji_Add emoji ->
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
                                 model.time
-                                (Local_AddReactionEmoji guildOrDmId messageIndex emoji |> Just)
+                                (Local_AddReactionEmoji guildOrDmIdWithThread messageIndex emoji |> Just)
                                 loggedIn
                                 Command.none
                         )
                         model
 
-                MessageView.MessageView_NoOp ->
-                    ( model, Command.none )
+                MessageView.MessageView_PressedReplyLink ->
+                    case model.loginStatus of
+                        LoggedIn loggedIn ->
+                            case guildOrDmIdNoThreadToMessage guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                                Just (UserTextMessage message) ->
+                                    case ( guildOrDmId, message.repliedTo ) of
+                                        ( GuildOrDmId_Guild_NoThread guildId channelId, Just repliedTo ) ->
+                                            routePush
+                                                model
+                                                (GuildRoute guildId
+                                                    (ChannelRoute
+                                                        channelId
+                                                        (case threadRoute of
+                                                            ViewThreadWithMessage threadMessageId _ ->
+                                                                ViewThreadWithMaybeMessage
+                                                                    threadMessageId
+                                                                    (Just (Id.changeType repliedTo))
 
-                MessageView.MessageView_PressedReplyLink messageIndex ->
-                    case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
-                            routePush
-                                model
-                                (GuildRoute guildId
-                                    (ChannelRoute
-                                        channelId
-                                        (case threadRoute of
-                                            ViewThread threadMessageId ->
-                                                ViewThreadWithMaybeMessage
-                                                    threadMessageId
-                                                    (Just (Id.changeType messageIndex))
+                                                            NoThreadWithMessage _ ->
+                                                                NoThreadWithMaybeMessage (Just repliedTo)
+                                                        )
+                                                    )
+                                                )
 
-                                            NoThread ->
-                                                NoThreadWithMaybeMessage (Just messageIndex)
-                                        )
-                                    )
-                                )
+                                        ( GuildOrDmId_Dm_NoThread otherUserId, Just repliedTo ) ->
+                                            routePush
+                                                model
+                                                (DmRoute
+                                                    otherUserId
+                                                    (case threadRoute of
+                                                        ViewThreadWithMessage threadMessageId _ ->
+                                                            ViewThreadWithMaybeMessage
+                                                                threadMessageId
+                                                                (Just (Id.changeType repliedTo))
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
-                            routePush
-                                model
-                                (DmRoute
-                                    otherUserId
-                                    (case threadRoute of
-                                        ViewThread threadMessageId ->
-                                            ViewThreadWithMaybeMessage
-                                                threadMessageId
-                                                (Just (Id.changeType messageIndex))
+                                                        NoThreadWithMessage _ ->
+                                                            NoThreadWithMaybeMessage (Just repliedTo)
+                                                    )
+                                                )
 
-                                        NoThread ->
-                                            NoThreadWithMaybeMessage (Just messageIndex)
-                                    )
-                                )
+                                        ( _, Nothing ) ->
+                                            ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector messageIndex _ ->
-                    showReactionEmojiSelector guildOrDmId messageIndex model
+                                _ ->
+                                    ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedEditMessage messageIndex ->
-                    pressedEditMessage guildOrDmId messageIndex model
+                        NotLoggedIn _ ->
+                            ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedReply messageIndex ->
-                    pressedReply guildOrDmId messageIndex model
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector _ ->
+                    showReactionEmojiSelector guildOrDmIdWithThread messageIndex model
 
-                MessageView.MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex clickedAt ->
+                MessageView.MessageViewMsg_PressedEditMessage ->
+                    pressedEditMessage guildOrDmIdWithThread messageIndex model
+
+                MessageView.MessageViewMsg_PressedReply ->
+                    pressedReply guildOrDmIdWithThread messageIndex model
+
+                MessageView.MessageViewMsg_PressedShowFullMenu isThreadStarter clickedAt ->
                     updateLoggedIn
                         (\loggedIn ->
                             let
@@ -2949,7 +3022,7 @@ updateLoaded msg model =
                                 menuHeight : Int
                                 menuHeight =
                                     MessageMenu.menuHeight
-                                        { guildOrDmId = guildOrDmId
+                                        { guildOrDmId = guildOrDmIdWithThread
                                         , messageIndex = messageIndex
                                         , position = clickedAt
                                         }
@@ -2970,7 +3043,7 @@ updateLoaded msg model =
                                                 Coord.plus
                                                     (Coord.xy (-MessageMenu.width - 8) -8)
                                                     clickedAt
-                                        , guildOrDmId = guildOrDmId
+                                        , guildOrDmId = guildOrDmIdWithThread
                                         , messageIndex = messageIndex
                                         , isThreadStarter = isThreadStarter
                                         , mobileMode =
@@ -2978,7 +3051,7 @@ updateLoaded msg model =
                                                 { offset = Quantity.zero
                                                 , targetOffset =
                                                     MessageMenu.mobileMenuOpeningOffset
-                                                        guildOrDmId
+                                                        guildOrDmIdWithThread
                                                         messageIndex
                                                         local
                                                         model
@@ -2990,13 +3063,13 @@ updateLoaded msg model =
                         )
                         model
 
-                MessageView.MessageView_PressedViewThreadLink messageIndex ->
-                    case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId NoThread ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
+                MessageView.MessageView_PressedViewThreadLink ->
+                    case ( guildOrDmId, threadRoute ) of
+                        ( GuildOrDmId_Guild_NoThread guildId channelId, NoThreadWithMessage messageId ) ->
+                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageId Nothing)))
 
-                        GuildOrDmId_Dm otherUserId NoThread ->
-                            routePush model (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
+                        ( GuildOrDmId_Dm_NoThread otherUserId, NoThreadWithMessage messageId ) ->
+                            routePush model (DmRoute otherUserId (ViewThreadWithMaybeMessage messageId Nothing))
 
                         _ ->
                             ( model, Command.none )
@@ -5255,6 +5328,42 @@ guildOrDmIdNoThreadToMessages guildOrDmId threadRoute local =
 
                         NoThreadWithMaybeMessage _ ->
                             Just dmChannel.messages
+
+                Nothing ->
+                    Nothing
+
+
+guildOrDmIdNoThreadToMessage : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> Maybe Message
+guildOrDmIdNoThreadToMessage guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId_Guild_NoThread guildId channelId ->
+            case LocalState.getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThreadWithMessage threadMessageIndex messageId ->
+                            SeqDict.get threadMessageIndex channel.threads
+                                |> Maybe.withDefault DmChannel.threadInit
+                                |> .messages
+                                |> LocalState.getArray messageId
+
+                        NoThreadWithMessage messageId ->
+                            LocalState.getArray messageId channel.messages
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm_NoThread otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    case threadRoute of
+                        ViewThreadWithMessage threadMessageIndex messageId ->
+                            SeqDict.get threadMessageIndex dmChannel.threads
+                                |> Maybe.withDefault DmChannel.threadInit
+                                |> .messages
+                                |> LocalState.getArray messageId
+
+                        NoThreadWithMessage messageId ->
+                            LocalState.getArray messageId dmChannel.messages
 
                 Nothing ->
                     Nothing

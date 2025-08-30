@@ -17,6 +17,7 @@ module Id exposing
     , fromString
     , guildOrDmIdSetThreadRoute
     , guildOrDmIdWithoutMaybeMessage
+    , guildOrDmIdWithoutThread
     , increment
     , nextId
     , toInt
@@ -50,6 +51,16 @@ guildOrDmIdWithoutMaybeMessage a =
 
         GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute ->
             GuildOrDmId_Dm otherUserId (threadWithoutMaybeMessage threadRoute)
+
+
+guildOrDmIdWithoutThread : GuildOrDmId -> ( GuildOrDmIdNoThread, ThreadRoute )
+guildOrDmIdWithoutThread guildOrDmId =
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId threadId threadRoute ->
+            ( GuildOrDmId_Guild_NoThread guildId threadId, threadRoute )
+
+        GuildOrDmId_Dm otherUserId threadRoute ->
+            ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute )
 
 
 threadWithoutMaybeMessage : ThreadRouteWithMaybeMessage -> ThreadRoute

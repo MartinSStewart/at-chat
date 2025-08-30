@@ -8,7 +8,7 @@ import Emoji exposing (Emoji)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -18,70 +18,66 @@ import Ui.Events
 
 
 type MessageViewMsg
-    = MessageView_PressedSpoiler (Id ChannelMessageId) Int
-    | MessageView_MouseEnteredMessage (Id ChannelMessageId)
-    | MessageView_MouseExitedMessage (Id ChannelMessageId)
-    | MessageView_TouchStart Time.Posix Bool (Id ChannelMessageId) (NonemptyDict Int Touch)
-    | MessageView_AltPressedMessage Bool (Id ChannelMessageId) (Coord CssPixels)
-    | MessageView_PressedReactionEmoji_Remove (Id ChannelMessageId) Emoji
-    | MessageView_PressedReactionEmoji_Add (Id ChannelMessageId) Emoji
-    | MessageView_NoOp
-    | MessageView_PressedReplyLink (Id ChannelMessageId)
-    | MessageViewMsg_PressedShowReactionEmojiSelector (Id ChannelMessageId) (Coord CssPixels)
-    | MessageViewMsg_PressedEditMessage (Id ChannelMessageId)
-    | MessageViewMsg_PressedReply (Id ChannelMessageId)
-    | MessageViewMsg_PressedShowFullMenu Bool (Id ChannelMessageId) (Coord CssPixels)
-    | MessageView_PressedViewThreadLink (Id ChannelMessageId)
+    = MessageView_PressedSpoiler Int
+    | MessageView_MouseEnteredMessage
+    | MessageView_MouseExitedMessage
+    | MessageView_TouchStart Time.Posix Bool (NonemptyDict Int Touch)
+    | MessageView_AltPressedMessage Bool (Coord CssPixels)
+    | MessageView_PressedReactionEmoji_Remove Emoji
+    | MessageView_PressedReactionEmoji_Add Emoji
+    | MessageView_PressedReplyLink
+    | MessageViewMsg_PressedShowReactionEmojiSelector (Coord CssPixels)
+    | MessageViewMsg_PressedEditMessage
+    | MessageViewMsg_PressedReply
+    | MessageViewMsg_PressedShowFullMenu Bool (Coord CssPixels)
+    | MessageView_PressedViewThreadLink
 
 
 isPressMsg : MessageViewMsg -> Bool
 isPressMsg msg =
     case msg of
-        MessageView_PressedSpoiler _ _ ->
+        MessageView_PressedSpoiler _ ->
             True
 
-        MessageView_MouseEnteredMessage _ ->
+        MessageView_MouseEnteredMessage ->
             False
 
-        MessageView_MouseExitedMessage _ ->
+        MessageView_MouseExitedMessage ->
             False
 
-        MessageView_TouchStart _ _ _ _ ->
+        MessageView_TouchStart _ _ _ ->
             False
 
-        MessageView_AltPressedMessage _ _ _ ->
+        MessageView_AltPressedMessage _ _ ->
             True
 
-        MessageView_PressedReactionEmoji_Remove _ _ ->
+        MessageView_PressedReactionEmoji_Remove _ ->
             True
 
-        MessageView_PressedReactionEmoji_Add _ _ ->
+        MessageView_PressedReactionEmoji_Add _ ->
             True
 
-        MessageView_NoOp ->
-            False
-
-        MessageView_PressedReplyLink _ ->
+        MessageView_PressedReplyLink ->
             True
 
-        MessageViewMsg_PressedShowReactionEmojiSelector _ _ ->
+        MessageViewMsg_PressedShowReactionEmojiSelector _ ->
             True
 
-        MessageViewMsg_PressedEditMessage _ ->
+        MessageViewMsg_PressedEditMessage ->
             True
 
-        MessageViewMsg_PressedReply _ ->
+        MessageViewMsg_PressedReply ->
             True
 
-        MessageViewMsg_PressedShowFullMenu _ _ _ ->
+        MessageViewMsg_PressedShowFullMenu _ _ ->
             True
 
-        MessageView_PressedViewThreadLink _ ->
+        MessageView_PressedViewThreadLink ->
             True
 
 
-miniView : Bool -> Bool -> Id ChannelMessageId -> Element MessageViewMsg
-miniView isThreadStarter canEdit messageIndex =
+miniView : Bool -> Bool -> Element MessageViewMsg
+miniView isThreadStarter canEdit =
     Ui.row
         [ Ui.alignRight
         , Ui.background MyUi.background1
@@ -93,12 +89,12 @@ miniView isThreadStarter canEdit messageIndex =
         ]
         [ miniButton
             (Dom.id "miniView_showReactionEmojiSelector")
-            (MessageViewMsg_PressedShowReactionEmojiSelector messageIndex)
+            MessageViewMsg_PressedShowReactionEmojiSelector
             Icons.smile
         , if canEdit then
             miniButton
                 (Dom.id "miniView_editMessage")
-                (\_ -> MessageViewMsg_PressedEditMessage messageIndex)
+                (\_ -> MessageViewMsg_PressedEditMessage)
                 Icons.pencil
 
           else
@@ -109,11 +105,11 @@ miniView isThreadStarter canEdit messageIndex =
           else
             miniButton
                 (Dom.id "miniView_reply")
-                (\_ -> MessageViewMsg_PressedReply messageIndex)
+                (\_ -> MessageViewMsg_PressedReply)
                 Icons.reply
         , miniButton
             (Dom.id "miniView_showFullMenu")
-            (MessageViewMsg_PressedShowFullMenu isThreadStarter messageIndex)
+            (MessageViewMsg_PressedShowFullMenu isThreadStarter)
             Icons.dotDotDot
         ]
 

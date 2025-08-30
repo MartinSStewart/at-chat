@@ -34,7 +34,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -966,6 +966,14 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
         guildOrDmId =
             Id.guildOrDmIdWithoutMaybeMessage guildOrDmIdWithMaybeMessage
 
+        ( guildOrDmIdNoThread, threadRoute ) =
+            case guildOrDmIdWithMaybeMessage of
+                GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute2 ->
+                    ( GuildOrDmId_Guild_NoThread guildId channelId, threadRoute2 )
+
+                GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute2 ->
+                    ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute2 )
+
         maybeEditing : Maybe EditMessage
         maybeEditing =
             SeqDict.get guildOrDmId loggedIn.editMessage
@@ -1015,6 +1023,14 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                 messageId : Id ChannelMessageId
                 messageId =
                     Id.fromInt index
+
+                threadRoute2 =
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                            ViewThreadWithMessage threadMessageIndex (Id.fromInt index)
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThreadWithMessage (Id.fromInt index)
 
                 threadId : Id ChannelMessageId
                 threadId =
@@ -1166,7 +1182,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                         messageView
                             isMobile
                             containerWidth
-                            True
+                            False
                             revealedSpoilers
                             highlight
                             messageHover2
@@ -1176,13 +1192,13 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                             (SeqDict.get threadId threads)
                             messageId
                             message
-                            |> Ui.map (MessageViewMsg guildOrDmId)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
                     else
                         messageEditingView
                             isMobile
                             guildOrDmId
-                            messageId
+                            threadRoute2
                             message
                             maybeRepliedTo
                             (SeqDict.get threadId threads)
@@ -1199,7 +1215,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                     messageView
                                         isMobile
                                         containerWidth
-                                        True
+                                        False
                                         revealedSpoilers
                                         highlight
                                         messageHover2
@@ -1209,7 +1225,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                         Nothing
                                         messageId
                                         message
-                                        |> Ui.map (MessageViewMsg guildOrDmId)
+                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
                                 Nothing ->
                                     Ui.Lazy.lazy5
@@ -1220,7 +1236,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                         local.localUser
                                         index
                                         message
-                                        |> Ui.map (MessageViewMsg guildOrDmId)
+                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
                         Just thread ->
                             case maybeRepliedTo of
@@ -1228,7 +1244,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                     messageView
                                         isMobile
                                         containerWidth
-                                        True
+                                        False
                                         revealedSpoilers
                                         highlight
                                         messageHover2
@@ -1238,7 +1254,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                         (Just thread)
                                         messageId
                                         message
-                                        |> Ui.map (MessageViewMsg guildOrDmId)
+                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
 
                                 Nothing ->
                                     Ui.Lazy.lazy6
@@ -1249,7 +1265,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                                         index
                                         thread
                                         message
-                                        |> Ui.map (MessageViewMsg guildOrDmId)
+                                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
               )
                 :: newLine
                 ++ list
@@ -1776,16 +1792,20 @@ threadStarterMessage :
     -> LocalState
     -> LoadedFrontend
     -> Element FrontendMsg
-threadStarterMessage isMobile guildOrDmId2 threadMessageIndex channel loggedIn local model =
+threadStarterMessage isMobile guildOrDmId threadMessageIndex channel loggedIn local model =
+    let
+        ( guildOrDmIdNoThread, threadRoute ) =
+            Id.guildOrDmIdWithoutThread guildOrDmId
+    in
     case LocalState.getArray threadMessageIndex channel.messages of
         Just message ->
-            case SeqDict.get guildOrDmId2 loggedIn.editMessage of
+            case SeqDict.get guildOrDmId loggedIn.editMessage of
                 Just editMessage ->
                     if editMessage.messageIndex == threadMessageIndex then
                         messageEditingView
                             isMobile
-                            guildOrDmId2
-                            threadMessageIndex
+                            guildOrDmId
+                            (NoThreadWithMessage threadMessageIndex)
                             message
                             Nothing
                             Nothing
@@ -1801,14 +1821,14 @@ threadStarterMessage isMobile guildOrDmId2 threadMessageIndex channel loggedIn l
                             True
                             SeqDict.empty
                             NoHighlight
-                            (messageHover guildOrDmId2 threadMessageIndex loggedIn)
+                            (messageHover guildOrDmId threadMessageIndex loggedIn)
                             False
                             local.localUser
                             Nothing
                             Nothing
                             threadMessageIndex
                             message
-                            |> Ui.map (MessageViewMsg guildOrDmId2)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread (NoThreadWithMessage threadMessageIndex))
 
                 Nothing ->
                     messageView
@@ -1817,14 +1837,14 @@ threadStarterMessage isMobile guildOrDmId2 threadMessageIndex channel loggedIn l
                         True
                         SeqDict.empty
                         NoHighlight
-                        (messageHover guildOrDmId2 threadMessageIndex loggedIn)
+                        (messageHover guildOrDmId threadMessageIndex loggedIn)
                         False
                         local.localUser
                         Nothing
                         Nothing
                         threadMessageIndex
                         message
-                        |> Ui.map (MessageViewMsg guildOrDmId2)
+                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread (NoThreadWithMessage threadMessageIndex))
 
         Nothing ->
             Ui.none
@@ -1863,8 +1883,8 @@ dropdownButtonId index =
     Dom.id ("dropdown_button" ++ String.fromInt index)
 
 
-reactionEmojiView : Id ChannelMessageId -> Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
-reactionEmojiView messageIndex currentUserId reactions =
+reactionEmojiView : Id UserId -> SeqDict Emoji (NonemptySet (Id UserId)) -> Maybe (Element MessageViewMsg)
+reactionEmojiView currentUserId reactions =
     if SeqDict.isEmpty reactions then
         Nothing
 
@@ -1883,12 +1903,12 @@ reactionEmojiView messageIndex currentUserId reactions =
                     (if hasReactedTo then
                         MyUi.rowButton
                             (Dom.id "guild_removeReactionEmoji")
-                            (MessageView_PressedReactionEmoji_Remove messageIndex emoji)
+                            (MessageView_PressedReactionEmoji_Remove emoji)
 
                      else
                         MyUi.rowButton
                             (Dom.id "guild_addReactionEmoji")
-                            (MessageView_PressedReactionEmoji_Add messageIndex emoji)
+                            (MessageView_PressedReactionEmoji_Add emoji)
                     )
                         [ Ui.rounded 8
                         , Ui.spacing 2
@@ -1922,7 +1942,7 @@ reactionEmojiView messageIndex currentUserId reactions =
 messageEditingView :
     Bool
     -> GuildOrDmId
-    -> Id ChannelMessageId
+    -> ThreadRouteWithMessage
     -> Message
     -> Maybe ( Id ChannelMessageId, Message )
     -> Maybe Thread
@@ -1931,12 +1951,15 @@ messageEditingView :
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
+messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView messageIndex local.localUser.userId data.reactions
+                    reactionEmojiView local.localUser.userId data.reactions
+
+                ( guildOrDmIdNoThread, _ ) =
+                    Id.guildOrDmIdWithoutThread guildOrDmId
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -1953,11 +1976,20 @@ messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo mayb
                             4
                     }
                 , Ui.spacing 4
-                , channelMessageHtmlId messageIndex |> Dom.idToString |> Ui.id
+                , (case threadRoute of
+                    ViewThreadWithMessage _ messageId ->
+                        Id.changeType messageId
+
+                    NoThreadWithMessage messageId ->
+                        messageId
+                  )
+                    |> channelMessageHtmlId
+                    |> Dom.idToString
+                    |> Ui.id
                 ]
-                [ repliedToMessage isMobile maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
+                [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
-                    |> Ui.map (MessageViewMsg guildOrDmId)
+                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
                 , User.toString data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
@@ -2004,21 +2036,22 @@ messageEditingView isMobile guildOrDmId messageIndex message maybeRepliedTo mayb
                     ]
                 , case maybeReactions of
                     Just reactionView ->
-                        Ui.el [ Ui.paddingXY 8 0 ] reactionView |> Ui.map (MessageViewMsg guildOrDmId)
+                        Ui.el [ Ui.paddingXY 8 0 ] reactionView
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
 
                     Nothing ->
                         Ui.none
-                , case maybeThread of
-                    Just thread ->
-                        threadStarterIndicator
+                , case ( threadRoute, maybeThread ) of
+                    ( NoThreadWithMessage messageId, Just thread ) ->
+                        previewThreadLastMessage
                             local.localUser.timezone
                             (LocalState.allUsers local)
-                            messageIndex
+                            messageId
                             thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
-                            |> Ui.map (MessageViewMsg guildOrDmId)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
 
-                    Nothing ->
+                    _ ->
                         Ui.none
                 ]
 
@@ -2180,7 +2213,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                         )
                     , Ui.column
                         []
-                        [ repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers
+                        [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
                         , Ui.row
                             []
                             [ User.toString message2.createdBy allUsers
@@ -2194,7 +2227,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                             (RichText.view
                                 (Dom.id ("spoiler_" ++ Id.toString messageIndex))
                                 containerWidth
-                                (MessageView_PressedSpoiler messageIndex)
+                                MessageView_PressedSpoiler
                                 (case SeqDict.get messageIndex revealedSpoilers of
                                     Just nonempty ->
                                         NonemptySet.toSeqSet nonempty
@@ -2299,16 +2332,16 @@ messageTimestamp createdAt timezone =
         [ MyUi.timestamp createdAt timezone |> Html.text ]
 
 
-repliedToMessage :
+replyToHeaderAboveMessage :
     Bool
     -> Maybe ( Id ChannelMessageId, Message )
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Element MessageViewMsg
-repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
+replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
     case maybeRepliedTo of
         Just ( repliedToIndex, UserTextMessage repliedToData ) ->
-            repliedToHeaderHelper
+            replyToHeaderAboveMessageHelper
                 isMobile
                 repliedToIndex
                 (userTextMessagePreview
@@ -2324,10 +2357,10 @@ repliedToMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
                 )
 
         Just ( repliedToIndex, UserJoinedMessage _ userId _ ) ->
-            repliedToHeaderHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
+            replyToHeaderAboveMessageHelper isMobile repliedToIndex (userJoinedContent userId allUsers)
 
         Just ( repliedToIndex, DeletedMessage _ ) ->
-            repliedToHeaderHelper
+            replyToHeaderAboveMessageHelper
                 isMobile
                 repliedToIndex
                 (Ui.el
@@ -2370,11 +2403,11 @@ threadMessageHtmlId messageIndex =
     "thread_message_" ++ Id.toString messageIndex |> Dom.id
 
 
-repliedToHeaderHelper : Bool -> Id ChannelMessageId -> Element MessageViewMsg -> Element MessageViewMsg
-repliedToHeaderHelper isMobile messageId content =
+replyToHeaderAboveMessageHelper : Bool -> Id ChannelMessageId -> Element MessageViewMsg -> Element MessageViewMsg
+replyToHeaderAboveMessageHelper isMobile messageId content =
     MyUi.rowButton
         (Dom.id ("guild_replyLink_" ++ Id.toString messageId))
-        (MessageView_PressedReplyLink messageId)
+        MessageView_PressedReplyLink
         [ Ui.Font.color MyUi.font1
         , Ui.Font.size 14
         , Ui.paddingWith { left = 0, right = 8, top = 2, bottom = 0 }
@@ -2425,12 +2458,12 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
-            reactionEmojiView messageIndex currentUserId reactions
+            reactionEmojiView currentUserId reactions
     in
     Ui.column
         ([ Ui.Font.color MyUi.font1
-         , Ui.Events.onMouseEnter (MessageView_MouseEnteredMessage messageIndex)
-         , Ui.Events.onMouseLeave (MessageView_MouseExitedMessage messageIndex)
+         , Ui.Events.onMouseEnter MessageView_MouseEnteredMessage
+         , Ui.Events.onMouseLeave MessageView_MouseExitedMessage
          , Ui.Events.on
             "touchstart"
             (Touch.touchEventDecoder
@@ -2438,14 +2471,13 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
                     MessageView_TouchStart
                         time
                         isThreadStarter
-                        messageIndex
                         (NonemptyDict.map (\_ touch -> { touch | target = channelMessageHtmlId messageIndex }) touches)
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
                 (\x y ->
-                    ( MessageView_AltPressedMessage isThreadStarter messageIndex (Coord.xy (round x) (round y))
+                    ( MessageView_AltPressedMessage isThreadStarter (Coord.xy (round x) (round y))
                     , True
                     )
                 )
@@ -2494,11 +2526,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView
-                            isThreadStarter
-                            canEdit
-                            messageIndex
-                            |> Ui.inFront
+                        , MessageView.miniView isThreadStarter canEdit |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->
@@ -2520,7 +2548,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
             :: Maybe.Extra.toList maybeReactions
             ++ (case maybeThread of
                     Just thread ->
-                        [ threadStarterIndicator timezone allUsers messageIndex thread
+                        [ previewThreadLastMessage timezone allUsers messageIndex thread
                         ]
 
                     Nothing ->
@@ -2529,8 +2557,8 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
         )
 
 
-threadStarterIndicator : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id ChannelMessageId -> Thread -> Element MessageViewMsg
-threadStarterIndicator timezone allUsers messageId thread =
+previewThreadLastMessage : Time.Zone -> SeqDict (Id UserId) FrontendUser -> Id ChannelMessageId -> Thread -> Element MessageViewMsg
+previewThreadLastMessage timezone allUsers messageId thread =
     let
         lastMessage =
             Array.Extra.last thread.messages
@@ -2548,8 +2576,9 @@ threadStarterIndicator timezone allUsers messageId thread =
         , Html.Attributes.style "margin" "0"
         , Html.Attributes.style "color" "inherit"
         , Html.Attributes.style "font-size" "inherit"
+        , Html.Attributes.style "text-align" "left"
         , Html.Attributes.id ("guild_threadStarterIndicator_" ++ Id.toString messageId)
-        , Html.Events.onClick (MessageView_PressedViewThreadLink messageId)
+        , Html.Events.onClick MessageView_PressedViewThreadLink
         , Html.Attributes.style "cursor" "pointer"
         ]
         (Html.div
