@@ -4,7 +4,6 @@ module Id exposing
     , GuildId(..)
     , GuildOrDmId
     , GuildOrDmIdNoThread(..)
-    , GuildOrDmIdWithMaybeMessage(..)
     , Id(..)
     , InviteLinkId(..)
     , ThreadMessageId(..)
@@ -15,7 +14,6 @@ module Id exposing
     , changeType
     , fromInt
     , fromString
-    , guildOrDmIdWithoutThread
     , increment
     , nextId
     , toInt
@@ -33,26 +31,6 @@ type alias GuildOrDmId =
 type GuildOrDmIdNoThread
     = GuildOrDmId_Guild_NoThread (Id GuildId) (Id ChannelId)
     | GuildOrDmId_Dm_NoThread (Id UserId)
-
-
-type GuildOrDmIdWithMaybeMessage
-    = GuildOrDmId_Guild_WithMaybeMessage (Id GuildId) (Id ChannelId) ThreadRouteWithMaybeMessage
-    | GuildOrDmId_Dm_WithMaybeMessage (Id UserId) ThreadRouteWithMaybeMessage
-
-
-guildOrDmIdWithoutThread : GuildOrDmId -> ( GuildOrDmIdNoThread, ThreadRoute )
-guildOrDmIdWithoutThread guildOrDmId =
-    guildOrDmId
-
-
-threadWithoutMaybeMessage : ThreadRouteWithMaybeMessage -> ThreadRoute
-threadWithoutMaybeMessage a =
-    case a of
-        NoThreadWithMaybeMessage _ ->
-            NoThread
-
-        ViewThreadWithMaybeMessage channelMessageId _ ->
-            ViewThread channelMessageId
 
 
 type ThreadRoute

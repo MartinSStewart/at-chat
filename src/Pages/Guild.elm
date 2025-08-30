@@ -34,7 +34,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -2358,7 +2358,7 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                     reactionEmojiView local.localUser.userId data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
-                    Id.guildOrDmIdWithoutThread guildOrDmId
+                    guildOrDmId
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -2480,7 +2480,7 @@ threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo
                     reactionEmojiView local.localUser.userId data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
-                    Id.guildOrDmIdWithoutThread guildOrDmId
+                    guildOrDmId
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
