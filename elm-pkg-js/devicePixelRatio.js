@@ -16,12 +16,12 @@ exports.init = async function init(app)
     const serviceWorkerJs = '/service-worker.js';
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
-        console.log("register");
+
         navigator.serviceWorker.register(serviceWorkerJs);
 
         navigator.serviceWorker.ready
         .then(function(registration) {
-            console.log(registration)
+
             // Use the PushManager to get the user's subscription to the push service.
             return registration.pushManager.getSubscription()
             .then(async function(subscription)
@@ -30,7 +30,7 @@ exports.init = async function init(app)
                 if (subscription) {
                     return subscription;
                 }
-                console.log("register3");
+
 
                 // Otherwise, subscribe the user (userVisibleOnly allows to specify that we don't plan to
                 // send notifications that don't have a visible effect for the user).
@@ -41,9 +41,6 @@ exports.init = async function init(app)
             });
         }).then(function(subscription) {
           // Send the subscription details to the server using the Fetch API.
-          console.log("register2");
-          console.log(subscription);
-          console.log(subscription.toJSON());
           app.ports.register_push_subscription_from_js.send(subscription.toJSON());
         });
     });
@@ -61,12 +58,9 @@ exports.init = async function init(app)
     app.ports.unregister_push_subscription_to_js.subscribe((a) => {
         navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
             if (registration) {
-                console.log("unregistered");
                 registration
                     .unregister()
-                    .then((isSuccessful) => {
-                      console.log(isSuccessful);
-                   });
+                    .then((isSuccessful) => { });
             }
         });
     });
@@ -109,12 +103,9 @@ exports.init = async function init(app)
     });
 
     app.ports.request_notification_permission.subscribe((a) => {
-        console.log("request");
         if ("Notification" in window) {
             Notification.requestPermission().then((permission) => {
-                console.log(permission);
                 if (permission === "granted") {
-                    console.log("granted");
                     const notification = new Notification("Notifications enabled");
                 }
                 app.ports.check_notification_permission_from_js.send(permission);
@@ -135,7 +126,6 @@ exports.init = async function init(app)
     app.ports.show_notification.subscribe((a) => {
         if ("Notification" in window) {
             const notification = new Notification(a.title, { body: a.body });
-            console.log(notification);
         }
     });
 

@@ -3638,7 +3638,7 @@ update authToken msg model =
         WebsocketClosed ->
             let
                 _ =
-                    Debug.log "WebsocketClosed" "abc"
+                    Debug.log "WebsocketClosed" ()
             in
             ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
