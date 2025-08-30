@@ -62,7 +62,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), UserTextMessageData)
@@ -258,9 +258,9 @@ createNewUser createdAt name email userIsAdmin =
 
 
 getMessages : GuildOrDmId -> LocalState -> Maybe ( ThreadRoute, Array Message )
-getMessages guildOrDmId local =
+getMessages ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId threadRoute ->
+        GuildOrDmId_Guild_NoThread guildId channelId ->
             case getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -278,7 +278,7 @@ getMessages guildOrDmId local =
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId threadRoute ->
+        GuildOrDmId_Dm_NoThread otherUserId ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     case threadRoute of

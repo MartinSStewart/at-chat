@@ -34,7 +34,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), GuildOrDmIdWithMaybeMessage(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -969,12 +969,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    GuildOrDmId_Guild guildId channelId NoThread
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    GuildOrDmId_Dm otherUserId NoThread
+            ( guildOrDmIdNoThread, NoThread )
 
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -1269,12 +1264,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    GuildOrDmId_Guild guildId channelId (ViewThread threadId)
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    GuildOrDmId_Dm otherUserId (ViewThread threadId)
+            ( guildOrDmIdNoThread, ViewThread threadId )
 
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -1689,26 +1679,20 @@ conversationContainerId =
 
 
 messageInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
-messageInputConfig guildOrDmId =
+messageInputConfig ( guildOrDmId, threadRoute ) =
     { gotPingUserPosition = GotPingUserPosition
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
     , pressedTextInput = PressedTextInput
-    , typedMessage = TypedMessage guildOrDmId
-    , pressedSendMessage =
-        case guildOrDmId of
-            GuildOrDmId_Guild guildId channelId threadRoute ->
-                PressedSendMessage (GuildOrDmId_Guild_NoThread guildId channelId) threadRoute
-
-            GuildOrDmId_Dm otherUserId threadRoute ->
-                PressedSendMessage (GuildOrDmId_Dm_NoThread otherUserId) threadRoute
+    , typedMessage = TypedMessage ( guildOrDmId, threadRoute )
+    , pressedSendMessage = PressedSendMessage guildOrDmId threadRoute
     , pressedArrowInDropdown = PressedArrowInDropdown guildOrDmId
-    , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput guildOrDmId
-    , pressedPingUser = PressedPingUser guildOrDmId
+    , pressedArrowUpInEmptyInput = PressedArrowUpInEmptyInput ( guildOrDmId, threadRoute )
+    , pressedPingUser = PressedPingUser ( guildOrDmId, threadRoute )
     , pressedPingDropdownContainer = PressedPingDropdownContainer
-    , pressedUploadFile = PressedAttachFiles guildOrDmId
+    , pressedUploadFile = PressedAttachFiles ( guildOrDmId, threadRoute )
     , target = MessageInput.NewMessage
-    , onPasteFiles = PastedFiles guildOrDmId
+    , onPasteFiles = PastedFiles ( guildOrDmId, threadRoute )
     }
 
 
@@ -1746,12 +1730,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    GuildOrDmId_Guild guildId channelId NoThread
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    GuildOrDmId_Dm otherUserId NoThread
+            ( guildOrDmIdNoThread, NoThread )
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -2000,12 +1979,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            case guildOrDmIdNoThread of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    GuildOrDmId_Guild guildId channelId (ViewThread threadId)
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    GuildOrDmId_Dm otherUserId (ViewThread threadId)
+            ( guildOrDmIdNoThread, ViewThread threadId )
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -2090,7 +2064,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 Just ( _, channel2 ) ->
                                     threadStarterMessage
                                         isMobile
-                                        (GuildOrDmId_Guild guildId channelId NoThread)
+                                        (GuildOrDmId_Guild_NoThread guildId channelId)
                                         threadId
                                         channel2
                                         loggedIn
@@ -2105,7 +2079,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 Just dmChannel2 ->
                                     threadStarterMessage
                                         isMobile
-                                        (GuildOrDmId_Dm otherUserId NoThread)
+                                        (GuildOrDmId_Dm_NoThread otherUserId)
                                         threadId
                                         dmChannel2
                                         loggedIn
@@ -2191,7 +2165,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
 threadStarterMessage :
     Bool
-    -> GuildOrDmId
+    -> GuildOrDmIdNoThread
     -> Id ChannelMessageId
     ->
         { a
@@ -2203,10 +2177,11 @@ threadStarterMessage :
     -> LocalState
     -> LoadedFrontend
     -> Element FrontendMsg
-threadStarterMessage isMobile guildOrDmId threadMessageIndex channel loggedIn local model =
+threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel loggedIn local model =
     let
-        ( guildOrDmIdNoThread, _ ) =
-            Id.guildOrDmIdWithoutThread guildOrDmId
+        guildOrDmId : GuildOrDmId
+        guildOrDmId =
+            ( guildOrDmIdNoThread, NoThread )
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =

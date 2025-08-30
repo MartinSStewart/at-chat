@@ -33,7 +33,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -1851,9 +1851,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_MemberTyping _ guildOrDmId ->
+                Local_MemberTyping _ ( guildOrDmId, threadRoute ) ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1871,19 +1871,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model2.guilds
                                       }
                                     , Command.batch
-                                        [ Local_MemberTyping time guildOrDmId
+                                        [ Local_MemberTyping time ( guildOrDmId, threadRoute )
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_MemberTyping time userId guildOrDmId |> ServerChange)
+                                            (Server_MemberTyping time userId ( guildOrDmId, threadRoute ) |> ServerChange)
                                             model2
                                         ]
                                     )
                                 )
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
                                 model2
                                 sessionId
@@ -1900,21 +1900,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model2.dmChannels
                                       }
                                     , Command.batch
-                                        [ Local_MemberTyping time guildOrDmId
+                                        [ Local_MemberTyping time ( guildOrDmId, threadRoute )
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToUser
                                             (Just clientId)
                                             otherUserId
-                                            (Server_MemberTyping time userId (GuildOrDmId_Dm userId threadRoute) |> ServerChange)
+                                            (Server_MemberTyping time userId ( GuildOrDmId_Dm_NoThread userId, threadRoute ) |> ServerChange)
                                             model2
                                         ]
                                     )
                                 )
 
-                Local_AddReactionEmoji guildOrDmId messageIndex emoji ->
+                Local_AddReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1936,13 +1936,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , broadcastToGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_AddReactionEmoji userId guildOrDmId messageIndex emoji |> ServerChange)
+                                            (Server_AddReactionEmoji userId ( guildOrDmId, threadRoute ) messageIndex emoji
+                                                |> ServerChange
+                                            )
                                             model2
                                         ]
                                     )
                                 )
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
                                 model2
                                 sessionId
@@ -1967,7 +1969,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_AddReactionEmoji
                                                     userId
-                                                    (GuildOrDmId_Dm otherUserId2 threadRoute)
+                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
                                                     messageIndex
                                                     emoji
                                             )
@@ -1976,9 +1978,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                Local_RemoveReactionEmoji guildOrDmId messageIndex emoji ->
+                Local_RemoveReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -2001,13 +2003,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 model2.guilds
                                       }
                                     , Command.batch
-                                        [ Local_RemoveReactionEmoji guildOrDmId messageIndex emoji
+                                        [ Local_RemoveReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji
+                                            (Server_RemoveReactionEmoji userId ( guildOrDmId, threadRoute ) messageIndex emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -2015,7 +2017,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
                                 model2
                                 sessionId
@@ -2041,7 +2043,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_RemoveReactionEmoji
                                                     userId
-                                                    (GuildOrDmId_Dm otherUserId2 threadRoute)
+                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
                                                     messageIndex
                                                     emoji
                                             )
@@ -2281,9 +2283,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_DeleteMessage guildOrDmId messageIndex ->
+                Local_DeleteMessage ( guildOrDmId, threadRoute ) messageIndex ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId threadRoute ->
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -2306,7 +2308,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , broadcastToGuildExcludingOne
                                                     clientId
                                                     guildId
-                                                    (Server_DeleteMessage userId guildOrDmId messageIndex |> ServerChange)
+                                                    (Server_DeleteMessage userId ( guildOrDmId, threadRoute ) messageIndex
+                                                        |> ServerChange
+                                                    )
                                                     model2
                                                 , case
                                                     ( SeqDict.get channelId guild2.channels
@@ -2343,7 +2347,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        GuildOrDmId_Dm otherUserId threadRoute ->
+                        GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
                                 model2
                                 sessionId
@@ -2369,7 +2373,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (\otherUserId2 ->
                                                                 Server_DeleteMessage
                                                                     userId
-                                                                    (GuildOrDmId_Dm otherUserId2 threadRoute)
+                                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
                                                                     messageIndex
                                                             )
                                                             model2

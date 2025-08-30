@@ -19,7 +19,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildOrDmId(..), Id, UserId)
+import Id exposing (GuildOrDmId, GuildOrDmIdNoThread(..), Id, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
@@ -352,7 +352,7 @@ newAtSymbol oldText text =
         |> .foundAtSymbol
 
 
-userDropdownList : GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList : GuildOrDmIdNoThread -> LocalState -> List ( Id UserId, FrontendUser )
 userDropdownList guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -360,7 +360,7 @@ userDropdownList guildOrDmId local =
             LocalState.allUsers local
     in
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId _ _ ->
+        GuildOrDmId_Guild_NoThread guildId _ ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     guild.owner
@@ -369,7 +369,7 @@ userDropdownList guildOrDmId local =
                 Nothing ->
                     []
 
-        GuildOrDmId_Dm otherUserId _ ->
+        GuildOrDmId_Dm_NoThread otherUserId ->
             [ local.localUser.userId, otherUserId ]
     )
         |> List.filterMap
@@ -384,7 +384,7 @@ userDropdownList guildOrDmId local =
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
 
 
-pressedArrowInDropdown : GuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+pressedArrowInDropdown : GuildOrDmIdNoThread -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
 pressedArrowInDropdown guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
@@ -407,7 +407,7 @@ pressedArrowInDropdown guildOrDmId index maybePingUser local =
 
 pressedPingUser :
     msg
-    -> GuildOrDmId
+    -> GuildOrDmIdNoThread
     -> HtmlId
     -> Int
     -> Maybe MentionUserDropdown
@@ -467,7 +467,7 @@ pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local 
 
 pingDropdownView :
     MsgConfig msg
-    -> GuildOrDmId
+    -> GuildOrDmIdNoThread
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown

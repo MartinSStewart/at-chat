@@ -345,7 +345,7 @@ type FrontendMsg
     | PressedPingUser GuildOrDmId Int
     | SetFocus
     | RemoveFocus
-    | PressedArrowInDropdown GuildOrDmId Int
+    | PressedArrowInDropdown GuildOrDmIdNoThread Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
@@ -355,7 +355,7 @@ type FrontendMsg
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage GuildOrDmId String
     | PressedSendEditMessage GuildOrDmId
-    | PressedArrowInDropdownForEditMessage GuildOrDmId Int
+    | PressedArrowInDropdownForEditMessage GuildOrDmIdNoThread Int
     | PressedPingUserForEditMessage GuildOrDmId Int
     | PressedArrowUpInEmptyInput GuildOrDmId
     | MessageMenu_PressedReply (Id ChannelMessageId)
