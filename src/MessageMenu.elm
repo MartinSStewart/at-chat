@@ -267,20 +267,20 @@ view model extraOptions local loggedIn =
 
 
 editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
-editMessageTextInputConfig guildOrDmId =
+editMessageTextInputConfig ( guildOrDmId, threadRoute ) =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
     , pressedTextInput = PressedTextInput
-    , typedMessage = TypedEditMessage guildOrDmId
-    , pressedSendMessage = PressedSendEditMessage guildOrDmId
+    , typedMessage = TypedEditMessage ( guildOrDmId, threadRoute )
+    , pressedSendMessage = PressedSendEditMessage ( guildOrDmId, threadRoute )
     , pressedArrowInDropdown = PressedArrowInDropdownForEditMessage guildOrDmId
     , pressedArrowUpInEmptyInput = FrontendNoOp
-    , pressedPingUser = PressedPingUserForEditMessage guildOrDmId
+    , pressedPingUser = PressedPingUserForEditMessage ( guildOrDmId, threadRoute )
     , pressedPingDropdownContainer = PressedEditMessagePingDropdownContainer
-    , pressedUploadFile = EditMessage_PressedAttachFiles guildOrDmId
+    , pressedUploadFile = EditMessage_PressedAttachFiles ( guildOrDmId, threadRoute )
     , target = MessageInput.EditMessage
-    , onPasteFiles = EditMessage_PastedFiles guildOrDmId
+    , onPasteFiles = EditMessage_PastedFiles ( guildOrDmId, threadRoute )
     }
 
 

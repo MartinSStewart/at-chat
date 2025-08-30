@@ -5,12 +5,12 @@ import Dict as RegularDict
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
+import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..))
+import Id exposing (ChannelMessageId, Id)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -18,13 +18,12 @@ import LoginForm
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
-import Route
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
 import Time
 import TwoFactorAuthentication
-import Types exposing (BackendModel, BackendMsg, FrontendModel(..), FrontendMsg, LoadedFrontend, LoginTokenData(..), ToBackend, ToFrontend)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 import Unsafe
 import Url exposing (Url)
 
@@ -280,29 +279,6 @@ dropPrefix prefix text =
         text
 
 
-andThenFrontend :
-    T.DelayInMs
-    -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-    -> (LoadedFrontend -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
-    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-andThenFrontend delay user func =
-    T.andThen
-        delay
-        (\data ->
-            case SeqDict.get user.clientId data.frontends of
-                Just frontend ->
-                    case frontend of
-                        Loaded loaded ->
-                            func loaded
-
-                        Loading _ ->
-                            [ T.checkState 0 (\_ -> Err "Frontend loading") ]
-
-                Nothing ->
-                    [ T.checkState 0 (\_ -> Err "Frontend missing") ]
-        )
-
-
 connectTwoUsers :
     (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
      -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
@@ -503,8 +479,8 @@ tests =
                 , clickSpoiler admin (Dom.id "spoiler_2_1")
                 , writeMessage admin "||*super*|| ||duper|| *||secret||* text"
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                , clickSpoiler admin (Dom.id "spoiler_0_0")
-                , clickSpoiler admin (Dom.id "spoiler_0_2")
+                , clickSpoiler admin (Dom.id "threadSpoiler_0_0")
+                , clickSpoiler admin (Dom.id "threadSpoiler_0_2")
                 ]
             )
         ]

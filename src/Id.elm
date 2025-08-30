@@ -2,9 +2,8 @@ module Id exposing
     ( ChannelId(..)
     , ChannelMessageId(..)
     , GuildId(..)
-    , GuildOrDmId(..)
+    , GuildOrDmId
     , GuildOrDmIdNoThread(..)
-    , GuildOrDmIdWithMaybeMessage(..)
     , Id(..)
     , InviteLinkId(..)
     , ThreadMessageId(..)
@@ -15,9 +14,6 @@ module Id exposing
     , changeType
     , fromInt
     , fromString
-    , guildOrDmIdSetThreadRoute
-    , guildOrDmIdWithoutMaybeMessage
-    , guildOrDmIdWithoutThread
     , increment
     , nextId
     , toInt
@@ -28,59 +24,13 @@ import List.Extra
 import SeqDict exposing (SeqDict)
 
 
-type GuildOrDmId
-    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId) ThreadRoute
-    | GuildOrDmId_Dm (Id UserId) ThreadRoute
+type alias GuildOrDmId =
+    ( GuildOrDmIdNoThread, ThreadRoute )
 
 
 type GuildOrDmIdNoThread
     = GuildOrDmId_Guild_NoThread (Id GuildId) (Id ChannelId)
     | GuildOrDmId_Dm_NoThread (Id UserId)
-
-
-type GuildOrDmIdWithMaybeMessage
-    = GuildOrDmId_Guild_WithMaybeMessage (Id GuildId) (Id ChannelId) ThreadRouteWithMaybeMessage
-    | GuildOrDmId_Dm_WithMaybeMessage (Id UserId) ThreadRouteWithMaybeMessage
-
-
-guildOrDmIdWithoutMaybeMessage : GuildOrDmIdWithMaybeMessage -> GuildOrDmId
-guildOrDmIdWithoutMaybeMessage a =
-    case a of
-        GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute ->
-            GuildOrDmId_Guild guildId channelId (threadWithoutMaybeMessage threadRoute)
-
-        GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute ->
-            GuildOrDmId_Dm otherUserId (threadWithoutMaybeMessage threadRoute)
-
-
-guildOrDmIdWithoutThread : GuildOrDmId -> ( GuildOrDmIdNoThread, ThreadRoute )
-guildOrDmIdWithoutThread guildOrDmId =
-    case guildOrDmId of
-        GuildOrDmId_Guild guildId threadId threadRoute ->
-            ( GuildOrDmId_Guild_NoThread guildId threadId, threadRoute )
-
-        GuildOrDmId_Dm otherUserId threadRoute ->
-            ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute )
-
-
-threadWithoutMaybeMessage : ThreadRouteWithMaybeMessage -> ThreadRoute
-threadWithoutMaybeMessage a =
-    case a of
-        NoThreadWithMaybeMessage _ ->
-            NoThread
-
-        ViewThreadWithMaybeMessage channelMessageId _ ->
-            ViewThread channelMessageId
-
-
-guildOrDmIdSetThreadRoute : GuildOrDmId -> ThreadRoute -> GuildOrDmId
-guildOrDmIdSetThreadRoute guildOrDmId threadRoute =
-    case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId _ ->
-            GuildOrDmId_Guild guildId channelId threadRoute
-
-        GuildOrDmId_Dm otherUserId _ ->
-            GuildOrDmId_Dm otherUserId threadRoute
 
 
 type ThreadRoute

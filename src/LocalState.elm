@@ -47,9 +47,11 @@ module LocalState exposing
     , nextMessageId
     , nextThreadMessageId
     , removeReactionEmoji
+    , repliedToUserId
     , setArray
     , updateArray
     , updateChannel
+    , usersToNotify
     )
 
 import Array exposing (Array)
@@ -62,7 +64,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), UserTextMessageData)
@@ -73,7 +75,7 @@ import Quantity
 import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 
@@ -258,9 +260,9 @@ createNewUser createdAt name email userIsAdmin =
 
 
 getMessages : GuildOrDmId -> LocalState -> Maybe ( ThreadRoute, Array Message )
-getMessages guildOrDmId local =
+getMessages ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId threadRoute ->
+        GuildOrDmId_Guild_NoThread guildId channelId ->
             case getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -278,7 +280,7 @@ getMessages guildOrDmId local =
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId threadRoute ->
+        GuildOrDmId_Dm_NoThread otherUserId ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     case threadRoute of
@@ -1028,6 +1030,73 @@ getGuildAndChannel guildId channelId local =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     Just ( guild, channel )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+usersToNotify :
+    Id UserId
+    -> ThreadRouteWithMaybeMessage
+    -> { a | messages : Array Message, threads : SeqDict (Id ChannelMessageId) Thread }
+    -> Nonempty RichText
+    -> SeqSet (Id UserId)
+usersToNotify senderId threadRouteWithRepliedTo channel content =
+    let
+        usersToNotify2 =
+            RichText.mentionsUser content
+
+        repliedToUserId2 : Maybe (Id UserId)
+        repliedToUserId2 =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
+                    case SeqDict.get threadId channel.threads of
+                        Just thread ->
+                            repliedToUserId maybeRepliedTo thread
+
+                        Nothing ->
+                            case getArray threadId channel.messages of
+                                Just (UserTextMessage data) ->
+                                    Just data.createdBy
+
+                                Just (UserJoinedMessage _ userJoined _) ->
+                                    Just userJoined
+
+                                Just (DeletedMessage _) ->
+                                    Nothing
+
+                                Nothing ->
+                                    Nothing
+
+                NoThreadWithMaybeMessage maybeRepliedTo ->
+                    repliedToUserId maybeRepliedTo channel
+    in
+    (case repliedToUserId2 of
+        Just a ->
+            SeqSet.insert a usersToNotify2
+
+        Nothing ->
+            usersToNotify2
+    )
+        |> SeqSet.remove senderId
+
+
+repliedToUserId : Maybe (Id messageId) -> { a | messages : Array Message } -> Maybe (Id UserId)
+repliedToUserId maybeRepliedTo channel =
+    case maybeRepliedTo of
+        Just repliedTo ->
+            case getArray repliedTo channel.messages of
+                Just (UserTextMessage repliedToData) ->
+                    Just repliedToData.createdBy
+
+                Just (UserJoinedMessage _ joinedUser _) ->
+                    Just joinedUser
+
+                Just (DeletedMessage _) ->
+                    Nothing
 
                 Nothing ->
                     Nothing
