@@ -229,7 +229,7 @@ messageMenuMobileOffset mobileMode =
 type alias RevealedSpoilers =
     { guildOrDmId : GuildOrDmId
     , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
-    , threadMessages : SeqDict ( Id ChannelMessageId, Id ThreadMessageId ) (NonemptySet Int)
+    , threadMessages : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (NonemptySet Int))
     }
 
 

@@ -2839,15 +2839,21 @@ updateLoaded msg model =
                                             { revealedSpoilers
                                                 | threadMessages =
                                                     SeqDict.update
-                                                        ( threadMessageIndex, messageId )
+                                                        threadMessageIndex
                                                         (\maybe ->
-                                                            (case maybe of
-                                                                Just revealed ->
-                                                                    NonemptySet.insert spoilerIndex revealed
+                                                            SeqDict.update
+                                                                messageId
+                                                                (\maybe2 ->
+                                                                    (case maybe2 of
+                                                                        Just revealed ->
+                                                                            NonemptySet.insert spoilerIndex revealed
 
-                                                                Nothing ->
-                                                                    NonemptySet.singleton spoilerIndex
-                                                            )
+                                                                        Nothing ->
+                                                                            NonemptySet.singleton spoilerIndex
+                                                                    )
+                                                                        |> Just
+                                                                )
+                                                                (Maybe.withDefault SeqDict.empty maybe)
                                                                 |> Just
                                                         )
                                                         revealedSpoilers.threadMessages
