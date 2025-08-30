@@ -56,6 +56,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
