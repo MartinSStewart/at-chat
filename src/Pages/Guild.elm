@@ -422,14 +422,15 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                             local
                             (PersonName.toString otherUser.name)
 
-                NoThreadWithMaybeMessage _ ->
+                NoThreadWithMaybeMessage maybeUrlMessageId ->
                     conversationView
                         (SeqDict.get
                             (GuildOrDmId_Dm_NoThread otherUserId)
                             local.localUser.user.lastViewed
                             |> Maybe.withDefault (Id.fromInt -1)
                         )
-                        (GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute)
+                        (GuildOrDmId_Dm_NoThread otherUserId)
+                        maybeUrlMessageId
                         loggedIn
                         model
                         local
@@ -733,14 +734,15 @@ channelView channelRoute guildId guild loggedIn local model =
                                         ++ threadPreviewText threadMessageIndex channel local.localUser
                                     )
 
-                        NoThreadWithMaybeMessage _ ->
+                        NoThreadWithMaybeMessage maybeUrlMessageId ->
                             conversationView
                                 (SeqDict.get
                                     (GuildOrDmId_Guild_NoThread guildId channelId)
                                     local.localUser.user.lastViewed
                                     |> Maybe.withDefault (Id.fromInt -1)
                                 )
-                                (GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute)
+                                (GuildOrDmId_Guild_NoThread guildId channelId)
+                                maybeUrlMessageId
                                 loggedIn
                                 model
                                 local
@@ -955,26 +957,24 @@ messageHover guildOrDmId messageIndex loggedIn =
 
 conversationViewHelper :
     Id ChannelMessageId
-    -> GuildOrDmIdWithMaybeMessage
+    -> GuildOrDmIdNoThread
+    -> Maybe (Id ChannelMessageId)
     -> SeqDict (Id ChannelMessageId) Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads channel loggedIn local model =
+conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threads channel loggedIn local model =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            Id.guildOrDmIdWithoutMaybeMessage guildOrDmIdWithMaybeMessage
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Guild_NoThread guildId channelId ->
+                    GuildOrDmId_Guild guildId channelId NoThread
 
-        ( guildOrDmIdNoThread, threadRoute ) =
-            case guildOrDmIdWithMaybeMessage of
-                GuildOrDmId_Guild_WithMaybeMessage guildId channelId threadRoute2 ->
-                    ( GuildOrDmId_Guild_NoThread guildId channelId, threadRoute2 )
-
-                GuildOrDmId_Dm_WithMaybeMessage otherUserId threadRoute2 ->
-                    ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute2 )
+                GuildOrDmId_Dm_NoThread otherUserId ->
+                    GuildOrDmId_Dm otherUserId NoThread
 
         maybeEditing : Maybe EditMessage
         maybeEditing =
@@ -1026,13 +1026,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                 messageId =
                     Id.fromInt index
 
+                threadRoute2 : ThreadRouteWithMessage
                 threadRoute2 =
-                    case threadRoute of
-                        ViewThreadWithMaybeMessage threadMessageIndex _ ->
-                            ViewThreadWithMessage threadMessageIndex (Id.fromInt index)
-
-                        NoThreadWithMaybeMessage _ ->
-                            NoThreadWithMessage (Id.fromInt index)
+                    NoThreadWithMessage messageId
 
                 threadId : Id ChannelMessageId
                 threadId =
@@ -1059,27 +1055,9 @@ conversationViewHelper lastViewedIndex guildOrDmIdWithMaybeMessage threads chann
                         Nothing ->
                             Nothing
 
-                isUrlHighlighted : Bool
-                isUrlHighlighted =
-                    case guildOrDmIdWithMaybeMessage of
-                        GuildOrDmId_Guild_WithMaybeMessage _ _ (ViewThreadWithMaybeMessage _ (Just a)) ->
-                            Id.toInt a == index
-
-                        GuildOrDmId_Guild_WithMaybeMessage _ _ (NoThreadWithMaybeMessage (Just a)) ->
-                            Id.toInt a == index
-
-                        GuildOrDmId_Dm_WithMaybeMessage _ (ViewThreadWithMaybeMessage _ (Just a)) ->
-                            Id.toInt a == index
-
-                        GuildOrDmId_Dm_WithMaybeMessage _ (NoThreadWithMaybeMessage (Just a)) ->
-                            Id.toInt a == index
-
-                        _ ->
-                            False
-
                 highlight : HighlightMessage
                 highlight =
-                    if isUrlHighlighted then
+                    if maybeUrlMessageId == Just messageId then
                         UrlHighlight
 
                     else if replyToIndex == Just messageId then
@@ -1758,7 +1736,8 @@ scrollToBottomDecoder isScrolledToBottomOfChannel =
 
 conversationView :
     Id ChannelMessageId
-    -> GuildOrDmIdWithMaybeMessage
+    -> GuildOrDmIdNoThread
+    -> Maybe (Id ChannelMessageId)
     -> LoggedIn2
     -> LoadedFrontend
     -> LocalState
@@ -1766,11 +1745,16 @@ conversationView :
     -> SeqDict (Id ChannelMessageId) Thread
     -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
     -> Element FrontendMsg
-conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model local name threads channel =
+conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name threads channel =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
-            Id.guildOrDmIdWithoutMaybeMessage guildOrDmIdWithMaybeMessage
+            case guildOrDmIdNoThread of
+                GuildOrDmId_Guild_NoThread guildId channelId ->
+                    GuildOrDmId_Guild guildId channelId NoThread
+
+                GuildOrDmId_Dm_NoThread otherUserId ->
+                    GuildOrDmId_Dm otherUserId NoThread
 
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -1790,8 +1774,8 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
         ]
         [ channelHeader
             isMobile
-            (case guildOrDmId of
-                GuildOrDmId_Dm otherUserId _ ->
+            (case guildOrDmIdNoThread of
+                GuildOrDmId_Dm_NoThread otherUserId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.userId then
@@ -1816,7 +1800,7 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                             ]
                         )
 
-                GuildOrDmId_Guild _ _ _ ->
+                GuildOrDmId_Guild_NoThread _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
                         [ Ui.html Icons.hashtag, Ui.text name ]
@@ -1844,55 +1828,13 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((case guildOrDmId of
-                    GuildOrDmId_Guild guildId channelId (ViewThread threadMessageIndex) ->
-                        Ui.column
-                            [ Ui.alignBottom ]
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "Start of thread")
-                            , case LocalState.getGuildAndChannel guildId channelId local of
-                                Just ( _, channel2 ) ->
-                                    threadStarterMessage
-                                        isMobile
-                                        (GuildOrDmId_Guild guildId channelId NoThread)
-                                        threadMessageIndex
-                                        channel2
-                                        loggedIn
-                                        local
-                                        model
-
-                                Nothing ->
-                                    Ui.none
-                            ]
-
-                    GuildOrDmId_Guild _ _ NoThread ->
+                ((case guildOrDmIdNoThread of
+                    GuildOrDmId_Guild_NoThread _ _ ->
                         Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                             (Ui.text ("This is the start of #" ++ name))
 
-                    GuildOrDmId_Dm otherUserId (ViewThread threadMessageIndex) ->
-                        Ui.column
-                            [ Ui.alignBottom ]
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                                (Ui.text "Start of thread")
-                            , case SeqDict.get otherUserId local.dmChannels of
-                                Just dmChannel2 ->
-                                    threadStarterMessage
-                                        isMobile
-                                        (GuildOrDmId_Dm otherUserId NoThread)
-                                        threadMessageIndex
-                                        dmChannel2
-                                        loggedIn
-                                        local
-                                        model
-
-                                Nothing ->
-                                    Ui.none
-                            ]
-
-                    GuildOrDmId_Dm otherUserId NoThread ->
+                    GuildOrDmId_Dm_NoThread otherUserId ->
                         Ui.el
                             [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                             (Ui.text
@@ -1906,7 +1848,8 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                  )
                     :: conversationViewHelper
                         lastViewedIndex
-                        guildOrDmIdWithMaybeMessage
+                        guildOrDmIdNoThread
+                        maybeUrlMessageId
                         threads
                         channel
                         loggedIn
@@ -1949,14 +1892,11 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                 (MyUi.isMobile model)
                 (messageInputConfig guildOrDmId)
                 channelTextInputId
-                (case guildOrDmId of
-                    GuildOrDmId_Guild _ _ NoThread ->
+                (case guildOrDmIdNoThread of
+                    GuildOrDmId_Guild_NoThread _ _ ->
                         "Write a message in #" ++ name
 
-                    GuildOrDmId_Guild _ _ (ViewThread _) ->
-                        "Write a message in this thread"
-
-                    GuildOrDmId_Dm otherUserId NoThread ->
+                    GuildOrDmId_Dm_NoThread otherUserId ->
                         "Write a message to "
                             ++ (if otherUserId == local.localUser.userId then
                                     "yourself"
@@ -1964,9 +1904,6 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                                 else
                                     name
                                )
-
-                    GuildOrDmId_Dm _ (ViewThread _) ->
-                        "Write a message in this thread"
                 )
                 (case SeqDict.get guildOrDmId loggedIn.drafts of
                     Just text ->
@@ -1984,61 +1921,71 @@ conversationView lastViewedIndex guildOrDmIdWithMaybeMessage loggedIn model loca
                 )
                 loggedIn.pingUser
                 local
-            , (case
-                SeqDict.filter
-                    (\_ a ->
-                        (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
-                            && (a.messageIndex == Nothing)
-                    )
-                    (SeqDict.remove local.localUser.userId channel.lastTypedAt)
-                    |> SeqDict.keys
-               of
-                [] ->
-                    " "
-
-                [ single ] ->
-                    User.toString single allUsers ++ " is typing..."
-
-                [ one, two ] ->
-                    User.toString one allUsers ++ " and " ++ User.toString two allUsers ++ " are typing..."
-
-                [ one, two, three ] ->
-                    User.toString one allUsers
-                        ++ ", "
-                        ++ User.toString two allUsers
-                        ++ ", and "
-                        ++ User.toString three allUsers
-                        ++ " are typing..."
-
-                _ :: _ :: _ :: _ ->
-                    "Several people are typing..."
-              )
-                |> Ui.text
-                |> Ui.el
-                    [ Ui.Font.bold
-                    , Ui.Font.size 13
-                    , Ui.Font.color MyUi.font3
-                    , MyUi.prewrap
-                    , MyUi.noShrinking
-                    , Ui.contentCenterY
-                    , MyUi.htmlStyle
-                        "padding"
-                        ("0 calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5) "
-                            ++ (if model.virtualKeyboardOpen then
-                                    "calc(" ++ MyUi.insetBottom ++ " * 0.5)"
-
-                                else
-                                    MyUi.insetBottom
-                               )
-                            ++ " calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5)"
-                        )
-                    ]
+            , peopleAreTypingView allUsers channel local model
             ]
         ]
+
+
+peopleAreTypingView :
+    SeqDict (Id UserId) FrontendUser
+    -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
+    -> LocalState
+    -> LoadedFrontend
+    -> Element msg
+peopleAreTypingView allUsers channel local model =
+    (case
+        SeqDict.filter
+            (\_ a ->
+                (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
+                    && (a.messageIndex == Nothing)
+            )
+            (SeqDict.remove local.localUser.userId channel.lastTypedAt)
+            |> SeqDict.keys
+     of
+        [] ->
+            " "
+
+        [ single ] ->
+            User.toString single allUsers ++ " is typing..."
+
+        [ one, two ] ->
+            User.toString one allUsers ++ " and " ++ User.toString two allUsers ++ " are typing..."
+
+        [ one, two, three ] ->
+            User.toString one allUsers
+                ++ ", "
+                ++ User.toString two allUsers
+                ++ ", and "
+                ++ User.toString three allUsers
+                ++ " are typing..."
+
+        _ :: _ :: _ :: _ ->
+            "Several people are typing..."
+    )
+        |> Ui.text
+        |> Ui.el
+            [ Ui.Font.bold
+            , Ui.Font.size 13
+            , Ui.Font.color MyUi.font3
+            , MyUi.prewrap
+            , MyUi.noShrinking
+            , Ui.contentCenterY
+            , MyUi.htmlStyle
+                "padding"
+                ("0 calc(12px + "
+                    ++ MyUi.insetBottom
+                    ++ " * 0.5) "
+                    ++ (if model.virtualKeyboardOpen then
+                            "calc(" ++ MyUi.insetBottom ++ " * 0.5)"
+
+                        else
+                            MyUi.insetBottom
+                       )
+                    ++ " calc(12px + "
+                    ++ MyUi.insetBottom
+                    ++ " * 0.5)"
+                )
+            ]
 
 
 threadConversationView :
@@ -2240,59 +2187,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 )
                 loggedIn.pingUser
                 local
-            , (case
-                SeqDict.filter
-                    (\_ a ->
-                        (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
-                            && (a.messageIndex == Nothing)
-                    )
-                    (SeqDict.remove local.localUser.userId channel.lastTypedAt)
-                    |> SeqDict.keys
-               of
-                [] ->
-                    " "
-
-                [ single ] ->
-                    User.toString single allUsers ++ " is typing..."
-
-                [ one, two ] ->
-                    User.toString one allUsers ++ " and " ++ User.toString two allUsers ++ " are typing..."
-
-                [ one, two, three ] ->
-                    User.toString one allUsers
-                        ++ ", "
-                        ++ User.toString two allUsers
-                        ++ ", and "
-                        ++ User.toString three allUsers
-                        ++ " are typing..."
-
-                _ :: _ :: _ :: _ ->
-                    "Several people are typing..."
-              )
-                |> Ui.text
-                |> Ui.el
-                    [ Ui.Font.bold
-                    , Ui.Font.size 13
-                    , Ui.Font.color MyUi.font3
-                    , MyUi.prewrap
-                    , MyUi.noShrinking
-                    , Ui.contentCenterY
-                    , MyUi.htmlStyle
-                        "padding"
-                        ("0 calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5) "
-                            ++ (if model.virtualKeyboardOpen then
-                                    "calc(" ++ MyUi.insetBottom ++ " * 0.5)"
-
-                                else
-                                    MyUi.insetBottom
-                               )
-                            ++ " calc(12px + "
-                            ++ MyUi.insetBottom
-                            ++ " * 0.5)"
-                        )
-                    ]
+            , peopleAreTypingView allUsers channel local model
             ]
         ]
 
