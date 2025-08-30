@@ -1211,8 +1211,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                     Ui.Lazy.lazy5
                                         messageViewNotThreadStarter
                                         (messageViewEncode isMobile messageHover2 containerWidth otherUserIsEditing highlight)
-                                        SeqDict.empty
-                                        --revealedSpoilers
+                                        revealedSpoilers
                                         local.localUser
                                         index
                                         message
@@ -1458,7 +1457,6 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                         threadMessageView
                             isMobile
                             containerWidth
-                            False
                             revealedSpoilers
                             highlight
                             messageHover2
@@ -1487,7 +1485,6 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                             threadMessageView
                                 isMobile
                                 containerWidth
-                                False
                                 revealedSpoilers
                                 highlight
                                 messageHover2
@@ -2208,8 +2205,21 @@ threadStarterMessage :
     -> Element FrontendMsg
 threadStarterMessage isMobile guildOrDmId threadMessageIndex channel loggedIn local model =
     let
-        ( guildOrDmIdNoThread, threadRoute ) =
+        ( guildOrDmIdNoThread, _ ) =
             Id.guildOrDmIdWithoutThread guildOrDmId
+
+        revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
+        revealedSpoilers =
+            case loggedIn.revealedSpoilers of
+                Just revealedSpoilers2 ->
+                    if revealedSpoilers2.guildOrDmId == guildOrDmId then
+                        revealedSpoilers2.messages
+
+                    else
+                        SeqDict.empty
+
+                Nothing ->
+                    SeqDict.empty
     in
     case LocalState.getArray threadMessageIndex channel.messages of
         Just message ->
@@ -2233,7 +2243,7 @@ threadStarterMessage isMobile guildOrDmId threadMessageIndex channel loggedIn lo
                             isMobile
                             (conversationWidth model)
                             True
-                            SeqDict.empty
+                            revealedSpoilers
                             NoHighlight
                             (messageHover guildOrDmId threadMessageIndex loggedIn)
                             False
@@ -2249,7 +2259,7 @@ threadStarterMessage isMobile guildOrDmId threadMessageIndex channel loggedIn lo
                         isMobile
                         (conversationWidth model)
                         True
-                        SeqDict.empty
+                        revealedSpoilers
                         NoHighlight
                         (messageHover guildOrDmId threadMessageIndex loggedIn)
                         False
@@ -2666,12 +2676,11 @@ threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
             messageViewDecode data
 
         _ =
-            Debug.log "rerender messageViewNotThreadStarter" ()
+            Debug.log "rerender threadMessageViewLazy" ()
     in
     threadMessageView
         isMobile
         containerWidth
-        False
         revealedSpoilers
         highlight
         isHovered
@@ -2854,7 +2863,6 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
 threadMessageView :
     Bool
     -> Int
-    -> Bool
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> HighlightMessage
     -> IsHovered
@@ -2864,7 +2872,7 @@ threadMessageView :
     -> Id ThreadMessageId
     -> Message
     -> Element MessageViewMsg
-threadMessageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
+threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
@@ -2873,7 +2881,6 @@ threadMessageView isMobile containerWidth isThreadStarter revealedSpoilers highl
     case message of
         UserTextMessage message2 ->
             threadMessageContainer
-                isThreadStarter
                 (case highlight of
                     NoHighlight ->
                         if SeqSet.member localUser.userId (RichText.mentionsUser message2.content) then
@@ -2929,7 +2936,7 @@ threadMessageView isMobile containerWidth isThreadStarter revealedSpoilers highl
                         , Html.div
                             [ Html.Attributes.style "white-space" "pre-wrap" ]
                             (RichText.view
-                                (Dom.id ("spoiler_" ++ Id.toString messageIndex))
+                                (Dom.id ("threadSpoiler_" ++ Id.toString messageIndex))
                                 containerWidth
                                 MessageView_PressedSpoiler
                                 (case SeqDict.get messageIndex revealedSpoilers of
@@ -2972,7 +2979,6 @@ threadMessageView isMobile containerWidth isThreadStarter revealedSpoilers highl
 
         UserJoinedMessage joinedAt userId reactions ->
             threadMessageContainer
-                isThreadStarter
                 highlight
                 messageIndex
                 False
@@ -2988,7 +2994,6 @@ threadMessageView isMobile containerWidth isThreadStarter revealedSpoilers highl
 
         DeletedMessage createdAt ->
             threadMessageContainer
-                isThreadStarter
                 highlight
                 messageIndex
                 False
@@ -3259,8 +3264,7 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
 
 
 threadMessageContainer :
-    Bool
-    -> HighlightMessage
+    HighlightMessage
     -> Id ThreadMessageId
     -> Bool
     -> Id UserId
@@ -3268,7 +3272,7 @@ threadMessageContainer :
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
-threadMessageContainer isThreadStarter highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
+threadMessageContainer highlight messageIndex canEdit currentUserId reactions isHovered messageContent =
     let
         maybeReactions : Maybe (Element MessageViewMsg)
         maybeReactions =
@@ -3284,14 +3288,14 @@ threadMessageContainer isThreadStarter highlight messageIndex canEdit currentUse
                 (\time touches ->
                     MessageView_TouchStart
                         time
-                        isThreadStarter
+                        False
                         (NonemptyDict.map (\_ touch -> { touch | target = threadMessageHtmlId messageIndex }) touches)
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"
             (Json.Decode.map2
                 (\x y ->
-                    ( MessageView_AltPressedMessage isThreadStarter (Coord.xy (round x) (round y))
+                    ( MessageView_AltPressedMessage False (Coord.xy (round x) (round y))
                     , True
                     )
                 )
@@ -3340,7 +3344,7 @@ threadMessageContainer isThreadStarter highlight messageIndex canEdit currentUse
 
                             UrlHighlight ->
                                 Ui.background MyUi.hoverAndReplyToColor
-                        , MessageView.miniView isThreadStarter canEdit |> Ui.inFront
+                        , MessageView.miniView False canEdit |> Ui.inFront
                         ]
 
                     IsHoveredButNoMenu ->

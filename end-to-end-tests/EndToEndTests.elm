@@ -503,8 +503,8 @@ tests =
                 , clickSpoiler admin (Dom.id "spoiler_2_1")
                 , writeMessage admin "||*super*|| ||duper|| *||secret||* text"
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
-                , clickSpoiler admin (Dom.id "spoiler_0_0")
-                , clickSpoiler admin (Dom.id "spoiler_0_2")
+                , clickSpoiler admin (Dom.id "threadSpoiler_0_0")
+                , clickSpoiler admin (Dom.id "threadSpoiler_0_2")
                 ]
             )
         ]
