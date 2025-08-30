@@ -2699,84 +2699,17 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 message2.reactions
                 maybeThreadStarter
                 isHovered
-                (Ui.row
-                    []
-                    [ Ui.el
-                        [ Ui.paddingWith
-                            { left = 0
-                            , right = profileImagePaddingRight
-                            , top =
-                                case maybeRepliedTo of
-                                    Just _ ->
-                                        24
-
-                                    Nothing ->
-                                        2
-                            , bottom = 0
-                            }
-                        , Ui.width Ui.shrink
-                        , Ui.alignTop
-                        ]
-                        (case SeqDict.get message2.createdBy allUsers of
-                            Just user ->
-                                User.profileImage user.icon
-
-                            Nothing ->
-                                User.profileImage Nothing
-                        )
-                    , Ui.column
-                        []
-                        [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
-                        , Ui.row
-                            []
-                            [ User.toString message2.createdBy allUsers
-                                ++ " "
-                                |> Ui.text
-                                |> Ui.el [ Ui.Font.bold ]
-                            , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
-                            ]
-                        , Html.div
-                            [ Html.Attributes.style "white-space" "pre-wrap" ]
-                            (RichText.view
-                                (Dom.id ("spoiler_" ++ Id.toString messageIndex))
-                                containerWidth
-                                MessageView_PressedSpoiler
-                                (case SeqDict.get messageIndex revealedSpoilers of
-                                    Just nonempty ->
-                                        NonemptySet.toSeqSet nonempty
-
-                                    Nothing ->
-                                        SeqSet.empty
-                                )
-                                allUsers
-                                message2.attachedFiles
-                                message2.content
-                                ++ (if isBeingEdited then
-                                        [ Html.span
-                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                            , Html.Attributes.style "font-size" "12px"
-                                            ]
-                                            [ Html.text " (editing...)" ]
-                                        ]
-
-                                    else
-                                        case message2.editedAt of
-                                            Just editedAt ->
-                                                [ Html.span
-                                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                                    , Html.Attributes.style "font-size" "12px"
-                                                    , MyUi.datestamp editedAt |> Html.Attributes.title
-                                                    ]
-                                                    [ Html.text " (edited)" ]
-                                                ]
-
-                                            Nothing ->
-                                                []
-                                   )
-                            )
-                            |> Ui.html
-                        ]
-                    ]
+                (userTextMessageContent
+                    (Dom.id "spoiler")
+                    containerWidth
+                    isBeingEdited
+                    isMobile
+                    maybeRepliedTo
+                    revealedSpoilers
+                    allUsers
+                    localUser.timezone
+                    messageIndex
+                    message2
                 )
 
         UserJoinedMessage joinedAt userId reactions ->
@@ -2850,84 +2783,17 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 localUser.userId
                 message2.reactions
                 isHovered
-                (Ui.row
-                    []
-                    [ Ui.el
-                        [ Ui.paddingWith
-                            { left = 0
-                            , right = profileImagePaddingRight
-                            , top =
-                                case maybeRepliedTo of
-                                    Just _ ->
-                                        24
-
-                                    Nothing ->
-                                        2
-                            , bottom = 0
-                            }
-                        , Ui.width Ui.shrink
-                        , Ui.alignTop
-                        ]
-                        (case SeqDict.get message2.createdBy allUsers of
-                            Just user ->
-                                User.profileImage user.icon
-
-                            Nothing ->
-                                User.profileImage Nothing
-                        )
-                    , Ui.column
-                        []
-                        [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
-                        , Ui.row
-                            []
-                            [ User.toString message2.createdBy allUsers
-                                ++ " "
-                                |> Ui.text
-                                |> Ui.el [ Ui.Font.bold ]
-                            , messageTimestamp message2.createdAt localUser.timezone |> Ui.html
-                            ]
-                        , Html.div
-                            [ Html.Attributes.style "white-space" "pre-wrap" ]
-                            (RichText.view
-                                (Dom.id ("threadSpoiler_" ++ Id.toString messageIndex))
-                                containerWidth
-                                MessageView_PressedSpoiler
-                                (case SeqDict.get messageIndex revealedSpoilers of
-                                    Just nonempty ->
-                                        NonemptySet.toSeqSet nonempty
-
-                                    Nothing ->
-                                        SeqSet.empty
-                                )
-                                allUsers
-                                message2.attachedFiles
-                                message2.content
-                                ++ (if isBeingEdited then
-                                        [ Html.span
-                                            [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                            , Html.Attributes.style "font-size" "12px"
-                                            ]
-                                            [ Html.text " (editing...)" ]
-                                        ]
-
-                                    else
-                                        case message2.editedAt of
-                                            Just editedAt ->
-                                                [ Html.span
-                                                    [ Html.Attributes.style "color" "rgb(200,200,200)"
-                                                    , Html.Attributes.style "font-size" "12px"
-                                                    , MyUi.datestamp editedAt |> Html.Attributes.title
-                                                    ]
-                                                    [ Html.text " (edited)" ]
-                                                ]
-
-                                            Nothing ->
-                                                []
-                                   )
-                            )
-                            |> Ui.html
-                        ]
-                    ]
+                (userTextMessageContent
+                    (Dom.id "threadSpoiler")
+                    containerWidth
+                    isBeingEdited
+                    isMobile
+                    maybeRepliedTo
+                    revealedSpoilers
+                    allUsers
+                    localUser.timezone
+                    messageIndex
+                    message2
                 )
 
         UserJoinedMessage joinedAt userId reactions ->
@@ -2954,6 +2820,99 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 SeqDict.empty
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
+
+
+userTextMessageContent :
+    HtmlId
+    -> Int
+    -> Bool
+    -> Bool
+    -> Maybe ( Id messageId, Message )
+    -> SeqDict (Id messageId) (NonemptySet Int)
+    -> SeqDict (Id UserId) FrontendUser
+    -> Time.Zone
+    -> Id messageId
+    -> UserTextMessageData
+    -> Element MessageViewMsg
+userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo revealedSpoilers allUsers timezone messageIndex message2 =
+    Ui.row
+        []
+        [ Ui.el
+            [ Ui.paddingWith
+                { left = 0
+                , right = profileImagePaddingRight
+                , top =
+                    case maybeRepliedTo of
+                        Just _ ->
+                            24
+
+                        Nothing ->
+                            2
+                , bottom = 0
+                }
+            , Ui.width Ui.shrink
+            , Ui.alignTop
+            ]
+            (case SeqDict.get message2.createdBy allUsers of
+                Just user ->
+                    User.profileImage user.icon
+
+                Nothing ->
+                    User.profileImage Nothing
+            )
+        , Ui.column
+            []
+            [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers
+            , Ui.row
+                []
+                [ User.toString message2.createdBy allUsers
+                    ++ " "
+                    |> Ui.text
+                    |> Ui.el [ Ui.Font.bold ]
+                , messageTimestamp message2.createdAt timezone |> Ui.html
+                ]
+            , Html.div
+                [ Html.Attributes.style "white-space" "pre-wrap" ]
+                (RichText.view
+                    (Dom.id (Dom.idToString spoilerHtmlId ++ "_" ++ Id.toString messageIndex))
+                    containerWidth
+                    MessageView_PressedSpoiler
+                    (case SeqDict.get messageIndex revealedSpoilers of
+                        Just nonempty ->
+                            NonemptySet.toSeqSet nonempty
+
+                        Nothing ->
+                            SeqSet.empty
+                    )
+                    allUsers
+                    message2.attachedFiles
+                    message2.content
+                    ++ (if isBeingEdited then
+                            [ Html.span
+                                [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                , Html.Attributes.style "font-size" "12px"
+                                ]
+                                [ Html.text " (editing...)" ]
+                            ]
+
+                        else
+                            case message2.editedAt of
+                                Just editedAt ->
+                                    [ Html.span
+                                        [ Html.Attributes.style "color" "rgb(200,200,200)"
+                                        , Html.Attributes.style "font-size" "12px"
+                                        , MyUi.datestamp editedAt |> Html.Attributes.title
+                                        ]
+                                        [ Html.text " (edited)" ]
+                                    ]
+
+                                Nothing ->
+                                    []
+                       )
+                )
+                |> Ui.html
+            ]
+        ]
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg
