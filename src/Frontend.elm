@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (DmChannel, Thread)
+import DmChannel exposing (DmChannel)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -40,7 +40,6 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Maybe.Extra
 import Message exposing (Message(..), UserTextMessageData)
 import MessageInput
 import MessageMenu
@@ -57,7 +56,6 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))

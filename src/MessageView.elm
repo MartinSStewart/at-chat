@@ -8,7 +8,6 @@ import Emoji exposing (Emoji)
 import Html exposing (Html)
 import Html.Attributes
 import Icons
-import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage)
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
