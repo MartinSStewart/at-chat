@@ -1179,8 +1179,8 @@ handleDiscordCreateMessage message model =
                         | dmChannels =
                             SeqDict.insert
                                 dmChannelId
-                                (LocalState.createMessage
-                                    (Just ( message.id, message.channelId ))
+                                (LocalState.createChannelMessage
+                                    (Just message.id)
                                     (UserTextMessage
                                         { createdAt = message.timestamp
                                         , createdBy = userId
@@ -1200,7 +1200,6 @@ handleDiscordCreateMessage message model =
                                         , attachedFiles = SeqDict.empty
                                         }
                                     )
-                                    NoThread
                                     dmChannel
                                 )
                                 model.dmChannels
@@ -1365,32 +1364,37 @@ handleDiscordCreateGuildMessageHelper :
     -> BackendChannel
     -> BackendChannel
 handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRouteWithMaybeReplyTo userId richText message channel =
-    LocalState.createMessage
-        (Just ( discordMessageId, discordChannelId ))
-        (UserTextMessage
-            { createdAt = message.timestamp
-            , createdBy = userId
-            , content = richText
-            , reactions = SeqDict.empty
-            , editedAt = Nothing
-            , repliedTo =
-                case threadRouteWithMaybeReplyTo of
-                    ViewThreadWithMaybeMessage _ replyTo ->
-                        Maybe.map Id.changeType replyTo
+    case threadRouteWithMaybeReplyTo of
+        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+            LocalState.createThreadMessage
+                (Just ( discordMessageId, discordChannelId ))
+                threadId
+                (UserTextMessage
+                    { createdAt = message.timestamp
+                    , createdBy = userId
+                    , content = richText
+                    , reactions = SeqDict.empty
+                    , editedAt = Nothing
+                    , repliedTo = maybeReplyTo
+                    , attachedFiles = SeqDict.empty
+                    }
+                )
+                channel
 
-                    NoThreadWithMaybeMessage replyTo ->
-                        replyTo
-            , attachedFiles = SeqDict.empty
-            }
-        )
-        (case threadRouteWithMaybeReplyTo of
-            ViewThreadWithMaybeMessage threadMessageId _ ->
-                ViewThread threadMessageId
-
-            NoThreadWithMaybeMessage _ ->
-                NoThread
-        )
-        channel
+        NoThreadWithMaybeMessage maybeReplyTo ->
+            LocalState.createChannelMessage
+                (Just discordMessageId)
+                (UserTextMessage
+                    { createdAt = message.timestamp
+                    , createdBy = userId
+                    , content = richText
+                    , reactions = SeqDict.empty
+                    , editedAt = Nothing
+                    , repliedTo = maybeReplyTo
+                    , attachedFiles = SeqDict.empty
+                    }
+                )
+                channel
 
 
 updateFromFrontend :
@@ -1912,7 +1916,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                Local_AddReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji ->
+                Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
@@ -1925,7 +1929,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.insert
                                                 guildId
                                                 (LocalState.updateChannel
-                                                    (LocalState.addReactionEmoji emoji userId threadRoute messageIndex)
+                                                    (LocalState.addReactionEmoji emoji userId threadRoute)
                                                     channelId
                                                     guild
                                                 )
@@ -1936,7 +1940,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , broadcastToGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_AddReactionEmoji userId ( guildOrDmId, threadRoute ) messageIndex emoji
+                                            (Server_AddReactionEmoji userId guildOrDmId threadRoute emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -1957,7 +1961,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | dmChannels =
                                             SeqDict.updateIfExists
                                                 dmChannelId
-                                                (LocalState.addReactionEmoji emoji userId threadRoute messageIndex)
+                                                (LocalState.addReactionEmoji emoji userId threadRoute)
                                                 model2.dmChannels
                                       }
                                     , Command.batch
@@ -1969,8 +1973,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_AddReactionEmoji
                                                     userId
-                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
-                                                    messageIndex
+                                                    (GuildOrDmId_Dm_NoThread otherUserId2)
+                                                    threadRoute
                                                     emoji
                                             )
                                             model2
@@ -1978,7 +1982,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                Local_RemoveReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji ->
+                Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
@@ -1991,25 +1995,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             SeqDict.insert
                                                 guildId
                                                 (LocalState.updateChannel
-                                                    (LocalState.removeReactionEmoji
-                                                        emoji
-                                                        userId
-                                                        threadRoute
-                                                        messageIndex
-                                                    )
+                                                    (LocalState.removeReactionEmoji emoji userId threadRoute)
                                                     channelId
                                                     guild
                                                 )
                                                 model2.guilds
                                       }
                                     , Command.batch
-                                        [ Local_RemoveReactionEmoji ( guildOrDmId, threadRoute ) messageIndex emoji
+                                        [ Local_RemoveReactionEmoji guildOrDmId threadRoute emoji
                                             |> LocalChangeResponse changeId
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_RemoveReactionEmoji userId ( guildOrDmId, threadRoute ) messageIndex emoji
+                                            (Server_RemoveReactionEmoji userId guildOrDmId threadRoute emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -2031,7 +2030,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | dmChannels =
                                             SeqDict.updateIfExists
                                                 dmChannelId
-                                                (LocalState.removeReactionEmoji emoji userId threadRoute messageIndex)
+                                                (LocalState.removeReactionEmoji emoji userId threadRoute)
                                                 model2.dmChannels
                                       }
                                     , Command.batch
@@ -2043,8 +2042,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_RemoveReactionEmoji
                                                     userId
-                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
-                                                    messageIndex
+                                                    (GuildOrDmId_Dm_NoThread otherUserId2)
+                                                    threadRoute
                                                     emoji
                                             )
                                             model2
@@ -2283,7 +2282,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
-                Local_DeleteMessage ( guildOrDmId, threadRoute ) messageIndex ->
+                Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
                         GuildOrDmId_Guild_NoThread guildId channelId ->
                             asGuildMember
@@ -2291,15 +2290,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 (\userId _ guild ->
-                                    case
-                                        LocalState.deleteMessage
-                                            userId
-                                            channelId
-                                            threadRoute
-                                            messageIndex
-                                            guild
-                                    of
-                                        Ok guild2 ->
+                                    case LocalState.deleteMessage userId channelId threadRoute guild of
+                                        Ok ( maybeDiscordMessageId, guild2 ) ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend
@@ -2308,31 +2300,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , broadcastToGuildExcludingOne
                                                     clientId
                                                     guildId
-                                                    (Server_DeleteMessage userId ( guildOrDmId, threadRoute ) messageIndex
-                                                        |> ServerChange
-                                                    )
+                                                    (Server_DeleteMessage userId guildOrDmId threadRoute |> ServerChange)
                                                     model2
                                                 , case
-                                                    ( SeqDict.get channelId guild2.channels
-                                                    , OneToOne.first channelId guild2.linkedChannelIds
+                                                    ( OneToOne.first channelId guild2.linkedChannelIds
+                                                    , maybeDiscordMessageId
+                                                    , model2.botToken
                                                     )
                                                   of
-                                                    ( Just channel, Just discordChannelId ) ->
-                                                        case
-                                                            ( OneToOne.first messageIndex channel.linkedMessageIds
-                                                            , model2.botToken
-                                                            )
-                                                        of
-                                                            ( Just discordMessageId, Just botToken ) ->
-                                                                Discord.deleteMessage
-                                                                    (botTokenToAuth botToken)
-                                                                    { channelId = discordChannelId
-                                                                    , messageId = discordMessageId
-                                                                    }
-                                                                    |> Task.attempt (\_ -> DeletedDiscordMessage)
-
-                                                            _ ->
-                                                                Command.none
+                                                    ( Just discordChannelId, Just discordMessageId, Just botToken ) ->
+                                                        Discord.deleteMessage
+                                                            (botTokenToAuth botToken)
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            }
+                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
 
                                                     _ ->
                                                         Command.none
@@ -2359,8 +2341,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
-                                            case LocalState.deleteMessageHelper userId messageIndex threadRoute dmChannel of
-                                                Ok dmChannel2 ->
+                                            case LocalState.deleteMessageHelper userId threadRoute dmChannel of
+                                                Ok ( maybeDiscordMessageId, dmChannel2 ) ->
                                                     ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
                                                     , Command.batch
                                                         [ Lamdera.sendToFrontend
@@ -2373,29 +2355,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (\otherUserId2 ->
                                                                 Server_DeleteMessage
                                                                     userId
-                                                                    ( GuildOrDmId_Dm_NoThread otherUserId2, threadRoute )
-                                                                    messageIndex
+                                                                    (GuildOrDmId_Dm_NoThread otherUserId2)
+                                                                    threadRoute
                                                             )
                                                             model2
-                                                        , case OneToOne.first dmChannelId model2.discordDms of
-                                                            Just discordChannelId ->
-                                                                case
-                                                                    ( OneToOne.first messageIndex dmChannel2.linkedMessageIds
-                                                                    , model2.botToken
-                                                                    )
-                                                                of
-                                                                    ( Just discordMessageId, Just botToken ) ->
-                                                                        Discord.deleteMessage
-                                                                            (botTokenToAuth botToken)
-                                                                            { channelId = discordChannelId
-                                                                            , messageId = discordMessageId
-                                                                            }
-                                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
+                                                        , case
+                                                            ( OneToOne.first dmChannelId model2.discordDms
+                                                            , maybeDiscordMessageId
+                                                            , model2.botToken
+                                                            )
+                                                          of
+                                                            ( Just discordChannelId, Just discordMessageId, Just botToken ) ->
+                                                                Discord.deleteMessage
+                                                                    (botTokenToAuth botToken)
+                                                                    { channelId = discordChannelId
+                                                                    , messageId = discordMessageId
+                                                                    }
+                                                                    |> Task.attempt (\_ -> DeletedDiscordMessage)
 
-                                                                    _ ->
-                                                                        Command.none
-
-                                                            Nothing ->
+                                                            _ ->
                                                                 Command.none
                                                         ]
                                                     )
@@ -3054,7 +3032,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
 
                 dmChannel2 : DmChannel
                 dmChannel2 =
-                    LocalState.createMessageHelper
+                    LocalState.createChannelMessage
                         Nothing
                         (UserTextMessage
                             { createdAt = time
@@ -3268,32 +3246,37 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
             let
                 channel2 : BackendChannel
                 channel2 =
-                    LocalState.createMessage
-                        Nothing
-                        (UserTextMessage
-                            { createdAt = time
-                            , createdBy = userId
-                            , content = text
-                            , reactions = SeqDict.empty
-                            , editedAt = Nothing
-                            , repliedTo =
-                                case threadRouteWithMaybeReplyTo of
-                                    ViewThreadWithMaybeMessage _ replyTo ->
-                                        Maybe.map Id.changeType replyTo
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                            LocalState.createThreadMessage
+                                Nothing
+                                threadId
+                                (UserTextMessage
+                                    { createdAt = time
+                                    , createdBy = userId
+                                    , content = text
+                                    , reactions = SeqDict.empty
+                                    , editedAt = Nothing
+                                    , repliedTo = maybeReplyTo
+                                    , attachedFiles = attachedFiles
+                                    }
+                                )
+                                channel
 
-                                    NoThreadWithMaybeMessage replyTo ->
-                                        replyTo
-                            , attachedFiles = attachedFiles
-                            }
-                        )
-                        (case threadRouteWithMaybeReplyTo of
-                            ViewThreadWithMaybeMessage threadMessageId _ ->
-                                ViewThread threadMessageId
-
-                            NoThreadWithMaybeMessage _ ->
-                                NoThread
-                        )
-                        channel
+                        NoThreadWithMaybeMessage maybeReplyTo ->
+                            LocalState.createChannelMessage
+                                Nothing
+                                (UserTextMessage
+                                    { createdAt = time
+                                    , createdBy = userId
+                                    , content = text
+                                    , reactions = SeqDict.empty
+                                    , editedAt = Nothing
+                                    , repliedTo = maybeReplyTo
+                                    , attachedFiles = attachedFiles
+                                    }
+                                )
+                                channel
             in
             ( { model
                 | guilds =

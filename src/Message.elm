@@ -11,24 +11,24 @@ import SeqSet
 import Time
 
 
-type Message
-    = UserTextMessage UserTextMessageData
+type Message messageId
+    = UserTextMessage (UserTextMessageData messageId)
     | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
     | DeletedMessage Time.Posix
 
 
-type alias UserTextMessageData =
+type alias UserTextMessageData messageId =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , content : Nonempty RichText
     , reactions : SeqDict Emoji (NonemptySet (Id UserId))
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id ChannelMessageId)
+    , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
-addReactionEmoji : Id UserId -> Emoji -> Message -> Message
+addReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -73,7 +73,7 @@ addReactionEmoji userId emoji message =
             message
 
 
-removeReactionEmoji : Id UserId -> Emoji -> Message -> Message
+removeReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->

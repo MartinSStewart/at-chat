@@ -186,15 +186,15 @@ type ChannelSidebarMode
 
 type MessageHover
     = NoMessageHover
-    | MessageHover GuildOrDmId (Id ChannelMessageId)
+    | MessageHover GuildOrDmIdNoThread ThreadRouteWithMessage
     | MessageMenu MessageMenuExtraOptions
 
 
 type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
-    , guildOrDmId : GuildOrDmId
+    , guildOrDmId : GuildOrDmIdNoThread
     , isThreadStarter : Bool
-    , messageIndex : Id ChannelMessageId
+    , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
     }
 
@@ -239,7 +239,7 @@ type alias EditMessage =
 
 type EmojiSelector
     = EmojiSelectorHidden
-    | EmojiSelectorForReaction GuildOrDmId (Id ChannelMessageId)
+    | EmojiSelectorForReaction GuildOrDmIdNoThread ThreadRouteWithMessage
     | EmojiSelectorForMessage
 
 
@@ -349,8 +349,8 @@ type FrontendMsg
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | MessageMenu_PressedShowReactionEmojiSelector GuildOrDmId (Id ChannelMessageId) (Coord CssPixels)
-    | MessageMenu_PressedEditMessage GuildOrDmId (Id ChannelMessageId)
+    | MessageMenu_PressedShowReactionEmojiSelector GuildOrDmIdNoThread ThreadRouteWithMessage (Coord CssPixels)
+    | MessageMenu_PressedEditMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | PressedEmojiSelectorEmoji Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
     | TypedEditMessage GuildOrDmId String
@@ -358,7 +358,7 @@ type FrontendMsg
     | PressedArrowInDropdownForEditMessage GuildOrDmIdNoThread Int
     | PressedPingUserForEditMessage GuildOrDmId Int
     | PressedArrowUpInEmptyInput GuildOrDmId
-    | MessageMenu_PressedReply (Id ChannelMessageId)
+    | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo GuildOrDmId
     | VisibilityChanged Visibility
@@ -375,14 +375,14 @@ type FrontendMsg
     | UserScrolled { scrolledToBottomOfChannel : Bool }
     | PressedBody
     | PressedReactionEmojiContainer
-    | MessageMenu_PressedDeleteMessage GuildOrDmId (Id ChannelMessageId)
+    | MessageMenu_PressedDeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
     | PressedCancelMessageEdit GuildOrDmId
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
-    | CheckMessageAltPress Time.Posix GuildOrDmId (Id ChannelMessageId) Bool
+    | CheckMessageAltPress Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage Bool
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
@@ -538,11 +538,11 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
-    | Server_AddReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
-    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId (Id ChannelMessageId) Emoji
+    | Server_AddReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Server_DeleteMessage (Id UserId) GuildOrDmId (Id ChannelMessageId)
+    | Server_DeleteMessage (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
@@ -559,12 +559,12 @@ type LocalChange
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
     | Local_MemberTyping Time.Posix GuildOrDmId
-    | Local_AddReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
-    | Local_RemoveReactionEmoji GuildOrDmId (Id ChannelMessageId) Emoji
+    | Local_AddReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Local_RemoveReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_DeleteMessage GuildOrDmId (Id ChannelMessageId)
+    | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
     | Local_SetName PersonName
 
