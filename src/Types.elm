@@ -364,7 +364,7 @@ type FrontendMsg
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
-    | TouchStart (Maybe ( GuildOrDmId, Id ChannelMessageId, Bool )) Time.Posix (NonemptyDict Int Touch)
+    | TouchStart (Maybe ( GuildOrDmIdNoThread, ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix

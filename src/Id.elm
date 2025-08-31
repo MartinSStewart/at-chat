@@ -16,6 +16,7 @@ module Id exposing
     , fromString
     , increment
     , nextId
+    , threadRouteWithMessage
     , threadRouteWithoutMessage
     , toInt
     , toString
@@ -40,13 +41,23 @@ type ThreadRoute
 
 
 threadRouteWithoutMessage : ThreadRouteWithMessage -> ThreadRoute
-threadRouteWithoutMessage threadRouteWithMessage =
-    case threadRouteWithMessage of
+threadRouteWithoutMessage threadRoute =
+    case threadRoute of
         ViewThreadWithMessage threadId _ ->
             ViewThread threadId
 
         NoThreadWithMessage _ ->
             NoThread
+
+
+threadRouteWithMessage : Id ChannelMessageId -> ThreadRoute -> ThreadRouteWithMessage
+threadRouteWithMessage messageId threadRoute =
+    case threadRoute of
+        ViewThread threadId ->
+            ViewThreadWithMessage threadId (changeType messageId)
+
+        NoThread ->
+            NoThreadWithMessage messageId
 
 
 type ThreadRouteWithMessage

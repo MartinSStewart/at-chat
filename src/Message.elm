@@ -1,4 +1,4 @@
-module Message exposing (Message(..), UserTextMessageData, addReactionEmoji, removeReactionEmoji)
+module Message exposing (Message(..), MessageNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
@@ -24,6 +24,22 @@ type alias UserTextMessageData messageId =
     , reactions : SeqDict Emoji (NonemptySet (Id UserId))
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
+    , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+type MessageNoReply
+    = UserTextMessage_NoReply UserTextMessageDataNoReply
+    | UserJoinedMessage_NoReply Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
+    | DeletedMessage_NoReply Time.Posix
+
+
+type alias UserTextMessageDataNoReply =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , content : Nonempty RichText
+    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 
