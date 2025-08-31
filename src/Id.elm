@@ -16,6 +16,7 @@ module Id exposing
     , fromString
     , increment
     , nextId
+    , threadRouteToMessageId
     , threadRouteWithMessage
     , threadRouteWithoutMessage
     , toInt
@@ -48,6 +49,16 @@ threadRouteWithoutMessage threadRoute =
 
         NoThreadWithMessage _ ->
             NoThread
+
+
+threadRouteToMessageId : ThreadRouteWithMessage -> Id ChannelMessageId
+threadRouteToMessageId threadRoute =
+    case threadRoute of
+        ViewThreadWithMessage _ messageId ->
+            changeType messageId
+
+        NoThreadWithMessage messageId ->
+            messageId
 
 
 threadRouteWithMessage : Id ChannelMessageId -> ThreadRoute -> ThreadRouteWithMessage
