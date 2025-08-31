@@ -69,7 +69,7 @@ import User exposing (BackendUser, FrontendUser)
 channelOrThreadHasNotifications :
     Id UserId
     -> Id messageId
-    -> { a | messages : Array Message }
+    -> { a | messages : Array (Message messageId) }
     -> NotificationType
 channelOrThreadHasNotifications currentUserId lastViewed channel =
     Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
@@ -413,7 +413,6 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                         model
                         local
                         (PersonName.toString otherUser.name)
-                        dmChannel.threads
                         dmChannel
 
         Nothing ->
@@ -661,7 +660,7 @@ sidebarOffsetAttr loggedIn model =
         }
 
 
-threadPreviewText : Id ChannelMessageId -> { a | messages : Array Message } -> LocalUser -> String
+threadPreviewText : Id ChannelMessageId -> { a | messages : Array (Message ChannelMessageId) } -> LocalUser -> String
 threadPreviewText threadMessageIndex channel localUser =
     case LocalState.getArray threadMessageIndex channel.messages of
         Just message ->
@@ -725,7 +724,6 @@ channelView channelRoute guildId guild loggedIn local model =
                                 model
                                 local
                                 (ChannelName.toString channel.name)
-                                channel.threads
                                 channel
 
                 Nothing ->
@@ -904,23 +902,19 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-messageHover : GuildOrDmId -> Id ChannelMessageId -> LoggedIn2 -> IsHovered
-messageHover guildOrDmId messageIndex loggedIn =
+messageHover : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
+messageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
         MessageMenu messageMenu ->
-            if guildOrDmId == messageMenu.guildOrDmId then
-                if messageMenu.messageIndex == messageIndex then
-                    IsHoveredButNoMenu
-
-                else
-                    IsNotHovered
+            if guildOrDmId == messageMenu.guildOrDmId && threadRoute == messageMenu.threadRoute then
+                IsHoveredButNoMenu
 
             else
                 IsNotHovered
 
-        MessageHover guildOrDmIdA messageIndexA ->
+        MessageHover guildOrDmIdA threadRouteA ->
             if guildOrDmId == guildOrDmIdA then
-                if messageIndexA == messageIndex then
+                if threadRouteA == threadRoute then
                     IsHovered
 
                 else
@@ -937,13 +931,17 @@ conversationViewHelper :
     Id ChannelMessageId
     -> GuildOrDmIdNoThread
     -> Maybe (Id ChannelMessageId)
-    -> SeqDict (Id ChannelMessageId) Thread
-    -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
+    ->
+        { a
+            | messages : Array (Message ChannelMessageId)
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) Thread
+        }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threads channel loggedIn local model =
+conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
@@ -953,7 +951,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         maybeEditing =
             SeqDict.get guildOrDmId loggedIn.editMessage
 
-        othersEditing : SeqSet (Id messageId)
+        othersEditing : SeqSet (Id ChannelMessageId)
         othersEditing =
             SeqDict.remove local.localUser.userId channel.lastTypedAt
                 |> SeqDict.values
@@ -1009,7 +1007,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
                 messageHover2 : IsHovered
                 messageHover2 =
-                    messageHover guildOrDmId messageId loggedIn
+                    messageHover guildOrDmIdNoThread threadRoute2 loggedIn
 
                 otherUserIsEditing : Bool
                 otherUserIsEditing =
@@ -1090,7 +1088,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                         Nothing ->
                             []
 
-                maybeRepliedTo : Maybe ( Id ChannelMessageId, Message )
+                maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId )
                 maybeRepliedTo =
                     case message of
                         UserTextMessage data ->
@@ -1142,7 +1140,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                             otherUserIsEditing
                             local.localUser
                             maybeRepliedTo
-                            (SeqDict.get threadId threads)
+                            (SeqDict.get threadId channel.threads)
                             messageId
                             message
                             |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute2)
@@ -1154,14 +1152,14 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                             threadRoute2
                             message
                             maybeRepliedTo
-                            (SeqDict.get threadId threads)
+                            (SeqDict.get threadId channel.threads)
                             revealedSpoilers
                             editing
                             loggedIn.pingUser
                             local
 
                 Nothing ->
-                    case SeqDict.get threadId threads of
+                    case SeqDict.get threadId channel.threads of
                         Nothing ->
                             case maybeRepliedTo of
                                 Just _ ->
@@ -1238,7 +1236,7 @@ threadConversationViewHelper :
     -> LocalState
     -> LoadedFrontend
     -> List (Element FrontendMsg)
-threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId channel loggedIn local model =
+threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
@@ -1250,7 +1248,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         othersEditing : SeqSet (Id ThreadMessageId)
         othersEditing =
-            SeqDict.remove local.localUser.userId channel.lastTypedAt
+            SeqDict.remove local.localUser.userId thread.lastTypedAt
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
@@ -1299,7 +1297,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
                 messageHover2 : IsHovered
                 messageHover2 =
-                    messageHover guildOrDmId (Id.changeType messageId) loggedIn
+                    messageHover guildOrDmIdNoThread threadRoute2 loggedIn
 
                 otherUserIsEditing : Bool
                 otherUserIsEditing =
@@ -1380,13 +1378,13 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                         Nothing ->
                             []
 
-                maybeRepliedTo : Maybe ( Id ThreadMessageId, Message )
+                maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId )
                 maybeRepliedTo =
                     case message of
                         UserTextMessage data ->
                             case data.repliedTo of
                                 Just repliedToIndex ->
-                                    case LocalState.getArray repliedToIndex channel.messages of
+                                    case LocalState.getArray repliedToIndex thread.messages of
                                         Just message2 ->
                                             Just ( Id.changeType repliedToIndex, message2 )
 
@@ -1439,7 +1437,8 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                         threadMessageEditingView
                             isMobile
                             guildOrDmId
-                            threadRoute2
+                            threadId
+                            (Id.fromInt index)
                             message
                             maybeRepliedTo
                             revealedSpoilers
@@ -1477,8 +1476,8 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                 ++ list
             )
         )
-        ( Array.length channel.messages - 1, Nothing, [] )
-        channel.messages
+        ( Array.length thread.messages - 1, Nothing, [] )
+        thread.messages
         |> (\( _, _, a ) -> a)
 
 
@@ -1701,10 +1700,14 @@ conversationView :
     -> LoadedFrontend
     -> LocalState
     -> String
-    -> SeqDict (Id ChannelMessageId) Thread
-    -> { a | lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId), messages : Array Message }
+    ->
+        { a
+            | messages : Array (Message ChannelMessageId)
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) Thread
+        }
     -> Element FrontendMsg
-conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name threads channel =
+conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
         guildOrDmId : GuildOrDmId
         guildOrDmId =
@@ -1804,7 +1807,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         lastViewedIndex
                         guildOrDmIdNoThread
                         maybeUrlMessageId
-                        threads
                         channel
                         loggedIn
                         local
@@ -2092,7 +2094,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             ]
             [ case replyTo of
                 Just messageIndex ->
-                    case LocalState.getArray messageIndex channel.messages of
+                    case LocalState.getArray (Id.changeType messageIndex) channel.messages of
                         Just (UserTextMessage data) ->
                             replyToHeader (PressedCloseReplyTo guildOrDmId) data.createdBy local
 
@@ -2145,12 +2147,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmIdNoThread
     -> Id ChannelMessageId
-    ->
-        { a
-            | messages : Array Message
-            , -- Isn't used but is here to indicate this is a Channel or DmChannel type
-              threads : SeqDict (Id ChannelMessageId) Thread
-        }
+    -> { a | messages : Array (Message ChannelMessageId) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -2160,6 +2157,10 @@ threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel log
         guildOrDmId : GuildOrDmId
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
+
+        threadRoute : ThreadRouteWithMessage
+        threadRoute =
+            NoThreadWithMessage threadMessageIndex
 
         revealedSpoilers : SeqDict (Id ChannelMessageId) (NonemptySet Int)
         revealedSpoilers =
@@ -2198,14 +2199,14 @@ threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel log
                             True
                             revealedSpoilers
                             NoHighlight
-                            (messageHover guildOrDmId threadMessageIndex loggedIn)
+                            (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                             False
                             local.localUser
                             Nothing
                             Nothing
                             threadMessageIndex
                             message
-                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread (NoThreadWithMessage threadMessageIndex))
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
 
                 Nothing ->
                     messageView
@@ -2214,14 +2215,14 @@ threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel log
                         True
                         revealedSpoilers
                         NoHighlight
-                        (messageHover guildOrDmId threadMessageIndex loggedIn)
+                        (messageHover guildOrDmIdNoThread threadRoute loggedIn)
                         False
                         local.localUser
                         Nothing
                         Nothing
                         threadMessageIndex
                         message
-                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread (NoThreadWithMessage threadMessageIndex))
+                        |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
 
         Nothing ->
             Ui.none
@@ -2320,22 +2321,22 @@ messageEditingView :
     Bool
     -> GuildOrDmId
     -> ThreadRouteWithMessage
-    -> Message
-    -> Maybe ( Id ChannelMessageId, Message )
+    -> Message ChannelMessageId
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId )
     -> Maybe Thread
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
+messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepliedTo maybeThread revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
                 maybeReactions =
                     reactionEmojiView local.localUser.userId data.reactions
 
-                ( guildOrDmIdNoThread, _ ) =
+                ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
             in
             Ui.column
@@ -2353,7 +2354,7 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                             4
                     }
                 , Ui.spacing 4
-                , (case threadRoute of
+                , (case threadRouteWithMessage of
                     ViewThreadWithMessage _ messageId ->
                         Id.changeType messageId
 
@@ -2366,7 +2367,7 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                 ]
                 [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
-                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
+                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
@@ -2386,7 +2387,7 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmId)
+                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
@@ -2414,11 +2415,11 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                 , case maybeReactions of
                     Just reactionView ->
                         Ui.el [ Ui.paddingXY 8 0 ] reactionView
-                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
                     Nothing ->
                         Ui.none
-                , case ( threadRoute, maybeThread ) of
+                , case ( threadRouteWithMessage, maybeThread ) of
                     ( NoThreadWithMessage messageId, Just thread ) ->
                         previewThreadLastMessage
                             local.localUser.timezone
@@ -2426,7 +2427,7 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
                             messageId
                             thread
                             |> Ui.el [ Ui.paddingXY 8 0 ]
-                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
                     _ ->
                         Ui.none
@@ -2442,15 +2443,16 @@ messageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo maybe
 threadMessageEditingView :
     Bool
     -> GuildOrDmId
-    -> ThreadRouteWithMessage
-    -> Message
-    -> Maybe ( Id ThreadMessageId, Message )
+    -> Id ChannelMessageId
+    -> Id ThreadMessageId
+    -> Message ThreadMessageId
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
     -> LocalState
     -> Element FrontendMsg
-threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo revealedSpoilers editing pingUser local =
+threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRepliedTo revealedSpoilers editing pingUser local =
     case message of
         UserTextMessage data ->
             let
@@ -2459,6 +2461,12 @@ threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
+
+                threadRouteWithMessage =
+                    ViewThreadWithMessage threadId messageId
+
+                threadRoute =
+                    ViewThread threadId
             in
             Ui.column
                 [ Ui.Font.color MyUi.font1
@@ -2475,20 +2483,11 @@ threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo
                             4
                     }
                 , Ui.spacing 4
-                , (case threadRoute of
-                    ViewThreadWithMessage _ messageId ->
-                        Id.changeType messageId
-
-                    NoThreadWithMessage messageId ->
-                        messageId
-                  )
-                    |> channelMessageHtmlId
-                    |> Dom.idToString
-                    |> Ui.id
+                , threadMessageHtmlId messageId |> Dom.idToString |> Ui.id
                 ]
                 [ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers (LocalState.allUsers local)
                     |> Ui.el [ Ui.paddingXY 8 0 ]
-                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
+                    |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
                 , User.toString data.createdBy (LocalState.allUsers local)
                     ++ " "
                     |> Ui.text
@@ -2508,7 +2507,7 @@ threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo
                         (Dom.id "messageMenu_editDesktop")
                         True
                         False
-                        (MessageMenu.editMessageTextInputConfig guildOrDmId)
+                        (MessageMenu.editMessageTextInputConfig guildOrDmIdNoThread threadRoute)
                         MessageMenu.editMessageTextInputId
                         ""
                         editing.text
@@ -2536,7 +2535,7 @@ threadMessageEditingView isMobile guildOrDmId threadRoute message maybeRepliedTo
                 , case maybeReactions of
                     Just reactionView ->
                         Ui.el [ Ui.paddingXY 8 0 ] reactionView
-                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRoute)
+                            |> Ui.map (MessageViewMsg guildOrDmIdNoThread threadRouteWithMessage)
 
                     Nothing ->
                         Ui.none
@@ -2560,7 +2559,7 @@ messageViewNotThreadStarter :
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
-    -> Message
+    -> Message ChannelMessageId
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
@@ -2591,7 +2590,7 @@ messageViewThreadStarter :
     -> LocalUser
     -> Int
     -> Thread
-    -> Message
+    -> Message ChannelMessageId
     -> Element MessageViewMsg
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
@@ -2621,7 +2620,7 @@ threadMessageViewLazy :
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
-    -> Message
+    -> Message ThreadMessageId
     -> Element MessageViewMsg
 threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
@@ -2665,10 +2664,10 @@ messageView :
     -> IsHovered
     -> Bool
     -> LocalUser
-    -> Maybe ( Id ChannelMessageId, Message )
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId )
     -> Maybe Thread
     -> Id ChannelMessageId
-    -> Message
+    -> Message ChannelMessageId
     -> Element MessageViewMsg
 messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
     let
@@ -2754,9 +2753,9 @@ threadMessageView :
     -> IsHovered
     -> Bool
     -> LocalUser
-    -> Maybe ( Id ThreadMessageId, Message )
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId )
     -> Id ThreadMessageId
-    -> Message
+    -> Message ThreadMessageId
     -> Element MessageViewMsg
 threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
@@ -2827,12 +2826,12 @@ userTextMessageContent :
     -> Int
     -> Bool
     -> Bool
-    -> Maybe ( Id messageId, Message )
+    -> Maybe ( Id messageId, Message messageId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Time.Zone
     -> Id messageId
-    -> UserTextMessageData
+    -> UserTextMessageData messageId
     -> Element MessageViewMsg
 userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo revealedSpoilers allUsers timezone messageIndex message2 =
     Ui.row
@@ -2952,7 +2951,7 @@ messageTimestamp createdAt timezone =
 
 replyToHeaderAboveMessage :
     Bool
-    -> Maybe ( Id messageId, Message )
+    -> Maybe ( Id messageId, Message messageId )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Element MessageViewMsg
@@ -2990,7 +2989,7 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
             Ui.none
 
 
-userTextMessagePreview : SeqDict (Id UserId) FrontendUser -> SeqSet Int -> UserTextMessageData -> Element MessageViewMsg
+userTextMessagePreview : SeqDict (Id UserId) FrontendUser -> SeqSet Int -> UserTextMessageData messageId -> Element MessageViewMsg
 userTextMessagePreview allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"

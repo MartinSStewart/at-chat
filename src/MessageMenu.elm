@@ -16,7 +16,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (ChannelMessageId, GuildOrDmId, Id, ThreadRoute(..))
+import Id exposing (ChannelMessageId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..))
 import LocalState exposing (LocalState)
 import Message exposing (Message(..))
 import MessageInput exposing (MsgConfig)
@@ -73,7 +73,9 @@ close model loggedIn =
                         NoMessageHover
                 , editMessage =
                     if isMobile then
-                        SeqDict.remove extraOptions.guildOrDmId loggedIn.editMessage
+                        SeqDict.remove
+                            ( extraOptions.guildOrDmId, Id.threadRouteWithoutMessage extraOptions.threadRoute )
+                            loggedIn.editMessage
 
                     else
                         loggedIn.editMessage
@@ -82,7 +84,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEdit extraOptions.guildOrDmId extraOptions.messageIndex loggedIn of
+    (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
         Just edit ->
             toFloat (List.length (String.lines edit.text)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
@@ -90,19 +92,24 @@ mobileMenuMaxHeight extraOptions local loggedIn model =
             let
                 itemCount : Float
                 itemCount =
-                    menuItems True extraOptions.guildOrDmId extraOptions.messageIndex False Coord.origin local model |> List.length |> toFloat
+                    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False Coord.origin local model |> List.length |> toFloat
             in
             itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
     )
         |> CssPixels.cssPixels
 
 
-mobileMenuOpeningOffset : GuildOrDmId -> Id ChannelMessageId -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuOpeningOffset guildOrDmId messageIndex local model =
+mobileMenuOpeningOffset :
+    GuildOrDmIdNoThread
+    -> ThreadRouteWithMessage
+    -> LocalState
+    -> LoadedFrontend
+    -> Quantity Float CssPixels
+mobileMenuOpeningOffset guildOrDmId threadRoute local model =
     let
         itemCount : Float
         itemCount =
-            menuItems True guildOrDmId messageIndex False Coord.origin local model |> List.length |> toFloat |> min 3.4
+            menuItems True guildOrDmId threadRoute False Coord.origin local model |> List.length |> toFloat |> min 3.4
     in
     itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding |> CssPixels.cssPixels
 
@@ -113,14 +120,14 @@ messageMenuSpeed =
 
 
 menuHeight :
-    { a | guildOrDmId : GuildOrDmId, messageIndex : Id ChannelMessageId, position : Coord CssPixels }
+    { a | guildOrDmId : GuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
 menuHeight extraOptions local model =
     let
         itemCount =
-            menuItems False extraOptions.guildOrDmId extraOptions.messageIndex False extraOptions.position local model
+            menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model
                 |> List.length
     in
     itemCount * buttonHeight False + 2
@@ -141,15 +148,24 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmId -> Id ChannelMessageId -> LoggedIn2 -> Maybe EditMessage
-showEdit guildOrDmId messageIndex loggedIn =
-    case SeqDict.get guildOrDmId loggedIn.editMessage of
+showEdit : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> Maybe EditMessage
+showEdit guildOrDmId threadRoute loggedIn =
+    case SeqDict.get ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute ) loggedIn.editMessage of
         Just edit ->
-            if edit.messageIndex == messageIndex then
-                Just edit
+            case threadRoute of
+                ViewThreadWithMessage _ messageId ->
+                    if edit.messageIndex == Id.changeType messageId then
+                        Just edit
 
-            else
-                Nothing
+                    else
+                        Nothing
+
+                NoThreadWithMessage messageId ->
+                    if edit.messageIndex == messageId then
+                        Just edit
+
+                    else
+                        Nothing
 
         Nothing ->
             Nothing
@@ -157,11 +173,6 @@ showEdit guildOrDmId messageIndex loggedIn =
 
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
-    let
-        guildOrDmId : GuildOrDmId
-        guildOrDmId =
-            extraOptions.guildOrDmId
-    in
     if MyUi.isMobile model then
         Ui.el
             [ Ui.height Ui.fill
@@ -203,13 +214,16 @@ view model extraOptions local loggedIn =
                         ]
                         Ui.none
                     )
-                    :: (case showEdit guildOrDmId extraOptions.messageIndex loggedIn of
+                    :: (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
                             Just edit ->
                                 [ MessageInput.view
                                     (Dom.id "messageMenu_editMobile")
                                     True
                                     True
-                                    (editMessageTextInputConfig guildOrDmId)
+                                    (editMessageTextInputConfig
+                                        extraOptions.guildOrDmId
+                                        (Id.threadRouteWithoutMessage extraOptions.threadRoute)
+                                    )
                                     editMessageTextInputId
                                     ""
                                     edit.text
@@ -229,7 +243,7 @@ view model extraOptions local loggedIn =
                                     (menuItems
                                         True
                                         extraOptions.guildOrDmId
-                                        extraOptions.messageIndex
+                                        extraOptions.threadRoute
                                         extraOptions.isThreadStarter
                                         extraOptions.position
                                         local
@@ -258,7 +272,7 @@ view model extraOptions local loggedIn =
             (menuItems
                 False
                 extraOptions.guildOrDmId
-                extraOptions.messageIndex
+                extraOptions.threadRoute
                 extraOptions.isThreadStarter
                 extraOptions.position
                 local
@@ -266,8 +280,8 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
-editMessageTextInputConfig ( guildOrDmId, threadRoute ) =
+editMessageTextInputConfig : GuildOrDmIdNoThread -> ThreadRoute -> MsgConfig FrontendMsg
+editMessageTextInputConfig guildOrDmId threadRoute =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
     , textInputLostFocus = TextInputLostFocus
@@ -289,106 +303,148 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmId -> Id ChannelMessageId -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
-menuItems isMobile guildOrDmId messageIndex isThreadStarter position local model =
-    case LocalState.getMessages guildOrDmId local of
-        Just ( threadRoute, messages ) ->
-            case LocalState.getArray messageIndex messages of
+menuItems : Bool -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
+    let
+        helper messageId thread =
+            case LocalState.getArray messageId thread.messages of
                 Just message ->
-                    let
-                        canEditAndDelete : Bool
-                        canEditAndDelete =
-                            case message of
-                                UserTextMessage data ->
-                                    data.createdBy == local.localUser.userId
+                    ( case message of
+                        UserTextMessage data ->
+                            data.createdBy == local.localUser.userId
 
-                                _ ->
-                                    False
+                        _ ->
+                            False
+                    , case message of
+                        UserTextMessage a ->
+                            RichText.toString (LocalState.allUsers local) a.content
 
-                        text : String
-                        text =
-                            case message of
-                                UserTextMessage a ->
-                                    RichText.toString (LocalState.allUsers local) a.content
+                        UserJoinedMessage _ userId _ ->
+                            User.toString userId (LocalState.allUsers local)
+                                ++ " joined!"
 
-                                UserJoinedMessage _ userId _ ->
-                                    User.toString userId (LocalState.allUsers local)
-                                        ++ " joined!"
-
-                                DeletedMessage _ ->
-                                    "Message deleted"
-                    in
-                    [ button
-                        isMobile
-                        (Dom.id "messageMenu_addReaction")
-                        Icons.smile
-                        "Add reaction emoji"
-                        (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId messageIndex position)
+                        DeletedMessage _ ->
+                            "Message deleted"
+                    )
                         |> Just
-                    , if canEditAndDelete then
-                        button
-                            isMobile
-                            (Dom.id "messageMenu_editMessage")
-                            Icons.pencil
-                            "Edit message"
-                            (MessageMenu_PressedEditMessage guildOrDmId messageIndex)
-                            |> Just
-
-                      else
-                        Nothing
-                    , if isThreadStarter then
-                        Nothing
-
-                      else
-                        button isMobile (Dom.id "messageMenu_replyTo") Icons.reply "Reply to" (MessageMenu_PressedReply messageIndex) |> Just
-                    , case threadRoute of
-                        NoThread ->
-                            button
-                                isMobile
-                                (Dom.id "messageMenu_openThread")
-                                Icons.hashtag
-                                "Start thread"
-                                (MessageMenu_PressedOpenThread messageIndex)
-                                |> Just
-
-                        ViewThread _ ->
-                            Nothing
-                    , button
-                        isMobile
-                        (Dom.id "messageMenu_copy")
-                        Icons.copyIcon
-                        (case model.lastCopied of
-                            Just lastCopied ->
-                                if lastCopied.copiedText == text then
-                                    "Copied!"
-
-                                else
-                                    "Copy message"
-
-                            Nothing ->
-                                "Copy message"
-                        )
-                        (PressedCopyText text)
-                        |> Just
-                    , if canEditAndDelete then
-                        Ui.el
-                            [ Ui.Font.color MyUi.errorColor ]
-                            (button
-                                isMobile
-                                (Dom.id "messageMenu_deleteMessage")
-                                Icons.delete
-                                "Delete message"
-                                (MessageMenu_PressedDeleteMessage guildOrDmId messageIndex)
-                            )
-                            |> Just
-
-                      else
-                        Nothing
-                    ]
-                        |> List.filterMap identity
 
                 Nothing ->
-                    []
+                    Nothing
+
+        maybeData =
+            case guildOrDmId of
+                GuildOrDmId_Guild_NoThread guildId channelId ->
+                    case LocalState.getGuildAndChannel guildId channelId local of
+                        Just ( _, channel ) ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex channel.threads of
+                                        Just thread ->
+                                            helper messageId thread
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    helper messageId channel
+
+                        Nothing ->
+                            Nothing
+
+                GuildOrDmId_Dm_NoThread otherUserId ->
+                    case SeqDict.get otherUserId local.dmChannels of
+                        Just dmChannel ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex dmChannel.threads of
+                                        Just thread ->
+                                            helper messageId thread
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    helper messageId dmChannel
+
+                        Nothing ->
+                            Nothing
+    in
+    case maybeData of
+        Just ( canEditAndDelete, text ) ->
+            [ button
+                isMobile
+                (Dom.id "messageMenu_addReaction")
+                Icons.smile
+                "Add reaction emoji"
+                (MessageMenu_PressedShowReactionEmojiSelector guildOrDmId threadRoute position)
+                |> Just
+            , if canEditAndDelete then
+                button
+                    isMobile
+                    (Dom.id "messageMenu_editMessage")
+                    Icons.pencil
+                    "Edit message"
+                    (MessageMenu_PressedEditMessage guildOrDmId threadRoute)
+                    |> Just
+
+              else
+                Nothing
+            , if isThreadStarter then
+                Nothing
+
+              else
+                button
+                    isMobile
+                    (Dom.id "messageMenu_replyTo")
+                    Icons.reply
+                    "Reply to"
+                    (MessageMenu_PressedReply threadRoute)
+                    |> Just
+            , case threadRoute of
+                NoThreadWithMessage messageId ->
+                    button
+                        isMobile
+                        (Dom.id "messageMenu_openThread")
+                        Icons.hashtag
+                        "Start thread"
+                        (MessageMenu_PressedOpenThread messageId)
+                        |> Just
+
+                ViewThreadWithMessage _ _ ->
+                    Nothing
+            , button
+                isMobile
+                (Dom.id "messageMenu_copy")
+                Icons.copyIcon
+                (case model.lastCopied of
+                    Just lastCopied ->
+                        if lastCopied.copiedText == text then
+                            "Copied!"
+
+                        else
+                            "Copy message"
+
+                    Nothing ->
+                        "Copy message"
+                )
+                (PressedCopyText text)
+                |> Just
+            , if canEditAndDelete then
+                Ui.el
+                    [ Ui.Font.color MyUi.errorColor ]
+                    (button
+                        isMobile
+                        (Dom.id "messageMenu_deleteMessage")
+                        Icons.delete
+                        "Delete message"
+                        (MessageMenu_PressedDeleteMessage guildOrDmId threadRoute)
+                    )
+                    |> Just
+
+              else
+                Nothing
+            ]
+                |> List.filterMap identity
 
         Nothing ->
             []

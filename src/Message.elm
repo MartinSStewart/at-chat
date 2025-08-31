@@ -1,4 +1,4 @@
-module Message exposing (Message(..), UserTextMessageData, addReactionEmoji, removeReactionEmoji)
+module Message exposing (Message(..), MessageNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
@@ -11,24 +11,40 @@ import SeqSet
 import Time
 
 
-type Message
-    = UserTextMessage UserTextMessageData
+type Message messageId
+    = UserTextMessage (UserTextMessageData messageId)
     | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
     | DeletedMessage Time.Posix
 
 
-type alias UserTextMessageData =
+type alias UserTextMessageData messageId =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , content : Nonempty RichText
     , reactions : SeqDict Emoji (NonemptySet (Id UserId))
     , editedAt : Maybe Time.Posix
-    , repliedTo : Maybe (Id ChannelMessageId)
+    , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
-addReactionEmoji : Id UserId -> Emoji -> Message -> Message
+type MessageNoReply
+    = UserTextMessage_NoReply UserTextMessageDataNoReply
+    | UserJoinedMessage_NoReply Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
+    | DeletedMessage_NoReply Time.Posix
+
+
+type alias UserTextMessageDataNoReply =
+    { createdAt : Time.Posix
+    , createdBy : Id UserId
+    , content : Nonempty RichText
+    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , editedAt : Maybe Time.Posix
+    , attachedFiles : SeqDict (Id FileId) FileData
+    }
+
+
+addReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -73,7 +89,7 @@ addReactionEmoji userId emoji message =
             message
 
 
-removeReactionEmoji : Id UserId -> Emoji -> Message -> Message
+removeReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->

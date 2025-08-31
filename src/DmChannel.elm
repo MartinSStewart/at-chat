@@ -19,7 +19,7 @@ import Time
 
 
 type alias DmChannel =
-    { messages : Array Message
+    { messages : Array (Message ChannelMessageId)
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
@@ -28,7 +28,7 @@ type alias DmChannel =
 
 
 type alias Thread =
-    { messages : Array Message
+    { messages : Array (Message ThreadMessageId)
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     }

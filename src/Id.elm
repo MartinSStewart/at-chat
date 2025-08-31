@@ -16,6 +16,9 @@ module Id exposing
     , fromString
     , increment
     , nextId
+    , threadRouteToMessageId
+    , threadRouteWithMessage
+    , threadRouteWithoutMessage
     , toInt
     , toString
     )
@@ -36,6 +39,36 @@ type GuildOrDmIdNoThread
 type ThreadRoute
     = NoThread
     | ViewThread (Id ChannelMessageId)
+
+
+threadRouteWithoutMessage : ThreadRouteWithMessage -> ThreadRoute
+threadRouteWithoutMessage threadRoute =
+    case threadRoute of
+        ViewThreadWithMessage threadId _ ->
+            ViewThread threadId
+
+        NoThreadWithMessage _ ->
+            NoThread
+
+
+threadRouteToMessageId : ThreadRouteWithMessage -> Id ChannelMessageId
+threadRouteToMessageId threadRoute =
+    case threadRoute of
+        ViewThreadWithMessage _ messageId ->
+            changeType messageId
+
+        NoThreadWithMessage messageId ->
+            messageId
+
+
+threadRouteWithMessage : Id ChannelMessageId -> ThreadRoute -> ThreadRouteWithMessage
+threadRouteWithMessage messageId threadRoute =
+    case threadRoute of
+        ViewThread threadId ->
+            ViewThreadWithMessage threadId (changeType messageId)
+
+        NoThread ->
+            NoThreadWithMessage messageId
 
 
 type ThreadRouteWithMessage
