@@ -455,16 +455,16 @@ update msg model =
                     tryInitLoadedFrontend { loading | time = Just time }
 
                 GotWindowSize width height ->
-                    ( Loading { loading | windowSize = Coord.xy width height }, Command.none )
+                    tryInitLoadedFrontend { loading | windowSize = Coord.xy width height }
 
                 CheckedNotificationPermission permission ->
-                    ( Loading { loading | notificationPermission = permission }, Command.none )
+                    tryInitLoadedFrontend { loading | notificationPermission = permission }
 
                 CheckedPwaStatus pwaStatus ->
-                    ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
+                    tryInitLoadedFrontend { loading | pwaStatus = pwaStatus }
 
                 GotTimezone timezone ->
-                    ( Loading { loading | timezone = timezone }, Command.none )
+                    tryInitLoadedFrontend { loading | timezone = timezone }
 
                 GotIsPushNotificationsRegistered isEnabled ->
                     tryInitLoadedFrontend { loading | enabledPushNotifications = isEnabled }
@@ -4993,6 +4993,7 @@ view model =
                 (case loading.loginStatus of
                     LoadingData ->
                         [ Html.div [ Html.Attributes.id "loading" ] []
+                        , MyUi.css
                         ]
 
                     LoadSuccess _ ->
@@ -5387,19 +5388,6 @@ routeToGuildOrDmId route =
                     NoThread
             )
                 |> Just
-
-        _ ->
-            Nothing
-
-
-routeToGuildOrDmIdNoThread : Route -> Maybe ( GuildOrDmIdNoThread, ThreadRouteWithMaybeMessage )
-routeToGuildOrDmIdNoThread route =
-    case route of
-        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
-            ( GuildOrDmId_Guild_NoThread guildId channelId, threadRoute ) |> Just
-
-        DmRoute otherUserId threadRoute ->
-            ( GuildOrDmId_Dm_NoThread otherUserId, threadRoute ) |> Just
 
         _ ->
             Nothing
