@@ -830,12 +830,7 @@ tests fileData =
     , T.start
         "Add and remove reaction emojis"
         (Time.millisToPosix 1756739527046)
-        { config
-            | handleHttpRequest =
-                handleHttpRequests
-                    (Dict.fromList [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/e3b0c44298fc1c14.txt" ) ])
-                    fileData
-        }
+        config
         [ T.connectFrontend
             0
             (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
