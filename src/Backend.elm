@@ -1051,6 +1051,24 @@ addDiscordGuilds time guilds model =
                                 SeqDict.empty
                                 data.threads
 
+                        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+                        members =
+                            List.filterMap
+                                (\guildMember ->
+                                    case OneToOne.second guildMember.user.id model2.discordUsers of
+                                        Just userId ->
+                                            if userId == ownerId then
+                                                Nothing
+
+                                            else
+                                                Just ( userId, { joinedAt = time } )
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                data.members
+                                |> SeqDict.fromList
+
                         newGuild : BackendGuild
                         newGuild =
                             { createdAt = time
@@ -1059,22 +1077,7 @@ addDiscordGuilds time guilds model =
                             , icon = Maybe.map Tuple.first data.icon
                             , channels = SeqDict.empty
                             , linkedChannelIds = OneToOne.empty
-                            , members =
-                                List.filterMap
-                                    (\guildMember ->
-                                        case OneToOne.second guildMember.user.id model2.discordUsers of
-                                            Just userId ->
-                                                if userId == ownerId then
-                                                    Nothing
-
-                                                else
-                                                    Just ( userId, { joinedAt = time } )
-
-                                            Nothing ->
-                                                Nothing
-                                    )
-                                    data.members
-                                    |> SeqDict.fromList
+                            , members = members
                             , owner = ownerId
                             , invites = SeqDict.empty
                             }
@@ -1126,6 +1129,39 @@ addDiscordGuilds time guilds model =
                         | discordGuilds =
                             OneToOne.insert discordGuildId guildId model2.discordGuilds
                         , guilds = SeqDict.insert guildId newGuild3 model2.guilds
+                        , users =
+                            SeqDict.foldl
+                                (\userId _ users ->
+                                    NonemptyDict.updateIfExists
+                                        userId
+                                        (\user ->
+                                            SeqDict.foldl
+                                                (\channelId channel user2 ->
+                                                    { user2
+                                                        | lastViewed =
+                                                            SeqDict.insert
+                                                                (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                                (LocalState.nextMessageId channel)
+                                                                user2.lastViewed
+                                                        , lastViewedThreads =
+                                                            SeqDict.foldl
+                                                                (\threadId thread lastViewedThreads ->
+                                                                    SeqDict.insert
+                                                                        ( GuildOrDmId_Guild_NoThread guildId channelId, threadId )
+                                                                        (LocalState.nextThreadMessageId thread)
+                                                                        lastViewedThreads
+                                                                )
+                                                                user2.lastViewedThreads
+                                                                channel.threads
+                                                    }
+                                                )
+                                                user
+                                                newGuild3.channels
+                                        )
+                                        users
+                                )
+                                model2.users
+                                members
                     }
         )
         model
