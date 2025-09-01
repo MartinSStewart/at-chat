@@ -1,4 +1,4 @@
-module MyTests exposing (main, setup, tests)
+module RecordedTests exposing (fileRequests, main, setup, tests)
 
 import Backend
 import Bytes exposing (Bytes)
@@ -12,7 +12,7 @@ import Json.Encode
 import Test.Html.Query
 import Test.Html.Selector as Selector
 import Time
-import Types exposing (ToBackend, FrontendMsg, FrontendModel, ToFrontend, BackendMsg, BackendModel)
+import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, ToBackend, ToFrontend)
 import Url exposing (Url)
 
 
@@ -32,7 +32,8 @@ domain =
     { protocol = Url.Http, host = "localhost", port_ = Just 8000, path = "", query = Nothing, fragment = Nothing }
 
 
-{-| Please don't modify or rename this function -}
+{-| Please don't modify or rename this function
+-}
 fileRequests : Dict String String
 fileRequests =
     [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
@@ -80,6 +81,7 @@ The rest needs to remain unchanged in order for the test generator to be able to
         in
         [ ...
         ]
+
 -}
 tests : Dict String Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData =
@@ -94,7 +96,7 @@ tests fileData =
                 (\_ -> UnhandledMultiFileUpload)
                 domain
     in
-    [T.start
+    [ T.start
         "new test"
         (Time.millisToPosix 1756680301958)
         config
@@ -124,7 +126,6 @@ tests fileData =
                 ]
             )
         ]
-    
     ]
 
 

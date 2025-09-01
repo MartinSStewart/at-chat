@@ -4,7 +4,7 @@
     "check": "lamdera check && elm-test-rs --compiler $(which lamdera) && npx elm-review --fix-all",
     "make": "lamdera make src/Frontend.elm src/Backend.elm",
     "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
-    "end-to-end-tests": "lamdera make end-to-end-tests/EndToEndTestsRunner.elm --output end-to-end-tests/EndToEndTestsRunnerElm.js && cd end-to-end-tests && node EndToEndTestsRunner.js"
+    "end-to-end-tests": "lamdera make tests/EndToEndTestsRunner.elm --output tests/EndToEndTestsRunnerElm.js && cd tests && node EndToEndTestsRunner.js"
   },
   "devDependencies": {
     "elm-codegen": "^0.5.3",
