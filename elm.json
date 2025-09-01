@@ -2,7 +2,6 @@
     "type": "application",
     "source-directories": [
         "src",
-        "end-to-end-tests",
         "vendored/mdgriffith/elm-ui/2.0.0/src",
         "vendored/mdgriffith/elm-animator/2.0.0/src",
         "vendored/MartinSStewart/elm-email/1.0.0/src",
