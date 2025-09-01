@@ -14,6 +14,7 @@ import NonemptyDict exposing (NonemptyDict)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Events
+import Ui.Input
 
 
 type MessageViewMsg
@@ -25,7 +26,7 @@ type MessageViewMsg
     | MessageView_PressedReactionEmoji_Remove Emoji
     | MessageView_PressedReactionEmoji_Add Emoji
     | MessageView_PressedReplyLink
-    | MessageViewMsg_PressedShowReactionEmojiSelector (Coord CssPixels)
+    | MessageViewMsg_PressedShowReactionEmojiSelector
     | MessageViewMsg_PressedEditMessage
     | MessageViewMsg_PressedReply
     | MessageViewMsg_PressedShowFullMenu Bool (Coord CssPixels)
@@ -59,7 +60,7 @@ isPressMsg msg =
         MessageView_PressedReplyLink ->
             True
 
-        MessageViewMsg_PressedShowReactionEmojiSelector _ ->
+        MessageViewMsg_PressedShowReactionEmojiSelector ->
             True
 
         MessageViewMsg_PressedEditMessage ->
@@ -93,7 +94,7 @@ miniView isThreadStarter canEdit =
         , if canEdit then
             miniButton
                 (Dom.id "miniView_editMessage")
-                (\_ -> MessageViewMsg_PressedEditMessage)
+                MessageViewMsg_PressedEditMessage
                 Icons.pencil
 
           else
@@ -104,17 +105,29 @@ miniView isThreadStarter canEdit =
           else
             miniButton
                 (Dom.id "miniView_reply")
-                (\_ -> MessageViewMsg_PressedReply)
+                MessageViewMsg_PressedReply
                 Icons.reply
-        , miniButton
+        , miniButtonWithPosition
             (Dom.id "miniView_showFullMenu")
             (MessageViewMsg_PressedShowFullMenu isThreadStarter)
             Icons.dotDotDot
         ]
 
 
-miniButton : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
+miniButton : HtmlId -> msg -> Html msg -> Element msg
 miniButton htmlId onPress svg =
+    Ui.el
+        [ Ui.width (Ui.px 32)
+        , Ui.paddingXY 4 3
+        , Ui.height Ui.fill
+        , Ui.id (Dom.idToString htmlId)
+        , Ui.Input.button onPress
+        ]
+        (Ui.html svg)
+
+
+miniButtonWithPosition : HtmlId -> (Coord CssPixels -> msg) -> Html msg -> Element msg
+miniButtonWithPosition htmlId onPress svg =
     Ui.el
         [ Ui.width (Ui.px 32)
         , Ui.paddingXY 4 3

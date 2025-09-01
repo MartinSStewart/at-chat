@@ -2925,7 +2925,7 @@ updateLoaded msg model =
                         NotLoggedIn _ ->
                             ( model, Command.none )
 
-                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector _ ->
+                MessageView.MessageViewMsg_PressedShowReactionEmojiSelector ->
                     showReactionEmojiSelector guildOrDmId threadRoute model
 
                 MessageView.MessageViewMsg_PressedEditMessage ->
@@ -4930,6 +4930,7 @@ layout model attributes child =
                 []
          )
             ++ Ui.Font.family [ Ui.Font.sansSerif ]
+            :: Ui.id "elm-ui-root-id"
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
             :: Ui.Font.size 16

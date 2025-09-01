@@ -886,13 +886,17 @@ emojiSelector =
                     [ Ui.height (Ui.px 34) ]
                     (List.map
                         (\emoji ->
+                            let
+                                emojiText =
+                                    Emoji.toString emoji
+                            in
                             MyUi.elButton
-                                (Dom.id "guild_emojiSelectorEmoji")
+                                (Dom.id ("guild_emojiSelector_" ++ emojiText))
                                 (PressedEmojiSelectorEmoji emoji)
                                 [ Ui.width (Ui.px 32)
                                 , Ui.contentCenterX
                                 ]
-                                (Ui.text (Emoji.toString emoji))
+                                (Ui.text emojiText)
                         )
                         emojiRow
                     )
@@ -2271,8 +2275,8 @@ reactionEmojiView currentUserId reactions =
             [ Ui.wrap
             , Ui.spacing 4
             ]
-            (List.map
-                (\( emoji, users ) ->
+            (List.indexedMap
+                (\index ( emoji, users ) ->
                     let
                         hasReactedTo : Bool
                         hasReactedTo =
@@ -2280,7 +2284,7 @@ reactionEmojiView currentUserId reactions =
                     in
                     (if hasReactedTo then
                         MyUi.rowButton
-                            (Dom.id "guild_removeReactionEmoji")
+                            (Dom.id ("guild_removeReactionEmoji_" ++ String.fromInt index))
                             (MessageView_PressedReactionEmoji_Remove emoji)
 
                      else
