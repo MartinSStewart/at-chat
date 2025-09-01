@@ -1141,14 +1141,14 @@ addDiscordGuilds time guilds model =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId_Guild_NoThread guildId channelId)
-                                                                (LocalState.nextMessageId channel)
+                                                                (LocalState.latestMessageId channel)
                                                                 user2.lastViewed
                                                         , lastViewedThreads =
                                                             SeqDict.foldl
                                                                 (\threadId thread lastViewedThreads ->
                                                                     SeqDict.insert
                                                                         ( GuildOrDmId_Guild_NoThread guildId channelId, threadId )
-                                                                        (LocalState.nextThreadMessageId thread)
+                                                                        (LocalState.latestThreadMessageId thread)
                                                                         lastViewedThreads
                                                                 )
                                                                 user2.lastViewedThreads
