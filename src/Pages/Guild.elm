@@ -1719,8 +1719,8 @@ messageInputConfig ( guildOrDmId, threadRoute ) =
     }
 
 
-scrollToBottomDecoder : ScrollPosition -> Json.Decode.Decoder FrontendMsg
-scrollToBottomDecoder currentScrollPosition =
+scrollToBottomDecoder : GuildOrDmIdNoThread -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
+scrollToBottomDecoder guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
         (\scrollTop scrollHeight clientHeight ->
             if scrollTop + clientHeight >= scrollHeight - 5 then
@@ -1741,7 +1741,7 @@ scrollToBottomDecoder currentScrollPosition =
                     Json.Decode.fail ""
 
                 else
-                    UserScrolled scrollPosition |> Json.Decode.succeed
+                    UserScrolled guildOrDmId threadRoute scrollPosition |> Json.Decode.succeed
             )
 
 
@@ -1836,7 +1836,9 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , scrollable (canScroll model)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on "scroll" (scrollToBottomDecoder model.channelScrollPosition)
+                , Ui.Events.on
+                    "scroll"
+                    (scrollToBottomDecoder guildOrDmIdNoThread NoThread loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
@@ -2086,7 +2088,9 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , scrollable (canScroll model)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on "scroll" (scrollToBottomDecoder model.channelScrollPosition)
+                , Ui.Events.on
+                    "scroll"
+                    (scrollToBottomDecoder guildOrDmIdNoThread (ViewThread threadId) loggedIn.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]

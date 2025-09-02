@@ -128,7 +128,6 @@ type alias LoadedFrontend =
     , pwaStatus : PwaStatus
     , drag : Drag
     , dragPrevious : Drag
-    , channelScrollPosition : ScrollPosition
     , aiChatModel : AiChat.FrontendModel
     , enabledPushNotifications : Bool
     }
@@ -167,6 +166,7 @@ type alias LoggedIn2 =
     , -- Only should be use for making requests to the Rust server
       sessionId : SessionId
     , isReloading : Bool
+    , channelScrollPosition : ScrollPosition
     }
 
 
@@ -374,7 +374,7 @@ type FrontendMsg
     | MessageMenuAnimated Duration
     | SetScrollToBottom
     | PressedChannelHeaderBackButton
-    | UserScrolled ScrollPosition
+    | UserScrolled GuildOrDmIdNoThread ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
@@ -446,6 +446,8 @@ type ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
+    | ChannelMessageHistoryRequest GuildOrDmIdNoThread (Id ChannelMessageId)
+    | ThreadMessageHistoryRequest GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId)
 
 
 type BackendMsg
@@ -504,6 +506,8 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
+    | ChannelMessageHistoryResponse GuildOrDmIdNoThread (Id ChannelMessageId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId))
+    | ThreadMessageHistoryResponse GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (SeqDict (Id ThreadMessageId) (Message ThreadMessageId))
 
 
 type alias LoginData =

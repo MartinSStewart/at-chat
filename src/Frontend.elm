@@ -277,7 +277,6 @@ initLoadedFrontend loading time loginResult =
             , pwaStatus = loading.pwaStatus
             , drag = NoDrag
             , dragPrevious = NoDrag
-            , channelScrollPosition = ScrolledToBottom
             , aiChatModel = aiChatModel
             , enabledPushNotifications = loading.enabledPushNotifications
             }
@@ -361,6 +360,7 @@ loadedInitHelper time timezone loginData loading =
             , filesToUpload = SeqDict.empty
             , sessionId = loginData.sessionId
             , isReloading = False
+            , channelScrollPosition = ScrolledToBottom
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -922,7 +922,7 @@ isPressMsg msg =
         PressedChannelHeaderBackButton ->
             True
 
-        UserScrolled _ ->
+        UserScrolled _ _ _ ->
             False
 
         PressedBody ->
@@ -2296,8 +2296,62 @@ updateLoaded msg model =
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
-        UserScrolled scrollPosition ->
-            ( { model | channelScrollPosition = scrollPosition }, Command.none )
+        UserScrolled guildOrDmId threadRoute scrollPosition ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    ( { loggedIn | channelScrollPosition = scrollPosition }
+                    , case scrollPosition of
+                        ScrolledToTop ->
+                            case guildOrDmId of
+                                GuildOrDmId_Guild_NoThread guildId channelId ->
+                                    case LocalState.getGuildAndChannel guildId channelId local of
+                                        Just ( _, channel ) ->
+                                            (case threadRoute of
+                                                NoThread ->
+                                                    ChannelMessageHistoryRequest guildOrDmId channel.oldestVisibleMessage
+
+                                                ViewThread threadId ->
+                                                    SeqDict.get threadId channel.threads
+                                                        |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                        |> .oldestVisibleMessage
+                                                        |> ThreadMessageHistoryRequest guildOrDmId threadId
+                                            )
+                                                |> Lamdera.sendToBackend
+
+                                        Nothing ->
+                                            Command.none
+
+                                GuildOrDmId_Dm_NoThread otherUserId ->
+                                    let
+                                        dmChannel : FrontendDmChannel
+                                        dmChannel =
+                                            SeqDict.get otherUserId local.dmChannels
+                                                |> Maybe.withDefault DmChannel.frontendInit
+                                    in
+                                    (case threadRoute of
+                                        NoThread ->
+                                            ChannelMessageHistoryRequest guildOrDmId dmChannel.oldestVisibleMessage
+
+                                        ViewThread threadId ->
+                                            SeqDict.get threadId dmChannel.threads
+                                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                |> .oldestVisibleMessage
+                                                |> ThreadMessageHistoryRequest guildOrDmId threadId
+                                    )
+                                        |> Lamdera.sendToBackend
+
+                        ScrolledToBottom ->
+                            Command.none
+
+                        ScrolledToMiddle ->
+                            Command.none
+                    )
+                )
+                model
 
         PressedBody ->
             updateLoggedIn
@@ -4714,7 +4768,7 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , case model.channelScrollPosition of
+                                                , case loggedIn.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         scrollToBottomOfChannel
 
@@ -4780,6 +4834,12 @@ updateLoadedFromBackend msg model =
 
                 Err () ->
                     logout model
+
+        ChannelMessageHistoryResponse guildOrDmId previousOldestVisibleMessage messages ->
+            Debug.todo ""
+
+        ThreadMessageHistoryResponse guildOrDmId threadId previousOldestVisibleMessage messages ->
+            Debug.todo ""
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
