@@ -424,18 +424,18 @@ type alias GuildChannelAndMessageId =
 
 
 type ToBackend
-    = CheckLoginRequest
-    | LoginWithTokenRequest Int
-    | LoginWithTwoFactorRequest Int
+    = CheckLoginRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
+    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest PersonName
+    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName
     | AiChatToBackend AiChat.ToBackend
-    | ReloadDataRequest
+    | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
 

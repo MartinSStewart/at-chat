@@ -228,7 +228,7 @@ init url key =
         [ Task.perform GotTime Time.now
         , BrowserNavigation.replaceUrl key (Route.encode route)
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
-        , Lamdera.sendToBackend CheckLoginRequest
+        , Lamdera.sendToBackend (CheckLoginRequest (routeToGuildOrDmId route))
         , Ports.loadSounds
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
@@ -1110,12 +1110,22 @@ updateLoaded msg model =
                     ( model, Command.none )
 
                 NotLoggedIn notLoggedIn ->
+                    let
+                        requestMessagesFor =
+                            routeToGuildOrDmId model.route
+                    in
                     case
                         LoginForm.update
                             (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
-                            (\loginToken -> LoginWithTokenRequest loginToken |> Lamdera.sendToBackend)
-                            (\loginToken -> LoginWithTwoFactorRequest loginToken |> Lamdera.sendToBackend)
-                            (\name -> FinishUserCreationRequest name |> Lamdera.sendToBackend)
+                            (\loginToken ->
+                                LoginWithTokenRequest requestMessagesFor loginToken
+                                    |> Lamdera.sendToBackend
+                            )
+                            (\loginToken ->
+                                LoginWithTwoFactorRequest requestMessagesFor loginToken
+                                    |> Lamdera.sendToBackend
+                            )
+                            (\name -> FinishUserCreationRequest requestMessagesFor name |> Lamdera.sendToBackend)
                             loginFormMsg
                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                     of
@@ -4676,7 +4686,9 @@ updateLoadedFromBackend msg model =
         YouConnected ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | isReloading = True }, Lamdera.sendToBackend ReloadDataRequest )
+                    ( { loggedIn | isReloading = True }
+                    , Lamdera.sendToBackend (ReloadDataRequest (routeToGuildOrDmId model.route))
+                    )
                 )
                 model
 

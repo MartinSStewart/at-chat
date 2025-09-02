@@ -1443,8 +1443,14 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-getLoginData : SessionId -> Id UserId -> BackendUser -> BackendModel -> LoginData
-getLoginData sessionId userId user model =
+getLoginData :
+    SessionId
+    -> Id UserId
+    -> BackendUser
+    -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    -> BackendModel
+    -> LoginData
+getLoginData sessionId userId user requestMessagesFor model =
     { userId = userId
     , adminData =
         if user.isAdmin then
@@ -1504,13 +1510,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             }
     in
     case msg of
-        CheckLoginRequest ->
+        CheckLoginRequest requestMessagesFor ->
             let
                 cmd : Command BackendOnly ToFrontend backendMsg
                 cmd =
                     case getUserFromSessionId sessionId model2 of
                         Just ( userId, user ) ->
-                            getLoginData sessionId userId user model2
+                            getLoginData sessionId userId user requestMessagesFor model2
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -1533,10 +1539,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             else
                 ( model2, cmd )
 
-        LoginWithTokenRequest loginCode ->
-            loginWithToken time sessionId clientId loginCode model2
+        LoginWithTokenRequest requestMessagesFor loginCode ->
+            loginWithToken time sessionId clientId loginCode requestMessagesFor model2
 
-        FinishUserCreationRequest personName ->
+        FinishUserCreationRequest requestMessagesFor personName ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForUserDataForSignup pendingLogin) ->
                     if
@@ -1569,7 +1575,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , getLoginData sessionId userId newUser model3
+                        , getLoginData sessionId userId newUser requestMessagesFor model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -1578,7 +1584,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 _ ->
                     ( model2, Command.none )
 
-        LoginWithTwoFactorRequest loginCode ->
+        LoginWithTwoFactorRequest requestMessagesFor loginCode ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForTwoFactorToken pendingLogin) ->
                     if
@@ -1596,7 +1602,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | sessions = SeqDict.insert sessionId pendingLogin.userId model2.sessions
                                         , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
                                       }
-                                    , getLoginData sessionId pendingLogin.userId user model2
+                                    , getLoginData sessionId pendingLogin.userId user requestMessagesFor model2
                                         |> LoginSuccess
                                         |> LoginWithTokenResponse
                                         |> Lamdera.sendToFrontends sessionId
@@ -2486,11 +2492,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (joinGuildByInvite inviteLinkId time sessionId clientId guildId model2)
 
-        ReloadDataRequest ->
+        ReloadDataRequest requestMessagesFor ->
             ( model2
             , case getUserFromSessionId sessionId model2 of
                 Just ( userId, user ) ->
-                    getLoginData sessionId userId user model2
+                    getLoginData sessionId userId user requestMessagesFor model2
                         |> Ok
                         |> ReloadDataResponse
                         |> Lamdera.sendToFrontend clientId
@@ -3791,9 +3797,10 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
+    -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-loginWithToken time sessionId clientId loginCode model =
+loginWithToken time sessionId clientId loginCode requestMessagesFor model =
     case SeqDict.get sessionId model.pendingLogins of
         Just (WaitingForLoginToken pendingLogin) ->
             if isLoginTooOld pendingLogin time then
@@ -3826,7 +3833,7 @@ loginWithToken time sessionId clientId loginCode model =
                                 | sessions = SeqDict.insert sessionId pendingLogin.userId model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
-                            , getLoginData sessionId pendingLogin.userId user model
+                            , getLoginData sessionId pendingLogin.userId user requestMessagesFor model
                                 |> LoginSuccess
                                 |> LoginWithTokenResponse
                                 |> Lamdera.sendToFrontends sessionId
