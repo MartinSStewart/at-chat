@@ -1215,7 +1215,7 @@ handleDiscordCreateMessage message model =
                         | dmChannels =
                             SeqDict.insert
                                 dmChannelId
-                                (LocalState.createChannelMessage
+                                (LocalState.createChannelMessageBackend
                                     (Just message.id)
                                     (UserTextMessage
                                         { createdAt = message.timestamp
@@ -1402,7 +1402,7 @@ handleDiscordCreateGuildMessageHelper :
 handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRouteWithMaybeReplyTo userId richText message channel =
     case threadRouteWithMaybeReplyTo of
         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-            LocalState.createThreadMessage
+            LocalState.createThreadMessageBackend
                 (Just ( discordMessageId, discordChannelId ))
                 threadId
                 (UserTextMessage
@@ -1418,7 +1418,7 @@ handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRo
                 channel
 
         NoThreadWithMaybeMessage maybeReplyTo ->
-            LocalState.createChannelMessage
+            LocalState.createChannelMessageBackend
                 (Just discordMessageId)
                 (UserTextMessage
                     { createdAt = message.timestamp
@@ -2326,7 +2326,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 (\userId _ guild ->
-                                    case LocalState.deleteMessage userId channelId threadRoute guild of
+                                    case LocalState.deleteMessageBackend userId channelId threadRoute guild of
                                         Ok ( maybeDiscordMessageId, guild2 ) ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
@@ -2377,7 +2377,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
-                                            case LocalState.deleteMessageHelper userId threadRoute dmChannel of
+                                            case LocalState.deleteMessageBackendHelper userId threadRoute dmChannel of
                                                 Ok ( maybeDiscordMessageId, dmChannel2 ) ->
                                                     ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
                                                     , Command.batch
@@ -3068,7 +3068,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
 
                 dmChannel2 : DmChannel
                 dmChannel2 =
-                    LocalState.createChannelMessage
+                    LocalState.createChannelMessageBackend
                         Nothing
                         (UserTextMessage
                             { createdAt = time
@@ -3284,7 +3284,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 channel2 =
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                            LocalState.createThreadMessage
+                            LocalState.createThreadMessageBackend
                                 Nothing
                                 threadId
                                 (UserTextMessage
@@ -3300,7 +3300,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 channel
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
-                            LocalState.createChannelMessage
+                            LocalState.createChannelMessageBackend
                                 Nothing
                                 (UserTextMessage
                                     { createdAt = time

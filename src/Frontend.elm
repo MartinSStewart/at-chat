@@ -3643,8 +3643,7 @@ changeUpdate localMsg local =
                                                             channelId
                                                             (case threadRouteWithRepliedTo of
                                                                 ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessage
-                                                                        Nothing
+                                                                    LocalState.createThreadMessageFrontend
                                                                         threadId
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
@@ -3659,8 +3658,7 @@ changeUpdate localMsg local =
                                                                         channel
 
                                                                 NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessage
-                                                                        Nothing
+                                                                    LocalState.createChannelMessageFrontend
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
                                                                             , createdBy = localUser.userId
@@ -3709,8 +3707,7 @@ changeUpdate localMsg local =
                                 dmChannel2 =
                                     case threadRouteWithRepliedTo of
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                            LocalState.createThreadMessage
-                                                Nothing
+                                            LocalState.createThreadMessageFrontend
                                                 threadId
                                                 (UserTextMessage
                                                     { createdAt = createdAt
@@ -3725,8 +3722,7 @@ changeUpdate localMsg local =
                                                 dmChannel
 
                                         NoThreadWithMaybeMessage maybeReplyTo ->
-                                            LocalState.createChannelMessage
-                                                Nothing
+                                            LocalState.createChannelMessageFrontend
                                                 (UserTextMessage
                                                     { createdAt = createdAt
                                                     , createdBy = localUser.userId
@@ -3905,8 +3901,7 @@ changeUpdate localMsg local =
                                                             channelId
                                                             (case threadRouteWithRepliedTo of
                                                                 ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                                    LocalState.createThreadMessage
-                                                                        Nothing
+                                                                    LocalState.createThreadMessageFrontend
                                                                         threadId
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
@@ -3921,8 +3916,7 @@ changeUpdate localMsg local =
                                                                         channel
 
                                                                 NoThreadWithMaybeMessage maybeReplyTo ->
-                                                                    LocalState.createChannelMessage
-                                                                        Nothing
+                                                                    LocalState.createChannelMessageFrontend
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
                                                                             , createdBy = userId
@@ -3976,8 +3970,7 @@ changeUpdate localMsg local =
                                 dmChannel2 =
                                     case threadRouteWithRepliedTo of
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                            LocalState.createThreadMessage
-                                                Nothing
+                                            LocalState.createThreadMessageFrontend
                                                 threadId
                                                 (UserTextMessage
                                                     { createdAt = createdAt
@@ -3992,8 +3985,7 @@ changeUpdate localMsg local =
                                                 dmChannel
 
                                         NoThreadWithMaybeMessage maybeReplyTo ->
-                                            LocalState.createChannelMessage
-                                                Nothing
+                                            LocalState.createChannelMessageFrontend
                                                 (UserTextMessage
                                                     { createdAt = createdAt
                                                     , createdBy = userId
@@ -4070,7 +4062,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (\guild -> LocalState.addMember time userId guild |> Result.withDefault guild)
+                                (\guild -> LocalState.addMemberFrontend time userId guild |> Result.withDefault guild)
                                 local.guilds
                         , localUser = { localUser | otherUsers = SeqDict.insert userId user localUser.otherUsers }
                     }
@@ -4173,7 +4165,7 @@ changeUpdate localMsg local =
                                 sender
                                 (\maybe ->
                                     Maybe.withDefault DmChannel.init maybe
-                                        |> LocalState.createChannelMessage
+                                        |> LocalState.createChannelMessageBackend
                                             (Just discordMessageId)
                                             (UserTextMessage
                                                 { createdAt = time
@@ -4349,34 +4341,20 @@ deleteMessage : Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Lo
 deleteMessage userId guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId_Guild_NoThread guildId channelId ->
-            case SeqDict.get guildId local.guilds of
-                Just guild ->
-                    case LocalState.deleteMessage userId channelId threadRoute guild of
-                        Ok ( _, guild2 ) ->
-                            { local
-                                | guilds =
-                                    SeqDict.insert guildId guild2 local.guilds
-                            }
-
-                        Err () ->
-                            local
-
-                Nothing ->
-                    local
+            { local
+                | guilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (LocalState.deleteMessageFrontend userId channelId threadRoute)
+                        local.guilds
+            }
 
         GuildOrDmId_Dm_NoThread otherUserId ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
-                        (\dmChannel ->
-                            case LocalState.deleteMessageHelper userId threadRoute dmChannel of
-                                Ok ( _, dmChannel2 ) ->
-                                    dmChannel2
-
-                                Err _ ->
-                                    dmChannel
-                        )
+                        (LocalState.deleteMessageFrontendHelper userId threadRoute)
                         local.dmChannels
             }
 
