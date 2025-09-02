@@ -60,7 +60,7 @@ import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -277,7 +277,7 @@ initLoadedFrontend loading time loginResult =
             , pwaStatus = loading.pwaStatus
             , drag = NoDrag
             , dragPrevious = NoDrag
-            , scrolledToBottomOfChannel = True
+            , channelScrollPosition = ScrolledToBottom
             , aiChatModel = aiChatModel
             , enabledPushNotifications = loading.enabledPushNotifications
             }
@@ -556,7 +556,7 @@ routeRequest previousRoute newRoute model =
                                     else
                                         Process.sleep Duration.millisecond
                                             |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                            |> Task.attempt (\_ -> ScrolledToBottom)
+                                            |> Task.attempt (\_ -> SetScrollToBottom)
                             in
                             handleLocalChange
                                 model3.time
@@ -694,7 +694,7 @@ routeRequest previousRoute newRoute model =
                         scrollToBottom =
                             Process.sleep Duration.millisecond
                                 |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                |> Task.attempt (\_ -> ScrolledToBottom)
+                                |> Task.attempt (\_ -> SetScrollToBottom)
                     in
                     ( startOpeningChannelSidebar loggedIn
                     , Command.batch
@@ -916,7 +916,7 @@ isPressMsg msg =
         MessageMenuAnimated _ ->
             False
 
-        ScrolledToBottom ->
+        SetScrollToBottom ->
             False
 
         PressedChannelHeaderBackButton ->
@@ -2290,14 +2290,14 @@ updateLoaded msg model =
                 )
                 model
 
-        ScrolledToBottom ->
+        SetScrollToBottom ->
             ( model, Command.none )
 
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
-        UserScrolled { scrolledToBottomOfChannel } ->
-            ( { model | scrolledToBottomOfChannel = scrolledToBottomOfChannel }, Command.none )
+        UserScrolled scrollPosition ->
+            ( { model | channelScrollPosition = scrollPosition }, Command.none )
 
         PressedBody ->
             updateLoggedIn
@@ -4712,11 +4712,15 @@ updateLoadedFromBackend msg model =
                                                     local
                                                     content
                                                     model
-                                                , if model.scrolledToBottomOfChannel then
-                                                    scrollToBottomOfChannel
+                                                , case model.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        scrollToBottomOfChannel
 
-                                                  else
-                                                    Command.none
+                                                    ScrolledToMiddle ->
+                                                        Command.none
+
+                                                    ScrolledToTop ->
+                                                        Command.none
                                                 ]
 
                                         Nothing ->
@@ -4800,7 +4804,7 @@ logout model =
 
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 scrollToBottomOfChannel =
-    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> ScrolledToBottom)
+    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
 
 
 playNotificationSound :

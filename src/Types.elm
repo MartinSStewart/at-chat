@@ -27,6 +27,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
+    , ScrollPosition(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
@@ -127,7 +128,7 @@ type alias LoadedFrontend =
     , pwaStatus : PwaStatus
     , drag : Drag
     , dragPrevious : Drag
-    , scrolledToBottomOfChannel : Bool
+    , channelScrollPosition : ScrollPosition
     , aiChatModel : AiChat.FrontendModel
     , enabledPushNotifications : Bool
     }
@@ -371,9 +372,9 @@ type FrontendMsg
     | TouchCancel Time.Posix
     | ChannelSidebarAnimated Duration
     | MessageMenuAnimated Duration
-    | ScrolledToBottom
+    | SetScrollToBottom
     | PressedChannelHeaderBackButton
-    | UserScrolled { scrolledToBottomOfChannel : Bool }
+    | UserScrolled ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
@@ -406,6 +407,12 @@ type FrontendMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool
+
+
+type ScrollPosition
+    = ScrolledToBottom
+    | ScrolledToTop
+    | ScrolledToMiddle
 
 
 type alias NewChannelForm =

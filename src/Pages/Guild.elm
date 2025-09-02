@@ -54,7 +54,7 @@ import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm)
+import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1703,22 +1703,29 @@ messageInputConfig ( guildOrDmId, threadRoute ) =
     }
 
 
-scrollToBottomDecoder : Bool -> Json.Decode.Decoder FrontendMsg
-scrollToBottomDecoder isScrolledToBottomOfChannel =
+scrollToBottomDecoder : ScrollPosition -> Json.Decode.Decoder FrontendMsg
+scrollToBottomDecoder currentScrollPosition =
     Json.Decode.map3
         (\scrollTop scrollHeight clientHeight ->
-            scrollTop + clientHeight >= scrollHeight - 5
+            if scrollTop + clientHeight >= scrollHeight - 5 then
+                ScrolledToBottom
+
+            else if scrollTop <= 5 then
+                ScrolledToTop
+
+            else
+                ScrolledToMiddle
         )
         (Json.Decode.at [ "target", "scrollTop" ] Json.Decode.float)
         (Json.Decode.at [ "target", "scrollHeight" ] Json.Decode.float)
         (Json.Decode.at [ "target", "clientHeight" ] Json.Decode.float)
         |> Json.Decode.andThen
-            (\isAtBottom ->
-                if isAtBottom == isScrolledToBottomOfChannel then
+            (\scrollPosition ->
+                if scrollPosition == currentScrollPosition then
                     Json.Decode.fail ""
 
                 else
-                    UserScrolled { scrolledToBottomOfChannel = isAtBottom } |> Json.Decode.succeed
+                    UserScrolled scrollPosition |> Json.Decode.succeed
             )
 
 
@@ -1811,7 +1818,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , scrollable (canScroll model)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
+                , Ui.Events.on "scroll" (scrollToBottomDecoder model.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
@@ -2061,7 +2068,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , scrollable (canScroll model)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
-                , Ui.Events.on "scroll" (scrollToBottomDecoder model.scrolledToBottomOfChannel)
+                , Ui.Events.on "scroll" (scrollToBottomDecoder model.channelScrollPosition)
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
