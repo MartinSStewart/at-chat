@@ -12,13 +12,14 @@ module MessageMenu exposing
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
 import Id exposing (ChannelMessageId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMessage(..))
 import LocalState exposing (LocalState)
-import Message exposing (Message(..))
+import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
 import MyUi
 import Quantity exposing (Quantity, Rate)
@@ -307,8 +308,8 @@ menuItems : Bool -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coo
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
         helper messageId thread =
-            case LocalState.getArray messageId thread.messages of
-                Just message ->
+            case DmChannel.getArray messageId thread.messages of
+                Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
                             data.createdBy == local.localUser.userId
@@ -328,7 +329,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     )
                         |> Just
 
-                Nothing ->
+                _ ->
                     Nothing
 
         maybeData =

@@ -775,7 +775,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                 Just ( channelId, channel ) ->
                     case OneToOne.second messageId channel.linkedMessageIds of
                         Just messageIndex ->
-                            case LocalState.getArray messageIndex channel.messages of
+                            case DmChannel.getArray messageIndex channel.messages of
                                 Just (UserTextMessage data) ->
                                     ( { model
                                         | guilds =
@@ -787,7 +787,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
                                                             channelId
                                                             { channel
                                                                 | messages =
-                                                                    LocalState.setArray
+                                                                    DmChannel.setArray
                                                                         messageIndex
                                                                         (DeletedMessage data.createdAt)
                                                                         channel.messages
@@ -1245,7 +1245,7 @@ handleDiscordCreateMessage message model =
                         [ broadcastToUser
                             Nothing
                             adminUserId
-                            (Server_DiscordDirectMessage message.timestamp message.id userId richText replyTo
+                            (Server_DiscordDirectMessage message.timestamp userId richText replyTo
                                 |> ServerChange
                             )
                             model
@@ -1460,7 +1460,7 @@ getLoginData sessionId userId user model =
             (\dmChannelId dmChannel dict ->
                 case DmChannel.otherUserId userId dmChannelId of
                     Just otherUserId ->
-                        SeqDict.insert otherUserId dmChannel dict
+                        SeqDict.insert otherUserId (DmChannel.toFrontend dmChannel) dict
 
                     Nothing ->
                         dict

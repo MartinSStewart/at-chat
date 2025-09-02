@@ -44,7 +44,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
-import DmChannel exposing (DmChannel, DmChannelId)
+import DmChannel exposing (DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -503,7 +503,7 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , dmChannels : SeqDict (Id UserId) DmChannel
+    , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
@@ -545,7 +545,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
-    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
+    | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
 
 

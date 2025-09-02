@@ -17,6 +17,7 @@ module LocalState exposing
     , addMember
     , addMemberFrontend
     , addReactionEmoji
+    , addReactionEmojiFrontend
     , allUsers
     , allUsers2
     , announcementChannel
@@ -35,8 +36,8 @@ module LocalState exposing
     , deleteMessageFrontend
     , deleteMessageFrontendHelper
     , editChannel
+    , editMessageFrontendHelper
     , editMessageHelper
-    , getArray
     , getGuildAndChannel
     , getUser
     , guildToFrontend
@@ -46,23 +47,26 @@ module LocalState exposing
     , linkedChannel
     , markAllChannelsAsViewed
     , memberIsEditTyping
+    , memberIsEditTypingFrontend
+    , memberIsEditTypingFrontendHelper
     , memberIsEditTypingHelper
     , memberIsTyping
     , nextMessageId
     , nextThreadMessageId
     , removeReactionEmoji
-    , repliedToUserId
-    , setArray
+    , removeReactionEmojiFrontend
+    , repliedToUserIdFrontend
     , updateArray
     , updateChannel
     , usersToNotify
+    , usersToNotifyFrontend
     )
 
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DmChannel, LastTypedAt, Thread)
+import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -71,7 +75,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
-import Message exposing (Message(..), UserTextMessageData)
+import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
@@ -87,7 +91,7 @@ import User exposing (BackendUser, EmailNotifications(..), EmailStatus, Frontend
 type alias LocalState =
     { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , dmChannels : SeqDict (Id UserId) DmChannel
+    , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , publicVapidKey : String
@@ -181,10 +185,10 @@ type alias FrontendChannel =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : ChannelName
-    , messages : Array (Message ChannelMessageId)
+    , messages : Array (MessageState ChannelMessageId)
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) Thread
+    , threads : SeqDict (Id ChannelMessageId) FrontendThread
     }
 
 
@@ -195,10 +199,10 @@ channelToFrontend channel =
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
-            , messages = channel.messages
+            , messages = DmChannel.toFrontendHelper channel
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
-            , threads = channel.threads
+            , threads = SeqDict.map (\_ thread -> DmChannel.threadToFrontend thread) channel.threads
             }
                 |> Just
 
@@ -372,7 +376,7 @@ createMessageBackend :
         }
 createMessageBackend maybeDiscordMessageId message channel =
     { channel
-        | messages = createMessageHelper message channel
+        | messages = createMessageHelperBackend message channel
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
@@ -396,8 +400,8 @@ createMessageBackend maybeDiscordMessageId message channel =
     }
 
 
-createMessageHelper : Message messageId -> { a | messages : Array (Message messageId) } -> Array (Message messageId)
-createMessageHelper message channel =
+createMessageHelperBackend : Message messageId -> { a | messages : Array (Message messageId) } -> Array (Message messageId)
+createMessageHelperBackend message channel =
     case message of
         UserTextMessage data ->
             let
@@ -405,7 +409,7 @@ createMessageHelper message channel =
                 previousIndex =
                     Array.length channel.messages - 1 |> Id.fromInt
             in
-            case getArray previousIndex channel.messages of
+            case DmChannel.getArray previousIndex channel.messages of
                 Just (UserTextMessage previous) ->
                     if
                         (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
@@ -414,7 +418,7 @@ createMessageHelper message channel =
                             && not (SeqDict.isEmpty previous.reactions)
                         --&& not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
                     then
-                        setArray
+                        DmChannel.setArray
                             previousIndex
                             (UserTextMessage
                                 { previous
@@ -439,20 +443,64 @@ createMessageHelper message channel =
             Array.push message channel.messages
 
 
+createMessageFrontendHelper : Message messageId -> { a | messages : Array (MessageState messageId) } -> Array (MessageState messageId)
+createMessageFrontendHelper message channel =
+    case message of
+        UserTextMessage data ->
+            let
+                previousIndex : Id messageId
+                previousIndex =
+                    Array.length channel.messages - 1 |> Id.fromInt
+            in
+            case DmChannel.getArray previousIndex channel.messages of
+                Just (MessageLoaded (UserTextMessage previous)) ->
+                    if
+                        (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
+                            && (previous.editedAt == Nothing)
+                            && (previous.createdBy == data.createdBy)
+                            && not (SeqDict.isEmpty previous.reactions)
+                        --&& not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
+                    then
+                        DmChannel.setArray
+                            previousIndex
+                            (UserTextMessage
+                                { previous
+                                    | content =
+                                        RichText.append
+                                            previous.content
+                                            (List.Nonempty.cons (NormalText '\n' "") data.content)
+                                }
+                                |> MessageLoaded
+                            )
+                            channel.messages
+
+                    else
+                        Array.push (MessageLoaded message) channel.messages
+
+                _ ->
+                    Array.push (MessageLoaded message) channel.messages
+
+        UserJoinedMessage _ _ _ ->
+            Array.push (MessageLoaded message) channel.messages
+
+        DeletedMessage _ ->
+            Array.push (MessageLoaded message) channel.messages
+
+
 createThreadMessageFrontend :
     Id ChannelMessageId
     -> Message ThreadMessageId
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) Thread
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) Thread
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
 createThreadMessageFrontend threadId message channel =
     { channel
@@ -460,7 +508,7 @@ createThreadMessageFrontend threadId message channel =
             SeqDict.update
                 threadId
                 (\maybe ->
-                    Maybe.withDefault DmChannel.threadInit maybe
+                    Maybe.withDefault DmChannel.frontendThreadInit maybe
                         |> createMessageFrontend message
                         |> Just
                 )
@@ -472,12 +520,12 @@ createChannelMessageFrontend :
     Message ChannelMessageId
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
 createChannelMessageFrontend message channel =
@@ -488,17 +536,17 @@ createMessageFrontend :
     Message messageId
     ->
         { d
-            | messages : Array (Message messageId)
+            | messages : Array (MessageState messageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
     ->
         { d
-            | messages : Array (Message messageId)
+            | messages : Array (MessageState messageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
 createMessageFrontend message channel =
     { channel
-        | messages = createMessageHelper message channel
+        | messages = createMessageFrontendHelper message channel
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
@@ -629,8 +677,16 @@ memberIsTyping :
     Id UserId
     -> Time.Posix
     -> ThreadRoute
-    -> { e | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> { e | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+    ->
+        { e
+            | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId) }
+        }
+    ->
+        { e
+            | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId) }
+        }
 memberIsTyping userId time threadRoute channel =
     case threadRoute of
         ViewThread threadMessageIndex ->
@@ -700,22 +756,55 @@ memberIsEditTyping userId time channelId threadRoute guild =
             Err ()
 
 
-getArray : Id messageId -> Array (Message messageId) -> Maybe (Message messageId)
-getArray id array =
-    Array.get (Id.toInt id) array
+memberIsEditTypingFrontend :
+    Id UserId
+    -> Time.Posix
+    -> Id ChannelId
+    -> ThreadRouteWithMessage
+    ->
+        { d
+            | channels :
+                SeqDict
+                    (Id ChannelId)
+                    { e
+                        | messages : Array (MessageState ChannelMessageId)
+                        , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                    }
+        }
+    ->
+        Result
+            ()
+            { d
+                | channels :
+                    SeqDict
+                        (Id ChannelId)
+                        { e
+                            | messages : Array (MessageState ChannelMessageId)
+                            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+                            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                        }
+            }
+memberIsEditTypingFrontend userId time channelId threadRoute guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            case memberIsEditTypingFrontendHelper time userId threadRoute channel of
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+
+                _ ->
+                    Err ()
+
+        Nothing ->
+            Err ()
 
 
-setArray : Id messageId -> Message messageId -> Array (Message messageId) -> Array (Message messageId)
-setArray id message array =
-    Array.set (Id.toInt id) message array
-
-
-updateArray : Id messageId -> (Message messageId -> Message messageId) -> Array (Message messageId) -> Array (Message messageId)
+updateArray : Id messageId -> (a -> a) -> Array a -> Array a
 updateArray id updateFunc array =
     Array.Extra.update (Id.toInt id) updateFunc array
 
 
-latestMessageId : { a | messages : Array (Message messageId), threads : SeqDict (Id ChannelMessageId) Thread } -> Id ChannelMessageId
+latestMessageId : { a | messages : Array b } -> Id ChannelMessageId
 latestMessageId channel =
     Array.length channel.messages - 1 |> Id.fromInt
 
@@ -746,7 +835,7 @@ memberIsEditTypingHelper time userId threadRoute channel =
         ViewThreadWithMessage threadMessageIndex messageIndex ->
             case SeqDict.get threadMessageIndex channel.threads of
                 Just thread ->
-                    case getArray messageIndex thread.messages of
+                    case DmChannel.getArray messageIndex thread.messages of
                         Just (UserTextMessage data) ->
                             if data.createdBy == userId then
                                 { channel
@@ -774,8 +863,63 @@ memberIsEditTypingHelper time userId threadRoute channel =
                     Err ()
 
         NoThreadWithMessage messageIndex ->
-            case getArray messageIndex channel.messages of
+            case DmChannel.getArray messageIndex channel.messages of
                 Just (UserTextMessage data) ->
+                    if data.createdBy == userId then
+                        { channel
+                            | lastTypedAt =
+                                SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                        }
+                            |> Ok
+
+                    else
+                        Err ()
+
+                _ ->
+                    Err ()
+
+
+memberIsEditTypingFrontendHelper :
+    Time.Posix
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> { a | messages : Array (MessageState ChannelMessageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> Result () { a | messages : Array (MessageState ChannelMessageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+memberIsEditTypingFrontendHelper time userId threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageIndex ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case DmChannel.getArray messageIndex thread.messages of
+                        Just (MessageLoaded (UserTextMessage data)) ->
+                            if data.createdBy == userId then
+                                { channel
+                                    | threads =
+                                        SeqDict.insert
+                                            threadMessageIndex
+                                            { thread
+                                                | lastTypedAt =
+                                                    SeqDict.insert
+                                                        userId
+                                                        { time = time, messageIndex = Just messageIndex }
+                                                        thread.lastTypedAt
+                                            }
+                                            channel.threads
+                                }
+                                    |> Ok
+
+                            else
+                                Err ()
+
+                        _ ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageIndex ->
+            case DmChannel.getArray messageIndex channel.messages of
+                Just (MessageLoaded (UserTextMessage data)) ->
                     if data.createdBy == userId then
                         { channel
                             | lastTypedAt =
@@ -884,6 +1028,55 @@ addReactionEmoji emoji userId threadRoute channel =
             }
 
 
+addReactionEmojiFrontend :
+    Emoji
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> { b | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> { b | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+addReactionEmojiFrontend emoji userId threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadId messageId ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadId
+                        (\thread ->
+                            { thread
+                                | messages =
+                                    updateArray
+                                        messageId
+                                        (\message ->
+                                            case message of
+                                                MessageLoaded message2 ->
+                                                    Message.addReactionEmoji userId emoji message2 |> MessageLoaded
+
+                                                MessageUnloaded ->
+                                                    message
+                                        )
+                                        thread.messages
+                            }
+                        )
+                        channel.threads
+            }
+
+        NoThreadWithMessage messageId ->
+            { channel
+                | messages =
+                    updateArray
+                        messageId
+                        (\message ->
+                            case message of
+                                MessageLoaded message2 ->
+                                    Message.addReactionEmoji userId emoji message2 |> MessageLoaded
+
+                                MessageUnloaded ->
+                                    message
+                        )
+                        channel.messages
+            }
+
+
 updateChannel :
     (v -> v)
     -> Id ChannelId
@@ -929,7 +1122,7 @@ editMessageHelper2 :
     -> { b | messages : Array (Message messageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
     -> Result () { b | messages : Array (Message messageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
 editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
-    case getArray messageIndex channel.messages of
+    case DmChannel.getArray messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy && data.content /= newContent then
                 let
@@ -938,7 +1131,79 @@ editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
                         { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
                 in
                 { channel
-                    | messages = setArray messageIndex (UserTextMessage data2) channel.messages
+                    | messages = DmChannel.setArray messageIndex (UserTextMessage data2) channel.messages
+                    , lastTypedAt =
+                        SeqDict.update
+                            editedBy
+                            (\maybe ->
+                                case maybe of
+                                    Just a ->
+                                        if a.messageIndex == Just messageIndex then
+                                            Nothing
+
+                                        else
+                                            maybe
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
+
+
+editMessageFrontendHelper :
+    Time.Posix
+    -> Id UserId
+    -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
+    -> ThreadRouteWithMessage
+    -> { b | messages : Array (MessageState ChannelMessageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> Result () { b | messages : Array (MessageState ChannelMessageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageId ->
+            case SeqDict.get threadMessageIndex channel.threads of
+                Just thread ->
+                    case editMessageFrontendHelper2 time editedBy newContent attachedFiles messageId thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
+
+                        Err () ->
+                            Err ()
+
+                Nothing ->
+                    Err ()
+
+        NoThreadWithMessage messageId ->
+            editMessageFrontendHelper2 time editedBy newContent attachedFiles messageId channel
+
+
+editMessageFrontendHelper2 :
+    Time.Posix
+    -> Id UserId
+    -> Nonempty RichText
+    -> SeqDict (Id FileId) FileData
+    -> Id messageId
+    -> { b | messages : Array (MessageState messageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
+    -> Result () { b | messages : Array (MessageState messageId), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
+editMessageFrontendHelper2 time editedBy newContent attachedFiles messageIndex channel =
+    case DmChannel.getArray messageIndex channel.messages of
+        Just (MessageLoaded (UserTextMessage data)) ->
+            if data.createdBy == editedBy && data.content /= newContent then
+                let
+                    data2 : UserTextMessageData messageId
+                    data2 =
+                        { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
+                in
+                { channel
+                    | messages = DmChannel.setArray messageIndex (MessageLoaded (UserTextMessage data2)) channel.messages
                     , lastTypedAt =
                         SeqDict.update
                             editedBy
@@ -999,9 +1264,58 @@ removeReactionEmoji emoji userId threadRoute channel =
             }
 
 
+removeReactionEmojiFrontend :
+    Emoji
+    -> Id UserId
+    -> ThreadRouteWithMessage
+    -> { b | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> { b | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+removeReactionEmojiFrontend emoji userId threadRoute channel =
+    case threadRoute of
+        ViewThreadWithMessage threadMessageIndex messageIndex ->
+            { channel
+                | threads =
+                    SeqDict.updateIfExists
+                        threadMessageIndex
+                        (\thread ->
+                            { thread
+                                | messages =
+                                    updateArray
+                                        messageIndex
+                                        (\message ->
+                                            case message of
+                                                MessageLoaded message2 ->
+                                                    Message.removeReactionEmoji userId emoji message2 |> MessageLoaded
+
+                                                MessageUnloaded ->
+                                                    message
+                                        )
+                                        thread.messages
+                            }
+                        )
+                        channel.threads
+            }
+
+        NoThreadWithMessage messageIndex ->
+            { channel
+                | messages =
+                    updateArray
+                        messageIndex
+                        (\message ->
+                            case message of
+                                MessageLoaded message2 ->
+                                    Message.removeReactionEmoji userId emoji message2 |> MessageLoaded
+
+                                MessageUnloaded ->
+                                    message
+                        )
+                        channel.messages
+            }
+
+
 markAllChannelsAsViewed :
     Id GuildId
-    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array (Message messageId), threads : SeqDict (Id ChannelMessageId) Thread } }
+    -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
     -> BackendUser
     -> BackendUser
 markAllChannelsAsViewed guildId guild user =
@@ -1084,7 +1398,7 @@ deleteMessageBackendHelper userId threadRoute channel =
         ViewThreadWithMessage threadId messageId ->
             case SeqDict.get threadId channel.threads of
                 Just thread ->
-                    case getArray messageId thread.messages of
+                    case DmChannel.getArray messageId thread.messages of
                         Just (UserTextMessage message) ->
                             if message.createdBy == userId then
                                 ( OneToOne.first messageId thread.linkedMessageIds
@@ -1093,7 +1407,7 @@ deleteMessageBackendHelper userId threadRoute channel =
                                         SeqDict.insert
                                             threadId
                                             { thread
-                                                | messages = setArray messageId (DeletedMessage message.createdAt) thread.messages
+                                                | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) thread.messages
                                             }
                                             channel.threads
                                   }
@@ -1110,11 +1424,11 @@ deleteMessageBackendHelper userId threadRoute channel =
                     Err ()
 
         NoThreadWithMessage messageId ->
-            case getArray messageId channel.messages of
+            case DmChannel.getArray messageId channel.messages of
                 Just (UserTextMessage message) ->
                     if message.createdBy == userId then
                         ( OneToOne.first messageId channel.linkedMessageIds
-                        , { channel | messages = setArray messageId (DeletedMessage message.createdAt) channel.messages }
+                        , { channel | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) channel.messages }
                         )
                             |> Ok
 
@@ -1135,8 +1449,8 @@ deleteMessageFrontend :
                 SeqDict
                     (Id ChannelId)
                     { c
-                        | messages : Array (Message ChannelMessageId)
-                        , threads : SeqDict (Id ChannelMessageId) Thread
+                        | messages : Array (MessageState ChannelMessageId)
+                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
                     }
         }
     ->
@@ -1145,8 +1459,8 @@ deleteMessageFrontend :
                 SeqDict
                     (Id ChannelId)
                     { c
-                        | messages : Array (Message ChannelMessageId)
-                        , threads : SeqDict (Id ChannelMessageId) Thread
+                        | messages : Array (MessageState ChannelMessageId)
+                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
                     }
         }
 deleteMessageFrontend userId channelId threadRoute guild =
@@ -1169,28 +1483,32 @@ deleteMessageFrontendHelper :
     -> ThreadRouteWithMessage
     ->
         { a
-            | messages : Array (Message ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) Thread
+            | messages : Array (MessageState ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
     ->
         { a
-            | messages : Array (Message ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) Thread
+            | messages : Array (MessageState ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
 deleteMessageFrontendHelper userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
             case SeqDict.get threadId channel.threads of
                 Just thread ->
-                    case getArray messageId thread.messages of
-                        Just (UserTextMessage message) ->
+                    case DmChannel.getArray messageId thread.messages of
+                        Just (MessageLoaded (UserTextMessage message)) ->
                             if message.createdBy == userId then
                                 { channel
                                     | threads =
                                         SeqDict.insert
                                             threadId
                                             { thread
-                                                | messages = setArray messageId (DeletedMessage message.createdAt) thread.messages
+                                                | messages =
+                                                    DmChannel.setArray
+                                                        messageId
+                                                        (MessageLoaded (DeletedMessage message.createdAt))
+                                                        thread.messages
                                             }
                                             channel.threads
                                 }
@@ -1205,10 +1523,16 @@ deleteMessageFrontendHelper userId threadRoute channel =
                     channel
 
         NoThreadWithMessage messageId ->
-            case getArray messageId channel.messages of
-                Just (UserTextMessage message) ->
+            case DmChannel.getArray messageId channel.messages of
+                Just (MessageLoaded (UserTextMessage message)) ->
                     if message.createdBy == userId then
-                        { channel | messages = setArray messageId (DeletedMessage message.createdAt) channel.messages }
+                        { channel
+                            | messages =
+                                DmChannel.setArray
+                                    messageId
+                                    (MessageLoaded (DeletedMessage message.createdAt))
+                                    channel.messages
+                        }
 
                     else
                         channel
@@ -1252,7 +1576,7 @@ usersToNotify senderId threadRouteWithRepliedTo channel content =
                             repliedToUserId maybeRepliedTo thread
 
                         Nothing ->
-                            case getArray threadId channel.messages of
+                            case DmChannel.getArray threadId channel.messages of
                                 Just (UserTextMessage data) ->
                                     Just data.createdBy
 
@@ -1278,21 +1602,94 @@ usersToNotify senderId threadRouteWithRepliedTo channel content =
         |> SeqSet.remove senderId
 
 
+usersToNotifyFrontend :
+    Id UserId
+    -> ThreadRouteWithMaybeMessage
+    -> { a | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> Nonempty RichText
+    -> SeqSet (Id UserId)
+usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content =
+    let
+        usersToNotify2 =
+            RichText.mentionsUser content
+
+        repliedToUserId2 : Maybe (Id UserId)
+        repliedToUserId2 =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
+                    case SeqDict.get threadId channel.threads of
+                        Just thread ->
+                            repliedToUserIdFrontend maybeRepliedTo thread
+
+                        Nothing ->
+                            case DmChannel.getArray threadId channel.messages of
+                                Just (MessageLoaded message) ->
+                                    case message of
+                                        UserTextMessage data ->
+                                            Just data.createdBy
+
+                                        UserJoinedMessage _ userJoined _ ->
+                                            Just userJoined
+
+                                        DeletedMessage _ ->
+                                            Nothing
+
+                                _ ->
+                                    Nothing
+
+                NoThreadWithMaybeMessage maybeRepliedTo ->
+                    repliedToUserIdFrontend maybeRepliedTo channel
+    in
+    (case repliedToUserId2 of
+        Just a ->
+            SeqSet.insert a usersToNotify2
+
+        Nothing ->
+            usersToNotify2
+    )
+        |> SeqSet.remove senderId
+
+
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId) } -> Maybe (Id UserId)
 repliedToUserId maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->
-            case getArray repliedTo channel.messages of
-                Just (UserTextMessage repliedToData) ->
-                    Just repliedToData.createdBy
+            case DmChannel.getArray repliedTo channel.messages of
+                Just message ->
+                    case message of
+                        UserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
 
-                Just (UserJoinedMessage _ joinedUser _) ->
-                    Just joinedUser
+                        UserJoinedMessage _ joinedUser _ ->
+                            Just joinedUser
 
-                Just (DeletedMessage _) ->
-                    Nothing
+                        DeletedMessage _ ->
+                            Nothing
 
                 Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+repliedToUserIdFrontend : Maybe (Id messageId) -> { a | messages : Array (MessageState messageId) } -> Maybe (Id UserId)
+repliedToUserIdFrontend maybeRepliedTo channel =
+    case maybeRepliedTo of
+        Just repliedTo ->
+            case DmChannel.getArray repliedTo channel.messages of
+                Just (MessageLoaded message) ->
+                    case message of
+                        UserTextMessage repliedToData ->
+                            Just repliedToData.createdBy
+
+                        UserJoinedMessage _ joinedUser _ ->
+                            Just joinedUser
+
+                        DeletedMessage _ ->
+                            Nothing
+
+                _ ->
                     Nothing
 
         Nothing ->
