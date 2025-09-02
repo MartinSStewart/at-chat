@@ -2468,43 +2468,111 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                Local_ViewChannel guildId channelId ->
+                Local_ViewChannel guildId channelId _ ->
                     asGuildMember
                         model2
                         sessionId
                         guildId
-                        (\userId user _ ->
-                            ( { model2
-                                | users =
-                                    NonemptyDict.insert
-                                        userId
-                                        (User.setLastChannelViewed guildId channelId NoThread user)
-                                        model2.users
-                              }
-                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                            )
+                        (\userId user guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    let
+                                        messageCount : Int
+                                        messageCount =
+                                            Array.length channel.messages
+
+                                        indexStart : Int
+                                        indexStart =
+                                            max (messageCount - DmChannel.pageSize) 0
+                                    in
+                                    ( { model2
+                                        | users =
+                                            NonemptyDict.insert
+                                                userId
+                                                (User.setLastChannelViewed guildId channelId NoThread user)
+                                                model2.users
+                                      }
+                                    , Local_ViewChannel
+                                        guildId
+                                        channelId
+                                        (FilledInByBackend
+                                            (Array.slice indexStart messageCount channel.messages
+                                                |> Array.toList
+                                                |> List.indexedMap
+                                                    (\index message ->
+                                                        ( index + indexStart |> Id.fromInt, message )
+                                                    )
+                                                |> SeqDict.fromList
+                                            )
+                                        )
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+
+                                Nothing ->
+                                    ( model
+                                    , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                    )
                         )
 
-                Local_ViewThread guildId channelId threadId ->
+                Local_ViewThread guildId channelId threadId _ ->
                     asGuildMember
                         model2
                         sessionId
                         guildId
-                        (\userId user _ ->
-                            ( { model2
-                                | users =
-                                    NonemptyDict.insert
-                                        userId
-                                        (User.setLastChannelViewed
-                                            guildId
-                                            channelId
-                                            (ViewThread threadId)
-                                            user
+                        (\userId user guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    let
+                                        thread : Thread
+                                        thread =
+                                            SeqDict.get threadId channel.threads
+                                                |> Maybe.withDefault DmChannel.threadInit
+
+                                        messageCount : Int
+                                        messageCount =
+                                            Array.length thread.messages
+
+                                        indexStart : Int
+                                        indexStart =
+                                            max (messageCount - DmChannel.pageSize) 0
+                                    in
+                                    ( { model2
+                                        | users =
+                                            NonemptyDict.insert
+                                                userId
+                                                (User.setLastChannelViewed
+                                                    guildId
+                                                    channelId
+                                                    (ViewThread threadId)
+                                                    user
+                                                )
+                                                model2.users
+                                      }
+                                    , Local_ViewThread
+                                        guildId
+                                        channelId
+                                        threadId
+                                        (FilledInByBackend
+                                            (Array.slice indexStart messageCount thread.messages
+                                                |> Array.toList
+                                                |> List.indexedMap
+                                                    (\index message ->
+                                                        ( index + indexStart |> Id.fromInt
+                                                        , message
+                                                        )
+                                                    )
+                                                |> SeqDict.fromList
+                                            )
                                         )
-                                        model2.users
-                              }
-                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                            )
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+
+                                Nothing ->
+                                    ( model
+                                    , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                    )
                         )
 
                 Local_SetName name ->

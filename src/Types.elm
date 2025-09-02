@@ -65,6 +65,7 @@ import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
+import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
@@ -565,8 +566,8 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_ViewChannel (Id GuildId) (Id ChannelId)
-    | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId)
+    | Local_ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
+    | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
     | Local_SetName PersonName
 
 

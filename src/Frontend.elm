@@ -562,10 +562,10 @@ routeRequest previousRoute newRoute model =
                                 model3.time
                                 (case threadRoute of
                                     ViewThreadWithMaybeMessage threadId _ ->
-                                        Just (Local_ViewThread guildId channelId threadId)
+                                        Just (Local_ViewThread guildId channelId threadId EmptyPlaceholder)
 
                                     NoThreadWithMaybeMessage _ ->
-                                        Just (Local_ViewChannel guildId channelId)
+                                        Just (Local_ViewChannel guildId channelId EmptyPlaceholder)
                                 )
                                 (if sameGuild || previousRoute == Nothing then
                                     startOpeningChannelSidebar loggedIn
@@ -3881,7 +3881,7 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.userId guildOrDmId messageIndex local
 
-                Local_ViewChannel guildId channelId ->
+                Local_ViewChannel guildId channelId messagesLoaded ->
                     let
                         localUser =
                             local.localUser
@@ -3889,9 +3889,14 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | user = User.setLastChannelViewed guildId channelId NoThread localUser.user }
+                        , guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
+                                local.guilds
                     }
 
-                Local_ViewThread guildId channelId threadId ->
+                Local_ViewThread guildId channelId threadId messagesLoaded ->
                     let
                         localUser =
                             local.localUser
@@ -3902,6 +3907,22 @@ changeUpdate localMsg local =
                                 | user =
                                     User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
                             }
+                        , guilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (\channel ->
+                                        { channel
+                                            | threads =
+                                                SeqDict.updateIfExists
+                                                    threadId
+                                                    (loadMessages messagesLoaded)
+                                                    channel.threads
+                                        }
+                                    )
+                                    channelId
+                                )
+                                local.guilds
                     }
 
                 Local_SetName name ->
@@ -4394,6 +4415,30 @@ deleteMessage userId guildOrDmId threadRoute local =
             }
 
 
+loadMessages :
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
+    -> { a | messages : Array (MessageState messageId) }
+    -> { a | messages : Array (MessageState messageId) }
+loadMessages messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            { channel
+                | messages =
+                    SeqDict.foldl
+                        (\messageId message messages ->
+                            DmChannel.setArray
+                                messageId
+                                (MessageLoaded message)
+                                messages
+                        )
+                        channel.messages
+                        messagesLoaded2
+            }
+
+        EmptyPlaceholder ->
+            channel
+
+
 handleLocalChange :
     Time.Posix
     -> Maybe LocalChange
@@ -4869,10 +4914,10 @@ pendingChangesText localChange =
         Local_DeleteMessage _ _ ->
             "Delete message"
 
-        Local_ViewChannel _ _ ->
+        Local_ViewChannel _ _ _ ->
             "View channel"
 
-        Local_ViewThread _ _ _ ->
+        Local_ViewThread _ _ _ _ ->
             "View thread"
 
         Local_SetName _ ->

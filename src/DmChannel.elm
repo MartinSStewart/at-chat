@@ -11,6 +11,7 @@ module DmChannel exposing
     , getArray
     , init
     , otherUserId
+    , pageSize
     , setArray
     , threadInit
     , threadToFrontend
@@ -143,6 +144,7 @@ loadMessages preloadMessages messages =
         Array.repeat messageCount MessageUnloaded
 
 
+pageSize : number
 pageSize =
     20
 
