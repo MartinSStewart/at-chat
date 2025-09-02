@@ -137,14 +137,31 @@ type alias FrontendGuild =
     }
 
 
-guildToFrontendForUser : Id UserId -> BackendGuild -> Maybe FrontendGuild
-guildToFrontendForUser userId guild =
+guildToFrontendForUser : Maybe ( Id ChannelId, ThreadRoute ) -> Id UserId -> BackendGuild -> Maybe FrontendGuild
+guildToFrontendForUser requestMessagesFor userId guild =
     if userId == guild.owner || SeqDict.member userId guild.members then
         { createdAt = guild.createdAt
         , createdBy = guild.createdBy
         , name = guild.name
         , icon = guild.icon
-        , channels = SeqDict.filterMap (\_ channel -> channelToFrontend channel) guild.channels
+        , channels =
+            SeqDict.filterMap
+                (\channelId channel ->
+                    channelToFrontend
+                        (case requestMessagesFor of
+                            Just ( channelIdB, threadRoute ) ->
+                                if channelId == channelIdB then
+                                    Just threadRoute
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                        )
+                        channel
+                )
+                guild.channels
         , members = guild.members
         , owner = guild.owner
         , invites = guild.invites
@@ -155,13 +172,30 @@ guildToFrontendForUser userId guild =
         Nothing
 
 
-guildToFrontend : BackendGuild -> FrontendGuild
-guildToFrontend guild =
+guildToFrontend : Maybe ( Id ChannelId, ThreadRoute ) -> BackendGuild -> FrontendGuild
+guildToFrontend requestMessagesFor guild =
     { createdAt = guild.createdAt
     , createdBy = guild.createdBy
     , name = guild.name
     , icon = guild.icon
-    , channels = SeqDict.filterMap (\_ channel -> channelToFrontend channel) guild.channels
+    , channels =
+        SeqDict.filterMap
+            (\channelId channel ->
+                channelToFrontend
+                    (case requestMessagesFor of
+                        Just ( channelIdB, threadRoute ) ->
+                            if channelId == channelIdB then
+                                Just threadRoute
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    channel
+            )
+            guild.channels
     , members = guild.members
     , owner = guild.owner
     , invites = guild.invites
@@ -192,17 +226,20 @@ type alias FrontendChannel =
     }
 
 
-channelToFrontend : BackendChannel -> Maybe FrontendChannel
-channelToFrontend channel =
+channelToFrontend : Maybe ThreadRoute -> BackendChannel -> Maybe FrontendChannel
+channelToFrontend threadRoute channel =
     case channel.status of
         ChannelActive ->
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
-            , messages = DmChannel.toFrontendHelper channel
+            , messages = DmChannel.toFrontendHelper (Just NoThread == threadRoute) channel
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
-            , threads = SeqDict.map (\_ thread -> DmChannel.threadToFrontend thread) channel.threads
+            , threads =
+                SeqDict.map
+                    (\threadId thread -> DmChannel.threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    channel.threads
             }
                 |> Just
 

@@ -560,7 +560,13 @@ routeRequest previousRoute newRoute model =
                             in
                             handleLocalChange
                                 model3.time
-                                (Just (Local_ViewChannel guildId channelId))
+                                (case threadRoute of
+                                    ViewThreadWithMaybeMessage threadId _ ->
+                                        Just (Local_ViewThread guildId channelId threadId)
+
+                                    NoThreadWithMaybeMessage _ ->
+                                        Just (Local_ViewChannel guildId channelId)
+                                )
                                 (if sameGuild || previousRoute == Nothing then
                                     startOpeningChannelSidebar loggedIn
 
@@ -3812,13 +3818,15 @@ changeUpdate localMsg local =
                             local
 
                         FilledInByBackend guildId ->
+                            let
+                                guild =
+                                    LocalState.createGuild time local.localUser.userId guildName
+                            in
                             { local
                                 | guilds =
                                     SeqDict.insert
                                         guildId
-                                        (LocalState.createGuild time local.localUser.userId guildName
-                                            |> LocalState.guildToFrontend
-                                        )
+                                        (LocalState.guildToFrontend (Just ( LocalState.announcementChannel guild, NoThread )) guild)
                                         local.guilds
                             }
 
@@ -3880,7 +3888,20 @@ changeUpdate localMsg local =
                     in
                     { local
                         | localUser =
-                            { localUser | user = User.setLastChannelViewed guildId channelId localUser.user }
+                            { localUser | user = User.setLastChannelViewed guildId channelId NoThread localUser.user }
+                    }
+
+                Local_ViewThread guildId channelId threadId ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user =
+                                    User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
+                            }
                     }
 
                 Local_SetName name ->
@@ -4850,6 +4871,9 @@ pendingChangesText localChange =
 
         Local_ViewChannel _ _ ->
             "View channel"
+
+        Local_ViewThread _ _ _ ->
+            "View thread"
 
         Local_SetName _ ->
             "Set display name"

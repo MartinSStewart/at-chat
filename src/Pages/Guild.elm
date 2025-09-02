@@ -222,11 +222,22 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                             (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
                             (GuildRoute
                                 guildId
-                                (ChannelRoute
-                                    (SeqDict.get guildId currentUser.lastChannelViewed
-                                        |> Maybe.withDefault (LocalState.announcementChannel guild)
-                                    )
-                                    (NoThreadWithMaybeMessage Nothing)
+                                (case SeqDict.get guildId currentUser.lastChannelViewed of
+                                    Just ( channelId, threadRoute ) ->
+                                        ChannelRoute
+                                            channelId
+                                            (case threadRoute of
+                                                ViewThread threadId ->
+                                                    ViewThreadWithMaybeMessage threadId Nothing
+
+                                                NoThread ->
+                                                    NoThreadWithMaybeMessage Nothing
+                                            )
+
+                                    Nothing ->
+                                        ChannelRoute
+                                            (LocalState.announcementChannel guild)
+                                            (NoThreadWithMaybeMessage Nothing)
                                 )
                             )
                             []

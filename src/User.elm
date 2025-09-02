@@ -17,7 +17,7 @@ module User exposing
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -38,14 +38,14 @@ type alias BackendUser =
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
     , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
-    , lastChannelViewed : SeqDict (Id GuildId) (Id ChannelId)
+    , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     }
 
 
-setLastChannelViewed : Id GuildId -> Id ChannelId -> BackendUser -> BackendUser
-setLastChannelViewed guildId channelId user =
-    { user | lastChannelViewed = SeqDict.insert guildId channelId user.lastChannelViewed }
+setLastChannelViewed : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
+setLastChannelViewed guildId channelId threadRoute user =
+    { user | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed }
 
 
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }

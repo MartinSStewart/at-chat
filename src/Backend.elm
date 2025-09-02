@@ -1460,13 +1460,46 @@ getLoginData sessionId userId user requestMessagesFor model =
             IsNotAdminLoginData
     , twoFactorAuthenticationEnabled =
         SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
-    , guilds = SeqDict.filterMap (\_ guild -> LocalState.guildToFrontendForUser userId guild) model.guilds
+    , guilds =
+        SeqDict.filterMap
+            (\guildId guild ->
+                LocalState.guildToFrontendForUser
+                    (case requestMessagesFor of
+                        Just ( GuildOrDmId_Guild_NoThread guildIdB channelId, threadRoute ) ->
+                            if guildId == guildIdB then
+                                Just ( channelId, threadRoute )
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    userId
+                    guild
+            )
+            model.guilds
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
                 case DmChannel.otherUserId userId dmChannelId of
                     Just otherUserId ->
-                        SeqDict.insert otherUserId (DmChannel.toFrontend dmChannel) dict
+                        SeqDict.insert otherUserId
+                            (DmChannel.toFrontend
+                                (case requestMessagesFor of
+                                    Just ( GuildOrDmId_Dm_NoThread otherUserIdB, threadRoute ) ->
+                                        if otherUserId == otherUserIdB then
+                                            Just threadRoute
+
+                                        else
+                                            Nothing
+
+                                    _ ->
+                                        Nothing
+                                )
+                                dmChannel
+                            )
+                            dict
 
                     Nothing ->
                         dict
@@ -2436,15 +2469,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                 Local_ViewChannel guildId channelId ->
-                    asUser
+                    asGuildMember
                         model2
                         sessionId
-                        (\userId user ->
+                        guildId
+                        (\userId user _ ->
                             ( { model2
                                 | users =
                                     NonemptyDict.insert
                                         userId
-                                        (User.setLastChannelViewed guildId channelId user)
+                                        (User.setLastChannelViewed guildId channelId NoThread user)
+                                        model2.users
+                              }
+                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                            )
+                        )
+
+                Local_ViewThread guildId channelId threadId ->
+                    asGuildMember
+                        model2
+                        sessionId
+                        guildId
+                        (\userId user _ ->
+                            ( { model2
+                                | users =
+                                    NonemptyDict.insert
+                                        userId
+                                        (User.setLastChannelViewed
+                                            guildId
+                                            channelId
+                                            (ViewThread threadId)
+                                            user
+                                        )
                                         model2.users
                               }
                             , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
@@ -2753,7 +2809,10 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                             modelWithoutUser
                         , case
                             ( NonemptyDict.get guild2.owner model2.users
-                            , LocalState.guildToFrontendForUser userId guild2
+                            , LocalState.guildToFrontendForUser
+                                (Just ( LocalState.announcementChannel guild, NoThread ))
+                                userId
+                                guild2
                             )
                           of
                             ( Just owner, Just frontendGuild ) ->

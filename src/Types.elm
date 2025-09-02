@@ -566,6 +566,7 @@ type LocalChange
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_ViewChannel (Id GuildId) (Id ChannelId)
+    | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId)
     | Local_SetName PersonName
 
 

@@ -20,7 +20,7 @@ module DmChannel exposing
 
 import Array exposing (Array)
 import Discord.Id
-import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, UserId)
+import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
@@ -99,25 +99,59 @@ frontendInit =
     }
 
 
-toFrontend : DmChannel -> FrontendDmChannel
-toFrontend dmChannel =
-    { messages = toFrontendHelper dmChannel
+toFrontend : Maybe ThreadRoute -> DmChannel -> FrontendDmChannel
+toFrontend threadRoute dmChannel =
+    { messages = toFrontendHelper (Just NoThread == threadRoute) dmChannel
     , lastTypedAt = dmChannel.lastTypedAt
-    , threads = SeqDict.map (\_ thread -> threadToFrontend thread) dmChannel.threads
+    , threads =
+        SeqDict.map
+            (\threadId thread -> threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+            dmChannel.threads
     }
 
 
-threadToFrontend : Thread -> FrontendThread
-threadToFrontend thread =
-    { messages = Array.repeat (Array.length thread.messages) MessageUnloaded
+threadToFrontend : Bool -> Thread -> FrontendThread
+threadToFrontend preloadMessages thread =
+    { messages = loadMessages preloadMessages thread.messages
     , lastTypedAt = thread.lastTypedAt
     }
 
 
+loadMessages : Bool -> Array (Message messageId) -> Array (MessageState messageId)
+loadMessages preloadMessages messages =
+    let
+        messageCount =
+            Array.length messages
+    in
+    if preloadMessages then
+        Array.initialize
+            messageCount
+            (\index ->
+                if messageCount - index < pageSize then
+                    case Array.get index messages of
+                        Just message ->
+                            MessageLoaded message
+
+                        Nothing ->
+                            MessageUnloaded
+
+                else
+                    MessageUnloaded
+            )
+
+    else
+        Array.repeat messageCount MessageUnloaded
+
+
+pageSize =
+    20
+
+
 toFrontendHelper :
-    { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+    Bool
+    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
     -> Array (MessageState ChannelMessageId)
-toFrontendHelper channel =
+toFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
             setArray
@@ -131,7 +165,7 @@ toFrontendHelper channel =
                 )
                 messages
         )
-        (Array.repeat (Array.length channel.messages) MessageUnloaded)
+        (loadMessages preloadMessages channel.messages)
         channel.threads
 
 
