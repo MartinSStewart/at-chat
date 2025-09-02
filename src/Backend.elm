@@ -2594,6 +2594,85 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId user guild ->
+                                    ( model2
+                                    , case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            handleMessagesRequest oldestVisibleMessage channel
+                                                |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                                |> LocalChangeResponse changeId
+                                                |> Lamdera.sendToFrontend clientId
+
+                                        Nothing ->
+                                            LocalChangeResponse changeId Local_Invalid
+                                                |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
+                        GuildOrDmId_Dm_NoThread otherUserId ->
+                            asUser
+                                model
+                                sessionId
+                                (\userId user ->
+                                    ( model2
+                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
+                                        |> Maybe.withDefault DmChannel.init
+                                        |> handleMessagesRequest oldestVisibleMessage
+                                        |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
+                Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
+                            asGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\userId user guild ->
+                                    ( model2
+                                    , case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            SeqDict.get threadId channel.threads
+                                                |> Maybe.withDefault DmChannel.threadInit
+                                                |> handleMessagesRequest oldestVisibleMessage
+                                                |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
+                                                |> LocalChangeResponse changeId
+                                                |> Lamdera.sendToFrontend clientId
+
+                                        Nothing ->
+                                            LocalChangeResponse changeId Local_Invalid
+                                                |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
+                        GuildOrDmId_Dm_NoThread otherUserId ->
+                            asUser
+                                model
+                                sessionId
+                                (\userId user ->
+                                    ( model2
+                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
+                                        |> Maybe.withDefault DmChannel.init
+                                        |> .threads
+                                        |> SeqDict.get threadId
+                                        |> Maybe.withDefault DmChannel.threadInit
+                                        |> handleMessagesRequest oldestVisibleMessage
+                                        |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2
@@ -2651,81 +2730,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             , Command.none
             )
 
-        ChannelMessageHistoryRequest guildOrDmId oldestVisibleMessage ->
-            case guildOrDmId of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        guildId
-                        (\userId user guild ->
-                            ( model2
-                            , case SeqDict.get channelId guild.channels of
-                                Just channel ->
-                                    handleMessagesRequest oldestVisibleMessage channel
-                                        |> ChannelMessageHistoryResponse guildOrDmId oldestVisibleMessage
-                                        |> Lamdera.sendToFrontend clientId
 
-                                Nothing ->
-                                    Command.none
-                            )
-                        )
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    asUser
-                        model
-                        sessionId
-                        (\userId user ->
-                            ( model2
-                            , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
-                                |> Maybe.withDefault DmChannel.init
-                                |> handleMessagesRequest oldestVisibleMessage
-                                |> ChannelMessageHistoryResponse guildOrDmId oldestVisibleMessage
-                                |> Lamdera.sendToFrontend clientId
-                            )
-                        )
-
-        ThreadMessageHistoryRequest guildOrDmId threadId oldestVisibleMessage ->
-            case guildOrDmId of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
-                    asGuildMember
-                        model2
-                        sessionId
-                        guildId
-                        (\userId user guild ->
-                            ( model2
-                            , case SeqDict.get channelId guild.channels of
-                                Just channel ->
-                                    SeqDict.get threadId channel.threads
-                                        |> Maybe.withDefault DmChannel.threadInit
-                                        |> handleMessagesRequest oldestVisibleMessage
-                                        |> ThreadMessageHistoryResponse guildOrDmId threadId oldestVisibleMessage
-                                        |> Lamdera.sendToFrontend clientId
-
-                                Nothing ->
-                                    Command.none
-                            )
-                        )
-
-                GuildOrDmId_Dm_NoThread otherUserId ->
-                    asUser
-                        model
-                        sessionId
-                        (\userId user ->
-                            ( model2
-                            , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
-                                |> Maybe.withDefault DmChannel.init
-                                |> .threads
-                                |> SeqDict.get threadId
-                                |> Maybe.withDefault DmChannel.threadInit
-                                |> handleMessagesRequest oldestVisibleMessage
-                                |> ThreadMessageHistoryResponse guildOrDmId threadId oldestVisibleMessage
-                                |> Lamdera.sendToFrontend clientId
-                            )
-                        )
-
-
-handleMessagesRequest : Id messageId -> { b | messages : Array.Array (Message messageId) } -> SeqDict (Id messageId) (Message messageId)
+handleMessagesRequest :
+    Id messageId
+    -> { b | messages : Array.Array (Message messageId) }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -2738,6 +2747,7 @@ handleMessagesRequest oldestVisibleMessage channel =
         |> Array.toList
         |> List.indexedMap (\index message -> ( Id.fromInt (index + nextOldestVisible), message ))
         |> SeqDict.fromList
+        |> FilledInByBackend
 
 
 pushNotification : Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg

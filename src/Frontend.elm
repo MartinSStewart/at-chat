@@ -2299,57 +2299,74 @@ updateLoaded msg model =
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    ( { loggedIn | channelScrollPosition = scrollPosition }
-                    , case scrollPosition of
+                    case scrollPosition of
                         ScrolledToTop ->
-                            case guildOrDmId of
-                                GuildOrDmId_Guild_NoThread guildId channelId ->
-                                    case LocalState.getGuildAndChannel guildId channelId local of
-                                        Just ( _, channel ) ->
-                                            (case threadRoute of
-                                                NoThread ->
-                                                    ChannelMessageHistoryRequest guildOrDmId channel.oldestVisibleMessage
+                            let
+                                local =
+                                    Local.model loggedIn.localState
+                            in
+                            handleLocalChange
+                                model.time
+                                (case guildOrDmId of
+                                    GuildOrDmId_Guild_NoThread guildId channelId ->
+                                        case LocalState.getGuildAndChannel guildId channelId local of
+                                            Just ( _, channel ) ->
+                                                (case threadRoute of
+                                                    NoThread ->
+                                                        Local_LoadChannelMessages
+                                                            guildOrDmId
+                                                            channel.oldestVisibleMessage
+                                                            EmptyPlaceholder
 
-                                                ViewThread threadId ->
-                                                    SeqDict.get threadId channel.threads
+                                                    ViewThread threadId ->
+                                                        Local_LoadThreadMessages
+                                                            guildOrDmId
+                                                            threadId
+                                                            (SeqDict.get threadId channel.threads
+                                                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                                |> .oldestVisibleMessage
+                                                            )
+                                                            EmptyPlaceholder
+                                                )
+                                                    |> Just
+
+                                            Nothing ->
+                                                Nothing
+
+                                    GuildOrDmId_Dm_NoThread otherUserId ->
+                                        let
+                                            dmChannel : FrontendDmChannel
+                                            dmChannel =
+                                                SeqDict.get otherUserId local.dmChannels
+                                                    |> Maybe.withDefault DmChannel.frontendInit
+                                        in
+                                        (case threadRoute of
+                                            NoThread ->
+                                                Local_LoadChannelMessages
+                                                    guildOrDmId
+                                                    dmChannel.oldestVisibleMessage
+                                                    EmptyPlaceholder
+
+                                            ViewThread threadId ->
+                                                Local_LoadThreadMessages
+                                                    guildOrDmId
+                                                    threadId
+                                                    (SeqDict.get threadId dmChannel.threads
                                                         |> Maybe.withDefault DmChannel.frontendThreadInit
                                                         |> .oldestVisibleMessage
-                                                        |> ThreadMessageHistoryRequest guildOrDmId threadId
-                                            )
-                                                |> Lamdera.sendToBackend
-
-                                        Nothing ->
-                                            Command.none
-
-                                GuildOrDmId_Dm_NoThread otherUserId ->
-                                    let
-                                        dmChannel : FrontendDmChannel
-                                        dmChannel =
-                                            SeqDict.get otherUserId local.dmChannels
-                                                |> Maybe.withDefault DmChannel.frontendInit
-                                    in
-                                    (case threadRoute of
-                                        NoThread ->
-                                            ChannelMessageHistoryRequest guildOrDmId dmChannel.oldestVisibleMessage
-
-                                        ViewThread threadId ->
-                                            SeqDict.get threadId dmChannel.threads
-                                                |> Maybe.withDefault DmChannel.frontendThreadInit
-                                                |> .oldestVisibleMessage
-                                                |> ThreadMessageHistoryRequest guildOrDmId threadId
-                                    )
-                                        |> Lamdera.sendToBackend
+                                                    )
+                                                    EmptyPlaceholder
+                                        )
+                                            |> Just
+                                )
+                                { loggedIn | channelScrollPosition = scrollPosition }
+                                Command.none
 
                         ScrolledToBottom ->
-                            Command.none
+                            ( loggedIn, Command.none )
 
                         ScrolledToMiddle ->
-                            Command.none
-                    )
+                            ( loggedIn, Command.none )
                 )
                 model
 
@@ -3986,6 +4003,22 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setName name localUser.user } }
 
+                Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messages ->
+                    case messages of
+                        FilledInByBackend messages2 ->
+                            Debug.todo ""
+
+                        EmptyPlaceholder ->
+                            local
+
+                Local_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messages ->
+                    case messages of
+                        FilledInByBackend messages2 ->
+                            Debug.todo ""
+
+                        EmptyPlaceholder ->
+                            local
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -4835,12 +4868,6 @@ updateLoadedFromBackend msg model =
                 Err () ->
                     logout model
 
-        ChannelMessageHistoryResponse guildOrDmId previousOldestVisibleMessage messages ->
-            Debug.todo ""
-
-        ThreadMessageHistoryResponse guildOrDmId threadId previousOldestVisibleMessage messages ->
-            Debug.todo ""
-
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 logout model =
@@ -4988,6 +5015,12 @@ pendingChangesText localChange =
 
         Local_SetName _ ->
             "Set display name"
+
+        Local_LoadChannelMessages guildOrDmIdNoThread id toBeFilledInByBackend ->
+            "Load channel messages"
+
+        Local_LoadThreadMessages guildOrDmIdNoThread id _ toBeFilledInByBackend ->
+            "Load thread messages"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

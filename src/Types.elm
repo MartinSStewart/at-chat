@@ -446,8 +446,6 @@ type ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
-    | ChannelMessageHistoryRequest GuildOrDmIdNoThread (Id ChannelMessageId)
-    | ThreadMessageHistoryRequest GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId)
 
 
 type BackendMsg
@@ -506,8 +504,6 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
-    | ChannelMessageHistoryResponse GuildOrDmIdNoThread (Id ChannelMessageId) (SeqDict (Id ChannelMessageId) (Message ChannelMessageId))
-    | ThreadMessageHistoryResponse GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (SeqDict (Id ThreadMessageId) (Message ThreadMessageId))
 
 
 type alias LoginData =
@@ -580,6 +576,8 @@ type LocalChange
     | Local_ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
     | Local_SetName PersonName
+    | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
+    | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
 
 
 type ToBeFilledInByBackend a
