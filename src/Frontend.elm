@@ -2363,10 +2363,10 @@ updateLoaded msg model =
                                 Command.none
 
                         ScrolledToBottom ->
-                            ( loggedIn, Command.none )
+                            ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
 
                         ScrolledToMiddle ->
-                            ( loggedIn, Command.none )
+                            ( { loggedIn | channelScrollPosition = scrollPosition }, Command.none )
                 )
                 model
 
@@ -4003,21 +4003,73 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setName name localUser.user } }
 
-                Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messages ->
-                    case messages of
-                        FilledInByBackend messages2 ->
-                            Debug.todo ""
+                Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
 
-                        EmptyPlaceholder ->
-                            local
+                        GuildOrDmId_Dm_NoThread otherUserId ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        local.dmChannels
+                            }
 
-                Local_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messages ->
-                    case messages of
-                        FilledInByBackend messages2 ->
-                            Debug.todo ""
+                Local_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messagesLoaded ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild_NoThread guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (loadOlderMessages
+                                                                previousOldestVisibleMessage
+                                                                messagesLoaded
+                                                            )
+                                                            channel.threads
+                                                }
+                                            )
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
 
-                        EmptyPlaceholder ->
-                            local
+                        GuildOrDmId_Dm_NoThread otherUserId ->
+                            { local
+                                | dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (\dmChannel ->
+                                            { dmChannel
+                                                | threads =
+                                                    SeqDict.updateIfExists
+                                                        threadId
+                                                        (loadOlderMessages
+                                                            previousOldestVisibleMessage
+                                                            messagesLoaded
+                                                        )
+                                                        dmChannel.threads
+                                            }
+                                        )
+                                        local.dmChannels
+                            }
 
         ServerChange serverChange ->
             case serverChange of
@@ -4500,6 +4552,32 @@ deleteMessage userId guildOrDmId threadRoute local =
                         (LocalState.deleteMessageFrontendHelper userId threadRoute)
                         local.dmChannels
             }
+
+
+loadOlderMessages :
+    Id messageId
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
+    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
+    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
+loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            { channel
+                | messages =
+                    SeqDict.foldl
+                        (\messageId message messages ->
+                            DmChannel.setArray
+                                messageId
+                                (MessageLoaded message)
+                                messages
+                        )
+                        channel.messages
+                        messagesLoaded2
+                , oldestVisibleMessage = Id.toInt previousOldestVisibleMessage - DmChannel.pageSize |> max 0 |> Id.fromInt
+            }
+
+        EmptyPlaceholder ->
+            channel
 
 
 loadMessages :

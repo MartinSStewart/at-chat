@@ -1246,7 +1246,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     )
 
                 MessageUnloaded ->
-                    ( index - 1, maybeLastDate, list )
+                    ( index - 1, maybeLastDate, unloadedMessageView index :: list )
         )
         ( Array.length channel.messages - 1, Nothing, [] )
         (visibleMessages channel)
@@ -1520,11 +1520,21 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                     )
 
                 MessageUnloaded ->
-                    ( index - 1, maybeLastDate, list )
+                    ( index - 1, maybeLastDate, unloadedMessageView index :: list )
         )
         ( Array.length thread.messages - 1, Nothing, [] )
         (visibleMessages thread)
         |> (\( _, _, a ) -> a)
+
+
+unloadedMessageView : Int -> Element msg
+unloadedMessageView index =
+    Ui.el
+        [ Ui.paddingXY 8 8
+        , Ui.background MyUi.alertColor
+        , Ui.Font.italic
+        ]
+        (Ui.text ("Something went wrong when loading message " ++ String.fromInt index))
 
 
 dateDivider : Date -> Date -> Ui.Attribute msg
@@ -2932,6 +2942,11 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp message2.createdAt timezone |> Ui.html
+                , if Env.isProduction then
+                    Ui.none
+
+                  else
+                    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text ("(" ++ Id.toString messageIndex ++ ")"))
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]

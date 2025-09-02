@@ -180,7 +180,7 @@ loadMessages preloadMessages messages =
 
 pageSize : number
 pageSize =
-    20
+    30
 
 
 toFrontendHelper :
