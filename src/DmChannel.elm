@@ -121,6 +121,7 @@ threadToFrontend preloadMessages thread =
 loadMessages : Bool -> Array (Message messageId) -> Array (MessageState messageId)
 loadMessages preloadMessages messages =
     let
+        messageCount : Int
         messageCount =
             Array.length messages
     in
@@ -142,6 +143,15 @@ loadMessages preloadMessages messages =
 
     else
         Array.repeat messageCount MessageUnloaded
+            |> Array.set
+                (messageCount - 1)
+                (case Array.get (messageCount - 1) messages of
+                    Just message ->
+                        MessageLoaded message
+
+                    Nothing ->
+                        MessageUnloaded
+                )
 
 
 pageSize : number
