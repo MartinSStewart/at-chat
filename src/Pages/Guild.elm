@@ -954,6 +954,8 @@ conversationViewHelper :
     ->
         { a
             | messages : Array (MessageState ChannelMessageId)
+            , oldestVisibleMessage : Id ChannelMessageId
+            , newestVisibleMessage : Id ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
@@ -1247,8 +1249,22 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     ( index - 1, maybeLastDate, list )
         )
         ( Array.length channel.messages - 1, Nothing, [] )
-        channel.messages
+        (visibleMessages channel)
         |> (\( _, _, a ) -> a)
+
+
+visibleMessages :
+    { a
+        | oldestVisibleMessage : Id messageId
+        , newestVisibleMessage : Id messageId
+        , messages : Array (MessageState messageId)
+    }
+    -> Array (MessageState messageId)
+visibleMessages channel =
+    Array.slice
+        (Id.toInt channel.oldestVisibleMessage)
+        (Id.toInt channel.newestVisibleMessage + 1)
+        channel.messages
 
 
 threadConversationViewHelper :
@@ -1507,7 +1523,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                     ( index - 1, maybeLastDate, list )
         )
         ( Array.length thread.messages - 1, Nothing, [] )
-        thread.messages
+        (visibleMessages thread)
         |> (\( _, _, a ) -> a)
 
 
@@ -1740,6 +1756,8 @@ conversationView :
     ->
         { a
             | messages : Array (MessageState ChannelMessageId)
+            , oldestVisibleMessage : Id ChannelMessageId
+            , newestVisibleMessage : Id ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }

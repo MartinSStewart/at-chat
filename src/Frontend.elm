@@ -4417,8 +4417,8 @@ deleteMessage userId guildOrDmId threadRoute local =
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
-    -> { a | messages : Array (MessageState messageId) }
-    -> { a | messages : Array (MessageState messageId) }
+    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
+    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -4433,6 +4433,8 @@ loadMessages messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
+                , oldestVisibleMessage = Array.length channel.messages - DmChannel.pageSize - 1 |> Id.fromInt
+                , newestVisibleMessage = Array.length channel.messages - 1 |> Id.fromInt
             }
 
         EmptyPlaceholder ->

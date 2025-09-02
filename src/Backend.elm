@@ -1141,14 +1141,14 @@ addDiscordGuilds time guilds model =
                                                         | lastViewed =
                                                             SeqDict.insert
                                                                 (GuildOrDmId_Guild_NoThread guildId channelId)
-                                                                (LocalState.latestMessageId channel)
+                                                                (DmChannel.latestMessageId channel)
                                                                 user2.lastViewed
                                                         , lastViewedThreads =
                                                             SeqDict.foldl
                                                                 (\threadId thread lastViewedThreads ->
                                                                     SeqDict.insert
                                                                         ( GuildOrDmId_Guild_NoThread guildId channelId, threadId )
-                                                                        (LocalState.latestThreadMessageId thread)
+                                                                        (DmChannel.latestThreadMessageId thread)
                                                                         lastViewedThreads
                                                                 )
                                                                 user2.lastViewedThreads
@@ -3181,7 +3181,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                             | lastViewedThreads =
                                 SeqDict.insert
                                     ( GuildOrDmId_Dm_NoThread otherUserId, threadMessageIndex )
-                                    (LocalState.latestThreadMessageId thread)
+                                    (DmChannel.latestThreadMessageId thread)
                                     user.lastViewedThreads
                         }
                         model.users
@@ -3197,7 +3197,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
             let
                 messageIndex : Id ChannelMessageId
                 messageIndex =
-                    LocalState.latestMessageId dmChannel2
+                    DmChannel.latestMessageId dmChannel2
 
                 dmChannel2 : DmChannel
                 dmChannel2 =
@@ -3464,7 +3464,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             ( GuildOrDmId_Guild_NoThread guildId channelId, threadMessageIndex )
                                             (SeqDict.get threadMessageIndex channel2.threads
                                                 |> Maybe.withDefault DmChannel.threadInit
-                                                |> LocalState.latestThreadMessageId
+                                                |> DmChannel.latestThreadMessageId
                                             )
                                             user.lastViewedThreads
                                 }
@@ -3474,7 +3474,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                     | lastViewed =
                                         SeqDict.insert
                                             (GuildOrDmId_Guild_NoThread guildId channelId)
-                                            (LocalState.latestMessageId channel2)
+                                            (DmChannel.latestMessageId channel2)
                                             user.lastViewed
                                 }
                         )
@@ -3529,7 +3529,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         (SentGuildMessageToDiscord
                                             guildId
                                             channelId
-                                            (LocalState.latestThreadMessageId thread
+                                            (DmChannel.latestThreadMessageId thread
                                                 |> ViewThreadWithMessage threadMessageIndex
                                             )
                                         )
@@ -3548,7 +3548,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                                 Nothing
                                     }
                                     |> Task.attempt
-                                        (LocalState.latestThreadMessageId thread
+                                        (DmChannel.latestThreadMessageId thread
                                             |> ViewThreadWithMessage threadMessageIndex
                                             |> SentGuildMessageToDiscord guildId channelId
                                         )
@@ -3575,7 +3575,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         (SentGuildMessageToDiscord
                                             guildId
                                             channelId
-                                            (NoThreadWithMessage (LocalState.latestMessageId channel2))
+                                            (NoThreadWithMessage (DmChannel.latestMessageId channel2))
                                         )
 
                             Nothing ->
