@@ -166,6 +166,9 @@ init =
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
       , botToken = Nothing
+      , slackWorkspaces = OneToOne.empty
+      , slackUsers = OneToOne.empty
+      , slackToken = Nothing
       , files = SeqDict.empty
       , publicVapidKey = ""
       , privateVapidKey = PrivateVapidKey ""
@@ -428,6 +431,52 @@ update msg model =
                     let
                         _ =
                             Debug.log "GotDiscordGuilds" error
+                    in
+                    ( model, Command.none )
+
+        GotSlackWorkspaces time result ->
+            case result of
+                Ok workspaces ->
+                    let
+                        loadWorkspaceDetails workspace =
+                            case model.slackToken of
+                                Just slackAuth ->
+                                    Slack.loadWorkspaceDetails slackAuth workspace.id
+                                        |> Task.andThen
+                                            (\workspaceDetails ->
+                                                Slack.loadWorkspaceChannels slackAuth workspace.id
+                                                    |> Task.map (\channels -> ( workspaceDetails, channels ))
+                                            )
+                                        |> Task.attempt (GotSlackWorkspaceDetails time workspace.id)
+
+                                Nothing ->
+                                    Command.none
+                    in
+                    ( model
+                    , workspaces
+                        |> List.map loadWorkspaceDetails
+                        |> Command.batch
+                    )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotSlackWorkspaces" error
+                    in
+                    ( model, Command.none )
+
+        GotSlackWorkspaceDetails time workspaceId result ->
+            case result of
+                Ok ( workspace, channels ) ->
+                    ( model
+                      --addSlackWorkspace time workspace channels model
+                    , Command.none
+                    )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotSlackWorkspaceDetails" error
                     in
                     ( model, Command.none )
 

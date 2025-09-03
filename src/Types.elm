@@ -81,6 +81,7 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import Slack
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
@@ -266,6 +267,9 @@ type alias BackendModel =
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
+    , slackWorkspaces : OneToOne String (Id GuildId)
+    , slackUsers : OneToOne String (Id UserId)
+    , slackToken : Maybe Slack.SlackAuth
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
@@ -483,6 +487,8 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
+    | GotSlackWorkspaces Time.Posix (Result Slack.HttpError (List Slack.SlackWorkspace))
+    | GotSlackWorkspaceDetails Time.Posix String (Result Slack.HttpError ( Slack.SlackWorkspace, List Slack.SlackChannel ))
 
 
 type LoginResult

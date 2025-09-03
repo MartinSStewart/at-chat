@@ -1,15 +1,22 @@
 module Slack exposing
     ( HttpError(..)
+    , OAuthConfig
+    , OAuthError(..)
     , SlackAuth(..)
     , SlackChannel
     , SlackError(..)
     , SlackMessage
     , SlackUser
     , SlackWorkspace
+    , TokenResponse
+    , buildOAuthUrl
+    , createUserToken
     , decodeChannel
+    , decodeTokenResponse
     , decodeUser
     , decodeWorkspace
     , encodeAuth
+    , exchangeCodeForToken
     , loadUserWorkspaces
     , loadWorkspaceChannels
     , loadWorkspaceDetails
@@ -23,6 +30,7 @@ import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Extra exposing (andMap)
 import Json.Encode as Encode
+import List.Extra
 import Url.Builder
 
 
@@ -35,6 +43,35 @@ type SlackAuth
     | UserToken String
 
 
+type alias OAuthConfig =
+    { clientId : String
+    , clientSecret : String
+    , redirectUri : String
+    , scopes : List String
+    }
+
+
+type alias TokenResponse =
+    { accessToken : String
+    , scope : String
+    , userId : String
+    , teamId : String
+    , teamName : String
+    }
+
+
+type OAuthError
+    = InvalidClientId
+    | InvalidClientSecret
+    | InvalidCode
+    | InvalidGrantType
+    | InvalidRedirectUri
+    | InvalidScope
+    | AccessDenied
+    | ServerError
+    | UnknownOAuthError String
+
+
 encodeAuth : SlackAuth -> String
 encodeAuth auth =
     case auth of
@@ -43,6 +80,48 @@ encodeAuth auth =
 
         UserToken token ->
             "Bearer " ++ token
+
+
+createUserToken : String -> SlackAuth
+createUserToken accessToken =
+    UserToken accessToken
+
+
+buildOAuthUrl : OAuthConfig -> String
+buildOAuthUrl config =
+    Url.Builder.crossOrigin "https://slack.com"
+        [ "oauth", "v2", "authorize" ]
+        [ Url.Builder.string "client_id" config.clientId
+        , Url.Builder.string "redirect_uri" config.redirectUri
+        , Url.Builder.string "scope" (String.join "," config.scopes)
+        , Url.Builder.string "response_type" "code"
+        ]
+
+
+exchangeCodeForToken : OAuthConfig -> String -> Task restriction HttpError TokenResponse
+exchangeCodeForToken config code =
+    let
+        url =
+            Url.Builder.crossOrigin "https://slack.com" [ "api", "oauth.v2.access" ] []
+
+        body =
+            [ ( "client_id", config.clientId )
+            , ( "client_secret", config.clientSecret )
+            , ( "code", code )
+            , ( "redirect_uri", config.redirectUri )
+            ]
+                |> List.map (\( key, value ) -> key ++ "=" ++ value)
+                |> String.join "&"
+                |> Http.stringBody "application/x-www-form-urlencoded"
+    in
+    Http.task
+        { method = "POST"
+        , headers = []
+        , url = url
+        , body = body
+        , resolver = Http.stringResolver (handleOAuthResponse decodeTokenResponse)
+        , timeout = Just (Duration.seconds 30)
+        }
 
 
 
@@ -210,6 +289,30 @@ handleSlackResponse decoder response =
                     Err (BadBody (Decode.errorToString decodeError))
 
 
+handleOAuthResponse : Decoder a -> Http.Response String -> Result HttpError a
+handleOAuthResponse decoder response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ metadata body ->
+            Err (BadStatus metadata.statusCode)
+
+        Http.GoodStatus_ metadata body ->
+            case Decode.decodeString (oauthResponseDecoder decoder) body of
+                Ok result ->
+                    Ok result
+
+                Err decodeError ->
+                    Err (BadBody (Decode.errorToString decodeError))
+
+
 slackResponseDecoder : Decoder a -> Decoder a
 slackResponseDecoder dataDecoder =
     Decode.field "ok" Decode.bool
@@ -221,6 +324,20 @@ slackResponseDecoder dataDecoder =
                 else
                     Decode.field "error" Decode.string
                         |> Decode.andThen (\error -> Decode.fail ("Slack API error: " ++ error))
+            )
+
+
+oauthResponseDecoder : Decoder a -> Decoder a
+oauthResponseDecoder dataDecoder =
+    Decode.field "ok" Decode.bool
+        |> Decode.andThen
+            (\isOk ->
+                if isOk then
+                    dataDecoder
+
+                else
+                    Decode.field "error" Decode.string
+                        |> Decode.andThen (\error -> Decode.fail ("OAuth error: " ++ error))
             )
 
 
@@ -287,3 +404,13 @@ decodeUserProfile =
         (Decode.maybe (Decode.field "image_72" Decode.string))
         (Decode.maybe (Decode.field "image_192" Decode.string))
         (Decode.maybe (Decode.field "image_512" Decode.string))
+
+
+decodeTokenResponse : Decoder TokenResponse
+decodeTokenResponse =
+    Decode.map5 TokenResponse
+        (Decode.field "access_token" Decode.string)
+        (Decode.field "scope" Decode.string)
+        (Decode.field "authed_user" (Decode.field "id" Decode.string))
+        (Decode.field "team" (Decode.field "id" Decode.string))
+        (Decode.field "team" (Decode.field "name" Decode.string))
