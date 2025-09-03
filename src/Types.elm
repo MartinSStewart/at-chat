@@ -274,6 +274,7 @@ type alias BackendModel =
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , pushSubscriptions : SeqDict SessionId PushSubscription
+    , slackClientSecret : String
     }
 
 
@@ -450,6 +451,7 @@ type ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
+    | LinkSlackOAuthCode Slack.OAuthCode
 
 
 type BackendMsg
@@ -489,6 +491,7 @@ type BackendMsg
     | GotVapidKeys (Result Http.Error String)
     | GotSlackWorkspaces Time.Posix (Result Slack.HttpError (List Slack.SlackWorkspace))
     | GotSlackWorkspaceDetails Time.Posix String (Result Slack.HttpError ( Slack.SlackWorkspace, List Slack.SlackChannel ))
+    | GotSlackOAuth SessionId (Result Slack.HttpError Slack.TokenResponse)
 
 
 type LoginResult

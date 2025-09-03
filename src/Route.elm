@@ -9,6 +9,7 @@ import AppUrl
 import Dict
 import Id exposing (ChannelId, GuildId, Id, InviteLinkId, ThreadRouteWithMaybeMessage(..), UserId)
 import SecretId exposing (SecretId)
+import Slack
 import Url exposing (Url)
 import Url.Builder
 
@@ -19,6 +20,7 @@ type Route
     | GuildRoute (Id GuildId) ChannelRoute
     | DmRoute (Id UserId) ThreadRouteWithMaybeMessage
     | AiChatRoute
+    | SlackOAuthRedirect (Result () Slack.OAuthCode)
 
 
 type ChannelRoute
@@ -120,6 +122,14 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
+        [ "slack-oauth" ] ->
+            case Dict.get "code" url2.queryParameters of
+                Just [ code ] ->
+                    SlackOAuthRedirect (Ok (Slack.OAuthCode code))
+
+                _ ->
+                    SlackOAuthRedirect (Err ())
+
         _ ->
             HomePageRoute
 
@@ -194,6 +204,11 @@ encode route =
                                 NoThreadWithMaybeMessage maybeMessageId ->
                                     maybeMessageIdToString maybeMessageId
                            )
+                    , []
+                    )
+
+                SlackOAuthRedirect _ ->
+                    ( [ "slack-oauth" ]
                     , []
                     )
     in

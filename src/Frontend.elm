@@ -211,7 +211,7 @@ init url key =
     let
         route : Route
         route =
-            Route.decode url
+            Route.decode (Debug.log "url" url)
     in
     ( Loading
         { navigationKey = key
@@ -722,6 +722,16 @@ routeRequest previousRoute newRoute model =
                 )
                 model3
 
+        SlackOAuthRedirect result ->
+            ( model
+            , case result of
+                Ok code ->
+                    Lamdera.sendToBackend (LinkSlackOAuthCode code)
+
+                Err () ->
+                    Command.none
+            )
+
 
 routeRequiresLogin : Route -> Bool
 routeRequiresLogin route =
@@ -740,6 +750,9 @@ routeRequiresLogin route =
 
         DmRoute _ _ ->
             True
+
+        SlackOAuthRedirect _ ->
+            False
 
 
 isPressMsg : FrontendMsg -> Bool
@@ -5421,6 +5434,18 @@ view model =
                     DmRoute userId thread ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) loaded)
+
+                    SlackOAuthRedirect result ->
+                        layout
+                            loaded
+                            [ Ui.contentCenterX, Ui.contentCenterY ]
+                            (case result of
+                                Ok _ ->
+                                    Ui.text "Slack is now linked with your account. You can return to the original page."
+
+                                Err () ->
+                                    Ui.text "Something went wrong when linking Slack to at-chat..."
+                            )
         ]
     }
 

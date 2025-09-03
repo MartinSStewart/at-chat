@@ -2,10 +2,12 @@ module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
+import Env
 import Icons
 import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
 import MyUi
 import PersonName
+import Slack
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -155,6 +157,16 @@ view isMobile time local loggedIn loaded model =
                         }
                     , enablePushNotificationsLabel.element
                     ]
+                , Ui.el
+                    [ Ui.linkNewTab
+                        (Slack.buildOAuthUrl
+                            { clientId = Env.slackClientId
+                            , redirectUri = "https://5b9d44d729f3.ngrok-free.app/slack-oauth"
+                            , scopes = [ "channels:read" ]
+                            }
+                        )
+                    ]
+                    (Ui.text "Link Slack account")
                 ]
             , Ui.el
                 [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]

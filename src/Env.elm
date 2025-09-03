@@ -53,3 +53,7 @@ adminEmail =
 openRouterKey : String
 openRouterKey =
     ""
+
+
+slackClientId =
+    "9460466681300.9470334175105"

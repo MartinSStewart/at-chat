@@ -173,6 +173,7 @@ init =
       , publicVapidKey = ""
       , privateVapidKey = PrivateVapidKey ""
       , pushSubscriptions = SeqDict.empty
+      , slackClientSecret = ""
       }
     , Command.none
     )
@@ -724,6 +725,11 @@ update msg model =
 
                 Err _ ->
                     model
+            , Command.none
+            )
+
+        GotSlackOAuth sessionId result ->
+            ( model
             , Command.none
             )
 
@@ -2779,6 +2785,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }
             , Command.none
             )
+
+        LinkSlackOAuthCode oAuthCode ->
+            asUser
+                model2
+                sessionId
+                (\userId _ ->
+                    ( model2
+                    , Slack.exchangeCodeForToken
+                        model2.slackClientSecret
+                        Env.slackClientId
+                        oAuthCode
+                        |> Task.attempt (GotSlackOAuth sessionId)
+                    )
+                )
 
 
 handleMessagesRequest :

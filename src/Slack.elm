@@ -1,5 +1,6 @@
 module Slack exposing
     ( HttpError(..)
+    , OAuthCode(..)
     , OAuthConfig
     , OAuthError(..)
     , SlackAuth(..)
@@ -32,6 +33,7 @@ import Json.Decode.Extra exposing (andMap)
 import Json.Encode as Encode
 import List.Extra
 import Url.Builder
+import Url.Parser.Query
 
 
 
@@ -43,9 +45,12 @@ type SlackAuth
     | UserToken String
 
 
+type OAuthCode
+    = OAuthCode String
+
+
 type alias OAuthConfig =
     { clientId : String
-    , clientSecret : String
     , redirectUri : String
     , scopes : List String
     }
@@ -87,6 +92,15 @@ createUserToken accessToken =
     UserToken accessToken
 
 
+
+--{ fragment = Nothing
+--, host = "5b9d44d729f3.ngrok-free.app"
+--, path = "/abc"
+--, port_ = Nothing
+--, protocol = Https
+--, query = Just "code=9460466681300.9460711968324.84d4a991c69e52c20ed5cbc63efad3040c4b98bac829dcfa27d40b32a3f985bc&state=" }
+
+
 buildOAuthUrl : OAuthConfig -> String
 buildOAuthUrl config =
     Url.Builder.crossOrigin "https://slack.com"
@@ -94,21 +108,21 @@ buildOAuthUrl config =
         [ Url.Builder.string "client_id" config.clientId
         , Url.Builder.string "redirect_uri" config.redirectUri
         , Url.Builder.string "scope" (String.join "," config.scopes)
-        , Url.Builder.string "response_type" "code"
+
+        --, Url.Builder.string "response_type" "code"
         ]
 
 
-exchangeCodeForToken : OAuthConfig -> String -> Task restriction HttpError TokenResponse
-exchangeCodeForToken config code =
+exchangeCodeForToken : String -> String -> OAuthCode -> Task restriction HttpError TokenResponse
+exchangeCodeForToken clientSecret clientId (OAuthCode code) =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "oauth.v2.access" ] []
 
         body =
-            [ ( "client_id", config.clientId )
-            , ( "client_secret", config.clientSecret )
+            [ ( "client_id", clientId )
+            , ( "client_secret", clientSecret )
             , ( "code", code )
-            , ( "redirect_uri", config.redirectUri )
             ]
                 |> List.map (\( key, value ) -> key ++ "=" ++ value)
                 |> String.join "&"
