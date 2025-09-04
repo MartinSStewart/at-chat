@@ -184,7 +184,7 @@ view isMobile time local loggedIn loaded model =
                         (Slack.buildOAuthUrl
                             { clientId = Env.slackClientId
                             , redirectUri = Slack.redirectUri
-                            , scopes = [ "channels:read" ]
+                            , scopes = [ "channels:read", "groups:read", "mpim:read", "im:read" ]
                             , state = Lamdera.sessionIdToString loggedIn.sessionId
                             }
                         )

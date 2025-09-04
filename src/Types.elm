@@ -269,7 +269,7 @@ type alias BackendModel =
     , botToken : Maybe DiscordBotToken
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne String (Id UserId)
-    , slackToken : Maybe Slack.SlackAuth
+    , slackToken : Maybe Slack.AuthToken
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
@@ -490,9 +490,8 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
-    | GotSlackWorkspaces Time.Posix (Result Slack.HttpError (List Slack.SlackWorkspace))
-    | GotSlackWorkspaceDetails Time.Posix String (Result Slack.HttpError ( Slack.SlackWorkspace, List Slack.SlackChannel ))
-    | GotSlackOAuth SessionId (Result Slack.HttpError Slack.TokenResponse)
+    | GotSlackWorkspaceDetails Time.Posix (Result Slack.HttpError (List Slack.Channel))
+    | GotSlackOAuth Time.Posix SessionId (Result Slack.HttpError Slack.TokenResponse)
 
 
 type LoginResult

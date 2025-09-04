@@ -1,16 +1,16 @@
 module Slack exposing
-    ( ClientSecret(..)
+    ( AuthToken(..)
+    , Channel
+    , ClientSecret(..)
     , HttpError(..)
     , Id(..)
     , OAuthCode(..)
     , OAuthError(..)
-    , SlackAuth(..)
-    , SlackChannel
     , SlackError(..)
     , SlackMessage
-    , SlackUser
-    , SlackWorkspace
     , TokenResponse
+    , User
+    , Workspace
     , buildOAuthUrl
     , decodeChannel
     , decodeTokenResponse
@@ -40,7 +40,7 @@ import Url.Parser.Query
 -- AUTHENTICATION
 
 
-type SlackAuth
+type AuthToken
     = SlackAuth String
 
 
@@ -65,7 +65,7 @@ type TeamId
 
 
 type alias TokenResponse =
-    { accessToken : SlackAuth
+    { accessToken : AuthToken
     , scope : String
     , userId : Id UserId
     , teamId : Id TeamId
@@ -131,7 +131,7 @@ exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
 -- DATA STRUCTURES
 
 
-type alias SlackWorkspace =
+type alias Workspace =
     { id : String
     , name : String
     , domain : String
@@ -140,7 +140,7 @@ type alias SlackWorkspace =
     }
 
 
-type alias SlackChannel =
+type alias Channel =
     { id : String
     , name : String
     , isChannel : Bool
@@ -153,7 +153,7 @@ type alias SlackChannel =
     }
 
 
-type alias SlackUser =
+type alias User =
     { id : String
     , name : String
     , realName : Maybe String
@@ -161,11 +161,11 @@ type alias SlackUser =
     , email : Maybe String
     , isBot : Bool
     , isDeleted : Bool
-    , profile : Maybe SlackUserProfile
+    , profile : Maybe UserProfile
     }
 
 
-type alias SlackUserProfile =
+type alias UserProfile =
     { avatarHash : Maybe String
     , image72 : Maybe String
     , image192 : Maybe String
@@ -210,7 +210,7 @@ type HttpError
 -- API FUNCTIONS
 
 
-loadUserWorkspaces : SlackAuth -> Task restriction HttpError (List SlackWorkspace)
+loadUserWorkspaces : AuthToken -> Task restriction HttpError (List Workspace)
 loadUserWorkspaces (SlackAuth auth) =
     let
         url =
@@ -226,7 +226,7 @@ loadUserWorkspaces (SlackAuth auth) =
         }
 
 
-loadWorkspaceDetails : SlackAuth -> String -> Task restriction HttpError SlackWorkspace
+loadWorkspaceDetails : AuthToken -> String -> Task restriction HttpError Workspace
 loadWorkspaceDetails (SlackAuth auth) teamId =
     let
         url =
@@ -245,23 +245,212 @@ loadWorkspaceDetails (SlackAuth auth) teamId =
         }
 
 
-loadWorkspaceChannels : SlackAuth -> String -> Task restriction HttpError (List SlackChannel)
-loadWorkspaceChannels (SlackAuth auth) teamId =
+loadWorkspaceChannels : AuthToken -> Id TeamId -> Task restriction HttpError (List Channel)
+loadWorkspaceChannels (SlackAuth auth) (Id teamId) =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "conversations.list" ] []
 
         body =
-            Http.stringBody "application/x-www-form-urlencoded" ("team_id=" ++ teamId ++ "&types=public_channel,private_channel,mpim,im")
+            Http.stringBody
+                "application/x-www-form-urlencoded"
+                ("team_id=" ++ teamId ++ "&types=public_channel,private_channel,mpim,im")
     in
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" auth ]
+        , headers = [ Http.header "Authorization" ("Bearer " ++ auth) ]
         , url = url
         , body = body
         , resolver = Http.stringResolver (handleSlackResponse decodeChannelsList)
         , timeout = Just (Duration.seconds 30)
         }
+
+
+
+--{
+--    "ok": true,
+--    "channels": [
+--        {
+--            "id": "C09DJDQSWLU",
+--            "created": 1756936522,
+--            "creator": "U09DJDQL1A8",
+--            "is_org_shared": false,
+--            "is_im": false,
+--            "context_team_id": "T09DJDQL18U",
+--            "updated": 1756936539024,
+--            "name": "all-test-slack",
+--            "name_normalized": "all-test-slack",
+--            "is_channel": true,
+--            "is_group": false,
+--            "is_mpim": false,
+--            "is_private": false,
+--            "is_archived": false,
+--            "is_general": true,
+--            "is_shared": false,
+--            "is_ext_shared": false,
+--            "unlinked": 0,
+--            "is_pending_ext_shared": false,
+--            "pending_shared": [],
+--            "parent_conversation": null,
+--            "purpose": {
+--                "value": "Share announcements and updates about company news, upcoming events, or teammates who deserve some kudos. \u2b50",
+--                "creator": "U09DJDQL1A8",
+--                "last_set": 1756936522
+--            },
+--            "topic": {
+--                "value": "",
+--                "creator": "",
+--                "last_set": 0
+--            },
+--            "shared_team_ids": [
+--                "T09DJDQL18U"
+--            ],
+--            "pending_connected_team_ids": [],
+--            "is_member": false,
+--            "num_members": 1,
+--            "properties": {
+--                "use_case": "welcome"
+--            },
+--            "previous_names": [
+--                "all-slack"
+--            ]
+--        },
+--        {
+--            "id": "C09DJDQUKKN",
+--            "created": 1756936522,
+--            "creator": "U09DJDQL1A8",
+--            "is_org_shared": false,
+--            "is_im": false,
+--            "context_team_id": "T09DJDQL18U",
+--            "updated": 1756936527359,
+--            "name": "social",
+--            "name_normalized": "social",
+--            "is_channel": true,
+--            "is_group": false,
+--            "is_mpim": false,
+--            "is_private": false,
+--            "is_archived": false,
+--            "is_general": false,
+--            "is_shared": false,
+--            "is_ext_shared": false,
+--            "unlinked": 0,
+--            "is_pending_ext_shared": false,
+--            "pending_shared": [],
+--            "parent_conversation": null,
+--            "purpose": {
+--                "value": "Other channels are for work. This one\u2019s just for fun. Get to know your teammates and show your lighter side. \ud83c\udf88",
+--                "creator": "U09DJDQL1A8",
+--                "last_set": 1756936522
+--            },
+--            "topic": {
+--                "value": "",
+--                "creator": "",
+--                "last_set": 0
+--            },
+--            "shared_team_ids": [
+--                "T09DJDQL18U"
+--            ],
+--            "pending_connected_team_ids": [],
+--            "is_member": false,
+--            "num_members": 1,
+--            "properties": {
+--                "tabs": [
+--                    {
+--                        "id": "Ct09DJDGSVC4",
+--                        "type": "canvas",
+--                        "data": {
+--                            "file_id": "F09DJDGG476",
+--                            "shared_ts": "1756936527.055909"
+--                        },
+--                        "label": ""
+--                    }
+--                ],
+--                "tabz": [
+--                    {
+--                        "id": "Ct09DJDGSVC4",
+--                        "type": "canvas",
+--                        "data": {
+--                            "file_id": "F09DJDGG476",
+--                            "shared_ts": "1756936527.055909"
+--                        }
+--                    }
+--                ],
+--                "use_case": "random"
+--            },
+--            "previous_names": []
+--        },
+--        {
+--            "id": "C09DJDRNNS0",
+--            "created": 1756936551,
+--            "creator": "U09DJDQL1A8",
+--            "is_org_shared": false,
+--            "is_im": false,
+--            "context_team_id": "T09DJDQL18U",
+--            "updated": 1756936551148,
+--            "name": "new-channel",
+--            "name_normalized": "new-channel",
+--            "is_channel": true,
+--            "is_group": false,
+--            "is_mpim": false,
+--            "is_private": false,
+--            "is_archived": false,
+--            "is_general": false,
+--            "is_shared": false,
+--            "is_ext_shared": false,
+--            "unlinked": 0,
+--            "is_pending_ext_shared": false,
+--            "pending_shared": [],
+--            "parent_conversation": null,
+--            "purpose": {
+--                "value": "This channel is for everything #new-channel. Hold meetings, share docs, and make decisions together with your team.",
+--                "creator": "U09DJDQL1A8",
+--                "last_set": 1756936551
+--            },
+--            "topic": {
+--                "value": "",
+--                "creator": "",
+--                "last_set": 0
+--            },
+--            "shared_team_ids": [
+--                "T09DJDQL18U"
+--            ],
+--            "pending_connected_team_ids": [],
+--            "is_member": false,
+--            "num_members": 1,
+--            "properties": {
+--                "use_case": "project"
+--            },
+--            "previous_names": []
+--        },
+--        {
+--            "id": "D09DFEY0YFP",
+--            "created": 1756987735,
+--            "is_org_shared": false,
+--            "is_im": true,
+--            "is_archived": false,
+--            "context_team_id": "T09DJDQL18U",
+--            "updated": 1756987735048,
+--            "user": "U09DJDQL1A8",
+--            "is_user_deleted": false,
+--            "priority": 0
+--        },
+--        {
+--            "id": "D09DFEY02TX",
+--            "created": 1756987734,
+--            "is_org_shared": false,
+--            "is_im": true,
+--            "is_archived": false,
+--            "context_team_id": "T09DJDQL18U",
+--            "updated": 1756987734975,
+--            "user": "USLACKBOT",
+--            "is_user_deleted": false,
+--            "priority": 0
+--        }
+--    ],
+--    "response_metadata": {
+--        "next_cursor": ""
+--    }
+--}
 
 
 
@@ -348,19 +537,19 @@ oauthResponseDecoder dataDecoder =
 -- DECODERS
 
 
-decodeWorkspacesList : Decoder (List SlackWorkspace)
+decodeWorkspacesList : Decoder (List Workspace)
 decodeWorkspacesList =
     Decode.field "teams" (Decode.list decodeWorkspace)
 
 
-decodeWorkspaceDetails : Decoder SlackWorkspace
+decodeWorkspaceDetails : Decoder Workspace
 decodeWorkspaceDetails =
     Decode.field "team" decodeWorkspace
 
 
-decodeWorkspace : Decoder SlackWorkspace
+decodeWorkspace : Decoder Workspace
 decodeWorkspace =
-    Decode.map5 SlackWorkspace
+    Decode.map5 Workspace
         (Decode.field "id" Decode.string)
         (Decode.field "name" Decode.string)
         (Decode.field "domain" Decode.string)
@@ -368,14 +557,14 @@ decodeWorkspace =
         (Decode.field "deleted" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
 
 
-decodeChannelsList : Decoder (List SlackChannel)
+decodeChannelsList : Decoder (List Channel)
 decodeChannelsList =
     Decode.field "channels" (Decode.list decodeChannel)
 
 
-decodeChannel : Decoder SlackChannel
+decodeChannel : Decoder Channel
 decodeChannel =
-    Decode.succeed SlackChannel
+    Decode.succeed Channel
         |> andMap (Decode.field "id" Decode.string)
         |> andMap (Decode.field "name" Decode.string)
         |> andMap (Decode.field "is_channel" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
@@ -387,9 +576,9 @@ decodeChannel =
         |> andMap (Decode.maybe (Decode.field "purpose" (Decode.field "value" Decode.string)))
 
 
-decodeUser : Decoder SlackUser
+decodeUser : Decoder User
 decodeUser =
-    Decode.succeed SlackUser
+    Decode.succeed User
         |> andMap (Decode.field "id" Decode.string)
         |> andMap (Decode.field "name" Decode.string)
         |> andMap (Decode.maybe (Decode.field "real_name" Decode.string))
@@ -400,9 +589,9 @@ decodeUser =
         |> andMap (Decode.maybe (Decode.field "profile" decodeUserProfile))
 
 
-decodeUserProfile : Decoder SlackUserProfile
+decodeUserProfile : Decoder UserProfile
 decodeUserProfile =
-    Decode.map4 SlackUserProfile
+    Decode.map4 UserProfile
         (Decode.maybe (Decode.field "avatar_hash" Decode.string))
         (Decode.maybe (Decode.field "image_72" Decode.string))
         (Decode.maybe (Decode.field "image_192" Decode.string))

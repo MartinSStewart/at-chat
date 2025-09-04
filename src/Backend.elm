@@ -436,40 +436,9 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        GotSlackWorkspaces time result ->
+        GotSlackWorkspaceDetails time result ->
             case result of
                 Ok workspaces ->
-                    let
-                        loadWorkspaceDetails workspace =
-                            case model.slackToken of
-                                Just slackAuth ->
-                                    Slack.loadWorkspaceDetails slackAuth workspace.id
-                                        |> Task.andThen
-                                            (\workspaceDetails ->
-                                                Slack.loadWorkspaceChannels slackAuth workspace.id
-                                                    |> Task.map (\channels -> ( workspaceDetails, channels ))
-                                            )
-                                        |> Task.attempt (GotSlackWorkspaceDetails time workspace.id)
-
-                                Nothing ->
-                                    Command.none
-                    in
-                    ( model
-                    , workspaces
-                        |> List.map loadWorkspaceDetails
-                        |> Command.batch
-                    )
-
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "GotSlackWorkspaces" error
-                    in
-                    ( model, Command.none )
-
-        GotSlackWorkspaceDetails time workspaceId result ->
-            case result of
-                Ok ( workspace, channels ) ->
                     ( model
                       --addSlackWorkspace time workspace channels model
                     , Command.none
@@ -729,10 +698,32 @@ update msg model =
             , Command.none
             )
 
-        GotSlackOAuth sessionId result ->
-            ( model
-            , Command.none
-            )
+        GotSlackOAuth time sessionId result ->
+            case result of
+                Ok ok ->
+                    ( model
+                      --, Slack.loadUserWorkspaces ok.accessToken
+                      --    |> Task.andThen
+                      --        (\workspaces ->
+                      --            List.map
+                      --                (\workspace ->
+                      --                    Slack.loadWorkspaceDetails ok.accessToken workspace.id
+                      --                        |> Task.andThen
+                      --                            (\workspaceDetails ->
+                      --                                Slack.loadWorkspaceChannels ok.accessToken workspace.id
+                      --                                    |> Task.map (\channels -> ( workspaceDetails, channels ))
+                      --                            )
+                      --                )
+                      --                workspaces
+                      --                |> Task.sequence
+                      --        )
+                      --    |> Task.attempt (GotSlackWorkspaceDetails time)
+                    , Slack.loadWorkspaceChannels ok.accessToken ok.teamId
+                        |> Task.attempt (GotSlackWorkspaceDetails time)
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
 
 
 getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
@@ -2796,7 +2787,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , case model2.slackClientSecret of
                         Just clientSecret ->
                             Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth sessionId2)
+                                |> Task.attempt (GotSlackOAuth time sessionId2)
 
                         Nothing ->
                             Command.none
