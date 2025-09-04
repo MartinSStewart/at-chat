@@ -80,6 +80,7 @@ import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Slack
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 
@@ -271,6 +272,7 @@ type alias AdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
+    , slackClientSecret : Maybe Slack.ClientSecret
     }
 
 

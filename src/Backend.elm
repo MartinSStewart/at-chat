@@ -173,7 +173,7 @@ init =
       , publicVapidKey = ""
       , privateVapidKey = PrivateVapidKey ""
       , pushSubscriptions = SeqDict.empty
-      , slackClientSecret = ""
+      , slackClientSecret = Nothing
       }
     , Command.none
     )
@@ -187,6 +187,7 @@ adminData model lastLogPageViewed =
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , botToken = model.botToken
     , privateVapidKey = model.privateVapidKey
+    , slackClientSecret = model.slackClientSecret
     }
 
 
@@ -2786,17 +2787,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             , Command.none
             )
 
-        LinkSlackOAuthCode oAuthCode ->
+        LinkSlackOAuthCode oAuthCode sessionId2 ->
             asUser
                 model2
-                sessionId
+                sessionId2
                 (\userId _ ->
                     ( model2
-                    , Slack.exchangeCodeForToken
-                        model2.slackClientSecret
-                        Env.slackClientId
-                        oAuthCode
-                        |> Task.attempt (GotSlackOAuth sessionId)
+                    , case model2.slackClientSecret of
+                        Just clientSecret ->
+                            Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
+                                |> Task.attempt (GotSlackOAuth sessionId2)
+
+                        Nothing ->
+                            Command.none
                     )
                 )
 
@@ -3302,6 +3305,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     |> ChangeBroadcast
                     |> Lamdera.broadcast
                 ]
+            )
+
+        Pages.Admin.SetSlackClientSecret clientSecret ->
+            ( { model | slackClientSecret = clientSecret }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
 

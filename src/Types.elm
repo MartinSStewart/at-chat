@@ -164,8 +164,7 @@ type alias LoggedIn2 =
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
     , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
-    , -- Only should be use for making requests to the Rust server
-      sessionId : SessionId
+    , sessionId : SessionId
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
     }
@@ -174,6 +173,7 @@ type alias LoggedIn2 =
 type alias UserOptionsModel =
     { name : Editable.Model
     , botToken : Editable.Model
+    , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     }
@@ -274,7 +274,7 @@ type alias BackendModel =
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , pushSubscriptions : SeqDict SessionId PushSubscription
-    , slackClientSecret : String
+    , slackClientSecret : Maybe Slack.ClientSecret
     }
 
 
@@ -396,6 +396,7 @@ type FrontendMsg
     | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
+    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OneFrameAfterDragEnd
@@ -451,7 +452,7 @@ type ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
-    | LinkSlackOAuthCode Slack.OAuthCode
+    | LinkSlackOAuthCode Slack.OAuthCode SessionId
 
 
 type BackendMsg

@@ -1,7 +1,8 @@
 module Slack exposing
-    ( HttpError(..)
+    ( ClientSecret(..)
+    , HttpError(..)
+    , Id(..)
     , OAuthCode(..)
-    , OAuthConfig
     , OAuthError(..)
     , SlackAuth(..)
     , SlackChannel
@@ -11,16 +12,15 @@ module Slack exposing
     , SlackWorkspace
     , TokenResponse
     , buildOAuthUrl
-    , createUserToken
     , decodeChannel
     , decodeTokenResponse
     , decodeUser
     , decodeWorkspace
-    , encodeAuth
     , exchangeCodeForToken
     , loadUserWorkspaces
     , loadWorkspaceChannels
     , loadWorkspaceDetails
+    , redirectUri
     )
 
 import Duration exposing (Duration)
@@ -41,26 +41,34 @@ import Url.Parser.Query
 
 
 type SlackAuth
-    = BotToken String
-    | UserToken String
+    = SlackAuth String
 
 
 type OAuthCode
     = OAuthCode String
 
 
-type alias OAuthConfig =
-    { clientId : String
-    , redirectUri : String
-    , scopes : List String
-    }
+type ClientSecret
+    = ClientSecret String
+
+
+type Id a
+    = Id String
+
+
+type UserId
+    = SlackUserId Never
+
+
+type TeamId
+    = SlackTeamId Never
 
 
 type alias TokenResponse =
-    { accessToken : String
+    { accessToken : SlackAuth
     , scope : String
-    , userId : String
-    , teamId : String
+    , userId : Id UserId
+    , teamId : Id TeamId
     , teamName : String
     }
 
@@ -77,44 +85,24 @@ type OAuthError
     | UnknownOAuthError String
 
 
-encodeAuth : SlackAuth -> String
-encodeAuth auth =
-    case auth of
-        BotToken token ->
-            "Bearer " ++ token
-
-        UserToken token ->
-            "Bearer " ++ token
-
-
-createUserToken : String -> SlackAuth
-createUserToken accessToken =
-    UserToken accessToken
-
-
-
---{ fragment = Nothing
---, host = "5b9d44d729f3.ngrok-free.app"
---, path = "/abc"
---, port_ = Nothing
---, protocol = Https
---, query = Just "code=9460466681300.9460711968324.84d4a991c69e52c20ed5cbc63efad3040c4b98bac829dcfa27d40b32a3f985bc&state=" }
-
-
-buildOAuthUrl : OAuthConfig -> String
+buildOAuthUrl : { clientId : String, redirectUri : String, scopes : List String, state : String } -> String
 buildOAuthUrl config =
     Url.Builder.crossOrigin "https://slack.com"
         [ "oauth", "v2", "authorize" ]
         [ Url.Builder.string "client_id" config.clientId
         , Url.Builder.string "redirect_uri" config.redirectUri
         , Url.Builder.string "scope" (String.join "," config.scopes)
-
-        --, Url.Builder.string "response_type" "code"
+        , Url.Builder.string "state" config.state
         ]
 
 
-exchangeCodeForToken : String -> String -> OAuthCode -> Task restriction HttpError TokenResponse
-exchangeCodeForToken clientSecret clientId (OAuthCode code) =
+redirectUri : String
+redirectUri =
+    "https://542d827f6c05.ngrok-free.app/slack-oauth"
+
+
+exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction HttpError TokenResponse
+exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "oauth.v2.access" ] []
@@ -123,6 +111,7 @@ exchangeCodeForToken clientSecret clientId (OAuthCode code) =
             [ ( "client_id", clientId )
             , ( "client_secret", clientSecret )
             , ( "code", code )
+            , ( "redirect_uri", redirectUri )
             ]
                 |> List.map (\( key, value ) -> key ++ "=" ++ value)
                 |> String.join "&"
@@ -222,14 +211,14 @@ type HttpError
 
 
 loadUserWorkspaces : SlackAuth -> Task restriction HttpError (List SlackWorkspace)
-loadUserWorkspaces auth =
+loadUserWorkspaces (SlackAuth auth) =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "auth.teams.list" ] []
     in
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" (encodeAuth auth) ]
+        , headers = [ Http.header "Authorization" auth ]
         , url = url
         , body = Http.emptyBody
         , resolver = Http.stringResolver (handleSlackResponse decodeWorkspacesList)
@@ -238,7 +227,7 @@ loadUserWorkspaces auth =
 
 
 loadWorkspaceDetails : SlackAuth -> String -> Task restriction HttpError SlackWorkspace
-loadWorkspaceDetails auth teamId =
+loadWorkspaceDetails (SlackAuth auth) teamId =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "team.info" ] []
@@ -248,7 +237,7 @@ loadWorkspaceDetails auth teamId =
     in
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" (encodeAuth auth) ]
+        , headers = [ Http.header "Authorization" auth ]
         , url = url
         , body = body
         , resolver = Http.stringResolver (handleSlackResponse decodeWorkspaceDetails)
@@ -257,7 +246,7 @@ loadWorkspaceDetails auth teamId =
 
 
 loadWorkspaceChannels : SlackAuth -> String -> Task restriction HttpError (List SlackChannel)
-loadWorkspaceChannels auth teamId =
+loadWorkspaceChannels (SlackAuth auth) teamId =
     let
         url =
             Url.Builder.crossOrigin "https://slack.com" [ "api", "conversations.list" ] []
@@ -267,7 +256,7 @@ loadWorkspaceChannels auth teamId =
     in
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" (encodeAuth auth) ]
+        , headers = [ Http.header "Authorization" auth ]
         , url = url
         , body = body
         , resolver = Http.stringResolver (handleSlackResponse decodeChannelsList)
@@ -423,8 +412,12 @@ decodeUserProfile =
 decodeTokenResponse : Decoder TokenResponse
 decodeTokenResponse =
     Decode.map5 TokenResponse
-        (Decode.field "access_token" Decode.string)
+        (Decode.field "access_token" (Decode.map SlackAuth Decode.string))
         (Decode.field "scope" Decode.string)
-        (Decode.field "authed_user" (Decode.field "id" Decode.string))
-        (Decode.field "team" (Decode.field "id" Decode.string))
-        (Decode.field "team" (Decode.field "name" Decode.string))
+        (Decode.at [ "authed_user", "id" ] decodeId)
+        (Decode.at [ "team", "id" ] decodeId)
+        (Decode.at [ "team", "name" ] Decode.string)
+
+
+decodeId =
+    Decode.map Id Decode.string

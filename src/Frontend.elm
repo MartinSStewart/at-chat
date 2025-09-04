@@ -60,7 +60,7 @@ import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -411,6 +411,7 @@ loginDataToLocalState timezone loginData =
                     , twoFactorAuthentication = adminData.twoFactorAuthentication
                     , botToken = adminData.botToken
                     , privateVapidKey = adminData.privateVapidKey
+                    , slackClientSecret = adminData.slackClientSecret
                     }
 
             IsNotAdminLoginData ->
@@ -725,8 +726,8 @@ routeRequest previousRoute newRoute model =
         SlackOAuthRedirect result ->
             ( model
             , case result of
-                Ok code ->
-                    Lamdera.sendToBackend (LinkSlackOAuthCode code)
+                Ok ( code, sessionId ) ->
+                    Lamdera.sendToBackend (LinkSlackOAuthCode code sessionId)
 
                 Err () ->
                     Command.none
@@ -1047,6 +1048,9 @@ isPressMsg msg =
             False
 
         PrivateVapidKeyEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
+
+        SlackClientSecretEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
 
@@ -2559,94 +2563,48 @@ updateLoaded msg model =
             )
 
         UserNameEditableMsg editableMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
-                            case editableMsg of
-                                Editable.Edit editable ->
-                                    ( { loggedIn | userOptions = Just { userOptions | name = editable } }
-                                    , Command.none
-                                    )
-
-                                Editable.PressedAcceptEdit value ->
-                                    handleLocalChange
-                                        model.time
-                                        (Just (Local_SetName value))
-                                        { loggedIn | userOptions = Just { userOptions | name = Editable.init } }
-                                        Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | botToken = value })
+                (\value loggedIn -> handleLocalChange model.time (Just (Local_SetName value)) loggedIn Command.none)
                 model
 
         BotTokenEditableMsg editableMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
-                            case editableMsg of
-                                Editable.Edit editable ->
-                                    ( { loggedIn | userOptions = Just { userOptions | botToken = editable } }
-                                    , Command.none
-                                    )
-
-                                Editable.PressedAcceptEdit value ->
-                                    handleLocalChange
-                                        model.time
-                                        (Just (Local_Admin (Pages.Admin.SetDiscordBotToken value)))
-                                        { loggedIn | userOptions = Just { userOptions | botToken = Editable.init } }
-                                        Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | botToken = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetDiscordBotToken value)))
+                        loggedIn
+                        Command.none
                 )
                 model
 
         PublicVapidKeyEditableMsg editableMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
-                            case editableMsg of
-                                Editable.Edit editable ->
-                                    ( { loggedIn | userOptions = Just { userOptions | publicVapidKey = editable } }
-                                    , Command.none
-                                    )
-
-                                Editable.PressedAcceptEdit value ->
-                                    handleLocalChange
-                                        model.time
-                                        (Just (Local_Admin (Pages.Admin.SetPublicVapidKey value)))
-                                        { loggedIn | userOptions = Just { userOptions | publicVapidKey = Editable.init } }
-                                        Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | publicVapidKey = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetPublicVapidKey value)))
+                        loggedIn
+                        Command.none
                 )
                 model
 
         PrivateVapidKeyEditableMsg editableMsg ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
-                            case editableMsg of
-                                Editable.Edit editable ->
-                                    ( { loggedIn | userOptions = Just { userOptions | privateVapidKey = editable } }
-                                    , Command.none
-                                    )
-
-                                Editable.PressedAcceptEdit value ->
-                                    handleLocalChange
-                                        model.time
-                                        (Just (Local_Admin (Pages.Admin.SetPrivateVapidKey value)))
-                                        { loggedIn | userOptions = Just { userOptions | privateVapidKey = Editable.init } }
-                                        Command.none
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | privateVapidKey = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetPrivateVapidKey value)))
+                        loggedIn
+                        Command.none
                 )
                 model
 
@@ -3134,6 +3092,45 @@ updateLoaded msg model =
 
         GotIsPushNotificationsRegistered isEnabled ->
             ( { model | enabledPushNotifications = isEnabled }, Command.none )
+
+        SlackClientSecretEditableMsg editableMsg ->
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | slackClientSecret = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetSlackClientSecret value)))
+                        loggedIn
+                        Command.none
+                )
+                model
+
+
+handleEditable :
+    Editable.Msg value
+    -> (UserOptionsModel -> Editable.Model -> UserOptionsModel)
+    -> (value -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg ))
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+handleEditable editableMsg setter acceptEdit model =
+    updateLoggedIn
+        (\loggedIn ->
+            case loggedIn.userOptions of
+                Just userOptions ->
+                    case editableMsg of
+                        Editable.Edit editable ->
+                            ( { loggedIn | userOptions = setter userOptions editable |> Just }
+                            , Command.none
+                            )
+
+                        Editable.PressedAcceptEdit value ->
+                            acceptEdit value { loggedIn | userOptions = setter userOptions Editable.init |> Just }
+
+                Nothing ->
+                    ( loggedIn, Command.none )
+        )
+        model
 
 
 pressedReply : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5058,6 +5055,9 @@ pendingChangesText localChange =
 
                 Pages.Admin.SetPublicVapidKey _ ->
                     "Set public vapid key"
+
+                Pages.Admin.SetSlackClientSecret maybeClientSecret ->
+                    "Set slack client secret"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"

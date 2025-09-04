@@ -2,6 +2,7 @@ module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
+import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
@@ -20,6 +21,7 @@ init : UserOptionsModel
 init =
     { name = Editable.init
     , botToken = Editable.init
+    , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     }
@@ -78,16 +80,6 @@ view isMobile time local loggedIn loaded model =
             ]
             [ case local.adminData of
                 IsAdmin adminData2 ->
-                    let
-                        botToken : String
-                        botToken =
-                            case adminData2.botToken of
-                                Just (DiscordBotToken a) ->
-                                    a
-
-                                Nothing ->
-                                    ""
-                    in
                     MyUi.container
                         isMobile
                         "Admin"
@@ -107,8 +99,38 @@ view isMobile time local loggedIn loaded model =
                                     Just (DiscordBotToken text2) |> Ok
                             )
                             BotTokenEditableMsg
-                            botToken
+                            (case adminData2.botToken of
+                                Just (DiscordBotToken a) ->
+                                    a
+
+                                Nothing ->
+                                    ""
+                            )
                             model.botToken
+                        , Editable.view
+                            (Dom.id "userOptions_slackClientSecret")
+                            True
+                            "Slack client secret"
+                            (\text ->
+                                let
+                                    text2 =
+                                        String.trim text
+                                in
+                                if text2 == "" then
+                                    Ok Nothing
+
+                                else
+                                    Just (Slack.ClientSecret text2) |> Ok
+                            )
+                            SlackClientSecretEditableMsg
+                            (case adminData2.slackClientSecret of
+                                Just (Slack.ClientSecret a) ->
+                                    a
+
+                                Nothing ->
+                                    ""
+                            )
+                            model.slackClientSecret
                         , Editable.view
                             (Dom.id "userOptions_publicVapidKey")
                             True
@@ -161,8 +183,9 @@ view isMobile time local loggedIn loaded model =
                     [ Ui.linkNewTab
                         (Slack.buildOAuthUrl
                             { clientId = Env.slackClientId
-                            , redirectUri = "https://5b9d44d729f3.ngrok-free.app/slack-oauth"
+                            , redirectUri = Slack.redirectUri
                             , scopes = [ "channels:read" ]
+                            , state = Lamdera.sessionIdToString loggedIn.sessionId
                             }
                         )
                     ]
