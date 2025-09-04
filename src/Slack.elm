@@ -1,22 +1,29 @@
 module Slack exposing
     ( AuthToken(..)
+    , BlockElement(..)
     , Channel
     , ClientSecret(..)
     , HttpError(..)
     , Id(..)
+    , Message
     , OAuthCode(..)
     , OAuthError(..)
+    , RichTextElement(..)
+    , RichText_Emoji_Data
+    , RichText_Text_Data
     , SlackError(..)
     , SlackMessage
     , TokenResponse
     , User
+    , UserMessageData
     , Workspace
     , buildOAuthUrl
+    , channelId
     , decodeChannel
     , decodeTokenResponse
-    , decodeUser
     , decodeWorkspace
     , exchangeCodeForToken
+    , loadMessages
     , loadUserWorkspaces
     , loadWorkspaceChannels
     , loadWorkspaceDetails
@@ -60,13 +67,16 @@ type UserId
     = SlackUserId Never
 
 
+type ChannelId
+    = ChannelId Never
+
+
 type TeamId
     = SlackTeamId Never
 
 
 type alias TokenResponse =
     { accessToken : AuthToken
-    , scope : String
     , userId : Id UserId
     , teamId : Id TeamId
     , teamName : String
@@ -91,14 +101,14 @@ buildOAuthUrl config =
         [ "oauth", "v2", "authorize" ]
         [ Url.Builder.string "client_id" config.clientId
         , Url.Builder.string "redirect_uri" config.redirectUri
-        , Url.Builder.string "scope" (String.join "," config.scopes)
+        , Url.Builder.string "user_scope" (String.join "," config.scopes)
         , Url.Builder.string "state" config.state
         ]
 
 
 redirectUri : String
 redirectUri =
-    "https://542d827f6c05.ngrok-free.app/slack-oauth"
+    "https://6b11fa4fc5b1.ngrok-free.app/slack-oauth"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction HttpError TokenResponse
@@ -140,21 +150,43 @@ type alias Workspace =
     }
 
 
-type alias Channel =
-    { id : String
-    , name : String
-    , isChannel : Bool
-    , isGroup : Bool
-    , isIm : Bool
-    , isMember : Bool
+type alias NormalChannelData =
+    { id : Id ChannelId
     , isArchived : Bool
-    , topic : Maybe String
-    , purpose : Maybe String
+    , name : String
+    , isMember : Bool
+    , isPrivate : Bool
+    , created : Time.Posix
     }
 
 
+type alias ImChannelData =
+    { id : Id ChannelId
+    , isArchived : Bool
+    , user : Id UserId
+    , isUserDeleted : Bool
+    , isOrgShared : Bool
+    , created : Time.Posix
+    }
+
+
+type Channel
+    = NormalChannel NormalChannelData
+    | ImChannel ImChannelData
+
+
+channelId : Channel -> Id ChannelId
+channelId channel =
+    case channel of
+        NormalChannel normalChannelData ->
+            normalChannelData.id
+
+        ImChannel imChannelData ->
+            imChannelData.id
+
+
 type alias User =
-    { id : String
+    { id : Id UserId
     , name : String
     , realName : Maybe String
     , displayName : Maybe String
@@ -177,7 +209,7 @@ type alias SlackMessage =
     { ts : String
     , user : String
     , text : String
-    , channelId : String
+    , channelId : Id ChannelId
     , threadTs : Maybe String
     }
 
@@ -266,191 +298,179 @@ loadWorkspaceChannels (SlackAuth auth) (Id teamId) =
         }
 
 
+loadMessages : AuthToken -> Id ChannelId -> Int -> Task restriction HttpError (List Message)
+loadMessages (SlackAuth auth) (Id channelId2) limit =
+    let
+        url =
+            Url.Builder.crossOrigin "https://slack.com" [ "api", "conversations.history" ] []
 
---{
---    "ok": true,
---    "channels": [
---        {
---            "id": "C09DJDQSWLU",
---            "created": 1756936522,
---            "creator": "U09DJDQL1A8",
---            "is_org_shared": false,
---            "is_im": false,
---            "context_team_id": "T09DJDQL18U",
---            "updated": 1756936539024,
---            "name": "all-test-slack",
---            "name_normalized": "all-test-slack",
---            "is_channel": true,
---            "is_group": false,
---            "is_mpim": false,
---            "is_private": false,
---            "is_archived": false,
---            "is_general": true,
---            "is_shared": false,
---            "is_ext_shared": false,
---            "unlinked": 0,
---            "is_pending_ext_shared": false,
---            "pending_shared": [],
---            "parent_conversation": null,
---            "purpose": {
---                "value": "Share announcements and updates about company news, upcoming events, or teammates who deserve some kudos. \u2b50",
---                "creator": "U09DJDQL1A8",
---                "last_set": 1756936522
---            },
---            "topic": {
---                "value": "",
---                "creator": "",
---                "last_set": 0
---            },
---            "shared_team_ids": [
---                "T09DJDQL18U"
---            ],
---            "pending_connected_team_ids": [],
---            "is_member": false,
---            "num_members": 1,
---            "properties": {
---                "use_case": "welcome"
---            },
---            "previous_names": [
---                "all-slack"
---            ]
---        },
---        {
---            "id": "C09DJDQUKKN",
---            "created": 1756936522,
---            "creator": "U09DJDQL1A8",
---            "is_org_shared": false,
---            "is_im": false,
---            "context_team_id": "T09DJDQL18U",
---            "updated": 1756936527359,
---            "name": "social",
---            "name_normalized": "social",
---            "is_channel": true,
---            "is_group": false,
---            "is_mpim": false,
---            "is_private": false,
---            "is_archived": false,
---            "is_general": false,
---            "is_shared": false,
---            "is_ext_shared": false,
---            "unlinked": 0,
---            "is_pending_ext_shared": false,
---            "pending_shared": [],
---            "parent_conversation": null,
---            "purpose": {
---                "value": "Other channels are for work. This one\u2019s just for fun. Get to know your teammates and show your lighter side. \ud83c\udf88",
---                "creator": "U09DJDQL1A8",
---                "last_set": 1756936522
---            },
---            "topic": {
---                "value": "",
---                "creator": "",
---                "last_set": 0
---            },
---            "shared_team_ids": [
---                "T09DJDQL18U"
---            ],
---            "pending_connected_team_ids": [],
---            "is_member": false,
---            "num_members": 1,
---            "properties": {
---                "tabs": [
---                    {
---                        "id": "Ct09DJDGSVC4",
---                        "type": "canvas",
---                        "data": {
---                            "file_id": "F09DJDGG476",
---                            "shared_ts": "1756936527.055909"
---                        },
---                        "label": ""
---                    }
---                ],
---                "tabz": [
---                    {
---                        "id": "Ct09DJDGSVC4",
---                        "type": "canvas",
---                        "data": {
---                            "file_id": "F09DJDGG476",
---                            "shared_ts": "1756936527.055909"
---                        }
---                    }
---                ],
---                "use_case": "random"
---            },
---            "previous_names": []
---        },
---        {
---            "id": "C09DJDRNNS0",
---            "created": 1756936551,
---            "creator": "U09DJDQL1A8",
---            "is_org_shared": false,
---            "is_im": false,
---            "context_team_id": "T09DJDQL18U",
---            "updated": 1756936551148,
---            "name": "new-channel",
---            "name_normalized": "new-channel",
---            "is_channel": true,
---            "is_group": false,
---            "is_mpim": false,
---            "is_private": false,
---            "is_archived": false,
---            "is_general": false,
---            "is_shared": false,
---            "is_ext_shared": false,
---            "unlinked": 0,
---            "is_pending_ext_shared": false,
---            "pending_shared": [],
---            "parent_conversation": null,
---            "purpose": {
---                "value": "This channel is for everything #new-channel. Hold meetings, share docs, and make decisions together with your team.",
---                "creator": "U09DJDQL1A8",
---                "last_set": 1756936551
---            },
---            "topic": {
---                "value": "",
---                "creator": "",
---                "last_set": 0
---            },
---            "shared_team_ids": [
---                "T09DJDQL18U"
---            ],
---            "pending_connected_team_ids": [],
---            "is_member": false,
---            "num_members": 1,
---            "properties": {
---                "use_case": "project"
---            },
---            "previous_names": []
---        },
---        {
---            "id": "D09DFEY0YFP",
---            "created": 1756987735,
---            "is_org_shared": false,
---            "is_im": true,
---            "is_archived": false,
---            "context_team_id": "T09DJDQL18U",
---            "updated": 1756987735048,
---            "user": "U09DJDQL1A8",
---            "is_user_deleted": false,
---            "priority": 0
---        },
---        {
---            "id": "D09DFEY02TX",
---            "created": 1756987734,
---            "is_org_shared": false,
---            "is_im": true,
---            "is_archived": false,
---            "context_team_id": "T09DJDQL18U",
---            "updated": 1756987734975,
---            "user": "USLACKBOT",
---            "is_user_deleted": false,
---            "priority": 0
---        }
---    ],
---    "response_metadata": {
---        "next_cursor": ""
---    }
---}
+        body =
+            Http.stringBody
+                "application/x-www-form-urlencoded"
+                ("channel=" ++ channelId2 ++ "&limit=" ++ String.fromInt limit)
+    in
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ auth) ]
+        , url = url
+        , body = body
+        , resolver = Http.stringResolver (handleSlackResponse (Decode.field "messages" (Decode.list decodeMessage)))
+        , timeout = Just (Duration.seconds 30)
+        }
+
+
+type Message
+    = UserJoinedMessage (Id UserId) Time.Posix
+    | UserMessage UserMessageData
+    | JoinerNotificationForInviter (Id UserId) Time.Posix
+    | BotMessage (Id UserId) Time.Posix
+
+
+type alias UserMessageData =
+    { user : Id UserId
+    , blocks : List Block
+    , createdAt : Time.Posix
+    }
+
+
+decodeMessage : Decoder Message
+decodeMessage =
+    Json.Decode.Extra.optionalField "subtype" Decode.string
+        |> Decode.andThen
+            (\subtype ->
+                case subtype of
+                    Just "channel_join" ->
+                        Decode.succeed UserJoinedMessage
+                            |> andMap (Decode.field "user" decodeId)
+                            |> andMap (Decode.field "ts" decodeTimePosixString)
+
+                    Just "joiner_notification_for_inviter" ->
+                        Decode.succeed JoinerNotificationForInviter
+                            |> andMap (Decode.field "user" decodeId)
+                            |> andMap (Decode.field "ts" decodeTimePosixString)
+
+                    Just "bot_message" ->
+                        Decode.succeed BotMessage
+                            |> andMap (Decode.field "user" decodeId)
+                            |> andMap (Decode.field "ts" decodeTimePosixString)
+
+                    Just subtype2 ->
+                        Decode.fail ("Unknown message subtype \"" ++ subtype2 ++ "\"")
+
+                    Nothing ->
+                        Decode.succeed UserMessageData
+                            |> andMap (Decode.field "user" decodeId)
+                            |> andMap (Decode.field "blocks" (Decode.list decodeBlock))
+                            |> andMap (Decode.field "ts" decodeTimePosixString)
+                            |> Decode.map UserMessage
+            )
+
+
+type Block
+    = RichTextBlock (List BlockElement)
+
+
+type BlockElement
+    = RichTextSection (List RichTextElement)
+    | RichTextPreformattedSection (List RichTextElement)
+
+
+type RichTextElement
+    = RichText_Text RichText_Text_Data
+    | RichText_Emoji RichText_Emoji_Data
+    | RichText_UserMention (Id UserId)
+
+
+type alias RichText_Text_Data =
+    { text : String, italic : Bool, bold : Bool, code : Bool }
+
+
+type alias RichText_Emoji_Data =
+    { name : String, unicode : String, italic : Bool, bold : Bool, code : Bool }
+
+
+decodeBlock : Decoder Block
+decodeBlock =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\blockType ->
+                case blockType of
+                    "rich_text" ->
+                        Decode.field "elements" (Decode.list decodeBlockElement)
+                            |> Decode.map RichTextBlock
+
+                    _ ->
+                        Decode.fail ("Unknown message block type \"" ++ blockType ++ "\"")
+            )
+
+
+decodeBlockElement : Decoder BlockElement
+decodeBlockElement =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\elementType ->
+                case elementType of
+                    "rich_text_section" ->
+                        Decode.field "elements" (Decode.list decodeRichTextElement)
+                            |> Decode.map RichTextSection
+
+                    "rich_text_preformatted" ->
+                        Decode.field "elements" (Decode.list decodeRichTextElement)
+                            |> Decode.map RichTextPreformattedSection
+
+                    _ ->
+                        Decode.fail ("Unknown block section type \"" ++ elementType ++ "\"")
+            )
+
+
+decodeRichTextElement : Decoder RichTextElement
+decodeRichTextElement =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "text" ->
+                        Decode.succeed RichText_Text_Data
+                            |> andMap (Decode.field "text" Decode.string)
+                            |> andMap (optionalBool "italic")
+                            |> andMap (optionalBool "bold")
+                            |> andMap (optionalBool "code")
+                            |> Decode.map RichText_Text
+
+                    "emoji" ->
+                        Decode.succeed RichText_Emoji_Data
+                            |> andMap (Decode.field "name" Decode.string)
+                            |> andMap (Decode.field "unicode" Decode.string)
+                            |> andMap (optionalBool "italic")
+                            |> andMap (optionalBool "bold")
+                            |> andMap (optionalBool "code")
+                            |> Decode.map RichText_Emoji
+
+                    "user" ->
+                        Decode.field "user_id" decodeId |> Decode.map RichText_UserMention
+
+                    _ ->
+                        Decode.fail ("Unknown block section type \"" ++ type_ ++ "\"")
+            )
+
+
+optionalBool : String -> Decoder Bool
+optionalBool fieldName =
+    Json.Decode.Extra.optionalField fieldName Decode.bool |> Decode.map (Maybe.withDefault False)
+
+
+decodeTimePosixString : Decoder Time.Posix
+decodeTimePosixString =
+    Decode.andThen
+        (\text ->
+            case String.toFloat text of
+                Just float ->
+                    round float |> Time.millisToPosix |> Decode.succeed
+
+                Nothing ->
+                    Decode.fail "Invalid time posix"
+        )
+        Decode.string
 
 
 
@@ -564,45 +584,54 @@ decodeChannelsList =
 
 decodeChannel : Decoder Channel
 decodeChannel =
-    Decode.succeed Channel
-        |> andMap (Decode.field "id" Decode.string)
+    Decode.map2
+        Tuple.pair
+        (Json.Decode.Extra.optionalField "is_im" Decode.bool |> Decode.map (Maybe.withDefault False))
+        (Json.Decode.Extra.optionalField "is_channel" Decode.bool |> Decode.map (Maybe.withDefault False))
+        |> Decode.andThen
+            (\( isIm, isChannel ) ->
+                if isIm then
+                    Decode.map ImChannel decodeImChannel
+
+                else if isChannel then
+                    Decode.map NormalChannel decodeNormalChannel
+
+                else
+                    Decode.fail "Invalid channel type"
+            )
+
+
+decodeTime : Decoder Time.Posix
+decodeTime =
+    Decode.map Time.millisToPosix Decode.int
+
+
+decodeImChannel : Decoder ImChannelData
+decodeImChannel =
+    Decode.succeed ImChannelData
+        |> andMap (Decode.field "id" decodeId)
+        |> andMap (Decode.field "is_archived" Decode.bool)
+        |> andMap (Decode.field "user" decodeId)
+        |> andMap (Decode.field "is_user_deleted" Decode.bool)
+        |> andMap (Decode.field "is_org_shared" Decode.bool)
+        |> andMap (Decode.field "created" decodeTime)
+
+
+decodeNormalChannel : Decoder NormalChannelData
+decodeNormalChannel =
+    Decode.succeed NormalChannelData
+        |> andMap (Decode.field "id" decodeId)
+        |> andMap (Decode.field "is_archived" Decode.bool)
         |> andMap (Decode.field "name" Decode.string)
-        |> andMap (Decode.field "is_channel" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.field "is_group" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.field "is_im" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.field "is_member" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.field "is_archived" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.maybe (Decode.field "topic" (Decode.field "value" Decode.string)))
-        |> andMap (Decode.maybe (Decode.field "purpose" (Decode.field "value" Decode.string)))
-
-
-decodeUser : Decoder User
-decodeUser =
-    Decode.succeed User
-        |> andMap (Decode.field "id" Decode.string)
-        |> andMap (Decode.field "name" Decode.string)
-        |> andMap (Decode.maybe (Decode.field "real_name" Decode.string))
-        |> andMap (Decode.maybe (Decode.field "profile" (Decode.field "display_name" Decode.string)))
-        |> andMap (Decode.maybe (Decode.field "profile" (Decode.field "email" Decode.string)))
-        |> andMap (Decode.field "is_bot" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.field "deleted" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
-        |> andMap (Decode.maybe (Decode.field "profile" decodeUserProfile))
-
-
-decodeUserProfile : Decoder UserProfile
-decodeUserProfile =
-    Decode.map4 UserProfile
-        (Decode.maybe (Decode.field "avatar_hash" Decode.string))
-        (Decode.maybe (Decode.field "image_72" Decode.string))
-        (Decode.maybe (Decode.field "image_192" Decode.string))
-        (Decode.maybe (Decode.field "image_512" Decode.string))
+        |> andMap (Decode.field "is_member" Decode.bool)
+        |> andMap (Decode.field "is_private" Decode.bool)
+        |> andMap (Decode.field "created" decodeTime)
 
 
 decodeTokenResponse : Decoder TokenResponse
 decodeTokenResponse =
-    Decode.map5 TokenResponse
-        (Decode.field "access_token" (Decode.map SlackAuth Decode.string))
-        (Decode.field "scope" Decode.string)
+    Decode.map4 TokenResponse
+        (Decode.at [ "authed_user", "access_token" ] (Decode.map SlackAuth Decode.string))
         (Decode.at [ "authed_user", "id" ] decodeId)
         (Decode.at [ "team", "id" ] decodeId)
         (Decode.at [ "team", "name" ] Decode.string)

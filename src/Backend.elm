@@ -436,9 +436,9 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        GotSlackWorkspaceDetails time result ->
+        GotSlackChannels time result ->
             case result of
-                Ok workspaces ->
+                Ok channels ->
                     ( model
                       --addSlackWorkspace time workspace channels model
                     , Command.none
@@ -447,7 +447,7 @@ update msg model =
                 Err error ->
                     let
                         _ =
-                            Debug.log "GotSlackWorkspaceDetails" error
+                            Debug.log "GotSlackChannels" error
                     in
                     ( model, Command.none )
 
@@ -702,24 +702,22 @@ update msg model =
             case result of
                 Ok ok ->
                     ( model
-                      --, Slack.loadUserWorkspaces ok.accessToken
-                      --    |> Task.andThen
-                      --        (\workspaces ->
-                      --            List.map
-                      --                (\workspace ->
-                      --                    Slack.loadWorkspaceDetails ok.accessToken workspace.id
-                      --                        |> Task.andThen
-                      --                            (\workspaceDetails ->
-                      --                                Slack.loadWorkspaceChannels ok.accessToken workspace.id
-                      --                                    |> Task.map (\channels -> ( workspaceDetails, channels ))
-                      --                            )
-                      --                )
-                      --                workspaces
-                      --                |> Task.sequence
-                      --        )
-                      --    |> Task.attempt (GotSlackWorkspaceDetails time)
                     , Slack.loadWorkspaceChannels ok.accessToken ok.teamId
-                        |> Task.attempt (GotSlackWorkspaceDetails time)
+                        |> Task.andThen
+                            (\channels ->
+                                List.map
+                                    (\channel ->
+                                        let
+                                            _ =
+                                                Debug.log "channel" channel
+                                        in
+                                        Slack.loadMessages ok.accessToken (Slack.channelId channel) 100
+                                            |> Task.map (\messages -> ( channel, messages ))
+                                    )
+                                    channels
+                                    |> Task.sequence
+                            )
+                        |> Task.attempt (GotSlackChannels time)
                     )
 
                 Err _ ->
