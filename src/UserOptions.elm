@@ -184,7 +184,12 @@ view isMobile time local loggedIn loaded model =
                         (Slack.buildOAuthUrl
                             { clientId = Env.slackClientId
                             , redirectUri = Slack.redirectUri
-                            , scopes =
+                            , botScopes =
+                                [ "channels:read"
+                                , "channels:history"
+                                , "users:read"
+                                ]
+                            , userScopes =
                                 [ "channels:read"
                                 , "channels:history"
                                 , "channels:write"

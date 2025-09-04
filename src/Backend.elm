@@ -702,7 +702,7 @@ update msg model =
             case result of
                 Ok ok ->
                     ( model
-                    , Slack.loadWorkspaceChannels ok.accessToken ok.teamId
+                    , Slack.loadWorkspaceChannels ok.userAccessToken ok.teamId
                         |> Task.andThen
                             (\channels ->
                                 List.map
@@ -711,7 +711,7 @@ update msg model =
                                             _ =
                                                 Debug.log "channel" channel
                                         in
-                                        Slack.loadMessages ok.accessToken (Slack.channelId channel) 100
+                                        Slack.loadMessages ok.userAccessToken (Slack.channelId channel) 100
                                             |> Task.map (\messages -> ( channel, messages ))
                                     )
                                     channels

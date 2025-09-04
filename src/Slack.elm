@@ -76,7 +76,8 @@ type TeamId
 
 
 type alias TokenResponse =
-    { accessToken : AuthToken
+    { botAccessToken : Maybe AuthToken
+    , userAccessToken : AuthToken
     , userId : Id UserId
     , teamId : Id TeamId
     , teamName : String
@@ -95,13 +96,21 @@ type OAuthError
     | UnknownOAuthError String
 
 
-buildOAuthUrl : { clientId : String, redirectUri : String, scopes : List String, state : String } -> String
+buildOAuthUrl :
+    { clientId : String
+    , redirectUri : String
+    , botScopes : List String
+    , userScopes : List String
+    , state : String
+    }
+    -> String
 buildOAuthUrl config =
     Url.Builder.crossOrigin "https://slack.com"
         [ "oauth", "v2", "authorize" ]
         [ Url.Builder.string "client_id" config.clientId
         , Url.Builder.string "redirect_uri" config.redirectUri
-        , Url.Builder.string "user_scope" (String.join "," config.scopes)
+        , Url.Builder.string "scope" (String.join "," config.botScopes)
+        , Url.Builder.string "user_scope" (String.join "," config.userScopes)
         , Url.Builder.string "state" config.state
         ]
 
@@ -630,12 +639,14 @@ decodeNormalChannel =
 
 decodeTokenResponse : Decoder TokenResponse
 decodeTokenResponse =
-    Decode.map4 TokenResponse
+    Decode.map5 TokenResponse
+        (Json.Decode.Extra.optionalField "access_token" (Decode.map SlackAuth Decode.string))
         (Decode.at [ "authed_user", "access_token" ] (Decode.map SlackAuth Decode.string))
         (Decode.at [ "authed_user", "id" ] decodeId)
         (Decode.at [ "team", "id" ] decodeId)
         (Decode.at [ "team", "name" ] Decode.string)
 
 
+decodeId : Decoder (Id a)
 decodeId =
     Decode.map Id Decode.string
