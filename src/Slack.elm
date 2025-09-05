@@ -376,8 +376,7 @@ httpRequest (SlackAuth auth) method rpcFunction body decoder =
 
 
 type alias Message =
-    { id : Id MessageId
-    , createdBy : Id UserId
+    { createdBy : Id UserId
     , createdAt : Time.Posix
     , messageType : MessageType
     }
@@ -385,15 +384,14 @@ type alias Message =
 
 type MessageType
     = UserJoinedMessage
-    | UserMessage (List Block)
+    | UserMessage (Id MessageId) (List Block)
     | JoinerNotificationForInviter
-    | BotMessage
+    | BotMessage (Id MessageId)
 
 
 decodeMessage : Decoder Message
 decodeMessage =
     Decode.succeed Message
-        |> andMap (Decode.field "ms_id" decodeId)
         |> andMap (Decode.field "user" decodeId)
         |> andMap (Decode.field "ts" decodeTimePosixString)
         |> andMap
@@ -411,12 +409,14 @@ decodeMessage =
 
                             Just "bot_message" ->
                                 Decode.succeed BotMessage
+                                    |> andMap (Decode.field "client_msg_id" decodeId)
 
                             Just subtype2 ->
                                 Decode.fail ("Unknown message subtype \"" ++ subtype2 ++ "\"")
 
                             Nothing ->
                                 Decode.succeed UserMessage
+                                    |> andMap (Decode.field "client_msg_id" decodeId)
                                     |> andMap (Decode.field "blocks" (Decode.list decodeBlock))
                     )
             )

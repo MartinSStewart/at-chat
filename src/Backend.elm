@@ -1282,12 +1282,12 @@ addSlackMessages threadRoute messages model channel =
                 ( Slack.JoinerNotificationForInviter, Nothing ) ->
                     channel2
 
-                ( Slack.BotMessage, Nothing ) ->
+                ( Slack.BotMessage _, Nothing ) ->
                     channel2
 
-                ( Slack.UserMessage data, Just userId ) ->
+                ( Slack.UserMessage messageId data, Just userId ) ->
                     LocalState.createChannelMessageBackend
-                        (Just (SlackMessageId message.id))
+                        (Just (SlackMessageId messageId))
                         (UserTextMessage
                             { createdAt = message.createdAt
                             , createdBy = userId
