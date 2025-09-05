@@ -7,6 +7,7 @@ module RichText exposing
     , attachedFileSuffix
     , fromDiscord
     , fromNonemptyString
+    , fromSlack
     , mentionsUser
     , preview
     , removeAttachedFile
@@ -35,6 +36,7 @@ import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..))
@@ -1202,6 +1204,76 @@ hyperlinkToString protocol rest =
 formatText : String -> Html msg
 formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
+
+
+fromSlack : OneToOne (Slack.Id Slack.UserId) (Id UserId) -> List Slack.Block -> Nonempty RichText
+fromSlack users blocks =
+    List.concatMap
+        (\block ->
+            case block of
+                Slack.RichTextBlock elements ->
+                    List.concatMap
+                        (\element ->
+                            case element of
+                                Slack.RichTextSection elements2 ->
+                                    List.filterMap
+                                        (\element2 ->
+                                            case element2 of
+                                                Slack.RichText_Text data ->
+                                                    case normalTextFromString data.text of
+                                                        Just text ->
+                                                            (if data.italic then
+                                                                Italic (Nonempty text [])
+
+                                                             else
+                                                                text
+                                                            )
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            Nothing
+
+                                                Slack.RichText_Emoji data ->
+                                                    NormalText
+                                                        (String.Nonempty.head data.unicode)
+                                                        (String.Nonempty.tail data.unicode)
+                                                        |> Just
+
+                                                Slack.RichText_UserMention id ->
+                                                    (case OneToOne.second id users of
+                                                        Just userId ->
+                                                            UserMention userId
+
+                                                        Nothing ->
+                                                            NormalText '<' "user missing>"
+                                                    )
+                                                        |> Just
+                                        )
+                                        elements2
+
+                                Slack.RichTextPreformattedSection elements2 ->
+                                    [ List.filterMap
+                                        (\element2 ->
+                                            case element2 of
+                                                Slack.RichText_Text data ->
+                                                    Just data.text
+
+                                                Slack.RichText_Emoji data ->
+                                                    Nothing
+
+                                                Slack.RichText_UserMention id ->
+                                                    Nothing
+                                        )
+                                        elements2
+                                        |> String.join ""
+                                        |> CodeBlock NoLanguage
+                                    ]
+                        )
+                        elements
+        )
+        blocks
+        |> List.Nonempty.fromList
+        |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
 fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> String -> Nonempty RichText

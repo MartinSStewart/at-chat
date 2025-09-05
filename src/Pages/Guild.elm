@@ -1812,7 +1812,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if Id.toInt channel.oldestVisibleMessage == 0 then
+                ((if Id.toInt channel.oldestVisibleMessage <= 0 then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild_NoThread _ _ ->
@@ -2072,45 +2072,51 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                (( "a"
-                 , Ui.column
-                    [ Ui.alignBottom ]
-                    [ Ui.el
-                        [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                        (Ui.text "Start of thread")
-                    , case guildOrDmIdNoThread of
-                        GuildOrDmId_Guild_NoThread guildId channelId ->
-                            case LocalState.getGuildAndChannel guildId channelId local of
-                                Just ( _, channel2 ) ->
-                                    threadStarterMessage
-                                        isMobile
-                                        (GuildOrDmId_Guild_NoThread guildId channelId)
-                                        threadId
-                                        channel2
-                                        loggedIn
-                                        local
-                                        model
+                ((if Id.toInt channel.oldestVisibleMessage <= 0 then
+                    [ ( "a"
+                      , Ui.column
+                            [ Ui.alignBottom ]
+                            [ Ui.el
+                                [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                                (Ui.text "Start of thread")
+                            , case guildOrDmIdNoThread of
+                                GuildOrDmId_Guild_NoThread guildId channelId ->
+                                    case LocalState.getGuildAndChannel guildId channelId local of
+                                        Just ( _, channel2 ) ->
+                                            threadStarterMessage
+                                                isMobile
+                                                (GuildOrDmId_Guild_NoThread guildId channelId)
+                                                threadId
+                                                channel2
+                                                loggedIn
+                                                local
+                                                model
 
-                                Nothing ->
-                                    Ui.none
+                                        Nothing ->
+                                            Ui.none
 
-                        GuildOrDmId_Dm_NoThread otherUserId ->
-                            case SeqDict.get otherUserId local.dmChannels of
-                                Just dmChannel2 ->
-                                    threadStarterMessage
-                                        isMobile
-                                        (GuildOrDmId_Dm_NoThread otherUserId)
-                                        threadId
-                                        dmChannel2
-                                        loggedIn
-                                        local
-                                        model
+                                GuildOrDmId_Dm_NoThread otherUserId ->
+                                    case SeqDict.get otherUserId local.dmChannels of
+                                        Just dmChannel2 ->
+                                            threadStarterMessage
+                                                isMobile
+                                                (GuildOrDmId_Dm_NoThread otherUserId)
+                                                threadId
+                                                dmChannel2
+                                                loggedIn
+                                                local
+                                                model
 
-                                Nothing ->
-                                    Ui.none
+                                        Nothing ->
+                                            Ui.none
+                            ]
+                      )
                     ]
+
+                  else
+                    []
                  )
-                    :: threadConversationViewHelper
+                    ++ threadConversationViewHelper
                         lastViewedIndex
                         guildOrDmIdNoThread
                         threadId

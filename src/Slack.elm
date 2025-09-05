@@ -1,5 +1,6 @@
 module Slack exposing
     ( AuthToken(..)
+    , Block(..)
     , BlockElement(..)
     , Channel(..)
     , ChannelId
@@ -45,6 +46,7 @@ import Json.Decode.Extra
 import Json.Encode as Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
+import String.Nonempty exposing (NonemptyString)
 import Url.Builder
 import Url.Parser.Query
 
@@ -442,7 +444,7 @@ type alias RichText_Text_Data =
 
 
 type alias RichText_Emoji_Data =
-    { name : String, unicode : String, italic : Bool, bold : Bool, code : Bool }
+    { name : String, unicode : NonemptyString, italic : Bool, bold : Bool, code : Bool }
 
 
 decodeBlock : Decoder Block
@@ -496,7 +498,7 @@ decodeRichTextElement =
                     "emoji" ->
                         Decode.succeed RichText_Emoji_Data
                             |> andMap (Decode.field "name" Decode.string)
-                            |> andMap (Decode.field "unicode" Decode.string)
+                            |> andMap (Decode.field "unicode" decodeUnicode)
                             |> andMap (optionalBool "italic")
                             |> andMap (optionalBool "bold")
                             |> andMap (optionalBool "code")
@@ -508,6 +510,20 @@ decodeRichTextElement =
                     _ ->
                         Decode.fail ("Unknown block section type \"" ++ type_ ++ "\"")
             )
+
+
+decodeUnicode : Decoder NonemptyString
+decodeUnicode =
+    Decode.andThen
+        (\text ->
+            case String.Nonempty.fromString text of
+                Just nonempty ->
+                    Decode.succeed nonempty
+
+                Nothing ->
+                    Decode.fail "Expected nonempty string"
+        )
+        Decode.string
 
 
 optionalBool : String -> Decoder Bool

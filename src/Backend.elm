@@ -442,7 +442,7 @@ update msg model =
             case result of
                 Ok data ->
                     ( addSlackUser time data.users model
-                      --|> addSlackServer time teamId channels
+                        |> addSlackServer time data.team data.users data.channels
                     , Command.none
                     )
 
@@ -1291,10 +1291,10 @@ addSlackMessages threadRoute messages model channel =
                         (UserTextMessage
                             { createdAt = message.createdAt
                             , createdBy = userId
-                            , content = Debug.todo "" --data.blocks
+                            , content = RichText.fromSlack model.slackUsers data
                             , reactions = SeqDict.empty
                             , editedAt = Nothing
-                            , repliedTo = Debug.todo "" --maybeReplyTo
+                            , repliedTo = Nothing --maybeReplyTo
                             , attachedFiles = SeqDict.empty
                             }
                         )
