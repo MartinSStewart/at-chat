@@ -9,14 +9,14 @@ module Backend exposing
     )
 
 import AiChat
-import Array
+import Array exposing (Array)
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
-import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..), Thread)
+import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..), LastTypedAt, Thread)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -43,7 +43,7 @@ import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
 import NonemptyDict
-import OneToOne
+import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (InitAdminData)
 import Pagination
 import PersonName
@@ -443,7 +443,7 @@ update msg model =
             case result of
                 Ok data ->
                     ( addSlackUsers time userId data.currentUser data.users model
-                        |> addSlackServer time data.team data.users data.channels
+                        |> addSlackServer time userId data.team data.users data.channels
                     , Command.none
                     )
 
@@ -739,8 +739,15 @@ update msg model =
                     ( model, Command.none )
 
 
-addSlackServer : Time.Posix -> Slack.Team -> List Slack.User -> List ( Channel, List Slack.Message ) -> BackendModel -> BackendModel
-addSlackServer time team slackUsers channels model =
+addSlackServer :
+    Time.Posix
+    -> Id UserId
+    -> Slack.Team
+    -> List Slack.User
+    -> List ( Channel, List Slack.Message )
+    -> BackendModel
+    -> BackendModel
+addSlackServer time currentUserId team slackUsers channels model =
     case OneToOne.second team.id model.slackServers of
         Just _ ->
             model
@@ -877,6 +884,40 @@ addSlackServer time team slackUsers channels model =
                         )
                         model.users
                         members
+                , dmChannels =
+                    List.foldl
+                        (\( channel, messages ) dmChannels ->
+                            case channel of
+                                ImChannel data ->
+                                    case OneToOne.second data.user model.slackUsers of
+                                        Just otherUserId ->
+                                            SeqDict.update
+                                                (DmChannel.channelIdFromUserIds
+                                                    currentUserId
+                                                    otherUserId
+                                                )
+                                                (\maybe ->
+                                                    case maybe of
+                                                        Just dmChannel ->
+                                                            dmChannel
+                                                                |> addSlackMessages NoThread messages model
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            DmChannel.init
+                                                                |> addSlackMessages NoThread messages model
+                                                                |> Just
+                                                )
+                                                dmChannels
+
+                                        Nothing ->
+                                            dmChannels
+
+                                NormalChannel _ ->
+                                    dmChannels
+                        )
+                        model.dmChannels
+                        channels
             }
 
 
@@ -1280,7 +1321,22 @@ addDiscordMessages threadRoute messages model channel =
         messages
 
 
-addSlackMessages : ThreadRoute -> List Slack.Message -> BackendModel -> BackendChannel -> BackendChannel
+addSlackMessages :
+    ThreadRoute
+    -> List Slack.Message
+    -> BackendModel
+    ->
+        { d
+            | messages : Array (Message ChannelMessageId)
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
+        }
+    ->
+        { d
+            | messages : Array (Message ChannelMessageId)
+            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
+        }
 addSlackMessages threadRoute messages model channel =
     List.foldr
         (\message channel2 ->
@@ -1291,23 +1347,28 @@ addSlackMessages threadRoute messages model channel =
                 ( Slack.JoinerNotificationForInviter, Nothing ) ->
                     channel2
 
-                ( Slack.BotMessage _, Nothing ) ->
+                ( Slack.BotMessage, Nothing ) ->
                     channel2
 
                 ( Slack.UserMessage messageId data, Just userId ) ->
-                    LocalState.createChannelMessageBackend
-                        (Just (SlackMessageId messageId))
-                        (UserTextMessage
-                            { createdAt = message.createdAt
-                            , createdBy = userId
-                            , content = RichText.fromSlack model.slackUsers data
-                            , reactions = SeqDict.empty
-                            , editedAt = Nothing
-                            , repliedTo = Nothing --maybeReplyTo
-                            , attachedFiles = SeqDict.empty
-                            }
-                        )
-                        channel2
+                    case OneToOne.second (SlackMessageId messageId) channel2.linkedMessageIds of
+                        Just _ ->
+                            channel2
+
+                        Nothing ->
+                            LocalState.createChannelMessageBackend
+                                (Just (SlackMessageId messageId))
+                                (UserTextMessage
+                                    { createdAt = message.createdAt
+                                    , createdBy = userId
+                                    , content = RichText.fromSlack model.slackUsers data
+                                    , reactions = SeqDict.empty
+                                    , editedAt = Nothing
+                                    , repliedTo = Nothing --maybeReplyTo
+                                    , attachedFiles = SeqDict.empty
+                                    }
+                                )
+                                channel2
 
                 --handleDiscordCreateGuildMessageHelper
                 --    message.id

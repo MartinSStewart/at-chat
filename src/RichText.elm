@@ -1220,14 +1220,35 @@ fromSlack users blocks =
                                         (\element2 ->
                                             case element2 of
                                                 Slack.RichText_Text data ->
-                                                    case normalTextFromString data.text of
+                                                    case String.Nonempty.fromString data.text of
                                                         Just text ->
-                                                            (if data.italic then
-                                                                Italic (Nonempty text [])
+                                                            (if data.code then
+                                                                InlineCode (String.Nonempty.head text) (String.Nonempty.tail text)
 
                                                              else
-                                                                text
+                                                                NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
                                                             )
+                                                                |> (\a ->
+                                                                        if data.italic then
+                                                                            Italic (Nonempty a [])
+
+                                                                        else
+                                                                            a
+                                                                   )
+                                                                |> (\a ->
+                                                                        if data.bold then
+                                                                            Bold (Nonempty a [])
+
+                                                                        else
+                                                                            a
+                                                                   )
+                                                                |> (\a ->
+                                                                        if data.strikethrough then
+                                                                            Strikethrough (Nonempty a [])
+
+                                                                        else
+                                                                            a
+                                                                   )
                                                                 |> Just
 
                                                         Nothing ->

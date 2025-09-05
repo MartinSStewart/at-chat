@@ -36,6 +36,7 @@ import Duration
 import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Effect.Time as Time
+import Hex
 import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Extra
@@ -382,7 +383,7 @@ type MessageType
     = UserJoinedMessage
     | UserMessage (Id MessageId) (List Block)
     | JoinerNotificationForInviter
-    | BotMessage (Id MessageId)
+    | BotMessage
 
 
 decodeMessage : Decoder Message
@@ -405,7 +406,6 @@ decodeMessage =
 
                             Just "bot_message" ->
                                 Decode.succeed BotMessage
-                                    |> andMap (Decode.field "client_msg_id" decodeId)
 
                             Just subtype2 ->
                                 Decode.fail ("Unknown message subtype \"" ++ subtype2 ++ "\"")
@@ -434,11 +434,18 @@ type RichTextElement
 
 
 type alias RichText_Text_Data =
-    { text : String, italic : Bool, bold : Bool, code : Bool }
+    { text : String
+    , italic : Bool
+    , bold : Bool
+    , code : Bool
+    , strikethrough : Bool
+    }
 
 
 type alias RichText_Emoji_Data =
-    { name : String, unicode : NonemptyString, italic : Bool, bold : Bool, code : Bool }
+    { name : String
+    , unicode : NonemptyString
+    }
 
 
 decodeBlock : Decoder Block
@@ -487,15 +494,13 @@ decodeRichTextElement =
                             |> andMap (optionalBool "italic")
                             |> andMap (optionalBool "bold")
                             |> andMap (optionalBool "code")
+                            |> andMap (optionalBool "strike")
                             |> Decode.map RichText_Text
 
                     "emoji" ->
                         Decode.succeed RichText_Emoji_Data
                             |> andMap (Decode.field "name" Decode.string)
                             |> andMap (Decode.field "unicode" decodeUnicode)
-                            |> andMap (optionalBool "italic")
-                            |> andMap (optionalBool "bold")
-                            |> andMap (optionalBool "code")
                             |> Decode.map RichText_Emoji
 
                     "user" ->
@@ -510,12 +515,12 @@ decodeUnicode : Decoder NonemptyString
 decodeUnicode =
     Decode.andThen
         (\text ->
-            case String.Nonempty.fromString text of
-                Just nonempty ->
-                    Decode.succeed nonempty
+            case Hex.fromString text of
+                Ok int ->
+                    Decode.succeed (String.Nonempty.fromChar (Char.fromCode int))
 
-                Nothing ->
-                    Decode.fail "Expected nonempty string"
+                Err _ ->
+                    Decode.fail ("Invalid emoji code \"" ++ text ++ "\"")
         )
         Decode.string
 

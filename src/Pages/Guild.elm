@@ -2922,7 +2922,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     Ui.none
 
                   else
-                    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text ("(" ++ Id.toString messageIndex ++ ")"))
+                    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageIndex))
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]
