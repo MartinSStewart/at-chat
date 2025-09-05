@@ -57,6 +57,7 @@ import SeqSet
 import Slack exposing (Channel(..))
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
+import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import UInt64
@@ -438,10 +439,10 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        GotSlackChannels time result ->
+        GotSlackChannels time userId result ->
             case result of
                 Ok data ->
-                    ( addSlackUsers time data.users model
+                    ( addSlackUsers time userId data.currentUser data.users model
                         |> addSlackServer time data.team data.users data.channels
                     , Command.none
                     )
@@ -703,17 +704,18 @@ update msg model =
             , Command.none
             )
 
-        GotSlackOAuth time result ->
+        GotSlackOAuth time userId result ->
             case result of
                 Ok ok ->
                     ( model
-                    , Task.map3
-                        (\a b c -> ( a, b, c ))
+                    , Task.map4
+                        T4
+                        (Slack.getCurrentUser ok.userAccessToken)
                         (Slack.teamInfo ok.botAccessToken)
                         (Slack.listUsers ok.botAccessToken 100 Nothing)
                         (Slack.loadWorkspaceChannels ok.userAccessToken ok.teamId)
                         |> Task.andThen
-                            (\( teamInfo, ( users, _ ), channels ) ->
+                            (\(T4 currentUser teamInfo ( users, _ ) channels) ->
                                 List.map
                                     (\channel ->
                                         Slack.loadMessages ok.userAccessToken (Slack.channelId channel) 100
@@ -721,9 +723,16 @@ update msg model =
                                     )
                                     channels
                                     |> Task.sequence
-                                    |> Task.map (\channels2 -> { team = teamInfo, users = users, channels = channels2 })
+                                    |> Task.map
+                                        (\channels2 ->
+                                            { currentUser = currentUser
+                                            , team = teamInfo
+                                            , users = users
+                                            , channels = channels2
+                                            }
+                                        )
                             )
-                        |> Task.attempt (GotSlackChannels time)
+                        |> Task.attempt (GotSlackChannels time userId)
                     )
 
                 Err _ ->
@@ -871,15 +880,12 @@ addSlackServer time team slackUsers channels model =
             }
 
 
-addSlackUsers : Time.Posix -> List Slack.User -> BackendModel -> BackendModel
-addSlackUsers time newUsers model =
+addSlackUsers : Time.Posix -> Id UserId -> Slack.CurrentUser -> List Slack.User -> BackendModel -> BackendModel
+addSlackUsers time currentUserId currentUser newUsers model =
     List.foldl
         (\slackUser model2 ->
-            case OneToOne.second slackUser.id model2.slackUsers of
-                Just _ ->
-                    model2
-
-                Nothing ->
+            case ( OneToOne.second slackUser.id model2.slackUsers, slackUser.id == currentUser.userId ) of
+                ( Nothing, False ) ->
                     let
                         userId : Id UserId
                         userId =
@@ -897,8 +903,11 @@ addSlackUsers time newUsers model =
                         | slackUsers = OneToOne.insert slackUser.id userId model2.slackUsers
                         , users = NonemptyDict.insert userId user model2.users
                     }
+
+                _ ->
+                    model2
         )
-        model
+        { model | slackUsers = OneToOne.insert currentUser.userId currentUserId model.slackUsers }
         newUsers
 
 
@@ -3068,12 +3077,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asUser
                 model2
                 sessionId2
-                (\_ _ ->
+                (\userId _ ->
                     ( model2
                     , case model2.slackClientSecret of
                         Just clientSecret ->
                             Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth time)
+                                |> Task.attempt (GotSlackOAuth time userId)
 
                         Nothing ->
                             Command.none

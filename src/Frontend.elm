@@ -56,6 +56,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -4992,7 +4993,30 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
-    Command.none
+    if False then
+        if
+            SeqSet.member
+                local.localUser.userId
+                (LocalState.usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content)
+        then
+            Command.batch
+                [ Ports.playSound "pop"
+                , Ports.setFavicon "/favicon-red.ico"
+                , case model.notificationPermission of
+                    Ports.Granted ->
+                        Ports.showNotification
+                            (User.toString senderId (LocalState.allUsers local))
+                            (RichText.toString (LocalState.allUsers local) content)
+
+                    _ ->
+                        Command.none
+                ]
+
+        else
+            Command.none
+
+    else
+        Command.none
 
 
 pendingChangesText : LocalChange -> String

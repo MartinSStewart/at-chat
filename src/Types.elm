@@ -494,14 +494,16 @@ type BackendMsg
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels
         Time.Posix
+        (Id UserId)
         (Result
             Http.Error
-            { team : Slack.Team
+            { currentUser : Slack.CurrentUser
+            , team : Slack.Team
             , users : List Slack.User
             , channels : List ( Slack.Channel, List Slack.Message )
             }
         )
-    | GotSlackOAuth Time.Posix (Result Http.Error Slack.TokenResponse)
+    | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
 
 
 type LoginResult
