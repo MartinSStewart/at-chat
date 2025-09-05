@@ -1258,14 +1258,14 @@ fromSlack users blocks =
                                                 Slack.RichText_Text data ->
                                                     Just data.text
 
-                                                Slack.RichText_Emoji data ->
+                                                Slack.RichText_Emoji _ ->
                                                     Nothing
 
-                                                Slack.RichText_UserMention id ->
+                                                Slack.RichText_UserMention _ ->
                                                     Nothing
                                         )
                                         elements2
-                                        |> String.join ""
+                                        |> String.concat
                                         |> CodeBlock NoLanguage
                                     ]
                         )

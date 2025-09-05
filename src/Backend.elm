@@ -441,7 +441,7 @@ update msg model =
         GotSlackChannels time result ->
             case result of
                 Ok data ->
-                    ( addSlackUser time data.users model
+                    ( addSlackUsers time data.users model
                         |> addSlackServer time data.team data.users data.channels
                     , Command.none
                     )
@@ -730,7 +730,7 @@ update msg model =
                     ( model, Command.none )
 
 
-addSlackServer : Time.Posix -> Slack.Team -> List Slack.User -> List ( Slack.Channel, List Slack.Message ) -> BackendModel -> BackendModel
+addSlackServer : Time.Posix -> Slack.Team -> List Slack.User -> List ( Channel, List Slack.Message ) -> BackendModel -> BackendModel
 addSlackServer time team slackUsers channels model =
     case OneToOne.second team.id model.slackServers of
         Just _ ->
@@ -747,7 +747,7 @@ addSlackServer time team slackUsers channels model =
                     --    Nothing ->
                     adminUserId
 
-                threads : SeqDict (Slack.Id Slack.ChannelId) (List ( Slack.Channel, List Slack.Message ))
+                threads : SeqDict (Slack.Id Slack.ChannelId) (List ( Channel, List Slack.Message ))
                 threads =
                     SeqDict.empty
 
@@ -871,8 +871,8 @@ addSlackServer time team slackUsers channels model =
             }
 
 
-addSlackUser : Time.Posix -> List Slack.User -> BackendModel -> BackendModel
-addSlackUser time newUsers model =
+addSlackUsers : Time.Posix -> List Slack.User -> BackendModel -> BackendModel
+addSlackUsers time newUsers model =
     List.foldl
         (\slackUser model2 ->
             case OneToOne.second slackUser.id model2.slackUsers of
@@ -1188,9 +1188,9 @@ addSlackChannel :
     Time.Posix
     -> Id UserId
     -> BackendModel
-    -> SeqDict (Slack.Id Slack.ChannelId) (List ( Slack.Channel, List Slack.Message ))
+    -> SeqDict (Slack.Id Slack.ChannelId) (List ( Channel, List Slack.Message ))
     -> Int
-    -> Slack.Channel
+    -> Channel
     -> List Slack.Message
     -> Maybe ( Slack.Id Slack.ChannelId, Id ChannelId, BackendChannel )
 addSlackChannel time ownerId model threads index slackChannel messages =
@@ -2935,7 +2935,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 guildId
-                                (\userId user guild ->
+                                (\_ _ guild ->
                                     ( model2
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
@@ -2954,7 +2954,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model
                                 sessionId
-                                (\userId user ->
+                                (\userId _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
                                         |> Maybe.withDefault DmChannel.init
@@ -2972,7 +2972,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 guildId
-                                (\userId user guild ->
+                                (\_ _ guild ->
                                     ( model2
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
@@ -2993,7 +2993,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model
                                 sessionId
-                                (\userId user ->
+                                (\userId _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
                                         |> Maybe.withDefault DmChannel.init
@@ -3068,7 +3068,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asUser
                 model2
                 sessionId2
-                (\userId _ ->
+                (\_ _ ->
                     ( model2
                     , case model2.slackClientSecret of
                         Just clientSecret ->
@@ -3213,7 +3213,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                                     }
                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
-                                            Just (SlackMessageId slackMessageId) ->
+                                            Just (SlackMessageId _) ->
                                                 Debug.todo ""
 
                                             Nothing ->

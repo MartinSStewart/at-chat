@@ -3,24 +3,12 @@ module Unsafe exposing
     , emailAddress
     , guildName
     , personName
-    , url
     )
 
 import ChannelName exposing (ChannelName)
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
-import Url exposing (Url)
-
-
-url : String -> Url
-url urlText =
-    case Url.fromString urlText of
-        Just url_ ->
-            url_
-
-        Nothing ->
-            unreachable 0
 
 
 personName : String -> PersonName

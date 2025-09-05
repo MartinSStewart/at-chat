@@ -2,7 +2,7 @@ module Message exposing (Message(..), MessageNoReply(..), MessageState(..), Mess
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)

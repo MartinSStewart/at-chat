@@ -16,18 +16,13 @@ module Slack exposing
     , RichTextElement(..)
     , RichText_Emoji_Data
     , RichText_Text_Data
-    , SlackMessage
     , Team
     , TeamId
     , TokenResponse
     , User
     , UserId
-    , Workspace
     , buildOAuthUrl
     , channelId
-    , decodeChannel
-    , decodeTokenResponse
-    , decodeWorkspace
     , exchangeCodeForToken
     , listUsers
     , loadMessages
@@ -36,19 +31,16 @@ module Slack exposing
     , teamInfo
     )
 
-import Duration exposing (Duration)
+import Duration
 import Effect.Http as Http
-import Effect.Task as Task exposing (Task)
+import Effect.Task exposing (Task)
 import Effect.Time as Time
 import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Extra
-import Json.Encode as Encode
-import List.Extra
 import List.Nonempty exposing (Nonempty)
 import String.Nonempty exposing (NonemptyString)
 import Url.Builder
-import Url.Parser.Query
 
 
 
@@ -97,15 +89,7 @@ type alias TokenResponse =
 
 
 type OAuthError
-    = InvalidClientId
-    | InvalidClientSecret
-    | InvalidCode
-    | InvalidGrantType
-    | InvalidRedirectUri
-    | InvalidScope
-    | AccessDenied
-    | ServerError
-    | UnknownOAuthError String
+    = UnknownOAuthError String
 
 
 buildOAuthUrl :
@@ -160,10 +144,10 @@ exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
                         Http.NetworkError_ ->
                             Err Http.NetworkError
 
-                        Http.BadStatus_ metadata body ->
+                        Http.BadStatus_ metadata _ ->
                             Err (Http.BadStatus metadata.statusCode)
 
-                        Http.GoodStatus_ metadata body ->
+                        Http.GoodStatus_ _ body ->
                             case Decode.decodeString decodeTokenResponse body of
                                 Ok result ->
                                     Ok result
@@ -177,15 +161,6 @@ exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
 
 
 -- DATA STRUCTURES
-
-
-type alias Workspace =
-    { id : String
-    , name : String
-    , domain : String
-    , icon : Maybe String
-    , isDeleted : Bool
-    }
 
 
 type alias NormalChannelData =
@@ -245,15 +220,6 @@ decodeUser =
         |> andMap (Decode.field "is_bot" Decode.bool)
         |> andMap (Decode.field "deleted" Decode.bool)
         |> andMap (Decode.at [ "profile", "image_192" ] Decode.string)
-
-
-type alias SlackMessage =
-    { ts : String
-    , user : String
-    , text : String
-    , channelId : Id ChannelId
-    , threadTs : Maybe String
-    }
 
 
 
@@ -365,7 +331,7 @@ httpRequest (SlackAuth auth) method rpcFunction body decoder =
                         Http.BadStatus_ metadata _ ->
                             Err (Http.BadStatus metadata.statusCode)
 
-                        Http.GoodStatus_ metadata body2 ->
+                        Http.GoodStatus_ _ body2 ->
                             case Decode.decodeString decoder body2 of
                                 Ok result ->
                                     Ok result
@@ -547,26 +513,6 @@ decodeTimePosixString =
 
 
 -- DECODERS
-
-
-decodeWorkspacesList : Decoder (List Workspace)
-decodeWorkspacesList =
-    Decode.field "teams" (Decode.list decodeWorkspace)
-
-
-decodeWorkspaceDetails : Decoder Workspace
-decodeWorkspaceDetails =
-    Decode.field "team" decodeWorkspace
-
-
-decodeWorkspace : Decoder Workspace
-decodeWorkspace =
-    Decode.map5 Workspace
-        (Decode.field "id" Decode.string)
-        (Decode.field "name" Decode.string)
-        (Decode.field "domain" Decode.string)
-        (Decode.maybe (Decode.field "icon" (Decode.field "image_68" Decode.string)))
-        (Decode.field "deleted" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault False))
 
 
 decodeChannelsList : Decoder (List Channel)

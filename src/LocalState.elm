@@ -52,7 +52,6 @@ module LocalState exposing
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , repliedToUserIdFrontend
-    , updateArray
     , updateChannel
     , usersToNotify
     , usersToNotifyFrontend
@@ -61,14 +60,13 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
-import Discord.Id
-import DmChannel exposing (DmChannel, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
+import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -547,7 +545,6 @@ createMessageFrontend message channel =
 
                 Nothing ->
                     Array.push (MessageLoaded message) channel.messages
-        , oldestVisibleMessage = channel.oldestVisibleMessage
         , newestVisibleMessage =
             case ( mergeWithPrevious, Id.toInt channel.newestVisibleMessage == (Array.length channel.messages - 1) ) of
                 ( Nothing, True ) ->

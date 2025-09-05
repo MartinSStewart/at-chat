@@ -25,13 +25,11 @@ port module Ports exposing
     , unregisterPushSubscriptionToJs
     )
 
-import Bytes exposing (Bytes)
 import Codec exposing (Codec)
 import CodecExtra
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
-import Env
 import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)

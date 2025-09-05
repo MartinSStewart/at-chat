@@ -33,7 +33,6 @@
             "elm/virtual-dom": "1.0.3",
             "elm-community/easing-functions": "2.0.0",
             "elm-community/json-extra": "4.3.0",
-            "elm-explorations/test": "2.1.1",
             "elmcraft/core-extra": "2.2.0",
             "ianmackenzie/elm-units": "2.10.0",
             "ianmackenzie/elm-units-interval": "3.2.0",
@@ -68,6 +67,7 @@
             "elm-community/result-extra": "2.4.0",
             "elm-community/string-extra": "4.0.1",
             "elm-explorations/linear-algebra": "1.0.3",
+            "elm-explorations/test": "2.1.1",
             "elm-explorations/webgl": "1.1.3",
             "folkertdev/elm-flate": "2.0.5",
             "folkertdev/elm-sha2": "1.0.0",
@@ -85,7 +85,9 @@
         }
     },
     "test-dependencies": {
-        "direct": {},
+        "direct": {
+            "elm-explorations/test": "2.1.1"
+        },
         "indirect": {}
     }
 }

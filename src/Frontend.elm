@@ -40,13 +40,13 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
+import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
 import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -56,7 +56,6 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..))
 import SeqDict exposing (SeqDict)
-import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -4993,30 +4992,7 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
-    if False then
-        if
-            SeqSet.member
-                local.localUser.userId
-                (LocalState.usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content)
-        then
-            Command.batch
-                [ Ports.playSound "pop"
-                , Ports.setFavicon "/favicon-red.ico"
-                , case model.notificationPermission of
-                    Ports.Granted ->
-                        Ports.showNotification
-                            (User.toString senderId (LocalState.allUsers local))
-                            (RichText.toString (LocalState.allUsers local) content)
-
-                    _ ->
-                        Command.none
-                ]
-
-        else
-            Command.none
-
-    else
-        Command.none
+    Command.none
 
 
 pendingChangesText : LocalChange -> String
@@ -5056,7 +5032,7 @@ pendingChangesText localChange =
                 Pages.Admin.SetPublicVapidKey _ ->
                     "Set public vapid key"
 
-                Pages.Admin.SetSlackClientSecret maybeClientSecret ->
+                Pages.Admin.SetSlackClientSecret _ ->
                     "Set slack client secret"
 
         Local_SendMessage _ _ _ _ _ ->
@@ -5107,10 +5083,10 @@ pendingChangesText localChange =
         Local_SetName _ ->
             "Set display name"
 
-        Local_LoadChannelMessages guildOrDmIdNoThread id toBeFilledInByBackend ->
+        Local_LoadChannelMessages _ _ _ ->
             "Load channel messages"
 
-        Local_LoadThreadMessages guildOrDmIdNoThread id _ toBeFilledInByBackend ->
+        Local_LoadThreadMessages _ _ _ _ ->
             "Load thread messages"
 
 
