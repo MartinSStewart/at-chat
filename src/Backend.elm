@@ -3134,6 +3134,9 @@ twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend mo
                 RegisteredFromDiscord ->
                     ( model2, Command.none )
 
+                RegisteredFromSlack ->
+                    ( model2, Command.none )
+
         TwoFactorAuthentication.ConfirmTwoFactorAuthenticationRequest code ->
             case SeqDict.get userId model.twoFactorAuthenticationSetup of
                 Just data ->

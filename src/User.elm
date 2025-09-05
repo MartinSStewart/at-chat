@@ -56,6 +56,7 @@ setName name user =
 
 type EmailStatus
     = RegisteredFromDiscord
+    | RegisteredFromSlack
     | RegisteredDirectly EmailAddress
 
 

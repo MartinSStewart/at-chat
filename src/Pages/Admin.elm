@@ -735,6 +735,9 @@ userToEditUser user =
 
             RegisteredFromDiscord ->
                 ""
+
+            RegisteredFromSlack ->
+                ""
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
     }
@@ -1476,6 +1479,9 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                                                     EmailAddress.toString email
 
                                                 RegisteredFromDiscord ->
+                                                    ""
+
+                                                RegisteredFromSlack ->
                                                     ""
                                         )
                                     |> Set.fromList
