@@ -266,9 +266,11 @@ type alias BackendModel =
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
+    , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
     , slackWorkspaces : OneToOne String (Id GuildId)
-    , slackUsers : OneToOne String (Id UserId)
+    , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
+    , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
     , slackToken : Maybe Slack.AuthToken
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
@@ -490,8 +492,16 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
-    | GotSlackChannels Time.Posix (Result Slack.HttpError ( List Slack.User, List ( Slack.Channel, List Slack.Message ) ))
-    | GotSlackOAuth Time.Posix (Result Slack.HttpError Slack.TokenResponse)
+    | GotSlackChannels
+        Time.Posix
+        (Result
+            Http.Error
+            { team : Slack.Team
+            , users : List Slack.User
+            , channels : List ( Slack.Channel, List Slack.Message )
+            }
+        )
+    | GotSlackOAuth Time.Posix (Result Http.Error Slack.TokenResponse)
 
 
 type LoginResult

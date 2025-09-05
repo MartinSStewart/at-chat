@@ -190,6 +190,7 @@ view isMobile time local loggedIn loaded model =
                                     "channels:read"
                                     [ "channels:history"
                                     , "users:read"
+                                    , "team:read"
                                     ]
                             , userScopes =
                                 Nonempty

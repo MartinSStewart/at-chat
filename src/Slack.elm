@@ -1,21 +1,26 @@
 module Slack exposing
     ( AuthToken(..)
     , BlockElement(..)
-    , Channel
+    , Channel(..)
+    , ChannelId
     , ClientSecret(..)
-    , HttpError(..)
     , Id(..)
+    , ImChannelData
     , Message
+    , MessageId
+    , MessageType(..)
+    , NormalChannelData
     , OAuthCode(..)
     , OAuthError(..)
     , RichTextElement(..)
     , RichText_Emoji_Data
     , RichText_Text_Data
-    , SlackError(..)
     , SlackMessage
+    , Team
+    , TeamId
     , TokenResponse
     , User
-    , UserMessageData
+    , UserId
     , Workspace
     , buildOAuthUrl
     , channelId
@@ -27,6 +32,7 @@ module Slack exposing
     , loadMessages
     , loadWorkspaceChannels
     , redirectUri
+    , teamInfo
     )
 
 import Duration exposing (Duration)
@@ -35,7 +41,7 @@ import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Decode.Extra exposing (andMap)
+import Json.Decode.Extra
 import Json.Encode as Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
@@ -64,7 +70,7 @@ type Id a
 
 
 type UserId
-    = SlackUserId Never
+    = UserId Never
 
 
 type ChannelId
@@ -72,7 +78,11 @@ type ChannelId
 
 
 type TeamId
-    = SlackTeamId Never
+    = TeamId Never
+
+
+type MessageId
+    = MessageId Never
 
 
 type alias TokenResponse =
@@ -117,16 +127,16 @@ buildOAuthUrl config =
 
 redirectUri : String
 redirectUri =
-    "https://6b11fa4fc5b1.ngrok-free.app/slack-oauth"
+    "https://6a209156400e.ngrok-free.app/slack-oauth"
 
 
-exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction HttpError TokenResponse
+exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse
 exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
-    let
-        url =
-            Url.Builder.crossOrigin "https://slack.com" [ "api", "oauth.v2.access" ] []
-
-        body =
+    Http.task
+        { method = "POST"
+        , headers = []
+        , url = Url.Builder.crossOrigin "https://slack.com" [ "api", "oauth.v2.access" ] []
+        , body =
             [ ( "client_id", clientId )
             , ( "client_secret", clientSecret )
             , ( "code", code )
@@ -135,13 +145,30 @@ exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
                 |> List.map (\( key, value ) -> key ++ "=" ++ value)
                 |> String.join "&"
                 |> Http.stringBody "application/x-www-form-urlencoded"
-    in
-    Http.task
-        { method = "POST"
-        , headers = []
-        , url = url
-        , body = body
-        , resolver = Http.stringResolver (handleOAuthResponse decodeTokenResponse)
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        Http.BadUrl_ url ->
+                            Err (Http.BadUrl url)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata body ->
+                            Err (Http.BadStatus metadata.statusCode)
+
+                        Http.GoodStatus_ metadata body ->
+                            case Decode.decodeString decodeTokenResponse body of
+                                Ok result ->
+                                    Ok result
+
+                                Err decodeError ->
+                                    Err (Http.BadBody (Decode.errorToString decodeError))
+                )
         , timeout = Just (Duration.seconds 30)
         }
 
@@ -203,6 +230,11 @@ type alias User =
     }
 
 
+andMap : Decoder a -> Decoder (a -> b) -> Decoder b
+andMap =
+    Decode.map2 (|>)
+
+
 decodeUser : Decoder User
 decodeUser =
     Decode.succeed User
@@ -223,34 +255,37 @@ type alias SlackMessage =
 
 
 
--- ERROR HANDLING
-
-
-type SlackError
-    = InvalidAuth
-    | AccountInactive
-    | InvalidArgName
-    | InvalidArrayArg
-    | RateLimited
-    | RequestTimeout
-    | InternalError
-    | Unknown String
-
-
-type HttpError
-    = BadUrl String
-    | Timeout
-    | NetworkError
-    | BadStatus Int
-    | BadBody String
-    | SlackApiError SlackError
-
-
-
 -- API FUNCTIONS
 
 
-listUsers : AuthToken -> Int -> Maybe String -> Task restriction HttpError ( List User, Maybe String )
+teamInfo : AuthToken -> Task restriction Http.Error Team
+teamInfo auth =
+    httpRequest
+        auth
+        "GET"
+        "team.info"
+        []
+        (Decode.field "team" decodeTeam)
+
+
+type alias Team =
+    { id : Id TeamId
+    , name : String
+    , domain : String
+    , image132 : String
+    }
+
+
+decodeTeam : Decoder Team
+decodeTeam =
+    Decode.succeed Team
+        |> andMap (Decode.field "id" decodeId)
+        |> andMap (Decode.field "name" Decode.string)
+        |> andMap (Decode.field "name" Decode.string)
+        |> andMap (Decode.at [ "icon", "image_132" ] Decode.string)
+
+
+listUsers : AuthToken -> Int -> Maybe String -> Task restriction Http.Error ( List User, Maybe String )
 listUsers auth limit cursor =
     httpRequest
         auth
@@ -271,7 +306,7 @@ listUsers auth limit cursor =
         )
 
 
-loadWorkspaceChannels : AuthToken -> Id TeamId -> Task restriction HttpError (List Channel)
+loadWorkspaceChannels : AuthToken -> Id TeamId -> Task restriction Http.Error (List Channel)
 loadWorkspaceChannels auth (Id teamId) =
     httpRequest
         auth
@@ -281,7 +316,7 @@ loadWorkspaceChannels auth (Id teamId) =
         decodeChannelsList
 
 
-loadMessages : AuthToken -> Id ChannelId -> Int -> Task restriction HttpError (List Message)
+loadMessages : AuthToken -> Id ChannelId -> Int -> Task restriction Http.Error (List Message)
 loadMessages auth (Id channelId2) limit =
     httpRequest
         auth
@@ -291,7 +326,7 @@ loadMessages auth (Id channelId2) limit =
         (Decode.field "messages" (Decode.list decodeMessage))
 
 
-httpRequest : AuthToken -> String -> String -> List (Maybe ( String, String )) -> Decoder a -> Task restriction HttpError a
+httpRequest : AuthToken -> String -> String -> List (Maybe ( String, String )) -> Decoder a -> Task restriction Http.Error a
 httpRequest (SlackAuth auth) method rpcFunction body decoder =
     Http.task
         { method = method
@@ -312,55 +347,78 @@ httpRequest (SlackAuth auth) method rpcFunction body decoder =
                     body
                     |> String.join "&"
                 )
-        , resolver = Http.stringResolver (handleSlackResponse decoder)
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        Http.BadUrl_ url ->
+                            Err (Http.BadUrl url)
+
+                        Http.Timeout_ ->
+                            Err Http.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Http.NetworkError
+
+                        Http.BadStatus_ metadata _ ->
+                            Err (Http.BadStatus metadata.statusCode)
+
+                        Http.GoodStatus_ metadata body2 ->
+                            case Decode.decodeString decoder body2 of
+                                Ok result ->
+                                    Ok result
+
+                                Err decodeError ->
+                                    Err (Http.BadBody (Decode.errorToString decodeError))
+                )
         , timeout = Just (Duration.seconds 30)
         }
 
 
-type Message
-    = UserJoinedMessage (Id UserId) Time.Posix
-    | UserMessage UserMessageData
-    | JoinerNotificationForInviter (Id UserId) Time.Posix
-    | BotMessage (Id UserId) Time.Posix
-
-
-type alias UserMessageData =
-    { user : Id UserId
-    , blocks : List Block
+type alias Message =
+    { id : Id MessageId
+    , createdBy : Id UserId
     , createdAt : Time.Posix
+    , messageType : MessageType
     }
+
+
+type MessageType
+    = UserJoinedMessage
+    | UserMessage (List Block)
+    | JoinerNotificationForInviter
+    | BotMessage
 
 
 decodeMessage : Decoder Message
 decodeMessage =
-    Json.Decode.Extra.optionalField "subtype" Decode.string
-        |> Decode.andThen
-            (\subtype ->
-                case subtype of
-                    Just "channel_join" ->
-                        Decode.succeed UserJoinedMessage
-                            |> andMap (Decode.field "user" decodeId)
-                            |> andMap (Decode.field "ts" decodeTimePosixString)
+    Decode.succeed Message
+        |> andMap (Decode.field "ms_id" decodeId)
+        |> andMap (Decode.field "user" decodeId)
+        |> andMap (Decode.field "ts" decodeTimePosixString)
+        |> andMap
+            (Json.Decode.Extra.optionalField
+                "subtype"
+                Decode.string
+                |> Decode.andThen
+                    (\subtype ->
+                        case subtype of
+                            Just "channel_join" ->
+                                Decode.succeed UserJoinedMessage
 
-                    Just "joiner_notification_for_inviter" ->
-                        Decode.succeed JoinerNotificationForInviter
-                            |> andMap (Decode.field "user" decodeId)
-                            |> andMap (Decode.field "ts" decodeTimePosixString)
+                            Just "joiner_notification_for_inviter" ->
+                                Decode.succeed JoinerNotificationForInviter
 
-                    Just "bot_message" ->
-                        Decode.succeed BotMessage
-                            |> andMap (Decode.field "user" decodeId)
-                            |> andMap (Decode.field "ts" decodeTimePosixString)
+                            Just "bot_message" ->
+                                Decode.succeed BotMessage
 
-                    Just subtype2 ->
-                        Decode.fail ("Unknown message subtype \"" ++ subtype2 ++ "\"")
+                            Just subtype2 ->
+                                Decode.fail ("Unknown message subtype \"" ++ subtype2 ++ "\"")
 
-                    Nothing ->
-                        Decode.succeed UserMessageData
-                            |> andMap (Decode.field "user" decodeId)
-                            |> andMap (Decode.field "blocks" (Decode.list decodeBlock))
-                            |> andMap (Decode.field "ts" decodeTimePosixString)
-                            |> Decode.map UserMessage
+                            Nothing ->
+                                Decode.succeed UserMessage
+                                    |> andMap (Decode.field "blocks" (Decode.list decodeBlock))
+                    )
             )
 
 
@@ -469,86 +527,6 @@ decodeTimePosixString =
                     Decode.fail "Invalid time posix"
         )
         Decode.string
-
-
-
--- HTTP RESPONSE HANDLING
-
-
-handleSlackResponse : Decoder a -> Http.Response String -> Result HttpError a
-handleSlackResponse decoder response =
-    case response of
-        Http.BadUrl_ url ->
-            Err (BadUrl url)
-
-        Http.Timeout_ ->
-            Err Timeout
-
-        Http.NetworkError_ ->
-            Err NetworkError
-
-        Http.BadStatus_ metadata body ->
-            Err (BadStatus metadata.statusCode)
-
-        Http.GoodStatus_ metadata body ->
-            case Decode.decodeString (slackResponseDecoder decoder) body of
-                Ok result ->
-                    Ok result
-
-                Err decodeError ->
-                    Err (BadBody (Decode.errorToString decodeError))
-
-
-handleOAuthResponse : Decoder a -> Http.Response String -> Result HttpError a
-handleOAuthResponse decoder response =
-    case response of
-        Http.BadUrl_ url ->
-            Err (BadUrl url)
-
-        Http.Timeout_ ->
-            Err Timeout
-
-        Http.NetworkError_ ->
-            Err NetworkError
-
-        Http.BadStatus_ metadata body ->
-            Err (BadStatus metadata.statusCode)
-
-        Http.GoodStatus_ metadata body ->
-            case Decode.decodeString (oauthResponseDecoder decoder) body of
-                Ok result ->
-                    Ok result
-
-                Err decodeError ->
-                    Err (BadBody (Decode.errorToString decodeError))
-
-
-slackResponseDecoder : Decoder a -> Decoder a
-slackResponseDecoder dataDecoder =
-    Decode.field "ok" Decode.bool
-        |> Decode.andThen
-            (\isOk ->
-                if isOk then
-                    dataDecoder
-
-                else
-                    Decode.field "error" Decode.string
-                        |> Decode.andThen (\error -> Decode.fail ("Slack API error: " ++ error))
-            )
-
-
-oauthResponseDecoder : Decoder a -> Decoder a
-oauthResponseDecoder dataDecoder =
-    Decode.field "ok" Decode.bool
-        |> Decode.andThen
-            (\isOk ->
-                if isOk then
-                    dataDecoder
-
-                else
-                    Decode.field "error" Decode.string
-                        |> Decode.andThen (\error -> Decode.fail ("OAuth error: " ++ error))
-            )
 
 
 

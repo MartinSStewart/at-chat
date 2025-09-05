@@ -1,6 +1,8 @@
 module DmChannel exposing
     ( DmChannel
     , DmChannelId(..)
+    , ExternalChannelId(..)
+    , ExternalMessageId(..)
     , FrontendDmChannel
     , FrontendThread
     , LastTypedAt
@@ -27,15 +29,16 @@ import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), 
 import Message exposing (Message, MessageState(..))
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
+import Slack
 import Time
 
 
 type alias DmChannel =
     { messages : Array (Message ChannelMessageId)
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
-    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelMessageId)
+    , linkedThreadIds : OneToOne ExternalChannelId (Id ChannelMessageId)
     }
 
 
@@ -51,7 +54,7 @@ type alias FrontendDmChannel =
 type alias Thread =
     { messages : Array (Message ThreadMessageId)
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+    , linkedMessageIds : OneToOne ExternalMessageId (Id ThreadMessageId)
     }
 
 
@@ -61,6 +64,16 @@ type alias FrontendThread =
     , newestVisibleMessage : Id ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     }
+
+
+type ExternalChannelId
+    = DiscordChannelId (Discord.Id.Id Discord.Id.ChannelId)
+    | SlackChannelId (Slack.Id Slack.ChannelId)
+
+
+type ExternalMessageId
+    = DiscordMessageId (Discord.Id.Id Discord.Id.MessageId)
+    | SlackMessageId (Slack.Id Slack.MessageId)
 
 
 threadInit : Thread

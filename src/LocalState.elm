@@ -62,7 +62,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
+import DmChannel exposing (DmChannel, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -115,7 +115,7 @@ type alias BackendGuild =
     , name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Id ChannelId) BackendChannel
-    , linkedChannelIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelId)
+    , linkedChannelIds : OneToOne ExternalChannelId (Id ChannelId)
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
@@ -206,9 +206,9 @@ type alias BackendChannel =
     , messages : Array (Message ChannelMessageId)
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
-    , linkedThreadIds : OneToOne (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelMessageId)
+    , linkedThreadIds : OneToOne ExternalChannelId (Id ChannelMessageId)
     }
 
 
@@ -353,7 +353,7 @@ getUser userId localUser =
 
 
 createThreadMessageBackend :
-    Maybe ( Discord.Id.Id Discord.Id.MessageId, Discord.Id.Id Discord.Id.ChannelId )
+    Maybe ( ExternalMessageId, ExternalChannelId )
     -> Id ChannelMessageId
     -> Message ThreadMessageId
     -> BackendChannel
@@ -380,38 +380,38 @@ createThreadMessageBackend maybeDiscordMessageId threadId message channel =
 
 
 createChannelMessageBackend :
-    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    Maybe ExternalMessageId
     -> Message ChannelMessageId
     ->
         { d
             | messages : Array (Message ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
     ->
         { d
             | messages : Array (Message ChannelMessageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
 createChannelMessageBackend maybeDiscordMessageId message channel =
     createMessageBackend maybeDiscordMessageId message channel
 
 
 createMessageBackend :
-    Maybe (Discord.Id.Id Discord.Id.MessageId)
+    Maybe ExternalMessageId
     -> Message messageId
     ->
         { d
             | messages : Array (Message messageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id messageId)
         }
     ->
         { d
             | messages : Array (Message messageId)
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id messageId)
         }
 createMessageBackend maybeDiscordMessageId message channel =
     let
@@ -652,7 +652,7 @@ createChannel time userId channelName guild =
     }
 
 
-linkedChannel : Discord.Id.Id Discord.Id.ChannelId -> BackendGuild -> Maybe ( Id ChannelId, BackendChannel )
+linkedChannel : ExternalChannelId -> BackendGuild -> Maybe ( Id ChannelId, BackendChannel )
 linkedChannel discordChannelId guild =
     case OneToOne.second discordChannelId guild.linkedChannelIds of
         Just channelId ->
@@ -1361,13 +1361,13 @@ deleteMessageBackend :
                     { c
                         | messages : Array (Message ChannelMessageId)
                         , threads : SeqDict (Id ChannelMessageId) Thread
-                        , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+                        , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
                     }
         }
     ->
         Result
             ()
-            ( Maybe (Discord.Id.Id Discord.Id.MessageId)
+            ( Maybe ExternalMessageId
             , { a
                 | channels :
                     SeqDict
@@ -1375,7 +1375,7 @@ deleteMessageBackend :
                         { c
                             | messages : Array (Message ChannelMessageId)
                             , threads : SeqDict (Id ChannelMessageId) Thread
-                            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+                            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
                         }
               }
             )
@@ -1400,16 +1400,16 @@ deleteMessageBackendHelper :
         { a
             | messages : Array (Message ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) Thread
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
     ->
         Result
             ()
-            ( Maybe (Discord.Id.Id Discord.Id.MessageId)
+            ( Maybe ExternalMessageId
             , { a
                 | messages : Array (Message ChannelMessageId)
                 , threads : SeqDict (Id ChannelMessageId) Thread
-                , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+                , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
               }
             )
 deleteMessageBackendHelper userId threadRoute channel =
