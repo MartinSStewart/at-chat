@@ -698,13 +698,16 @@ update msg model =
             , Command.none
             )
 
-        GotSlackOAuth time sessionId result ->
+        GotSlackOAuth time result ->
             case result of
                 Ok ok ->
                     ( model
-                    , Slack.loadWorkspaceChannels ok.userAccessToken ok.teamId
+                    , Task.map2
+                        Tuple.pair
+                        (Slack.listUsers ok.botAccessToken 100 Nothing)
+                        (Slack.loadWorkspaceChannels ok.userAccessToken ok.teamId)
                         |> Task.andThen
-                            (\channels ->
+                            (\( ( users, _ ), channels ) ->
                                 List.map
                                     (\channel ->
                                         let
@@ -716,6 +719,7 @@ update msg model =
                                     )
                                     channels
                                     |> Task.sequence
+                                    |> Task.map (Tuple.pair users)
                             )
                         |> Task.attempt (GotSlackChannels time)
                     )
@@ -2785,7 +2789,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , case model2.slackClientSecret of
                         Just clientSecret ->
                             Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth time sessionId2)
+                                |> Task.attempt (GotSlackOAuth time)
 
                         Nothing ->
                             Command.none

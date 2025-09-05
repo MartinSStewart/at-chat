@@ -490,8 +490,8 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
-    | GotSlackChannels Time.Posix (Result Slack.HttpError (List ( Slack.Channel, List Slack.Message )))
-    | GotSlackOAuth Time.Posix SessionId (Result Slack.HttpError Slack.TokenResponse)
+    | GotSlackChannels Time.Posix (Result Slack.HttpError ( List Slack.User, List ( Slack.Channel, List Slack.Message ) ))
+    | GotSlackOAuth Time.Posix (Result Slack.HttpError Slack.TokenResponse)
 
 
 type LoginResult

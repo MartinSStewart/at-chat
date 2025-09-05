@@ -5,6 +5,7 @@ import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
 import Env
 import Icons
+import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
 import MyUi
 import PersonName
@@ -185,24 +186,26 @@ view isMobile time local loggedIn loaded model =
                             { clientId = Env.slackClientId
                             , redirectUri = Slack.redirectUri
                             , botScopes =
-                                [ "channels:read"
-                                , "channels:history"
-                                , "users:read"
-                                ]
+                                Nonempty
+                                    "channels:read"
+                                    [ "channels:history"
+                                    , "users:read"
+                                    ]
                             , userScopes =
-                                [ "channels:read"
-                                , "channels:history"
-                                , "channels:write"
-                                , "groups:read"
-                                , "groups:history"
-                                , "groups:write"
-                                , "mpim:read"
-                                , "mpim:history"
-                                , "mpim:write"
-                                , "im:read"
-                                , "im:history"
-                                , "im:write"
-                                ]
+                                Nonempty
+                                    "channels:read"
+                                    [ "channels:history"
+                                    , "channels:write"
+                                    , "groups:read"
+                                    , "groups:history"
+                                    , "groups:write"
+                                    , "mpim:read"
+                                    , "mpim:history"
+                                    , "mpim:write"
+                                    , "im:read"
+                                    , "im:history"
+                                    , "im:write"
+                                    ]
                             , state = Lamdera.sessionIdToString loggedIn.sessionId
                             }
                         )

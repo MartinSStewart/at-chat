@@ -23,10 +23,9 @@ module Slack exposing
     , decodeTokenResponse
     , decodeWorkspace
     , exchangeCodeForToken
+    , listUsers
     , loadMessages
-    , loadUserWorkspaces
     , loadWorkspaceChannels
-    , loadWorkspaceDetails
     , redirectUri
     )
 
@@ -39,6 +38,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Extra exposing (andMap)
 import Json.Encode as Encode
 import List.Extra
+import List.Nonempty exposing (Nonempty)
 import Url.Builder
 import Url.Parser.Query
 
@@ -76,7 +76,7 @@ type TeamId
 
 
 type alias TokenResponse =
-    { botAccessToken : Maybe AuthToken
+    { botAccessToken : AuthToken
     , userAccessToken : AuthToken
     , userId : Id UserId
     , teamId : Id TeamId
@@ -99,8 +99,8 @@ type OAuthError
 buildOAuthUrl :
     { clientId : String
     , redirectUri : String
-    , botScopes : List String
-    , userScopes : List String
+    , botScopes : Nonempty String
+    , userScopes : Nonempty String
     , state : String
     }
     -> String
@@ -109,8 +109,8 @@ buildOAuthUrl config =
         [ "oauth", "v2", "authorize" ]
         [ Url.Builder.string "client_id" config.clientId
         , Url.Builder.string "redirect_uri" config.redirectUri
-        , Url.Builder.string "scope" (String.join "," config.botScopes)
-        , Url.Builder.string "user_scope" (String.join "," config.userScopes)
+        , Url.Builder.string "scope" (String.join "," (List.Nonempty.toList config.botScopes))
+        , Url.Builder.string "user_scope" (String.join "," (List.Nonempty.toList config.userScopes))
         , Url.Builder.string "state" config.state
         ]
 
@@ -197,21 +197,20 @@ channelId channel =
 type alias User =
     { id : Id UserId
     , name : String
-    , realName : Maybe String
-    , displayName : Maybe String
-    , email : Maybe String
     , isBot : Bool
     , isDeleted : Bool
-    , profile : Maybe UserProfile
+    , profile : String
     }
 
 
-type alias UserProfile =
-    { avatarHash : Maybe String
-    , image72 : Maybe String
-    , image192 : Maybe String
-    , image512 : Maybe String
-    }
+decodeUser : Decoder User
+decodeUser =
+    Decode.succeed User
+        |> andMap (Decode.field "id" decodeId)
+        |> andMap (Decode.field "name" Decode.string)
+        |> andMap (Decode.field "is_bot" Decode.bool)
+        |> andMap (Decode.field "deleted" Decode.bool)
+        |> andMap (Decode.at [ "profile", "image_192" ] Decode.string)
 
 
 type alias SlackMessage =
@@ -251,79 +250,69 @@ type HttpError
 -- API FUNCTIONS
 
 
-loadUserWorkspaces : AuthToken -> Task restriction HttpError (List Workspace)
-loadUserWorkspaces (SlackAuth auth) =
-    let
-        url =
-            Url.Builder.crossOrigin "https://slack.com" [ "api", "auth.teams.list" ] []
-    in
-    Http.task
-        { method = "POST"
-        , headers = [ Http.header "Authorization" auth ]
-        , url = url
-        , body = Http.emptyBody
-        , resolver = Http.stringResolver (handleSlackResponse decodeWorkspacesList)
-        , timeout = Just (Duration.seconds 30)
-        }
+listUsers : AuthToken -> Int -> Maybe String -> Task restriction HttpError ( List User, Maybe String )
+listUsers auth limit cursor =
+    httpRequest
+        auth
+        "GET"
+        "users.list"
+        [ Just ( "limit", String.fromInt limit )
+        , case cursor of
+            Just cursor2 ->
+                Just ( "cursor", cursor2 )
 
-
-loadWorkspaceDetails : AuthToken -> String -> Task restriction HttpError Workspace
-loadWorkspaceDetails (SlackAuth auth) teamId =
-    let
-        url =
-            Url.Builder.crossOrigin "https://slack.com" [ "api", "team.info" ] []
-
-        body =
-            Http.stringBody "application/x-www-form-urlencoded" ("team=" ++ teamId)
-    in
-    Http.task
-        { method = "POST"
-        , headers = [ Http.header "Authorization" auth ]
-        , url = url
-        , body = body
-        , resolver = Http.stringResolver (handleSlackResponse decodeWorkspaceDetails)
-        , timeout = Just (Duration.seconds 30)
-        }
+            Nothing ->
+                Nothing
+        ]
+        (Decode.map2
+            Tuple.pair
+            (Decode.field "members" (Decode.list decodeUser))
+            (Decode.at [ "response_metadata", "next_cursor" ] Decode.string |> Decode.maybe)
+        )
 
 
 loadWorkspaceChannels : AuthToken -> Id TeamId -> Task restriction HttpError (List Channel)
-loadWorkspaceChannels (SlackAuth auth) (Id teamId) =
-    let
-        url =
-            Url.Builder.crossOrigin "https://slack.com" [ "api", "conversations.list" ] []
-
-        body =
-            Http.stringBody
-                "application/x-www-form-urlencoded"
-                ("team_id=" ++ teamId ++ "&types=public_channel,private_channel,mpim,im")
-    in
-    Http.task
-        { method = "POST"
-        , headers = [ Http.header "Authorization" ("Bearer " ++ auth) ]
-        , url = url
-        , body = body
-        , resolver = Http.stringResolver (handleSlackResponse decodeChannelsList)
-        , timeout = Just (Duration.seconds 30)
-        }
+loadWorkspaceChannels auth (Id teamId) =
+    httpRequest
+        auth
+        "POST"
+        "conversations.list"
+        [ Just ( "team_id", teamId ), Just ( "types", "public_channel,private_channel,mpim,im" ) ]
+        decodeChannelsList
 
 
 loadMessages : AuthToken -> Id ChannelId -> Int -> Task restriction HttpError (List Message)
-loadMessages (SlackAuth auth) (Id channelId2) limit =
-    let
-        url =
-            Url.Builder.crossOrigin "https://slack.com" [ "api", "conversations.history" ] []
+loadMessages auth (Id channelId2) limit =
+    httpRequest
+        auth
+        "POST"
+        "conversations.history"
+        [ Just ( "channel", channelId2 ), Just ( "limit", String.fromInt limit ) ]
+        (Decode.field "messages" (Decode.list decodeMessage))
 
-        body =
+
+httpRequest : AuthToken -> String -> String -> List (Maybe ( String, String )) -> Decoder a -> Task restriction HttpError a
+httpRequest (SlackAuth auth) method rpcFunction body decoder =
+    Http.task
+        { method = method
+        , headers = [ Http.header "Authorization" ("Bearer " ++ auth) ]
+        , url = Url.Builder.crossOrigin "https://slack.com" [ "api", rpcFunction ] []
+        , body =
             Http.stringBody
                 "application/x-www-form-urlencoded"
-                ("channel=" ++ channelId2 ++ "&limit=" ++ String.fromInt limit)
-    in
-    Http.task
-        { method = "POST"
-        , headers = [ Http.header "Authorization" ("Bearer " ++ auth) ]
-        , url = url
-        , body = body
-        , resolver = Http.stringResolver (handleSlackResponse (Decode.field "messages" (Decode.list decodeMessage)))
+                (List.filterMap
+                    (\maybe ->
+                        case maybe of
+                            Just ( key, value ) ->
+                                key ++ "=" ++ value |> Just
+
+                            Nothing ->
+                                Nothing
+                    )
+                    body
+                    |> String.join "&"
+                )
+        , resolver = Http.stringResolver (handleSlackResponse decoder)
         , timeout = Just (Duration.seconds 30)
         }
 
@@ -640,7 +629,7 @@ decodeNormalChannel =
 decodeTokenResponse : Decoder TokenResponse
 decodeTokenResponse =
     Decode.map5 TokenResponse
-        (Json.Decode.Extra.optionalField "access_token" (Decode.map SlackAuth Decode.string))
+        (Decode.field "access_token" (Decode.map SlackAuth Decode.string))
         (Decode.at [ "authed_user", "access_token" ] (Decode.map SlackAuth Decode.string))
         (Decode.at [ "authed_user", "id" ] decodeId)
         (Decode.at [ "team", "id" ] decodeId)
