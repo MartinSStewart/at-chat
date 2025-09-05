@@ -2927,7 +2927,7 @@ eventToString depth settings clients events =
                 client clientId =
                     case listFindIndex (\a -> a == clientId) clients of
                         Just index ->
-                            "tab" ++ String.fromInt (index + 1)
+                            "tab" ++ String.fromChar (Char.fromCode (Char.toCode 'A' + index))
 
                         Nothing ->
                             "tab"

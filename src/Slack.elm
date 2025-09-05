@@ -5,6 +5,7 @@ module Slack exposing
     , Channel(..)
     , ChannelId
     , ClientSecret(..)
+    , CurrentUser
     , Id(..)
     , ImChannelData
     , Message
@@ -12,7 +13,6 @@ module Slack exposing
     , MessageType(..)
     , NormalChannelData
     , OAuthCode(..)
-    , OAuthError(..)
     , RichTextElement(..)
     , RichText_Emoji_Data
     , RichText_Text_Data
@@ -24,6 +24,7 @@ module Slack exposing
     , buildOAuthUrl
     , channelId
     , exchangeCodeForToken
+    , getCurrentUser
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
@@ -86,10 +87,6 @@ type alias TokenResponse =
     , teamId : Id TeamId
     , teamName : String
     }
-
-
-type OAuthError
-    = UnknownOAuthError String
 
 
 buildOAuthUrl :
@@ -236,11 +233,31 @@ teamInfo auth =
         (Decode.field "team" decodeTeam)
 
 
+getCurrentUser : AuthToken -> Task restriction Http.Error CurrentUser
+getCurrentUser auth =
+    httpRequest
+        auth
+        "GET"
+        "auth.test"
+        []
+        decodeCurrentUser
+
+
 type alias Team =
     { id : Id TeamId
     , name : String
     , domain : String
     , image132 : String
+    }
+
+
+type alias CurrentUser =
+    { userId : Id UserId
+    , teamId : Id TeamId
+    , url : String
+    , team : String
+    , user : String
+    , enterpriseId : Maybe String
     }
 
 
@@ -251,6 +268,17 @@ decodeTeam =
         |> andMap (Decode.field "name" Decode.string)
         |> andMap (Decode.field "name" Decode.string)
         |> andMap (Decode.at [ "icon", "image_132" ] Decode.string)
+
+
+decodeCurrentUser : Decoder CurrentUser
+decodeCurrentUser =
+    Decode.succeed CurrentUser
+        |> andMap (Decode.field "user_id" decodeId)
+        |> andMap (Decode.field "team_id" decodeId)
+        |> andMap (Decode.field "url" Decode.string)
+        |> andMap (Decode.field "team" Decode.string)
+        |> andMap (Decode.field "user" Decode.string)
+        |> andMap (Decode.maybe (Decode.field "enterprise_id" Decode.string))
 
 
 listUsers : AuthToken -> Int -> Maybe String -> Task restriction Http.Error ( List User, Maybe String )

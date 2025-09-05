@@ -565,6 +565,7 @@ createMessageFrontend message channel =
     }
 
 
+mergeMessages : Message messageId -> Message messageId -> Maybe (Message messageId)
 mergeMessages message previousMessage =
     case ( message, previousMessage ) of
         ( UserTextMessage data, UserTextMessage previous ) ->

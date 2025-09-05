@@ -723,7 +723,7 @@ routeRequest previousRoute newRoute model =
                 model3
 
         SlackOAuthRedirect result ->
-            ( model
+            ( model2
             , case result of
                 Ok ( code, sessionId ) ->
                     Lamdera.sendToBackend (LinkSlackOAuthCode code sessionId)

@@ -356,6 +356,7 @@ connectTwoUsers continueFunc =
         )
 
 
+writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user text =
     T.group
         [ user.input 100 (Dom.id "channel_textinput") text
@@ -836,78 +837,78 @@ tests fileData =
             (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
             "/"
             { width = 1887, height = 770 }
-            (\tab1 ->
-                [ tab1.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tab1.portEvent 152 "is_push_subscription_registered_from_js" (stringToJson "false")
-                , tab1.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
+            (\tabA ->
+                [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , tabA.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tabA.portEvent 152 "is_push_subscription_registered_from_js" (stringToJson "false")
+                , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
                     (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
                     "/"
                     { width = 1887, height = 674 }
-                    (\tab2 ->
-                        [ tab2.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
-                        , tab2.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
-                        , tab2.portEvent 39 "is_push_subscription_registered_from_js" (stringToJson "false")
-                        , tab2.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
-                        , tab1.click 3098 (Dom.id "homePage_loginButton")
-                        , tab1.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
-                        , tab1.keyUp 263 (Dom.id "loginForm_emailInput") "Enter" []
-                        , tab1.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
-                        , tab1.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
-                        , tab1.click 1747 (Dom.id "guild_openGuild_0")
-                        , tab1.focus 19 (Dom.id "channel_textinput")
-                        , tab1.click 1005 (Dom.id "channel_textinput")
-                        , tab1.input 636 (Dom.id "channel_textinput") "Test"
-                        , tab1.keyDown 751 (Dom.id "channel_textinput") "Enter" []
-                        , tab1.blur 910 (Dom.id "channel_textinput")
-                        , tab2.click 111 (Dom.id "guild_openGuild_0")
-                        , tab2.focus 25 (Dom.id "channel_textinput")
-                        , tab1.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
-                        , tab1.focus 921 (Dom.id "channel_textinput")
-                        , tab1.blur 4 (Dom.id "channel_textinput")
-                        , tab2.blur 17 (Dom.id "channel_textinput")
-                        , tab1.click 28 (Dom.id "miniView_reply")
-                        , tab1.focus 8 (Dom.id "channel_textinput")
-                        , tab1.mouseLeave 375 (Dom.id "guild_message_0") ( 1286, 57 ) []
-                        , tab1.click 457 (Dom.id "channel_textinput")
-                        , tab1.input 781 (Dom.id "channel_textinput") "Test2"
-                        , tab1.blur 2357 (Dom.id "channel_textinput")
-                        , tab1.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
-                        , tab1.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
-                        , tab1.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
-                        , tab1.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tab1.click 991 (Dom.id "guild_emojiSelector_😀")
-                        , tab2.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
-                        , tab1.click 548 (Dom.id "guild_removeReactionEmoji_0")
-                        , tab2.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
-                        , createThread tab1 (Id.fromInt 0)
-                        , tab1.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
-                        , tab1.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
-                        , tab1.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
-                        , tab1.click 991 (Dom.id "guild_emojiSelector_😀")
-                        , tab2.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
-                        , tab1.click 548 (Dom.id "guild_removeReactionEmoji_0")
-                        , tab2.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
-                        , tab1.click 457 (Dom.id "channel_textinput")
-                        , tab1.input 781 (Dom.id "channel_textinput") "Test3"
-                        , tab1.blur 2357 (Dom.id "channel_textinput")
-                        , tab1.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
-                        , tab2.click 100 (Dom.id "guild_viewThread_0_0")
-                        , tab1.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
-                        , tab1.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
-                        , tab1.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
-                        , tab1.click 991 (Dom.id "guild_emojiSelector_😀")
-                        , tab2.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
-                        , tab1.click 548 (Dom.id "guild_removeReactionEmoji_0")
-                        , tab2.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
-                        , tab1.mouseLeave 410 (Dom.id "thread_message_0") ( 148, 63 ) []
+                    (\tabB ->
+                        [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                        , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
+                        , tabB.portEvent 39 "is_push_subscription_registered_from_js" (stringToJson "false")
+                        , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
+                        , tabA.click 3098 (Dom.id "homePage_loginButton")
+                        , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
+                        , tabA.keyUp 263 (Dom.id "loginForm_emailInput") "Enter" []
+                        , tabA.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , tabA.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , tabA.click 1747 (Dom.id "guild_openGuild_0")
+                        , tabA.focus 19 (Dom.id "channel_textinput")
+                        , tabA.click 1005 (Dom.id "channel_textinput")
+                        , tabA.input 636 (Dom.id "channel_textinput") "Test"
+                        , tabA.keyDown 751 (Dom.id "channel_textinput") "Enter" []
+                        , tabA.blur 910 (Dom.id "channel_textinput")
+                        , tabB.click 111 (Dom.id "guild_openGuild_0")
+                        , tabB.focus 25 (Dom.id "channel_textinput")
+                        , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
+                        , tabA.focus 921 (Dom.id "channel_textinput")
+                        , tabA.blur 4 (Dom.id "channel_textinput")
+                        , tabB.blur 17 (Dom.id "channel_textinput")
+                        , tabA.click 28 (Dom.id "miniView_reply")
+                        , tabA.focus 8 (Dom.id "channel_textinput")
+                        , tabA.mouseLeave 375 (Dom.id "guild_message_0") ( 1286, 57 ) []
+                        , tabA.click 457 (Dom.id "channel_textinput")
+                        , tabA.input 781 (Dom.id "channel_textinput") "Test2"
+                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
+                        , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                        , createThread tabA (Id.fromInt 0)
+                        , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                        , tabA.click 457 (Dom.id "channel_textinput")
+                        , tabA.input 781 (Dom.id "channel_textinput") "Test3"
+                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
+                        , tabB.click 100 (Dom.id "guild_viewThread_0_0")
+                        , tabA.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "thread_message_0") ( 148, 63 ) []
                         ]
                     )
                 ]

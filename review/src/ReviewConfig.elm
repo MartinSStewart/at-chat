@@ -114,7 +114,6 @@ config =
         , modules =
             [ [ "Backend" ]
             , [ "EmailViewer" ]
-            , [ "EndToEndTests" ]
             , [ "TwoFactorAuthentication" ]
             ]
         }

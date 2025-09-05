@@ -1298,7 +1298,7 @@ addSlackMessages threadRoute messages model channel =
                             , attachedFiles = SeqDict.empty
                             }
                         )
-                        channel
+                        channel2
 
                 --handleDiscordCreateGuildMessageHelper
                 --    message.id
@@ -2844,7 +2844,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                                 Nothing ->
-                                    ( model
+                                    ( model2
                                     , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
                                     )
                         )
@@ -2904,7 +2904,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
 
                                 Nothing ->
-                                    ( model
+                                    ( model2
                                     , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
                                     )
                         )
@@ -2952,11 +2952,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                         GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
-                                model
+                                model2
                                 sessionId
                                 (\userId _ ->
                                     ( model2
-                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
+                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
                                         |> Maybe.withDefault DmChannel.init
                                         |> handleMessagesRequest oldestVisibleMessage
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
@@ -2991,11 +2991,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                         GuildOrDmId_Dm_NoThread otherUserId ->
                             asUser
-                                model
+                                model2
                                 sessionId
                                 (\userId _ ->
                                     ( model2
-                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels
+                                    , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
                                         |> Maybe.withDefault DmChannel.init
                                         |> .threads
                                         |> SeqDict.get threadId
@@ -3329,7 +3329,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
                         , case
                             ( NonemptyDict.get guild2.owner model2.users
                             , LocalState.guildToFrontendForUser
-                                (Just ( LocalState.announcementChannel guild, NoThread ))
+                                (Just ( LocalState.announcementChannel guild2, NoThread ))
                                 userId
                                 guild2
                             )
@@ -3956,7 +3956,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
-                , broadcastMessageNotification time userId threadRouteWithMaybeReplyTo channel text model
+                , broadcastMessageNotification time userId threadRouteWithMaybeReplyTo channel2 text model
                 , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let
