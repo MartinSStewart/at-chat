@@ -36,6 +36,7 @@ import Duration
 import Effect.Http as Http
 import Effect.Task exposing (Task)
 import Effect.Time as Time
+import Env
 import Hex
 import Id exposing (Id)
 import Json.Decode as Decode exposing (Decoder)
@@ -111,7 +112,18 @@ buildOAuthUrl config =
 
 redirectUri : String
 redirectUri =
-    "https://0eefaebbb5d6.ngrok-free.app/slack-oauth"
+    (if Env.isProduction then
+        Env.domain
+
+     else
+        ngrokPath
+    )
+        ++ "/slack-oauth"
+
+
+ngrokPath : String
+ngrokPath =
+    "https://d5f652f01c6d.ngrok-free.app"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse
