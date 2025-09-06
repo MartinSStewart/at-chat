@@ -659,7 +659,7 @@ guildView model guildId channelRoute loggedIn local =
                                     local.dmChannels
                                     local.guilds
                                     canScroll2
-                                , pageMissing "Guild not found"
+                                , pageMissingMobile "Guild not found"
                                 ]
                             , loggedInAsView local
                             ]
@@ -669,6 +669,7 @@ guildView model guildId channelRoute loggedIn local =
                             [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
                             [ Ui.column
                                 [ Ui.height Ui.fill
+                                , Ui.width (Ui.px 300)
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
@@ -680,10 +681,17 @@ guildView model guildId channelRoute loggedIn local =
                                         local.dmChannels
                                         local.guilds
                                         True
-                                    , pageMissing "Guild not found"
+                                    , Ui.el
+                                        [ Ui.background MyUi.background2
+                                        , Ui.height Ui.fill
+                                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+                                        , Ui.borderColor MyUi.border1
+                                        ]
+                                        Ui.none
                                     ]
                                 , loggedInAsView local
                                 ]
+                            , pageMissing "Guild not found"
                             ]
 
 
@@ -791,12 +799,28 @@ sidebarOffsetAttr loggedIn model =
         }
 
 
+pageMissing : String -> Element msg
 pageMissing text =
     Ui.el
-        [ Ui.centerY
+        [ Ui.height Ui.fill
+        , Ui.contentCenterY
         , Ui.Font.center
         , Ui.Font.color MyUi.font1
         , Ui.Font.size 20
+        , Ui.background MyUi.background3
+        ]
+        (Ui.text text)
+
+
+pageMissingMobile : String -> Element msg
+pageMissingMobile text =
+    Ui.el
+        [ Ui.height Ui.fill
+        , Ui.contentCenterY
+        , Ui.Font.center
+        , Ui.Font.color MyUi.font1
+        , Ui.Font.size 20
+        , Ui.background MyUi.background2
         ]
         (Ui.text text)
 
