@@ -69,6 +69,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
+import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -1581,41 +1582,35 @@ usersToNotify :
     -> SeqSet (Id UserId)
 usersToNotify senderId threadRouteWithRepliedTo channel content =
     let
-        usersToNotify2 =
-            RichText.mentionsUser content
-
-        repliedToUserId2 : Maybe (Id UserId)
+        repliedToUserId2 : List (Id UserId)
         repliedToUserId2 =
             case threadRouteWithRepliedTo of
                 ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    case SeqDict.get threadId channel.threads of
+                    (case SeqDict.get threadId channel.threads of
                         Just thread ->
-                            repliedToUserId maybeRepliedTo thread
+                            repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
 
                         Nothing ->
-                            case DmChannel.getArray threadId channel.messages of
+                            []
+                    )
+                        ++ (case DmChannel.getArray threadId channel.messages of
                                 Just (UserTextMessage data) ->
-                                    Just data.createdBy
+                                    [ data.createdBy ]
 
                                 Just (UserJoinedMessage _ userJoined _) ->
-                                    Just userJoined
+                                    [ userJoined ]
 
                                 Just (DeletedMessage _) ->
-                                    Nothing
+                                    []
 
                                 Nothing ->
-                                    Nothing
+                                    []
+                           )
 
                 NoThreadWithMaybeMessage maybeRepliedTo ->
-                    repliedToUserId maybeRepliedTo channel
+                    repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
     in
-    (case repliedToUserId2 of
-        Just a ->
-            SeqSet.insert a usersToNotify2
-
-        Nothing ->
-            usersToNotify2
-    )
+    List.foldl SeqSet.insert (RichText.mentionsUser content) repliedToUserId2
         |> SeqSet.remove senderId
 
 

@@ -123,7 +123,7 @@ redirectUri =
 
 ngrokPath : String
 ngrokPath =
-    "https://d5f652f01c6d.ngrok-free.app"
+    "https://181c7d3c0e1f.ngrok-free.app"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse
