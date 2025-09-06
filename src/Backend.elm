@@ -3382,7 +3382,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                             Just (SlackMessageId _) ->
-                                                Debug.todo ""
+                                                Command.none
 
                                             Nothing ->
                                                 Command.none
