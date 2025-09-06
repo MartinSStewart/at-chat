@@ -334,7 +334,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
         maybeData =
             case guildOrDmId of
-                GuildOrDmId_Guild_NoThread guildId channelId ->
+                GuildOrDmId_Guild guildId channelId ->
                     case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
@@ -352,7 +352,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                GuildOrDmId_Dm_NoThread otherUserId ->
+                GuildOrDmId_Dm otherUserId ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of

@@ -1338,7 +1338,7 @@ markAllChannelsAsViewed guildId guild user =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
-                        (GuildOrDmId_Guild_NoThread guildId channelId)
+                        (GuildOrDmId_Guild guildId channelId)
                         (DmChannel.latestMessageId channel)
                         state
                 )
