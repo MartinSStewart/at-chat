@@ -26,6 +26,7 @@ module DmChannel exposing
     , toFrontendHelper
     , visibleMessagesFirstLoad
     , visibleMessagesForNewChannel
+    , visibleMessagesIncludesStart
     , visibleMessagesLoadOlder
     , visibleMessagesSlice
     )
@@ -127,7 +128,7 @@ frontendInit =
 
 
 type alias VisibleMessages messageId =
-    { oldest : Id messageId, newest : Int }
+    { oldest : Id messageId, count : Int }
 
 
 toFrontend : Maybe ThreadRoute -> DmChannel -> FrontendDmChannel
@@ -158,7 +159,7 @@ initVisibleMessages : Bool -> { a | messages : Array (Message messageId) } -> Vi
 initVisibleMessages preloadMessages channel =
     if preloadMessages then
         { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
-        , newest = Array.length channel.messages
+        , count = 0
         }
 
     else
@@ -167,13 +168,13 @@ initVisibleMessages preloadMessages channel =
 
 visibleMessagesForNewChannel : VisibleMessages messageId
 visibleMessagesForNewChannel =
-    { oldest = Id.fromInt 0, newest = 0 }
+    { oldest = Id.fromInt 0, count = 0 }
 
 
 incrementVisibleMessages : { a | messages : Array b } -> VisibleMessages messageId -> VisibleMessages messageId
 incrementVisibleMessages channel visibleMessages =
-    if visibleMessages.newest == Array.length channel.messages then
-        { oldest = visibleMessages.oldest, newest = visibleMessages.newest + 1 }
+    if visibleMessages.count == Array.length channel.messages then
+        { oldest = visibleMessages.oldest, count = visibleMessages.count + 1 }
 
     else
         visibleMessages
@@ -181,15 +182,20 @@ incrementVisibleMessages channel visibleMessages =
 
 visibleMessagesLoadOlder : Id messageId -> VisibleMessages messageId -> VisibleMessages messageId
 visibleMessagesLoadOlder previousOldestVisibleMessage visibleMessages =
-    { oldest = Id.toInt previousOldestVisibleMessage - pageSize |> max 0 |> Id.fromInt
-    , newest = visibleMessages.newest
+    let
+        oldestNext : Int
+        oldestNext =
+            Id.toInt previousOldestVisibleMessage - pageSize |> max 0
+    in
+    { oldest = Id.fromInt oldestNext
+    , count = visibleMessages.count + (Id.toInt visibleMessages.oldest - oldestNext)
     }
 
 
 visibleMessagesFirstLoad : { a | messages : Array b } -> VisibleMessages messageId
 visibleMessagesFirstLoad channel =
-    { oldest = Array.length channel.messages - pageSize - 1 |> Id.fromInt
-    , newest = Array.length channel.messages
+    { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
+    , count = Array.length channel.messages
     }
 
 
@@ -197,7 +203,15 @@ visibleMessagesSlice :
     { a | visibleMessages : VisibleMessages messageId, messages : Array (MessageState messageId) }
     -> Array (MessageState messageId)
 visibleMessagesSlice { visibleMessages, messages } =
-    Array.slice (Id.toInt visibleMessages.oldest) visibleMessages.newest messages
+    Array.slice
+        (Id.toInt visibleMessages.oldest)
+        (Id.toInt visibleMessages.oldest + visibleMessages.count)
+        messages
+
+
+visibleMessagesIncludesStart : VisibleMessages messageId -> Bool
+visibleMessagesIncludesStart visibleMessages =
+    Id.toInt visibleMessages.oldest <= 0
 
 
 latestMessageId : { a | messages : Array b } -> Id ChannelMessageId

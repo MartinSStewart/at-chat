@@ -1908,7 +1908,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if Id.toInt channel.visibleMessages.oldest <= 0 then
+                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild _ _ ->
@@ -2168,7 +2168,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if Id.toInt channel.visibleMessages.oldest <= 0 then
+                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
                     [ ( "a"
                       , Ui.column
                             [ Ui.alignBottom ]
