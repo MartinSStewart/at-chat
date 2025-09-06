@@ -60,7 +60,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
-import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread, VisibleMessages)
+import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -82,6 +82,7 @@ import SeqSet exposing (SeqSet)
 import Slack
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
+import VisibleMessages exposing (VisibleMessages)
 
 
 type alias LocalState =
@@ -235,7 +236,7 @@ channelToFrontend threadRoute channel =
             , createdBy = channel.createdBy
             , name = channel.name
             , messages = DmChannel.toFrontendHelper preloadMessages channel
-            , visibleMessages = DmChannel.initVisibleMessages preloadMessages channel
+            , visibleMessages = VisibleMessages.init preloadMessages channel
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
             , threads =
@@ -546,7 +547,7 @@ createMessageFrontend message channel =
         , visibleMessages =
             case mergeWithPrevious of
                 Nothing ->
-                    DmChannel.incrementVisibleMessages channel channel.visibleMessages
+                    VisibleMessages.increment channel channel.visibleMessages
 
                 _ ->
                     channel.visibleMessages
@@ -673,7 +674,7 @@ createChannelFrontend time userId channelName guild =
                 , createdBy = userId
                 , name = channelName
                 , messages = Array.empty
-                , visibleMessages = DmChannel.visibleMessagesForNewChannel
+                , visibleMessages = VisibleMessages.empty
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty

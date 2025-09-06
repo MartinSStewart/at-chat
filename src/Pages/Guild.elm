@@ -21,7 +21,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt, VisibleMessages)
+import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -65,6 +65,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
+import VisibleMessages exposing (VisibleMessages)
 
 
 channelOrThreadHasNotifications :
@@ -1335,7 +1336,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length channel.messages - 1, Nothing, [] )
-        (DmChannel.visibleMessagesSlice channel)
+        (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
 
@@ -1603,7 +1604,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length thread.messages - 1, Nothing, [] )
-        (DmChannel.visibleMessagesSlice thread)
+        (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
 
@@ -1932,7 +1933,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
+                ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild _ _ ->
@@ -2192,7 +2193,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
+                ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , Ui.column
                             [ Ui.alignBottom ]

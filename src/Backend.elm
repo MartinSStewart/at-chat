@@ -64,6 +64,7 @@ import UInt64
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
+import VisibleMessages
 
 
 app :
@@ -2886,7 +2887,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         indexStart : Int
                                         indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
+                                            max (messageCount - VisibleMessages.pageSize) 0
                                     in
                                     ( { model2
                                         | users =
@@ -2936,7 +2937,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         indexStart : Int
                                         indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
+                                            max (messageCount - VisibleMessages.pageSize) 0
                                     in
                                     ( { model2
                                         | users =
@@ -2985,7 +2986,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         indexStart : Int
                                         indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
+                                            max (messageCount - VisibleMessages.pageSize) 0
                                     in
                                     ( { model2
                                         | users =
@@ -3037,7 +3038,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         indexStart : Int
                                         indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
+                                            max (messageCount - VisibleMessages.pageSize) 0
                                     in
                                     ( { model2
                                         | users =
@@ -3259,7 +3260,7 @@ handleMessagesRequest oldestVisibleMessage channel =
             Id.toInt oldestVisibleMessage
 
         nextOldestVisible =
-            oldestVisibleMessage2 - DmChannel.pageSize |> max 0
+            oldestVisibleMessage2 - VisibleMessages.pageSize |> max 0
     in
     Array.slice nextOldestVisible oldestVisibleMessage2 channel.messages
         |> Array.toList

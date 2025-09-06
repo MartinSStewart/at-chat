@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (FrontendDmChannel, FrontendThread, VisibleMessages)
+import DmChannel exposing (FrontendDmChannel, FrontendThread)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -69,6 +69,7 @@ import Url exposing (Url)
 import User exposing (BackendUser)
 import UserOptions
 import Vector2d
+import VisibleMessages exposing (VisibleMessages)
 
 
 app :
@@ -4615,7 +4616,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
-                , visibleMessages = DmChannel.visibleMessagesLoadOlder previousOldestVisibleMessage channel.visibleMessages
+                , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
             }
 
         EmptyPlaceholder ->
@@ -4640,7 +4641,7 @@ loadMessages messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
-                , visibleMessages = DmChannel.visibleMessagesFirstLoad channel
+                , visibleMessages = VisibleMessages.firstLoad channel
             }
 
         EmptyPlaceholder ->
