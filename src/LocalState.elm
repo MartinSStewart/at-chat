@@ -296,6 +296,7 @@ createNewUser createdAt name email userIsAdmin =
     , lastEmailNotification = createdAt
     , lastViewed = SeqDict.empty
     , lastViewedThreads = SeqDict.empty
+    , lastDmViewed = Nothing
     , lastChannelViewed = SeqDict.empty
     , icon = Nothing
     }

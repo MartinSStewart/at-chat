@@ -11,7 +11,7 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -19,6 +19,7 @@ import LoginForm
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import Route
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -595,6 +596,28 @@ tests fileData =
                 , admin.click 100 (Dom.id "guild_openDm_1")
                 , writeMessage admin "Here's a DM to you"
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
+                , writeMessage user "Here's a reply!"
+                , writeMessage user "And another reply"
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\userReload ->
+                        [ userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDm_0" ]
+                            )
+                        , userReload.click 100 (Dom.id "guildIcon_showFriends")
+                        , userReload.click 100 (Dom.id "guild_friendLabel_0")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
+                        ]
+                    )
                 ]
             )
         ]

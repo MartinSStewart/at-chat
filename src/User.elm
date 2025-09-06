@@ -10,6 +10,7 @@ module User exposing
     , profileImageSize
     , sectionToString
     , setLastChannelViewed
+    , setLastDmViewed
     , setName
     , toString
     )
@@ -38,6 +39,7 @@ type alias BackendUser =
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
     , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     }
@@ -46,6 +48,11 @@ type alias BackendUser =
 setLastChannelViewed : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
 setLastChannelViewed guildId channelId threadRoute user =
     { user | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed }
+
+
+setLastDmViewed : Id UserId -> ThreadRoute -> BackendUser -> BackendUser
+setLastDmViewed otherUserId threadRoute user =
+    { user | lastDmViewed = Just ( otherUserId, threadRoute ) }
 
 
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }

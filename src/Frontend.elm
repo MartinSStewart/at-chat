@@ -548,17 +548,6 @@ routeRequest previousRoute newRoute model =
                 ChannelRoute channelId threadRoute ->
                     updateLoggedIn
                         (\loggedIn ->
-                            let
-                                scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
-                                scrollToBottom =
-                                    if sameChannel then
-                                        Command.none
-
-                                    else
-                                        Process.sleep Duration.millisecond
-                                            |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                            |> Task.attempt (\_ -> SetScrollToBottom)
-                            in
                             handleLocalChange
                                 model3.time
                                 (if SeqDict.member guildId (Local.model loggedIn.localState).guilds then
@@ -578,28 +567,7 @@ routeRequest previousRoute newRoute model =
                                  else
                                     loggedIn
                                 )
-                                (Command.batch
-                                    [ setFocus model3 Pages.Guild.channelTextInputId
-                                    , case threadRoute of
-                                        ViewThreadWithMaybeMessage _ maybeMessageIndex ->
-                                            case maybeMessageIndex of
-                                                Just messageIndex ->
-                                                    smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
-                                                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                                                Nothing ->
-                                                    scrollToBottom
-
-                                        NoThreadWithMaybeMessage maybeMessageIndex ->
-                                            case maybeMessageIndex of
-                                                Just messageIndex ->
-                                                    smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
-                                                        |> Task.attempt (\_ -> ScrolledToMessage)
-
-                                                Nothing ->
-                                                    scrollToBottom
-                                    ]
-                                )
+                                (openChannelCmds threadRoute model3)
                         )
                         model3
 
@@ -678,7 +646,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
 
-        DmRoute _ threadRoute ->
+        DmRoute otherUserId threadRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -694,36 +662,21 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    let
-                        scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
-                        scrollToBottom =
-                            Process.sleep Duration.millisecond
-                                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
-                                |> Task.attempt (\_ -> SetScrollToBottom)
-                    in
-                    ( startOpeningChannelSidebar loggedIn
-                    , Command.batch
-                        [ setFocus model3 Pages.Guild.channelTextInputId
-                        , case threadRoute of
-                            ViewThreadWithMaybeMessage _ maybeMessageIndex ->
-                                case maybeMessageIndex of
-                                    Just messageIndex ->
-                                        smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
-                                            |> Task.attempt (\_ -> ScrolledToMessage)
+                    handleLocalChange
+                        model3.time
+                        (if SeqDict.member otherUserId (Local.model loggedIn.localState).dmChannels then
+                            case threadRoute of
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    Just (Local_ViewDmThread otherUserId threadId EmptyPlaceholder)
 
-                                    Nothing ->
-                                        scrollToBottom
+                                NoThreadWithMaybeMessage _ ->
+                                    Just (Local_ViewDm otherUserId EmptyPlaceholder)
 
-                            NoThreadWithMaybeMessage maybeMessageIndex ->
-                                case maybeMessageIndex of
-                                    Just messageIndex ->
-                                        smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
-                                            |> Task.attempt (\_ -> ScrolledToMessage)
-
-                                    Nothing ->
-                                        scrollToBottom
-                        ]
-                    )
+                         else
+                            Nothing
+                        )
+                        (startOpeningChannelSidebar loggedIn)
+                        (openChannelCmds threadRoute model3)
                 )
                 model3
 
@@ -736,6 +689,41 @@ routeRequest previousRoute newRoute model =
                 Err () ->
                     Command.none
             )
+
+
+openChannelCmds :
+    ThreadRouteWithMaybeMessage
+    -> LoadedFrontend
+    -> Command FrontendOnly ToBackend FrontendMsg
+openChannelCmds threadRoute model3 =
+    let
+        scrollToBottom : Command FrontendOnly ToBackend FrontendMsg
+        scrollToBottom =
+            Process.sleep Duration.millisecond
+                |> Task.andThen (\() -> Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999)
+                |> Task.attempt (\_ -> SetScrollToBottom)
+    in
+    Command.batch
+        [ setFocus model3 Pages.Guild.channelTextInputId
+        , case threadRoute of
+            ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+                case maybeMessageIndex of
+                    Just messageIndex ->
+                        smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                            |> Task.attempt (\_ -> ScrolledToMessage)
+
+                    Nothing ->
+                        scrollToBottom
+
+            NoThreadWithMaybeMessage maybeMessageIndex ->
+                case maybeMessageIndex of
+                    Just messageIndex ->
+                        smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                            |> Task.attempt (\_ -> ScrolledToMessage)
+
+                    Nothing ->
+                        scrollToBottom
+        ]
 
 
 routeRequiresLogin : Route -> Bool
@@ -3966,6 +3954,47 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.userId guildOrDmId messageIndex local
 
+                Local_ViewDm otherUserId messagesLoaded ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = User.setLastDmViewed otherUserId NoThread localUser.user }
+                        , dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (loadMessages messagesLoaded)
+                                local.dmChannels
+                    }
+
+                Local_ViewDmThread otherUserId threadId messagesLoaded ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user =
+                                    User.setLastDmViewed otherUserId (ViewThread threadId) localUser.user
+                            }
+                        , dmChannels =
+                            SeqDict.updateIfExists
+                                otherUserId
+                                (\dmChannel ->
+                                    { dmChannel
+                                        | threads =
+                                            SeqDict.updateIfExists
+                                                threadId
+                                                (loadMessages messagesLoaded)
+                                                dmChannel.threads
+                                    }
+                                )
+                                local.dmChannels
+                    }
+
                 Local_ViewChannel guildId channelId messagesLoaded ->
                     let
                         localUser =
@@ -5101,6 +5130,12 @@ pendingChangesText localChange =
 
         Local_DeleteMessage _ _ ->
             "Delete message"
+
+        Local_ViewDm _ _ ->
+            "View direct messages"
+
+        Local_ViewDmThread _ _ _ ->
+            "View thread"
 
         Local_ViewChannel _ _ _ ->
             "View channel"
