@@ -915,14 +915,9 @@ tests fileData =
             )
         ]
     , T.start
-        "Opening non-existent guild shouldn't show server unreachable warning"
+        "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
         (Time.millisToPosix 1757158297558)
-        { config
-            | handleHttpRequest =
-                handleHttpRequests
-                    (Dict.fromList [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/73b22fe3b4e6df4d.txt" ) ])
-                    fileData
-        }
+        config
         [ T.connectFrontend
             0
             (Effect.Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")

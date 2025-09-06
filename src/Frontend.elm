@@ -561,12 +561,16 @@ routeRequest previousRoute newRoute model =
                             in
                             handleLocalChange
                                 model3.time
-                                (case threadRoute of
-                                    ViewThreadWithMaybeMessage threadId _ ->
-                                        Just (Local_ViewThread guildId channelId threadId EmptyPlaceholder)
+                                (if SeqDict.member guildId (Local.model loggedIn.localState).guilds then
+                                    case threadRoute of
+                                        ViewThreadWithMaybeMessage threadId _ ->
+                                            Just (Local_ViewThread guildId channelId threadId EmptyPlaceholder)
 
-                                    NoThreadWithMaybeMessage _ ->
-                                        Just (Local_ViewChannel guildId channelId EmptyPlaceholder)
+                                        NoThreadWithMaybeMessage _ ->
+                                            Just (Local_ViewChannel guildId channelId EmptyPlaceholder)
+
+                                 else
+                                    Nothing
                                 )
                                 (if sameGuild || previousRoute == Nothing then
                                     startOpeningChannelSidebar loggedIn

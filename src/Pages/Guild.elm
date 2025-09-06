@@ -570,7 +570,53 @@ guildView model guildId channelRoute loggedIn local =
                             ]
 
                 Nothing ->
-                    homePageLoggedInView Nothing model loggedIn local
+                    if MyUi.isMobile model then
+                        let
+                            canScroll2 =
+                                canScroll model
+                        in
+                        Ui.column
+                            [ Ui.height Ui.fill
+                            , Ui.background MyUi.background1
+                            , Ui.heightMin 0
+                            , Ui.clip
+                            ]
+                            [ Ui.row
+                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ Ui.Lazy.lazy6
+                                    guildColumn
+                                    True
+                                    model.route
+                                    local.localUser.userId
+                                    local.localUser.user
+                                    local.guilds
+                                    canScroll2
+                                , pageMissing "Guild not found"
+                                ]
+                            , loggedInAsView local
+                            ]
+
+                    else
+                        Ui.row
+                            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
+                            [ Ui.column
+                                [ Ui.height Ui.fill
+                                ]
+                                [ Ui.row
+                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                    [ Ui.Lazy.lazy6
+                                        guildColumn
+                                        False
+                                        model.route
+                                        local.localUser.userId
+                                        local.localUser.user
+                                        local.guilds
+                                        True
+                                    , pageMissing "Guild not found"
+                                    ]
+                                , loggedInAsView local
+                                ]
+                            ]
 
 
 memberColumnWidth : number
@@ -677,6 +723,16 @@ sidebarOffsetAttr loggedIn model =
         }
 
 
+pageMissing text =
+    Ui.el
+        [ Ui.centerY
+        , Ui.Font.center
+        , Ui.Font.color MyUi.font1
+        , Ui.Font.size 20
+        ]
+        (Ui.text text)
+
+
 threadPreviewText : Id ChannelMessageId -> { a | messages : Array (MessageState ChannelMessageId) } -> LocalUser -> String
 threadPreviewText threadMessageIndex channel localUser =
     case DmChannel.getArray threadMessageIndex channel.messages of
@@ -744,13 +800,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 channel
 
                 Nothing ->
-                    Ui.el
-                        [ Ui.centerY
-                        , Ui.Font.center
-                        , Ui.Font.color MyUi.font1
-                        , Ui.Font.size 20
-                        ]
-                        (Ui.text "Channel does not exist")
+                    pageMissing "Channel does not exist"
 
         NewChannelRoute ->
             SeqDict.get guildId loggedIn.newChannelForm
@@ -769,13 +819,7 @@ channelView channelRoute guildId guild loggedIn local model =
                         )
 
                 Nothing ->
-                    Ui.el
-                        [ Ui.centerY
-                        , Ui.Font.center
-                        , Ui.Font.color MyUi.font1
-                        , Ui.Font.size 20
-                        ]
-                        (Ui.text "Channel does not exist")
+                    pageMissing "Channel does not exist"
 
         InviteLinkCreatorRoute ->
             inviteLinkCreatorForm model guildId guild

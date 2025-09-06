@@ -111,7 +111,7 @@ buildOAuthUrl config =
 
 redirectUri : String
 redirectUri =
-    "https://6a209156400e.ngrok-free.app/slack-oauth"
+    "https://0eefaebbb5d6.ngrok-free.app/slack-oauth"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse
