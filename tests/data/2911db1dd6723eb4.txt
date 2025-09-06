@@ -1,0 +1,1 @@
+{"ErrorCode":400,"Message":"The 'From' address you supplied (no-reply@at-chat.app) is not a Sender Signature on your account. Please add and confirm this address in order to be able to use it in the 'From' field of your messages."}

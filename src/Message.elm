@@ -1,8 +1,8 @@
-module Message exposing (Message(..), MessageNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
+module Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
-import Id exposing (ChannelMessageId, Id, UserId)
+import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty)
 import NonemptySet exposing (NonemptySet)
 import RichText exposing (RichText)
@@ -17,6 +17,11 @@ type Message messageId
     | DeletedMessage Time.Posix
 
 
+type MessageState messageId
+    = MessageLoaded (Message messageId)
+    | MessageUnloaded
+
+
 type alias UserTextMessageData messageId =
     { createdAt : Time.Posix
     , createdBy : Id UserId
@@ -26,6 +31,11 @@ type alias UserTextMessageData messageId =
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     }
+
+
+type MessageStateNoReply
+    = MessageLoaded_NoReply MessageNoReply
+    | MessageUnloaded_NoReply
 
 
 type MessageNoReply

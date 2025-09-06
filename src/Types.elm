@@ -27,6 +27,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
+    , ScrollPosition(..)
     , ServerChange(..)
     , ToBackend(..)
     , ToBeFilledInByBackend(..)
@@ -44,7 +45,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
-import DmChannel exposing (DmChannel, DmChannelId)
+import DmChannel exposing (DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -65,6 +66,7 @@ import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
+import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
@@ -79,6 +81,7 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import Slack
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
@@ -126,7 +129,6 @@ type alias LoadedFrontend =
     , pwaStatus : PwaStatus
     , drag : Drag
     , dragPrevious : Drag
-    , scrolledToBottomOfChannel : Bool
     , aiChatModel : AiChat.FrontendModel
     , enabledPushNotifications : Bool
     }
@@ -162,15 +164,16 @@ type alias LoggedIn2 =
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
     , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
-    , -- Only should be use for making requests to the Rust server
-      sessionId : SessionId
+    , sessionId : SessionId
     , isReloading : Bool
+    , channelScrollPosition : ScrollPosition
     }
 
 
 type alias UserOptionsModel =
     { name : Editable.Model
     , botToken : Editable.Model
+    , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     }
@@ -263,11 +266,17 @@ type alias BackendModel =
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
+    , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , botToken : Maybe DiscordBotToken
+    , slackWorkspaces : OneToOne String (Id GuildId)
+    , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
+    , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
+    , slackToken : Maybe Slack.AuthToken
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , pushSubscriptions : SeqDict SessionId PushSubscription
+    , slackClientSecret : Maybe Slack.ClientSecret
     }
 
 
@@ -370,9 +379,9 @@ type FrontendMsg
     | TouchCancel Time.Posix
     | ChannelSidebarAnimated Duration
     | MessageMenuAnimated Duration
-    | ScrolledToBottom
+    | SetScrollToBottom
     | PressedChannelHeaderBackButton
-    | UserScrolled { scrolledToBottomOfChannel : Bool }
+    | UserScrolled GuildOrDmIdNoThread ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
@@ -389,6 +398,7 @@ type FrontendMsg
     | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
     | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
+    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OneFrameAfterDragEnd
@@ -405,6 +415,12 @@ type FrontendMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool
+
+
+type ScrollPosition
+    = ScrolledToBottom
+    | ScrolledToTop
+    | ScrolledToMiddle
 
 
 type alias NewChannelForm =
@@ -424,20 +440,21 @@ type alias GuildChannelAndMessageId =
 
 
 type ToBackend
-    = CheckLoginRequest
-    | LoginWithTokenRequest Int
-    | LoginWithTwoFactorRequest Int
+    = CheckLoginRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
+    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest PersonName
+    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName
     | AiChatToBackend AiChat.ToBackend
-    | ReloadDataRequest
+    | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
     | UnregisterPushSubscriptionRequest
+    | LinkSlackOAuthCode Slack.OAuthCode SessionId
 
 
 type BackendMsg
@@ -475,6 +492,18 @@ type BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
+    | GotSlackChannels
+        Time.Posix
+        (Id UserId)
+        (Result
+            Http.Error
+            { currentUser : Slack.CurrentUser
+            , team : Slack.Team
+            , users : List Slack.User
+            , channels : List ( Slack.Channel, List Slack.Message )
+            }
+        )
+    | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
 
 
 type LoginResult
@@ -503,7 +532,7 @@ type alias LoginData =
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
-    , dmChannels : SeqDict (Id UserId) DmChannel
+    , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
@@ -545,7 +574,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
-    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.MessageId) (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
+    | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
 
 
@@ -565,8 +594,13 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_ViewChannel (Id GuildId) (Id ChannelId)
+    | Local_ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
+    | Local_ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
+    | Local_ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
+    | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
     | Local_SetName PersonName
+    | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
+    | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
 
 
 type ToBeFilledInByBackend a

@@ -44,6 +44,7 @@ import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Set exposing (Set)
+import Slack
 import Table
 import Toop exposing (T2(..), T3(..))
 import Ui exposing (Element)
@@ -122,6 +123,7 @@ type alias InitAdminData =
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
     , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
+    , slackClientSecret : Maybe Slack.ClientSecret
     }
 
 
@@ -139,6 +141,7 @@ type AdminChange
     | SetDiscordBotToken (Maybe DiscordBotToken)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
+    | SetSlackClientSecret (Maybe Slack.ClientSecret)
 
 
 type alias EditedBackendUser =
@@ -234,25 +237,19 @@ updateAdmin changedBy change adminData local =
             }
 
         SetEmailNotificationsEnabled isEnabled ->
-            { local
-                | adminData =
-                    IsAdmin { adminData | emailNotificationsEnabled = isEnabled }
-            }
+            { local | adminData = IsAdmin { adminData | emailNotificationsEnabled = isEnabled } }
 
         SetDiscordBotToken botToken ->
-            { local
-                | adminData =
-                    IsAdmin { adminData | botToken = botToken }
-            }
+            { local | adminData = IsAdmin { adminData | botToken = botToken } }
 
         SetPrivateVapidKey privateVapidKey ->
-            { local
-                | adminData =
-                    IsAdmin { adminData | privateVapidKey = privateVapidKey }
-            }
+            { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
 
         SetPublicVapidKey publicVapidKey ->
             { local | publicVapidKey = publicVapidKey }
+
+        SetSlackClientSecret clientSecret ->
+            { local | adminData = IsAdmin { adminData | slackClientSecret = clientSecret } }
 
 
 update :
@@ -737,6 +734,9 @@ userToEditUser user =
                 EmailAddress.toString email
 
             RegisteredFromDiscord ->
+                ""
+
+            RegisteredFromSlack ->
                 ""
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
@@ -1479,6 +1479,9 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                                                     EmailAddress.toString email
 
                                                 RegisteredFromDiscord ->
+                                                    ""
+
+                                                RegisteredFromSlack ->
                                                     ""
                                         )
                                     |> Set.fromList

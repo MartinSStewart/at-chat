@@ -1,16 +1,17 @@
-module EndToEndTests exposing (main, setup)
+module RecordedTests exposing (main, setup)
 
 import Backend
-import Dict as RegularDict
+import Bytes exposing (Bytes)
+import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Lamdera as Lamdera exposing (SessionId)
+import Effect.Lamdera exposing (SessionId)
 import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..))
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -18,6 +19,7 @@ import LoginForm
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
+import Route
 import SeqDict
 import Test.Html.Query
 import Test.Html.Selector
@@ -31,6 +33,7 @@ import Url exposing (Url)
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
 setup =
     T.viewerWith tests
+        |> T.addBytesFiles (Dict.values fileRequests)
 
 
 main : Program () (T.Model ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel) (T.Msg ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
@@ -38,9 +41,24 @@ main =
     T.startViewer setup
 
 
-homepageUrl : Url
-homepageUrl =
-    Unsafe.url "https://my-website.com"
+domain : Url
+domain =
+    { protocol = Url.Http, host = "localhost", port_ = Just 8000, path = "", query = Nothing, fragment = Nothing }
+
+
+{-| Please don't modify or rename this function
+-}
+fileRequests : Dict String String
+fileRequests =
+    [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/1b846b6a39f0b828.txt" )
+    , ( "POST_https://api.postmarkapp.com/email", "/tests/data/2911db1dd6723eb4.txt" )
+    ]
+        |> Dict.fromList
+
+
+stringToJson : String -> Json.Encode.Value
+stringToJson json =
+    Result.withDefault Json.Encode.null (Json.Decode.decodeString Json.Decode.value json)
 
 
 handlePortToJs :
@@ -180,12 +198,12 @@ isLoginEmail emailAddress httpRequest =
 
 sessionId0 : SessionId
 sessionId0 =
-    Lamdera.sessionIdFromString "sessionId0"
+    Effect.Lamdera.sessionIdFromString "sessionId0"
 
 
 sessionId1 : SessionId
 sessionId1 =
-    Lamdera.sessionIdFromString "sessionId1"
+    Effect.Lamdera.sessionIdFromString "sessionId1"
 
 
 handleLogin :
@@ -339,6 +357,7 @@ connectTwoUsers continueFunc =
         )
 
 
+writeMessage : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 writeMessage user text =
     T.group
         [ user.input 100 (Dom.id "channel_textinput") text
@@ -376,11 +395,38 @@ clickSpoiler user htmlId =
         ]
 
 
-tests : List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
-tests =
+handleHttpRequests : Dict String String -> Dict String Bytes -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
+handleHttpRequests overrides fileData { currentRequest } =
     let
-        handleHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-        handleHttpRequests overrides ({ currentRequest } as httpRequests) =
+        key : String
+        key =
+            currentRequest.method ++ "_" ++ currentRequest.url
+
+        getData : String -> HttpResponse
+        getData path =
+            case Dict.get path fileData of
+                Just data ->
+                    BytesHttpResponse { url = currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty } data
+
+                Nothing ->
+                    UnhandledHttpRequest
+    in
+    case ( Dict.get key overrides, Dict.get key fileRequests ) of
+        ( Just path, _ ) ->
+            getData path
+
+        ( Nothing, Just path ) ->
+            getData path
+
+        _ ->
+            UnhandledHttpRequest
+
+
+tests : Dict String Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
+tests fileData =
+    let
+        handleNormalHttpRequests : ({ currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> Maybe HttpResponse) -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
+        handleNormalHttpRequests overrides ({ currentRequest } as httpRequests) =
             case overrides httpRequests of
                 Just response ->
                     response
@@ -391,7 +437,7 @@ tests =
                             { url = currentRequest.url
                             , statusCode = 200
                             , statusText = "OK"
-                            , headers = RegularDict.empty
+                            , headers = Dict.empty
                             }
                             "BIMi0iQoEXBXE3DyvGBToZfTfC8OyTn5lr_8eMvGBzJbxdEzv4wXFwIOEna_X3NJnCqIMbZX81VgSOFCjYda0bo,Ik2bRdqy_1dPMyiHxJX3_mV_t5R0GpQjsIu71E4MkCU"
 
@@ -400,7 +446,7 @@ tests =
                             { url = currentRequest.url
                             , statusCode = 200
                             , statusText = "OK"
-                            , headers = RegularDict.empty
+                            , headers = Dict.empty
                             }
                             ""
 
@@ -413,7 +459,7 @@ tests =
                                             { url = currentRequest.url
                                             , statusCode = 200
                                             , statusText = "OK"
-                                            , headers = RegularDict.empty
+                                            , headers = Dict.empty
                                             }
                                             ("""{"To":\""""
                                                 ++ email
@@ -441,21 +487,31 @@ tests =
         handleMultiFileUpload _ =
             UnhandledMultiFileUpload
 
-        config : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        normalConfig : T.Config ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+        normalConfig =
+            T.Config
+                Frontend.app_
+                Backend.app_
+                (handleNormalHttpRequests (\_ -> Nothing))
+                handlePortToJs
+                handleFileRequest
+                handleMultiFileUpload
+                domain
+
         config =
             T.Config
                 Frontend.app_
                 Backend.app_
-                (handleHttpRequests (\_ -> Nothing))
-                handlePortToJs
-                handleFileRequest
-                handleMultiFileUpload
-                homepageUrl
+                (handleHttpRequests Dict.empty fileData)
+                (\_ -> Nothing)
+                (\_ -> UnhandledFileUpload)
+                (\_ -> UnhandledMultiFileUpload)
+                domain
     in
     [ T.start
         "spoilers"
         startTime
-        config
+        normalConfig
         [ connectTwoUsers
             (\admin user ->
                 [ writeMessage admin "This message is ||very|| ||secret||"
@@ -487,7 +543,7 @@ tests =
     , T.start
         "Notifications"
         startTime
-        config
+        normalConfig
         [ connectTwoUsers
             (\admin user ->
                 [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
@@ -537,13 +593,50 @@ tests =
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , checkNotification "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                , admin.click 100 (Dom.id "guild_openDm_1")
+                , writeMessage admin "Here's a DM to you"
+                , user.click 100 (Dom.id "guildsColumn_openDm_0")
+                , writeMessage user "Here's a reply!"
+                , writeMessage user "And another reply"
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\userReload ->
+                        [ userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.id "guildsColumn_openDm_0" ]
+                            )
+                        , userReload.click 100 (Dom.id "guildIcon_showFriends")
+                        , userReload.click 100 (Dom.id "guild_friendLabel_0")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
+                        , userReload.click 100 (Dom.id "guild_openChannel_0")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
+                        ]
+                    )
                 ]
             )
         ]
     , T.start
         "Enable 2FA"
         startTime
-        config
+        normalConfig
         [ T.connectFrontend
             100
             sessionId0
@@ -645,7 +738,7 @@ tests =
         ]
     , T.start "Logins are rate limited"
         startTime
-        config
+        normalConfig
         [ T.connectFrontend
             100
             sessionId0
@@ -739,7 +832,7 @@ tests =
         ]
     , T.start "Test login"
         startTime
-        config
+        normalConfig
         [ T.connectFrontend
             100
             sessionId0
@@ -772,6 +865,117 @@ tests =
                 ]
             )
         , checkNoErrorLogs
+        ]
+    , T.start
+        "Add and remove reaction emojis"
+        (Time.millisToPosix 1756739527046)
+        config
+        [ T.connectFrontend
+            0
+            (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
+            "/"
+            { width = 1887, height = 770 }
+            (\tabA ->
+                [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , tabA.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tabA.portEvent 152 "is_push_subscription_registered_from_js" (stringToJson "false")
+                , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
+                , T.connectFrontend
+                    17
+                    (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
+                    "/"
+                    { width = 1887, height = 674 }
+                    (\tabB ->
+                        [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                        , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
+                        , tabB.portEvent 39 "is_push_subscription_registered_from_js" (stringToJson "false")
+                        , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
+                        , tabA.click 3098 (Dom.id "homePage_loginButton")
+                        , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
+                        , tabA.keyUp 263 (Dom.id "loginForm_emailInput") "Enter" []
+                        , tabA.input 164 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , tabA.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                        , tabA.click 1747 (Dom.id "guild_openGuild_0")
+                        , tabA.focus 19 (Dom.id "channel_textinput")
+                        , tabA.click 1005 (Dom.id "channel_textinput")
+                        , tabA.input 636 (Dom.id "channel_textinput") "Test"
+                        , tabA.keyDown 751 (Dom.id "channel_textinput") "Enter" []
+                        , tabA.blur 910 (Dom.id "channel_textinput")
+                        , tabB.click 111 (Dom.id "guild_openGuild_0")
+                        , tabB.focus 25 (Dom.id "channel_textinput")
+                        , tabA.mouseEnter 991 (Dom.id "guild_message_0") ( 620, 54 ) []
+                        , tabA.focus 921 (Dom.id "channel_textinput")
+                        , tabA.blur 4 (Dom.id "channel_textinput")
+                        , tabB.blur 17 (Dom.id "channel_textinput")
+                        , tabA.click 28 (Dom.id "miniView_reply")
+                        , tabA.focus 8 (Dom.id "channel_textinput")
+                        , tabA.mouseLeave 375 (Dom.id "guild_message_0") ( 1286, 57 ) []
+                        , tabA.click 457 (Dom.id "channel_textinput")
+                        , tabA.input 781 (Dom.id "channel_textinput") "Test2"
+                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
+                        , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                        , createThread tabA (Id.fromInt 0)
+                        , tabA.mouseEnter 1 (Dom.id "guild_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "guild_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "guild_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "guild_message_0") ( 148, 63 ) []
+                        , tabA.click 457 (Dom.id "channel_textinput")
+                        , tabA.input 781 (Dom.id "channel_textinput") "Test3"
+                        , tabA.blur 2357 (Dom.id "channel_textinput")
+                        , tabA.click 78 (Dom.id "messageMenu_channelInput_sendMessage")
+                        , tabB.click 100 (Dom.id "guild_viewThread_0_0")
+                        , tabA.mouseEnter 1 (Dom.id "thread_message_0") ( 1036, 55 ) []
+                        , tabA.click 1205 (Dom.id "miniView_showReactionEmojiSelector")
+                        , tabA.mouseLeave 633 (Dom.id "thread_message_0") ( 690, -1 ) []
+                        , tabA.click 991 (Dom.id "guild_emojiSelector_😀")
+                        , tabB.checkView 50 (Test.Html.Query.has [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseEnter 348 (Dom.id "thread_message_0") ( 66, 13 ) []
+                        , tabA.click 548 (Dom.id "guild_removeReactionEmoji_0")
+                        , tabB.checkView 50 (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "😀" ])
+                        , tabA.mouseLeave 410 (Dom.id "thread_message_0") ( 148, 63 ) []
+                        ]
+                    )
+                ]
+            )
+        ]
+    , T.start
+        "Opening non-existent guild shouldn't show \"Unable to reach the server.\" warning"
+        (Time.millisToPosix 1757158297558)
+        config
+        [ T.connectFrontend
+            0
+            (Effect.Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
+            "/g/1/c/0"
+            { width = 1615, height = 820 }
+            (\tab1 ->
+                [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tab1.portEvent 9 "is_push_subscription_registered_from_js" (stringToJson "true")
+                , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
+                , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
+                , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []
+                , tab1.input 91 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , tab1.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , tab1.click 17660 (Dom.id "guild_openGuild_0")
+                , tab1.focus 17 (Dom.id "channel_textinput")
+                , tab1.blur 3994 (Dom.id "channel_textinput")
+                , tab1.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
+                ]
+            )
         ]
     ]
 

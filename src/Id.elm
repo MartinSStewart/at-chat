@@ -32,8 +32,8 @@ type alias GuildOrDmId =
 
 
 type GuildOrDmIdNoThread
-    = GuildOrDmId_Guild_NoThread (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_Dm_NoThread (Id UserId)
+    = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_Dm (Id UserId)
 
 
 type ThreadRoute

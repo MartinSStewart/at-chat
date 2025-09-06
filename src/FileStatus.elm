@@ -208,12 +208,12 @@ upload onResult sessionId guildOrDmId fileId file2 =
 uploadTrackerId : GuildOrDmId -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
-        GuildOrDmId_Guild_NoThread guildId channelId ->
+        GuildOrDmId_Guild guildId channelId ->
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
 
-        GuildOrDmId_Dm_NoThread otherUserId ->
+        GuildOrDmId_Dm otherUserId ->
             Id.toString otherUserId
     )
         ++ (case threadRoute of
