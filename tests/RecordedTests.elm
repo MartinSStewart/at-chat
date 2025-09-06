@@ -914,6 +914,36 @@ tests fileData =
                 ]
             )
         ]
+    , T.start
+        "Opening non-existent guild shouldn't show server unreachable warning"
+        (Time.millisToPosix 1757158297558)
+        { config
+            | handleHttpRequest =
+                handleHttpRequests
+                    (Dict.fromList [ ( "GET_http://localhost:3000/file/vapid", "/tests/data/73b22fe3b4e6df4d.txt" ) ])
+                    fileData
+        }
+        [ T.connectFrontend
+            0
+            (Effect.Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
+            "/g/1/c/0"
+            { width = 1615, height = 820 }
+            (\tab1 ->
+                [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
+                , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tab1.portEvent 9 "is_push_subscription_registered_from_js" (stringToJson "true")
+                , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
+                , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
+                , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []
+                , tab1.input 91 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , tab1.input 1 (Dom.id "loginForm_loginCodeInput") "22923193"
+                , tab1.click 17660 (Dom.id "guild_openGuild_0")
+                , tab1.focus 17 (Dom.id "channel_textinput")
+                , tab1.blur 3994 (Dom.id "channel_textinput")
+                , tab1.checkView 100 (Test.Html.Query.hasNot [ Test.Html.Selector.text "Unable to reach the server." ])
+                ]
+            )
+        ]
     ]
 
 
