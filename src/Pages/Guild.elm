@@ -150,7 +150,7 @@ dmHasNotifications currentUser otherUserId dmChannel =
                     Id.increment id
 
                 Nothing ->
-                    Id.fromInt 0
+                    Id.fromInt -1
     in
     (DmChannel.latestMessageId dmChannel /= lastViewed)
         || List.any
@@ -255,7 +255,7 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                 (\( otherUserId, dmChannel ) ->
                     if dmHasNotifications localUser.user otherUserId dmChannel then
                         elLinkButton
-                            (Dom.id ("guild_openDm_" ++ Id.toString otherUserId))
+                            (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
                             (DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
                             []
                             (case SeqDict.get otherUserId allUsers of

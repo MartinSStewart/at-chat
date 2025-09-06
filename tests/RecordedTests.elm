@@ -594,6 +594,7 @@ tests fileData =
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
                 , admin.click 100 (Dom.id "guild_openDm_1")
                 , writeMessage admin "Here's a DM to you"
+                , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 ]
             )
         ]
