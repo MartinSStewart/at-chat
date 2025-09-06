@@ -253,22 +253,35 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
             ]
             (List.filterMap
                 (\( otherUserId, dmChannel ) ->
-                    if dmHasNotifications localUser.user otherUserId dmChannel then
-                        elLinkButton
-                            (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                            (DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
-                            []
-                            (case SeqDict.get otherUserId allUsers of
-                                Just otherUser ->
-                                    GuildIcon.userView NewMessageForUser otherUser.icon otherUserId
+                    let
+                        dmIcon =
+                            if dmHasNotifications localUser.user otherUserId dmChannel then
+                                elLinkButton
+                                    (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
+                                    (DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
+                                    []
+                                    (case SeqDict.get otherUserId allUsers of
+                                        Just otherUser ->
+                                            GuildIcon.userView NewMessageForUser otherUser.icon otherUserId
 
-                                Nothing ->
-                                    GuildIcon.userView NewMessageForUser Nothing otherUserId
-                            )
-                            |> Just
+                                        Nothing ->
+                                            GuildIcon.userView NewMessageForUser Nothing otherUserId
+                                    )
+                                    |> Just
 
-                    else
-                        Nothing
+                            else
+                                Nothing
+                    in
+                    case route of
+                        DmRoute otherUserIdRoute _ ->
+                            if otherUserId == otherUserIdRoute then
+                                Nothing
+
+                            else
+                                dmIcon
+
+                        _ ->
+                            dmIcon
                 )
                 (SeqDict.toList dmChannels)
                 ++ GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
