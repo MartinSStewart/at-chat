@@ -592,6 +592,8 @@ tests fileData =
                 , admin.keyDown 100 (Dom.id "channel_textinput") "Enter" []
                 , checkNotification "Lets move this to a thread..."
                 , user.click 100 (Dom.id "guild_threadStarterIndicator_2")
+                , admin.click 100 (Dom.id "guild_openDm_1")
+                , writeMessage admin "Here's a DM to you"
                 ]
             )
         ]

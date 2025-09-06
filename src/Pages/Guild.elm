@@ -21,13 +21,13 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import DmChannel exposing (FrontendDmChannel, FrontendThread, LastTypedAt)
+import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
 import FileStatus
-import GuildIcon exposing (NotificationType(..))
+import GuildIcon exposing (ChannelNotificationType(..))
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -71,7 +71,7 @@ channelOrThreadHasNotifications :
     Id UserId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId) }
-    -> NotificationType
+    -> ChannelNotificationType
 channelOrThreadHasNotifications currentUserId lastViewed channel =
     Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
         |> Array.toList
@@ -110,7 +110,7 @@ channelOrThreadHasNotifications currentUserId lastViewed channel =
             NoNotification
 
 
-guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> NotificationType
+guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
 guildHasNotifications currentUserId currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel state ->
@@ -120,36 +120,6 @@ guildHasNotifications currentUserId currentUser guildId guild =
 
                 _ ->
                     let
-                        state3 =
-                            SeqDict.foldl
-                                (\threadMessageIndex thread state2 ->
-                                    case state2 of
-                                        NewMessageForUser ->
-                                            state2
-
-                                        _ ->
-                                            let
-                                                lastViewed2 : Id ThreadMessageId
-                                                lastViewed2 =
-                                                    case SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) currentUser.lastViewedThreads of
-                                                        Just id ->
-                                                            Id.increment id
-
-                                                        Nothing ->
-                                                            Id.fromInt 0
-                                            in
-                                            case
-                                                channelOrThreadHasNotifications currentUserId lastViewed2 thread
-                                            of
-                                                NoNotification ->
-                                                    state2
-
-                                                notification ->
-                                                    notification
-                                )
-                                state
-                                channel.threads
-
                         lastViewed : Id ChannelMessageId
                         lastViewed =
                             case SeqDict.get (GuildOrDmId_Guild guildId channelId) currentUser.lastViewed of
@@ -161,13 +131,74 @@ guildHasNotifications currentUserId currentUser guildId guild =
                     in
                     case channelOrThreadHasNotifications currentUserId lastViewed channel of
                         NoNotification ->
-                            state3
+                            threadHasNotifications (GuildOrDmId_Guild guildId channelId) currentUserId currentUser channel
 
                         notification ->
                             notification
         )
         NoNotification
         guild.channels
+
+
+dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Bool
+dmHasNotifications currentUser otherUserId dmChannel =
+    let
+        lastViewed : Id ChannelMessageId
+        lastViewed =
+            case SeqDict.get (GuildOrDmId_Dm otherUserId) currentUser.lastViewed of
+                Just id ->
+                    Id.increment id
+
+                Nothing ->
+                    Id.fromInt 0
+    in
+    (DmChannel.latestMessageId dmChannel /= lastViewed)
+        || List.any
+            (\( threadId, thread ) ->
+                let
+                    lastViewed2 : Id ThreadMessageId
+                    lastViewed2 =
+                        case SeqDict.get ( GuildOrDmId_Dm otherUserId, threadId ) currentUser.lastViewedThreads of
+                            Just id ->
+                                Id.increment id
+
+                            Nothing ->
+                                Id.fromInt 0
+                in
+                DmChannel.latestThreadMessageId thread == lastViewed2
+            )
+            (SeqDict.toList dmChannel.threads)
+
+
+threadHasNotifications guildOrDmId currentUserId currentUser channel =
+    SeqDict.foldl
+        (\threadMessageIndex thread state2 ->
+            case state2 of
+                NewMessageForUser ->
+                    state2
+
+                _ ->
+                    let
+                        lastViewed2 : Id ThreadMessageId
+                        lastViewed2 =
+                            case SeqDict.get ( guildOrDmId, threadMessageIndex ) currentUser.lastViewedThreads of
+                                Just id ->
+                                    Id.increment id
+
+                                Nothing ->
+                                    Id.fromInt 0
+                    in
+                    case
+                        channelOrThreadHasNotifications currentUserId lastViewed2 thread
+                    of
+                        NoNotification ->
+                            state2
+
+                        notification ->
+                            notification
+        )
+        NoNotification
+        channel.threads
 
 
 canScroll : LoadedFrontend -> Bool
@@ -183,12 +214,16 @@ canScroll model =
 guildColumn :
     Bool
     -> Route
-    -> Id UserId
-    -> BackendUser
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Id GuildId) FrontendGuild
     -> Bool
     -> Element FrontendMsg
-guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
+guildColumn isMobile route localUser dmChannels guilds canScroll2 =
+    let
+        allUsers =
+            LocalState.allUsers2 localUser
+    in
     Ui.el
         [ Ui.inFront
             (Ui.el
@@ -216,14 +251,34 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
             , MyUi.htmlStyle "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
             , bounceScroll isMobile
             ]
-            (GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
+            (List.filterMap
+                (\( otherUserId, dmChannel ) ->
+                    if dmHasNotifications localUser.user otherUserId dmChannel then
+                        elLinkButton
+                            (Dom.id ("guild_openDm_" ++ Id.toString otherUserId))
+                            (DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
+                            []
+                            (case SeqDict.get otherUserId allUsers of
+                                Just otherUser ->
+                                    GuildIcon.userView NewMessageForUser otherUser.icon otherUserId
+
+                                Nothing ->
+                                    GuildIcon.userView NewMessageForUser Nothing otherUserId
+                            )
+                            |> Just
+
+                    else
+                        Nothing
+                )
+                (SeqDict.toList dmChannels)
+                ++ GuildIcon.showFriendsButton (route == HomePageRoute) (PressedLink HomePageRoute)
                 :: List.map
                     (\( guildId, guild ) ->
                         elLinkButton
                             (Dom.id ("guild_openGuild_" ++ Id.toString guildId))
                             (GuildRoute
                                 guildId
-                                (case SeqDict.get guildId currentUser.lastChannelViewed of
+                                (case SeqDict.get guildId localUser.user.lastChannelViewed of
                                     Just ( channelId, threadRoute ) ->
                                         ChannelRoute
                                             channelId
@@ -249,11 +304,11 @@ guildColumn isMobile route currentUserId currentUser guilds canScroll2 =
                                             GuildIcon.IsSelected
 
                                         else
-                                            guildHasNotifications currentUserId currentUser guildId guild
+                                            guildHasNotifications localUser.userId localUser.user guildId guild
                                                 |> GuildIcon.Normal
 
                                     _ ->
-                                        guildHasNotifications currentUserId currentUser guildId guild |> GuildIcon.Normal
+                                        guildHasNotifications localUser.userId localUser.user guildId guild |> GuildIcon.Normal
                                 )
                                 guild
                             )
@@ -337,8 +392,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 guildColumn
                                 True
                                 model.route
-                                local.localUser.userId
-                                local.localUser.user
+                                local.localUser
+                                local.dmChannels
                                 local.guilds
                                 (canScroll model)
                             , friendsColumn True maybeOtherUserId local
@@ -360,8 +415,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 guildColumn
                                 False
                                 model.route
-                                local.localUser.userId
-                                local.localUser.user
+                                local.localUser
+                                local.dmChannels
                                 local.guilds
                                 (canScroll model)
                             , friendsColumn False maybeOtherUserId local
@@ -502,8 +557,8 @@ guildView model guildId channelRoute loggedIn local =
                                     guildColumn
                                     True
                                     model.route
-                                    local.localUser.userId
-                                    local.localUser.user
+                                    local.localUser
+                                    local.dmChannels
                                     local.guilds
                                     canScroll2
                                 , Ui.Lazy.lazy5
@@ -535,8 +590,8 @@ guildView model guildId channelRoute loggedIn local =
                                         guildColumn
                                         False
                                         model.route
-                                        local.localUser.userId
-                                        local.localUser.user
+                                        local.localUser
+                                        local.dmChannels
                                         local.guilds
                                         True
                                     , Ui.Lazy.lazy5
@@ -587,8 +642,8 @@ guildView model guildId channelRoute loggedIn local =
                                     guildColumn
                                     True
                                     model.route
-                                    local.localUser.userId
-                                    local.localUser.user
+                                    local.localUser
+                                    local.dmChannels
                                     local.guilds
                                     canScroll2
                                 , pageMissing "Guild not found"
@@ -608,8 +663,8 @@ guildView model guildId channelRoute loggedIn local =
                                         guildColumn
                                         False
                                         model.route
-                                        local.localUser.userId
-                                        local.localUser.user
+                                        local.localUser
+                                        local.dmChannels
                                         local.guilds
                                         True
                                     , pageMissing "Guild not found"

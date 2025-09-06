@@ -1,10 +1,12 @@
 module GuildIcon exposing
-    ( Mode(..)
-    , NotificationType(..)
+    ( ChannelNotificationType(..)
+    , Mode(..)
     , addGuildButton
     , fullWidth
+    , iconView
     , notificationView
     , showFriendsButton
+    , userView
     , view
     )
 
@@ -14,6 +16,8 @@ import GuildName
 import Html
 import Html.Attributes
 import Icons
+import Id exposing (Id, UserId)
+import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (FrontendGuild)
 import MyUi
 import Ui exposing (Element)
@@ -21,17 +25,17 @@ import Ui.Font
 
 
 type Mode
-    = Normal NotificationType
+    = Normal ChannelNotificationType
     | IsSelected
 
 
-type NotificationType
+type ChannelNotificationType
     = NoNotification
     | NewMessage
     | NewMessageForUser
 
 
-notificationView : Int -> Int -> Ui.Color -> NotificationType -> Ui.Attribute msg
+notificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
 notificationView xOffset yOffset borderColor notification =
     case notification of
         NoNotification ->
@@ -85,33 +89,7 @@ view mode guild =
         ]
         (case guild.icon of
             Just icon ->
-                Html.img
-                    [ Html.Attributes.style
-                        "width"
-                        (case mode of
-                            IsSelected ->
-                                String.fromInt fullWidth ++ "px"
-
-                            _ ->
-                                String.fromInt size ++ "px"
-                        )
-                    , Html.Attributes.style "height" (String.fromInt size ++ "px")
-                    , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent icon)
-                    , Html.Attributes.style "display" "flex"
-                    , Html.Attributes.style "align-self" "center"
-                    , Html.Attributes.style "object-fit" "cover"
-                    , Html.Attributes.style
-                        "border-radius"
-                        (case mode of
-                            IsSelected ->
-                                "0"
-
-                            _ ->
-                                String.fromInt (round (toFloat size * 8 / 50)) ++ "px"
-                        )
-                    ]
-                    []
-                    |> Ui.html
+                iconView mode icon
 
             Nothing ->
                 String.replace "-" " " name
@@ -148,6 +126,82 @@ view mode guild =
                         , MyUi.hoverText name
                         ]
         )
+
+
+userView : ChannelNotificationType -> Maybe FileStatus.FileHash -> Id UserId -> Element msg
+userView notification maybeIcon userId =
+    Ui.el
+        [ notificationView 0 -3 MyUi.background1 notification
+        ]
+        (case maybeIcon of
+            Just icon ->
+                iconView (Normal notification) icon
+
+            Nothing ->
+                Ui.el
+                    [ Ui.contentCenterX
+                    , Ui.contentCenterY
+                    , Ui.rounded (round (toFloat size * 8 / 50))
+                    , MyUi.montserrat
+                    , Ui.Font.weight 600
+                    , Ui.background (userDefaultColor userId)
+                    , Ui.centerX
+                    , Ui.width (Ui.px size)
+                    , Ui.height (Ui.px size)
+                    , Ui.Font.size (round (toFloat size * 18 / 50))
+                    , Ui.Font.color (Ui.rgb 20 20 20)
+                    , Ui.paddingXY 4 0
+                    ]
+                    (Ui.html Icons.person)
+        )
+
+
+iconView : Mode -> FileStatus.FileHash -> Element msg
+iconView mode icon =
+    Html.img
+        [ Html.Attributes.style
+            "width"
+            (case mode of
+                IsSelected ->
+                    String.fromInt fullWidth ++ "px"
+
+                _ ->
+                    String.fromInt size ++ "px"
+            )
+        , Html.Attributes.style "height" (String.fromInt size ++ "px")
+        , Html.Attributes.src (FileStatus.fileUrl FileStatus.pngContent icon)
+        , Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "align-self" "center"
+        , Html.Attributes.style "object-fit" "cover"
+        , Html.Attributes.style
+            "border-radius"
+            (case mode of
+                IsSelected ->
+                    "0"
+
+                _ ->
+                    String.fromInt (round (toFloat size * 8 / 50)) ++ "px"
+            )
+        ]
+        []
+        |> Ui.html
+
+
+userDefaultColor : Id UserId -> Ui.Color
+userDefaultColor userId =
+    List.Nonempty.get (Id.toInt userId) userColors
+
+
+userColors : Nonempty Ui.Color
+userColors =
+    Nonempty
+        (Ui.rgb 232 134 170)
+        [ Ui.rgb 235 179 142
+        , Ui.rgb 232 215 139
+        , Ui.rgb 188 244 155
+        , Ui.rgb 172 246 228
+        , Ui.rgb 198 150 232
+        ]
 
 
 size : number
