@@ -60,7 +60,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
-import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
+import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread, VisibleMessages)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -216,8 +216,7 @@ type alias FrontendChannel =
     , createdBy : Id UserId
     , name : ChannelName
     , messages : Array (MessageState ChannelMessageId)
-    , oldestVisibleMessage : Id ChannelMessageId
-    , newestVisibleMessage : Id ChannelMessageId
+    , visibleMessages : VisibleMessages ChannelMessageId
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -228,12 +227,15 @@ channelToFrontend : Maybe ThreadRoute -> BackendChannel -> Maybe FrontendChannel
 channelToFrontend threadRoute channel =
     case channel.status of
         ChannelActive ->
+            let
+                preloadMessages =
+                    Just NoThread == threadRoute
+            in
             { createdAt = channel.createdAt
             , createdBy = channel.createdBy
             , name = channel.name
-            , messages = DmChannel.toFrontendHelper (Just NoThread == threadRoute) channel
-            , oldestVisibleMessage = Array.length channel.messages - DmChannel.pageSize - 1 |> Id.fromInt
-            , newestVisibleMessage = DmChannel.latestMessageId channel
+            , messages = DmChannel.toFrontendHelper preloadMessages channel
+            , visibleMessages = DmChannel.initVisibleMessages preloadMessages channel
             , isArchived = Nothing
             , lastTypedAt = channel.lastTypedAt
             , threads =
@@ -461,16 +463,14 @@ createThreadMessageFrontend :
     ->
         { d
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
     ->
         { d
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
@@ -493,15 +493,13 @@ createChannelMessageFrontend :
     ->
         { d
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
     ->
         { d
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
         }
 createChannelMessageFrontend message channel =
@@ -513,15 +511,13 @@ createMessageFrontend :
     ->
         { d
             | messages : Array (MessageState messageId)
-            , oldestVisibleMessage : Id messageId
-            , newestVisibleMessage : Id messageId
+            , visibleMessages : VisibleMessages messageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
     ->
         { d
             | messages : Array (MessageState messageId)
-            , oldestVisibleMessage : Id messageId
-            , newestVisibleMessage : Id messageId
+            , visibleMessages : VisibleMessages messageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
 createMessageFrontend message channel =
@@ -547,13 +543,13 @@ createMessageFrontend message channel =
 
                 Nothing ->
                     Array.push (MessageLoaded message) channel.messages
-        , newestVisibleMessage =
-            case ( mergeWithPrevious, Id.toInt channel.newestVisibleMessage == (Array.length channel.messages - 1) ) of
-                ( Nothing, True ) ->
-                    Id.increment channel.newestVisibleMessage
+        , visibleMessages =
+            case mergeWithPrevious of
+                Nothing ->
+                    DmChannel.incrementVisibleMessages channel channel.visibleMessages
 
                 _ ->
-                    channel.newestVisibleMessage
+                    channel.visibleMessages
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
@@ -677,8 +673,7 @@ createChannelFrontend time userId channelName guild =
                 , createdBy = userId
                 , name = channelName
                 , messages = Array.empty
-                , oldestVisibleMessage = Id.fromInt 0
-                , newestVisibleMessage = Id.fromInt 0
+                , visibleMessages = DmChannel.visibleMessagesForNewChannel
                 , isArchived = Nothing
                 , lastTypedAt = SeqDict.empty
                 , threads = SeqDict.empty

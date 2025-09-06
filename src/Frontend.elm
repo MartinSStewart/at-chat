@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (FrontendDmChannel, FrontendThread)
+import DmChannel exposing (FrontendDmChannel, FrontendThread, VisibleMessages)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -534,7 +534,7 @@ routeRequest previousRoute newRoute model =
                                     model2.loginStatus
                     }
 
-                ( sameGuild, sameChannel ) =
+                ( sameGuild, _ ) =
                     case previousRoute of
                         Just (GuildRoute previousGuildId previousChannelRoute) ->
                             ( guildId == previousGuildId
@@ -2324,7 +2324,7 @@ updateLoaded msg model =
                                                     NoThread ->
                                                         Local_LoadChannelMessages
                                                             guildOrDmId
-                                                            channel.oldestVisibleMessage
+                                                            channel.visibleMessages.oldest
                                                             EmptyPlaceholder
 
                                                     ViewThread threadId ->
@@ -2333,7 +2333,8 @@ updateLoaded msg model =
                                                             threadId
                                                             (SeqDict.get threadId channel.threads
                                                                 |> Maybe.withDefault DmChannel.frontendThreadInit
-                                                                |> .oldestVisibleMessage
+                                                                |> .visibleMessages
+                                                                |> .oldest
                                                             )
                                                             EmptyPlaceholder
                                                 )
@@ -2353,7 +2354,7 @@ updateLoaded msg model =
                                             NoThread ->
                                                 Local_LoadChannelMessages
                                                     guildOrDmId
-                                                    dmChannel.oldestVisibleMessage
+                                                    dmChannel.visibleMessages.oldest
                                                     EmptyPlaceholder
 
                                             ViewThread threadId ->
@@ -2362,7 +2363,8 @@ updateLoaded msg model =
                                                     threadId
                                                     (SeqDict.get threadId dmChannel.threads
                                                         |> Maybe.withDefault DmChannel.frontendThreadInit
-                                                        |> .oldestVisibleMessage
+                                                        |> .visibleMessages
+                                                        |> .oldest
                                                     )
                                                     EmptyPlaceholder
                                         )
@@ -4600,8 +4602,8 @@ deleteMessage userId guildOrDmId threadRoute local =
 loadOlderMessages :
     Id messageId
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
-    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
-    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
+    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -4609,14 +4611,11 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
                 | messages =
                     SeqDict.foldl
                         (\messageId message messages ->
-                            DmChannel.setArray
-                                messageId
-                                (MessageLoaded message)
-                                messages
+                            DmChannel.setArray messageId (MessageLoaded message) messages
                         )
                         channel.messages
                         messagesLoaded2
-                , oldestVisibleMessage = Id.toInt previousOldestVisibleMessage - DmChannel.pageSize |> max 0 |> Id.fromInt
+                , visibleMessages = DmChannel.visibleMessagesLoadOlder previousOldestVisibleMessage channel.visibleMessages
             }
 
         EmptyPlaceholder ->
@@ -4625,8 +4624,8 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 loadMessages :
     ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
-    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
-    -> { a | messages : Array (MessageState messageId), oldestVisibleMessage : Id messageId, newestVisibleMessage : Id messageId }
+    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -4641,8 +4640,7 @@ loadMessages messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
-                , oldestVisibleMessage = Array.length channel.messages - DmChannel.pageSize - 1 |> Id.fromInt
-                , newestVisibleMessage = Array.length channel.messages - 1 |> Id.fromInt
+                , visibleMessages = DmChannel.visibleMessagesFirstLoad channel
             }
 
         EmptyPlaceholder ->

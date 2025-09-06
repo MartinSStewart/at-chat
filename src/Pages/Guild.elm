@@ -21,7 +21,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt)
+import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt, VisibleMessages)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -1067,8 +1067,7 @@ conversationViewHelper :
     ->
         { a
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
@@ -1312,7 +1311,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length channel.messages - 1, Nothing, [] )
-        (visibleMessages channel)
+        (DmChannel.visibleMessagesSlice channel)
         |> (\( _, _, a ) -> a)
 
 
@@ -1372,20 +1371,6 @@ newMessageLine maybeLastDate date lastViewedIndex index messageId =
 
         Nothing ->
             []
-
-
-visibleMessages :
-    { a
-        | oldestVisibleMessage : Id messageId
-        , newestVisibleMessage : Id messageId
-        , messages : Array (MessageState messageId)
-    }
-    -> Array (MessageState messageId)
-visibleMessages channel =
-    Array.slice
-        (Id.toInt channel.oldestVisibleMessage)
-        (Id.toInt channel.newestVisibleMessage + 1)
-        channel.messages
 
 
 threadConversationViewHelper :
@@ -1594,7 +1579,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length thread.messages - 1, Nothing, [] )
-        (visibleMessages thread)
+        (DmChannel.visibleMessagesSlice thread)
         |> (\( _, _, a ) -> a)
 
 
@@ -1837,8 +1822,7 @@ conversationView :
     ->
         { a
             | messages : Array (MessageState ChannelMessageId)
-            , oldestVisibleMessage : Id ChannelMessageId
-            , newestVisibleMessage : Id ChannelMessageId
+            , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
@@ -1924,7 +1908,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if Id.toInt channel.oldestVisibleMessage <= 0 then
+                ((if Id.toInt channel.visibleMessages.oldest <= 0 then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild _ _ ->
@@ -2184,7 +2168,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if Id.toInt channel.oldestVisibleMessage <= 0 then
+                ((if Id.toInt channel.visibleMessages.oldest <= 0 then
                     [ ( "a"
                       , Ui.column
                             [ Ui.alignBottom ]

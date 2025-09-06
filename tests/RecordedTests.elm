@@ -616,6 +616,18 @@ tests fileData =
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.text "Something went wrong when loading message" ]
                             )
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
+                        , userReload.click 100 (Dom.id "guild_openChannel_0")
+                        , userReload.checkView
+                            20
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
+                            )
                         ]
                     )
                 ]

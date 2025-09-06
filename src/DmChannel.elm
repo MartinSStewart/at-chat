@@ -7,11 +7,14 @@ module DmChannel exposing
     , FrontendThread
     , LastTypedAt
     , Thread
+    , VisibleMessages
     , channelIdFromUserIds
     , frontendInit
     , frontendThreadInit
     , getArray
+    , incrementVisibleMessages
     , init
+    , initVisibleMessages
     , latestMessageId
     , latestThreadMessageId
     , otherUserId
@@ -21,6 +24,10 @@ module DmChannel exposing
     , threadToFrontend
     , toFrontend
     , toFrontendHelper
+    , visibleMessagesFirstLoad
+    , visibleMessagesForNewChannel
+    , visibleMessagesLoadOlder
+    , visibleMessagesSlice
     )
 
 import Array exposing (Array)
@@ -44,8 +51,7 @@ type alias DmChannel =
 
 type alias FrontendDmChannel =
     { messages : Array (MessageState ChannelMessageId)
-    , oldestVisibleMessage : Id ChannelMessageId
-    , newestVisibleMessage : Id ChannelMessageId
+    , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
     }
@@ -60,8 +66,7 @@ type alias Thread =
 
 type alias FrontendThread =
     { messages : Array (MessageState ThreadMessageId)
-    , oldestVisibleMessage : Id ThreadMessageId
-    , newestVisibleMessage : Id ThreadMessageId
+    , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     }
 
@@ -87,8 +92,7 @@ threadInit =
 frontendThreadInit : FrontendThread
 frontendThreadInit =
     { messages = Array.empty
-    , oldestVisibleMessage = Id.fromInt 0
-    , newestVisibleMessage = Id.fromInt 0
+    , visibleMessages = visibleMessagesForNewChannel
     , lastTypedAt = SeqDict.empty
     }
 
@@ -116,18 +120,24 @@ init =
 frontendInit : FrontendDmChannel
 frontendInit =
     { messages = Array.empty
-    , oldestVisibleMessage = Id.fromInt 0
-    , newestVisibleMessage = Id.fromInt 0
+    , visibleMessages = visibleMessagesForNewChannel
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     }
 
 
+type alias VisibleMessages messageId =
+    { oldest : Id messageId, newest : Int }
+
+
 toFrontend : Maybe ThreadRoute -> DmChannel -> FrontendDmChannel
 toFrontend threadRoute dmChannel =
-    { messages = toFrontendHelper (Just NoThread == threadRoute) dmChannel
-    , oldestVisibleMessage = Array.length dmChannel.messages - pageSize - 1 |> Id.fromInt
-    , newestVisibleMessage = latestMessageId dmChannel
+    let
+        preloadMessages =
+            Just NoThread == threadRoute
+    in
+    { messages = toFrontendHelper preloadMessages dmChannel
+    , visibleMessages = initVisibleMessages preloadMessages dmChannel
     , lastTypedAt = dmChannel.lastTypedAt
     , threads =
         SeqDict.map
@@ -139,10 +149,55 @@ toFrontend threadRoute dmChannel =
 threadToFrontend : Bool -> Thread -> FrontendThread
 threadToFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
-    , oldestVisibleMessage = Array.length thread.messages - pageSize - 1 |> Id.fromInt
-    , newestVisibleMessage = latestThreadMessageId thread
+    , visibleMessages = initVisibleMessages preloadMessages thread
     , lastTypedAt = thread.lastTypedAt
     }
+
+
+initVisibleMessages : Bool -> { a | messages : Array (Message messageId) } -> VisibleMessages messageId
+initVisibleMessages preloadMessages channel =
+    if preloadMessages then
+        { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
+        , newest = Array.length channel.messages
+        }
+
+    else
+        visibleMessagesForNewChannel
+
+
+visibleMessagesForNewChannel : VisibleMessages messageId
+visibleMessagesForNewChannel =
+    { oldest = Id.fromInt 0, newest = 0 }
+
+
+incrementVisibleMessages : { a | messages : Array b } -> VisibleMessages messageId -> VisibleMessages messageId
+incrementVisibleMessages channel visibleMessages =
+    if visibleMessages.newest == Array.length channel.messages then
+        { oldest = visibleMessages.oldest, newest = visibleMessages.newest + 1 }
+
+    else
+        visibleMessages
+
+
+visibleMessagesLoadOlder : Id messageId -> VisibleMessages messageId -> VisibleMessages messageId
+visibleMessagesLoadOlder previousOldestVisibleMessage visibleMessages =
+    { oldest = Id.toInt previousOldestVisibleMessage - pageSize |> max 0 |> Id.fromInt
+    , newest = visibleMessages.newest
+    }
+
+
+visibleMessagesFirstLoad : { a | messages : Array b } -> VisibleMessages messageId
+visibleMessagesFirstLoad channel =
+    { oldest = Array.length channel.messages - pageSize - 1 |> Id.fromInt
+    , newest = Array.length channel.messages
+    }
+
+
+visibleMessagesSlice :
+    { a | visibleMessages : VisibleMessages messageId, messages : Array (MessageState messageId) }
+    -> Array (MessageState messageId)
+visibleMessagesSlice { visibleMessages, messages } =
+    Array.slice (Id.toInt visibleMessages.oldest) visibleMessages.newest messages
 
 
 latestMessageId : { a | messages : Array b } -> Id ChannelMessageId
