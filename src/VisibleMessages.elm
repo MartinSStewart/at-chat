@@ -23,7 +23,7 @@ init : Bool -> { a | messages : Array (Message messageId) } -> VisibleMessages m
 init preloadMessages channel =
     if preloadMessages then
         { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
-        , count = 0
+        , count = pageSize
         }
 
     else
@@ -58,8 +58,8 @@ loadOlder previousOldestVisibleMessage visibleMessages =
 
 firstLoad : { a | messages : Array b } -> VisibleMessages messageId
 firstLoad channel =
-    { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
-    , count = Array.length channel.messages
+    { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
+    , count = pageSize
     }
 
 

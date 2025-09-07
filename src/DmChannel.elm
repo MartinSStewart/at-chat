@@ -14,6 +14,7 @@ module DmChannel exposing
     , init
     , latestMessageId
     , latestThreadMessageId
+    , loadMessages
     , otherUserId
     , setArray
     , threadInit
@@ -164,7 +165,7 @@ loadMessages preloadMessages messages =
         Array.initialize
             messageCount
             (\index ->
-                if messageCount - index < VisibleMessages.pageSize then
+                if messageCount - index <= VisibleMessages.pageSize then
                     case Array.get index messages of
                         Just message ->
                             MessageLoaded message

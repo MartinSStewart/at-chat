@@ -2897,6 +2897,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp joinedAt localUser.timezone |> Ui.html
+                    , messageIdView messageIndex
                     ]
                 )
 
@@ -3039,11 +3040,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp message2.createdAt timezone |> Ui.html
-                , if Env.isProduction then
-                    Ui.none
-
-                  else
-                    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageIndex))
+                , messageIdView messageIndex
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]
@@ -3087,6 +3084,15 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 |> Ui.html
             ]
         ]
+
+
+messageIdView : Id messageId -> Element msg
+messageIdView messageId =
+    if Env.isProduction then
+        Ui.none
+
+    else
+        Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg
