@@ -596,6 +596,14 @@ tests fileData =
                 [ user.click 100 (Dom.id "guildIcon_showFriends")
                 , writeMessage admin "See if notification appears next to guild icon"
                 , user.snapshotView 100 { name = "Guild icon new message notification" }
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\_ ->
+                        [ user.snapshotView 100 { name = "Guild icon new message notification on reload" } ]
+                    )
                 , writeMessage admin "@Stevie Steve now you should see a red icon"
                 , user.snapshotView 100 { name = "Guild icon new mention notification" }
                 ]
