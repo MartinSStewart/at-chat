@@ -16,6 +16,7 @@ import Json.Decode
 import Json.Encode
 import List.Extra
 import LoginForm
+import Pages.Guild
 import Pages.Home
 import Parser exposing ((|.), (|=))
 import PersonName
@@ -28,6 +29,7 @@ import TwoFactorAuthentication
 import Types exposing (BackendModel, BackendMsg, FrontendModel, FrontendMsg, LoginTokenData(..), ToBackend, ToFrontend)
 import Unsafe
 import Url exposing (Url)
+import VisibleMessages
 
 
 setup : T.ViewerWith (List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel))
@@ -297,13 +299,13 @@ dropPrefix prefix text =
         text
 
 
-connectTwoUsers :
+connectTwoUsersAndJoinNewGuild :
     (T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
      -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
      -> List (T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
     )
     -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-connectTwoUsers continueFunc =
+connectTwoUsersAndJoinNewGuild continueFunc =
     T.connectFrontend
         100
         sessionId0
@@ -422,6 +424,48 @@ handleHttpRequests overrides fileData { currentRequest } =
             UnhandledHttpRequest
 
 
+scrollToTop user =
+    user.custom
+        100
+        Pages.Guild.conversationContainerId
+        "scroll"
+        (Json.Encode.object
+            [ ( "target"
+              , Json.Encode.object
+                    [ ( "scrollTop", Json.Encode.float 10 )
+                    , ( "scrollHeight", Json.Encode.float 1000 )
+                    , ( "clientHeight", Json.Encode.float (windowSize.height - 40) )
+                    ]
+              )
+            ]
+        )
+
+
+scrollToMiddle user =
+    user.custom
+        100
+        Pages.Guild.conversationContainerId
+        "scroll"
+        (Json.Encode.object
+            [ ( "target"
+              , Json.Encode.object
+                    [ ( "scrollTop", Json.Encode.float 1000 )
+                    , ( "scrollHeight", Json.Encode.float 2000 )
+                    , ( "clientHeight", Json.Encode.float (windowSize.height - 40) )
+                    ]
+              )
+            ]
+        )
+
+
+noMissingMessages delayInMs user =
+    user.checkView
+        delayInMs
+        (Test.Html.Query.hasNot
+            [ Test.Html.Selector.text "Something went wrong when loading message" ]
+        )
+
+
 tests : Dict String Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData =
     let
@@ -512,7 +556,7 @@ tests fileData =
         "spoilers"
         startTime
         normalConfig
-        [ connectTwoUsers
+        [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
                 [ writeMessage admin "This message is ||very|| ||secret||"
                 , admin.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
@@ -541,10 +585,45 @@ tests fileData =
             )
         ]
     , T.start
+        "No messages missing even in long chat history"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ List.range 0 (VisibleMessages.pageSize * 2)
+                    |> List.map (\index -> writeMessage user ("Message " ++ String.fromInt (index + 1)))
+                    |> T.group
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\userReload ->
+                        [ userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "This is the start of #general" ])
+                        , noMissingMessages 100 userReload
+                        , scrollToTop userReload
+                        , noMissingMessages 100 userReload
+                        , scrollToMiddle userReload
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "This is the start of #general" ])
+                        , scrollToTop userReload
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "This is the start of #general" ])
+                        ]
+                    )
+                ]
+            )
+        ]
+    , T.start
         "Notifications"
         startTime
         normalConfig
-        [ connectTwoUsers
+        [ connectTwoUsersAndJoinNewGuild
             (\admin user ->
                 [ admin.input 100 (Dom.id "channel_textinput") "@Stevie Steve Hi!"
                 , user.checkView
@@ -611,23 +690,11 @@ tests fileData =
                             )
                         , userReload.click 100 (Dom.id "guildIcon_showFriends")
                         , userReload.click 100 (Dom.id "guild_friendLabel_0")
-                        , userReload.checkView
-                            20
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
-                            )
+                        , noMissingMessages 20 userReload
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
-                        , userReload.checkView
-                            20
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
-                            )
+                        , noMissingMessages 20 userReload
                         , userReload.click 100 (Dom.id "guild_openChannel_0")
-                        , userReload.checkView
-                            20
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.text "Something went wrong when loading message" ]
-                            )
+                        , noMissingMessages 20 userReload
                         ]
                     )
                 ]
