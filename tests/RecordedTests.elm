@@ -5,6 +5,7 @@ import Bytes exposing (Bytes)
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera exposing (SessionId)
 import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
@@ -702,6 +703,7 @@ tests fileData =
                 , user.click 100 (Dom.id "guildsColumn_openDm_0")
                 , writeMessage user "Here's a reply!"
                 , writeMessage user "And another reply"
+                , user.update 100 (Types.VisibilityChanged Hidden)
                 , T.connectFrontend
                     100
                     sessionId1

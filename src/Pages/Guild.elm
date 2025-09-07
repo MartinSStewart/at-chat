@@ -148,7 +148,7 @@ dmHasNotifications currentUser otherUserId dmChannel =
         lastViewed =
             case SeqDict.get (GuildOrDmId_Dm otherUserId) currentUser.lastViewed of
                 Just id ->
-                    Id.increment id
+                    id
 
                 Nothing ->
                     Id.fromInt -1

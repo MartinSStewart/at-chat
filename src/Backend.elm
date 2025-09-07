@@ -2747,9 +2747,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user.lastViewedThreads
                                                 }
 
-                                            NoThreadWithMessage messageIndex ->
+                                            NoThreadWithMessage messageId ->
                                                 { user
-                                                    | lastViewed = SeqDict.insert guildOrDmId messageIndex user.lastViewed
+                                                    | lastViewed = SeqDict.insert guildOrDmId messageId user.lastViewed
                                                 }
                                         )
                                         model2.users

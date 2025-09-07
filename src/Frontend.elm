@@ -1185,35 +1185,7 @@ updateLoaded msg model =
                             Command.none
 
                 ( model2, cmd ) =
-                    updateLoggedIn
-                        (\loggedIn ->
-                            handleLocalChange
-                                model.time
-                                (case routeToGuildOrDmId model.route of
-                                    Just ( guildOrDmId, threadRoute ) ->
-                                        case guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
-                                            Just messages ->
-                                                Local_SetLastViewed
-                                                    guildOrDmId
-                                                    (case threadRoute of
-                                                        ViewThread threadMessageId ->
-                                                            ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
-
-                                                        NoThread ->
-                                                            NoThreadWithMessage (messages - 1 |> Id.fromInt)
-                                                    )
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-
-                                    Nothing ->
-                                        Nothing
-                                )
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                    updateLoggedIn (setLastViewedToLatestMessage model) model
 
                 ( model3, routeCmd ) =
                     routePush model2 route
@@ -2121,7 +2093,7 @@ updateLoaded msg model =
                     )
 
                 Effect.Browser.Events.Hidden ->
-                    ( model, Command.none )
+                    updateLoggedIn (setLastViewedToLatestMessage model) model
 
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
@@ -3100,6 +3072,35 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
+
+
+setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+setLastViewedToLatestMessage model loggedIn =
+    handleLocalChange
+        model.time
+        (case routeToGuildOrDmId model.route of
+            Just ( guildOrDmId, threadRoute ) ->
+                case guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                    Just messages ->
+                        Local_SetLastViewed
+                            guildOrDmId
+                            (case threadRoute of
+                                ViewThread threadMessageId ->
+                                    ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
+
+                                NoThread ->
+                                    NoThreadWithMessage (messages - 1 |> Id.fromInt)
+                            )
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+
+            Nothing ->
+                Nothing
+        )
+        loggedIn
+        Command.none
 
 
 handleEditable :
