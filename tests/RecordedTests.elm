@@ -7,12 +7,12 @@ import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
 import Effect.Lamdera exposing (SessionId)
-import Effect.Test as T exposing (FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
+import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
 import Frontend
 import Html.Attributes
-import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage(..))
+import Id exposing (ChannelMessageId, Id)
 import Json.Decode
 import Json.Encode
 import List.Extra
@@ -442,6 +442,7 @@ scrollToTop user =
         )
 
 
+scrollToMiddle : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 scrollToMiddle user =
     user.custom
         100
@@ -459,6 +460,7 @@ scrollToMiddle user =
         )
 
 
+noMissingMessages : DelayInMs -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 noMissingMessages delayInMs user =
     user.checkView
         delayInMs
@@ -590,7 +592,7 @@ tests fileData =
         startTime
         normalConfig
         [ connectTwoUsersAndJoinNewGuild
-            (\admin user ->
+            (\_ user ->
                 [ List.range 0 (VisibleMessages.pageSize * 2)
                     |> List.map (\index -> writeMessage user ("Message " ++ String.fromInt (index + 1)))
                     |> T.group

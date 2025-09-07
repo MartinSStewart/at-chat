@@ -21,7 +21,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt)
+import DmChannel exposing (FrontendDmChannel, FrontendThread, LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -171,6 +171,12 @@ dmHasNotifications currentUser otherUserId dmChannel =
             (SeqDict.toList dmChannel.threads)
 
 
+threadHasNotifications :
+    GuildOrDmIdNoThread
+    -> Id UserId
+    -> BackendUser
+    -> FrontendChannel
+    -> ChannelNotificationType
 threadHasNotifications guildOrDmId currentUserId currentUser channel =
     SeqDict.foldl
         (\threadMessageIndex thread state2 ->

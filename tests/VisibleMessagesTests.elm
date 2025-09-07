@@ -1,4 +1,4 @@
-module VisibleMessagesTests exposing (..)
+module VisibleMessagesTests exposing (test)
 
 import Array
 import DmChannel

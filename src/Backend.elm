@@ -1244,7 +1244,7 @@ addSlackChannel :
     -> Channel
     -> List Slack.Message
     -> Maybe ( Slack.Id Slack.ChannelId, Id ChannelId, BackendChannel )
-addSlackChannel time ownerId model threads index slackChannel messages =
+addSlackChannel time ownerId model _ index slackChannel messages =
     case slackChannel of
         NormalChannel slackChannel2 ->
             let
@@ -1338,7 +1338,7 @@ addSlackMessages :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
-addSlackMessages threadRoute messages model channel =
+addSlackMessages _ messages model channel =
     List.foldr
         (\message channel2 ->
             case ( message.messageType, OneToOne.second message.createdBy model.slackUsers ) of
@@ -2878,7 +2878,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         (\userId user ->
-                            case SeqDict.get (DmChannel.channelIdFromUserIds otherUserId userId) model.dmChannels of
+                            case SeqDict.get (DmChannel.channelIdFromUserIds otherUserId userId) model2.dmChannels of
                                 Just channel ->
                                     ( { model2
                                         | users =
@@ -2903,7 +2903,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         (\userId user ->
-                            case SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels of
+                            case SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels of
                                 Just dmChannel ->
                                     ( { model2
                                         | users =
@@ -3194,7 +3194,7 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : Array.Array (Message messageId) }
+    -> { b | messages : Array (Message messageId) }
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
