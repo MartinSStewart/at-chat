@@ -588,6 +588,20 @@ tests fileData =
             )
         ]
     , T.start
+        "Guild icon notification is shown"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ user.click 100 (Dom.id "guildIcon_showFriends")
+                , writeMessage admin "See if notification appears next to guild icon"
+                , user.snapshotView 100 { name = "Guild icon new message notification" }
+                , writeMessage admin "@Stevie Steve now you should see a red icon"
+                , user.snapshotView 100 { name = "Guild icon new mention notification" }
+                ]
+            )
+        ]
+    , T.start
         "No messages missing even in long chat history"
         startTime
         normalConfig
