@@ -3842,7 +3842,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         guildOrDmId
-                                                        (Array.length dmChannel2.messages - 1 |> Id.fromInt)
+                                                        (DmChannel.latestMessageId dmChannel2)
                                                         user.lastViewed
                                             }
                                     }
@@ -4251,7 +4251,7 @@ changeUpdate localMsg local =
                                                     | lastViewed =
                                                         SeqDict.insert
                                                             guildOrDmId
-                                                            (Array.length dmChannel2.messages - 1 |> Id.fromInt)
+                                                            (DmChannel.latestMessageId dmChannel2)
                                                             user.lastViewed
                                                 }
 
@@ -4867,6 +4867,54 @@ updateLoadedFromBackend msg model =
                                         )
 
                                 Nothing ->
+                                    Command.none
+
+                        Local_ViewChannel guildId channelId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, NoThread ) ->
+                                    if guildId == guildIdRoute && channelId == channelIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewDm otherUserId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Dm otherUserIdRoute, NoThread ) ->
+                                    if otherUserId == otherUserIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewThread guildId channelId threadId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, ViewThread threadIdRoute ) ->
+                                    if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewDmThread otherUserId threadId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Dm otherUserIdRoute, ViewThread threadIdRoute ) ->
+                                    if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
                                     Command.none
 
                         _ ->

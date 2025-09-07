@@ -87,7 +87,7 @@ view isMobile time local loggedIn loaded model =
                         [ Editable.view
                             (Dom.id "userOptions_botToken")
                             True
-                            "Bot token"
+                            "Discord bot token"
                             (\text ->
                                 let
                                     text2 =
