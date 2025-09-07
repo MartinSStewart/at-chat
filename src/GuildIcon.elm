@@ -3,7 +3,6 @@ module GuildIcon exposing
     , Mode(..)
     , addGuildButton
     , fullWidth
-    , iconView
     , notificationView
     , showFriendsButton
     , userView

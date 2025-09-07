@@ -64,6 +64,7 @@ import UInt64
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
+import VisibleMessages
 
 
 app :
@@ -1243,7 +1244,7 @@ addSlackChannel :
     -> Channel
     -> List Slack.Message
     -> Maybe ( Slack.Id Slack.ChannelId, Id ChannelId, BackendChannel )
-addSlackChannel time ownerId model threads index slackChannel messages =
+addSlackChannel time ownerId model _ index slackChannel messages =
     case slackChannel of
         NormalChannel slackChannel2 ->
             let
@@ -1337,7 +1338,7 @@ addSlackMessages :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
-addSlackMessages threadRoute messages model channel =
+addSlackMessages _ messages model channel =
     List.foldr
         (\message channel2 ->
             case ( message.messageType, OneToOne.second message.createdBy model.slackUsers ) of
@@ -2746,9 +2747,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             user.lastViewedThreads
                                                 }
 
-                                            NoThreadWithMessage messageIndex ->
+                                            NoThreadWithMessage messageId ->
                                                 { user
-                                                    | lastViewed = SeqDict.insert guildOrDmId messageIndex user.lastViewed
+                                                    | lastViewed = SeqDict.insert guildOrDmId messageId user.lastViewed
                                                 }
                                         )
                                         model2.users
@@ -2877,17 +2878,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         (\userId user ->
-                            case SeqDict.get (DmChannel.channelIdFromUserIds otherUserId userId) model.dmChannels of
+                            case SeqDict.get (DmChannel.channelIdFromUserIds otherUserId userId) model2.dmChannels of
                                 Just channel ->
-                                    let
-                                        messageCount : Int
-                                        messageCount =
-                                            Array.length channel.messages
-
-                                        indexStart : Int
-                                        indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
-                                    in
                                     ( { model2
                                         | users =
                                             NonemptyDict.insert
@@ -2895,18 +2887,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (User.setLastDmViewed otherUserId NoThread user)
                                                 model2.users
                                       }
-                                    , Local_ViewDm
-                                        otherUserId
-                                        (FilledInByBackend
-                                            (Array.slice indexStart messageCount channel.messages
-                                                |> Array.toList
-                                                |> List.indexedMap
-                                                    (\index message ->
-                                                        ( index + indexStart |> Id.fromInt, message )
-                                                    )
-                                                |> SeqDict.fromList
-                                            )
-                                        )
+                                    , Local_ViewDm otherUserId (loadMessagesHelper channel)
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
@@ -2922,22 +2903,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         (\userId user ->
-                            case SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model.dmChannels of
+                            case SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels of
                                 Just dmChannel ->
-                                    let
-                                        thread : Thread
-                                        thread =
-                                            SeqDict.get threadId dmChannel.threads
-                                                |> Maybe.withDefault DmChannel.threadInit
-
-                                        messageCount : Int
-                                        messageCount =
-                                            Array.length thread.messages
-
-                                        indexStart : Int
-                                        indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
-                                    in
                                     ( { model2
                                         | users =
                                             NonemptyDict.insert
@@ -2948,17 +2915,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Local_ViewDmThread
                                         otherUserId
                                         threadId
-                                        (FilledInByBackend
-                                            (Array.slice indexStart messageCount thread.messages
-                                                |> Array.toList
-                                                |> List.indexedMap
-                                                    (\index message ->
-                                                        ( index + indexStart |> Id.fromInt
-                                                        , message
-                                                        )
-                                                    )
-                                                |> SeqDict.fromList
-                                            )
+                                        (SeqDict.get threadId dmChannel.threads
+                                            |> Maybe.withDefault DmChannel.threadInit
+                                            |> loadMessagesHelper
                                         )
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -2978,15 +2937,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\userId user guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
-                                    let
-                                        messageCount : Int
-                                        messageCount =
-                                            Array.length channel.messages
-
-                                        indexStart : Int
-                                        indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
-                                    in
                                     ( { model2
                                         | users =
                                             NonemptyDict.insert
@@ -2997,16 +2947,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , Local_ViewChannel
                                         guildId
                                         channelId
-                                        (FilledInByBackend
-                                            (Array.slice indexStart messageCount channel.messages
-                                                |> Array.toList
-                                                |> List.indexedMap
-                                                    (\index message ->
-                                                        ( index + indexStart |> Id.fromInt, message )
-                                                    )
-                                                |> SeqDict.fromList
-                                            )
-                                        )
+                                        (loadMessagesHelper channel)
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
                                     )
@@ -3025,20 +2966,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\userId user guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
-                                    let
-                                        thread : Thread
-                                        thread =
-                                            SeqDict.get threadId channel.threads
-                                                |> Maybe.withDefault DmChannel.threadInit
-
-                                        messageCount : Int
-                                        messageCount =
-                                            Array.length thread.messages
-
-                                        indexStart : Int
-                                        indexStart =
-                                            max (messageCount - DmChannel.pageSize) 0
-                                    in
                                     ( { model2
                                         | users =
                                             NonemptyDict.insert
@@ -3055,17 +2982,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         guildId
                                         channelId
                                         threadId
-                                        (FilledInByBackend
-                                            (Array.slice indexStart messageCount thread.messages
-                                                |> Array.toList
-                                                |> List.indexedMap
-                                                    (\index message ->
-                                                        ( index + indexStart |> Id.fromInt
-                                                        , message
-                                                        )
-                                                    )
-                                                |> SeqDict.fromList
-                                            )
+                                        (SeqDict.get threadId channel.threads
+                                            |> Maybe.withDefault DmChannel.threadInit
+                                            |> loadMessagesHelper
                                         )
                                         |> LocalChangeResponse changeId
                                         |> Lamdera.sendToFrontend clientId
@@ -3249,9 +3168,33 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
 
+loadMessagesHelper :
+    { a | messages : Array (Message messageId) }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
+loadMessagesHelper channel =
+    let
+        messageCount : Int
+        messageCount =
+            Array.length channel.messages
+
+        indexStart : Int
+        indexStart =
+            max (messageCount - VisibleMessages.pageSize) 0
+    in
+    FilledInByBackend
+        (Array.slice indexStart messageCount channel.messages
+            |> Array.toList
+            |> List.indexedMap
+                (\index message ->
+                    ( index + indexStart |> Id.fromInt, message )
+                )
+            |> SeqDict.fromList
+        )
+
+
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : Array.Array (Message messageId) }
+    -> { b | messages : Array (Message messageId) }
     -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
@@ -3259,7 +3202,7 @@ handleMessagesRequest oldestVisibleMessage channel =
             Id.toInt oldestVisibleMessage
 
         nextOldestVisible =
-            oldestVisibleMessage2 - DmChannel.pageSize |> max 0
+            max (oldestVisibleMessage2 - VisibleMessages.pageSize) 0
     in
     Array.slice nextOldestVisible oldestVisibleMessage2 channel.messages
         |> Array.toList

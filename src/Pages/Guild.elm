@@ -21,7 +21,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
-import DmChannel exposing (DmChannel, FrontendDmChannel, FrontendThread, LastTypedAt, VisibleMessages)
+import DmChannel exposing (FrontendDmChannel, FrontendThread, LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -65,6 +65,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import User exposing (BackendUser, FrontendUser)
+import VisibleMessages exposing (VisibleMessages)
 
 
 channelOrThreadHasNotifications :
@@ -147,7 +148,7 @@ dmHasNotifications currentUser otherUserId dmChannel =
         lastViewed =
             case SeqDict.get (GuildOrDmId_Dm otherUserId) currentUser.lastViewed of
                 Just id ->
-                    Id.increment id
+                    id
 
                 Nothing ->
                     Id.fromInt -1
@@ -170,6 +171,12 @@ dmHasNotifications currentUser otherUserId dmChannel =
             (SeqDict.toList dmChannel.threads)
 
 
+threadHasNotifications :
+    GuildOrDmIdNoThread
+    -> Id UserId
+    -> BackendUser
+    -> FrontendChannel
+    -> ChannelNotificationType
 threadHasNotifications guildOrDmId currentUserId currentUser channel =
     SeqDict.foldl
         (\threadMessageIndex thread state2 ->
@@ -1335,7 +1342,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length channel.messages - 1, Nothing, [] )
-        (DmChannel.visibleMessagesSlice channel)
+        (VisibleMessages.slice channel)
         |> (\( _, _, a ) -> a)
 
 
@@ -1603,7 +1610,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                     ( index - 1, maybeLastDate, ( String.fromInt index, unloadedMessageView index ) :: list )
         )
         ( Array.length thread.messages - 1, Nothing, [] )
-        (DmChannel.visibleMessagesSlice thread)
+        (VisibleMessages.slice thread)
         |> (\( _, _, a ) -> a)
 
 
@@ -1932,7 +1939,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
+                ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , case guildOrDmIdNoThread of
                             GuildOrDmId_Guild _ _ ->
@@ -2192,7 +2199,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 ]
-                ((if DmChannel.visibleMessagesIncludesStart channel.visibleMessages then
+                ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
                       , Ui.column
                             [ Ui.alignBottom ]
@@ -2896,6 +2903,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                     []
                     [ userJoinedContent userId allUsers
                     , messageTimestamp joinedAt localUser.timezone |> Ui.html
+                    , messageIdView messageIndex
                     ]
                 )
 
@@ -3038,11 +3046,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                     |> Ui.text
                     |> Ui.el [ Ui.Font.bold ]
                 , messageTimestamp message2.createdAt timezone |> Ui.html
-                , if Env.isProduction then
-                    Ui.none
-
-                  else
-                    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageIndex))
+                , messageIdView messageIndex
                 ]
             , Html.div
                 [ Html.Attributes.style "white-space" "pre-wrap" ]
@@ -3086,6 +3090,15 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
                 |> Ui.html
             ]
         ]
+
+
+messageIdView : Id messageId -> Element msg
+messageIdView messageId =
+    if Env.isProduction then
+        Ui.none
+
+    else
+        Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg

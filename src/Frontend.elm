@@ -7,7 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import DmChannel exposing (FrontendDmChannel, FrontendThread, VisibleMessages)
+import DmChannel exposing (FrontendDmChannel, FrontendThread)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -69,6 +69,7 @@ import Url exposing (Url)
 import User exposing (BackendUser)
 import UserOptions
 import Vector2d
+import VisibleMessages exposing (VisibleMessages)
 
 
 app :
@@ -1184,35 +1185,7 @@ updateLoaded msg model =
                             Command.none
 
                 ( model2, cmd ) =
-                    updateLoggedIn
-                        (\loggedIn ->
-                            handleLocalChange
-                                model.time
-                                (case routeToGuildOrDmId model.route of
-                                    Just ( guildOrDmId, threadRoute ) ->
-                                        case guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
-                                            Just messages ->
-                                                Local_SetLastViewed
-                                                    guildOrDmId
-                                                    (case threadRoute of
-                                                        ViewThread threadMessageId ->
-                                                            ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
-
-                                                        NoThread ->
-                                                            NoThreadWithMessage (messages - 1 |> Id.fromInt)
-                                                    )
-                                                    |> Just
-
-                                            Nothing ->
-                                                Nothing
-
-                                    Nothing ->
-                                        Nothing
-                                )
-                                loggedIn
-                                Command.none
-                        )
-                        model
+                    updateLoggedIn (setLastViewedToLatestMessage model) model
 
                 ( model3, routeCmd ) =
                     routePush model2 route
@@ -2120,7 +2093,7 @@ updateLoaded msg model =
                     )
 
                 Effect.Browser.Events.Hidden ->
-                    ( model, Command.none )
+                    updateLoggedIn (setLastViewedToLatestMessage model) model
 
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
@@ -3101,6 +3074,35 @@ updateLoaded msg model =
                 model
 
 
+setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
+setLastViewedToLatestMessage model loggedIn =
+    handleLocalChange
+        model.time
+        (case routeToGuildOrDmId model.route of
+            Just ( guildOrDmId, threadRoute ) ->
+                case guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                    Just messages ->
+                        Local_SetLastViewed
+                            guildOrDmId
+                            (case threadRoute of
+                                ViewThread threadMessageId ->
+                                    ViewThreadWithMessage threadMessageId (messages - 1 |> Id.fromInt)
+
+                                NoThread ->
+                                    NoThreadWithMessage (messages - 1 |> Id.fromInt)
+                            )
+                            |> Just
+
+                    Nothing ->
+                        Nothing
+
+            Nothing ->
+                Nothing
+        )
+        loggedIn
+        Command.none
+
+
 handleEditable :
     Editable.Msg value
     -> (UserOptionsModel -> Editable.Model -> UserOptionsModel)
@@ -3840,7 +3842,7 @@ changeUpdate localMsg local =
                                                 | lastViewed =
                                                     SeqDict.insert
                                                         guildOrDmId
-                                                        (Array.length dmChannel2.messages - 1 |> Id.fromInt)
+                                                        (DmChannel.latestMessageId dmChannel2)
                                                         user.lastViewed
                                             }
                                     }
@@ -4249,7 +4251,7 @@ changeUpdate localMsg local =
                                                     | lastViewed =
                                                         SeqDict.insert
                                                             guildOrDmId
-                                                            (Array.length dmChannel2.messages - 1 |> Id.fromInt)
+                                                            (DmChannel.latestMessageId dmChannel2)
                                                             user.lastViewed
                                                 }
 
@@ -4615,7 +4617,7 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
-                , visibleMessages = DmChannel.visibleMessagesLoadOlder previousOldestVisibleMessage channel.visibleMessages
+                , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
             }
 
         EmptyPlaceholder ->
@@ -4640,7 +4642,7 @@ loadMessages messagesLoaded channel =
                         )
                         channel.messages
                         messagesLoaded2
-                , visibleMessages = DmChannel.visibleMessagesFirstLoad channel
+                , visibleMessages = VisibleMessages.firstLoad channel
             }
 
         EmptyPlaceholder ->
@@ -4865,6 +4867,54 @@ updateLoadedFromBackend msg model =
                                         )
 
                                 Nothing ->
+                                    Command.none
+
+                        Local_ViewChannel guildId channelId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, NoThread ) ->
+                                    if guildId == guildIdRoute && channelId == channelIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewDm otherUserId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Dm otherUserIdRoute, NoThread ) ->
+                                    if otherUserId == otherUserIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewThread guildId channelId threadId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, ViewThread threadIdRoute ) ->
+                                    if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
+                                    Command.none
+
+                        Local_ViewDmThread otherUserId threadId _ ->
+                            case routeToGuildOrDmId model.route of
+                                Just ( GuildOrDmId_Dm otherUserIdRoute, ViewThread threadIdRoute ) ->
+                                    if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                                        scrollToBottomOfChannel
+
+                                    else
+                                        Command.none
+
+                                _ ->
                                     Command.none
 
                         _ ->
