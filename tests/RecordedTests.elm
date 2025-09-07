@@ -602,9 +602,34 @@ tests fileData =
                         [ userReload.click 100 (Dom.id "guild_openGuild_1")
                         , userReload.checkView
                             100
-                            (Test.Html.Query.hasNot [ Test.Html.Selector.exactText "This is the start of #general" ])
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general"
+                                , Test.Html.Selector.exactText "Message 31"
+                                ]
+                            )
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Message 32"
+                                , Test.Html.Selector.exactText "Message 61"
+                                ]
+                            )
                         , noMissingMessages 100 userReload
                         , scrollToTop userReload
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "This is the start of #general"
+                                , Test.Html.Selector.exactText "Message 1"
+                                ]
+                            )
+                        , userReload.checkView
+                            0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Message 2"
+                                , Test.Html.Selector.exactText "Message 61"
+                                ]
+                            )
                         , noMissingMessages 100 userReload
                         , scrollToMiddle userReload
                         , userReload.checkView

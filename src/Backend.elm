@@ -3179,7 +3179,7 @@ loadMessagesHelper channel =
 
         indexStart : Int
         indexStart =
-            max (messageCount - VisibleMessages.pageSize - 1) 0
+            max (messageCount - VisibleMessages.pageSize) 0
     in
     FilledInByBackend
         (Array.slice indexStart messageCount channel.messages
