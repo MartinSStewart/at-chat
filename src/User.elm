@@ -6,6 +6,7 @@ module User exposing
     , FrontendUser
     , backendToFrontend
     , backendToFrontendForUser
+    , notifyOnAllChanges
     , profileImage
     , profileImageSize
     , sectionToString
@@ -42,6 +43,19 @@ type alias BackendUser =
     , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
+    , notifyOnAllMessages : SeqSet (Id GuildId)
+    }
+
+
+notifyOnAllChanges : Id GuildId -> Bool -> BackendUser -> BackendUser
+notifyOnAllChanges guildId isEnabled user =
+    { user
+        | notifyOnAllMessages =
+            if isEnabled then
+                SeqSet.insert guildId user.notifyOnAllMessages
+
+            else
+                SeqSet.remove guildId user.notifyOnAllMessages
     }
 
 

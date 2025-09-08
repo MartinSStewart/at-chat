@@ -3094,6 +3094,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                Local_SetNotifyOnAllChanges guildId isEnabled ->
+                    asUser
+                        model2
+                        sessionId
+                        (\userId user ->
+                            ( { model
+                                | users =
+                                    NonemptyDict.insert
+                                        userId
+                                        (User.notifyOnAllChanges guildId isEnabled user)
+                                        model.users
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg
+                                    |> Lamdera.sendToFrontend clientId
+                                ]
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2

@@ -576,6 +576,7 @@ type ServerChange
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
+    | Server_SetNotifyOnAllChanges (Id GuildId) Bool
 
 
 type LocalChange
@@ -601,6 +602,7 @@ type LocalChange
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
+    | Local_SetNotifyOnAllChanges (Id GuildId) Bool
 
 
 type ToBeFilledInByBackend a

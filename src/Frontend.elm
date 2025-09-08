@@ -4118,6 +4118,16 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
+                Local_SetNotifyOnAllChanges guildId isEnabled ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = User.notifyOnAllChanges guildId isEnabled localUser.user }
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -4426,6 +4436,16 @@ changeUpdate localMsg local =
 
                 Server_PushNotificationsReset publicVapidKey ->
                     { local | publicVapidKey = publicVapidKey }
+
+                Server_SetNotifyOnAllChanges guildId isEnabled ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | user = User.notifyOnAllChanges guildId isEnabled localUser.user }
+                    }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
@@ -5199,6 +5219,13 @@ pendingChangesText localChange =
 
         Local_LoadThreadMessages _ _ _ _ ->
             "Load thread messages"
+
+        Local_SetNotifyOnAllChanges _ enabled ->
+            if enabled then
+                "Enabled notifications for all messages"
+
+            else
+                "Disabled notifications for all messages"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
