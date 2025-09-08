@@ -64,7 +64,7 @@ import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -921,14 +921,14 @@ channelView channelRoute guildId guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         InviteLinkCreatorRoute ->
-            inviteLinkCreatorForm model guildId guild
+            inviteLinkCreatorForm model local guildId guild
 
         JoinRoute _ ->
             Ui.none
 
 
-inviteLinkCreatorForm : LoadedFrontend -> Id GuildId -> FrontendGuild -> Element FrontendMsg
-inviteLinkCreatorForm model guildId guild =
+inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
+inviteLinkCreatorForm model local guildId guild =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -968,8 +968,37 @@ inviteLinkCreatorForm model guildId guild =
                                 ]
                         )
                 )
+            , guildNotificationLevelView guildId local
             ]
         )
+
+
+guildNotificationLevelView : Id GuildId -> LocalState -> Element FrontendMsg
+guildNotificationLevelView guildId local =
+    let
+        label =
+            Ui.Input.label "guild_notificationLevel" [ Ui.Font.bold ] (Ui.text "Guild notifications")
+    in
+    Ui.column
+        [ Ui.paddingXY 16 0, Ui.spacing 8 ]
+        [ label.element
+        , Ui.Input.chooseOne
+            Ui.column
+            []
+            { onChange = PressedGuildNotificationLevel guildId
+            , options =
+                [ Ui.Input.option NotifyOnMention (Ui.text "Only when mentioned")
+                , Ui.Input.option NotifyOnEveryMessage (Ui.text "On every message")
+                ]
+            , selected =
+                if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
+                    Just NotifyOnEveryMessage
+
+                else
+                    Just NotifyOnMention
+            , label = label.id
+            }
+        ]
 
 
 copyableText : String -> LoadedFrontend -> Element FrontendMsg

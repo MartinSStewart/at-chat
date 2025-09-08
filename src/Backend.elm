@@ -53,7 +53,7 @@ import Quantity
 import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import Slack exposing (Channel(..))
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
@@ -1774,7 +1774,15 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                         |> ServerChange
                     )
                     model
-                , broadcastMessageNotification message.timestamp userId threadRoute channel richText model
+                , broadcastMessageNotification
+                    message.timestamp
+                    userId
+                    (GuildOrDmId_Guild guildId channelId)
+                    threadRoute
+                    channel
+                    richText
+                    (guild.owner :: SeqDict.keys guild.members)
+                    model
                 ]
             )
 
@@ -3094,7 +3102,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                Local_SetNotifyOnAllChanges guildId isEnabled ->
+                Local_SetGuildNotificationLevel guildId isEnabled ->
                     asUser
                         model2
                         sessionId
@@ -3964,18 +3972,40 @@ validateAttachedFiles uploadedFiles dict =
 broadcastMessageNotification :
     Time.Posix
     -> Id UserId
+    -> GuildOrDmIdNoThread
     -> ThreadRouteWithMaybeMessage
     -> BackendChannel
     -> Nonempty RichText
+    -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-broadcastMessageNotification time sender threadRouteWithRepliedTo channel text model =
+broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo channel text members model =
     let
         plainText : String
         plainText =
             RichText.toString (NonemptyDict.toSeqDict model.users) text
+
+        alwaysNotify : SeqSet (Id UserId)
+        alwaysNotify =
+            case guildOrDmId of
+                GuildOrDmId_Guild guildId _ ->
+                    List.filter
+                        (\userId ->
+                            case NonemptyDict.get userId model.users of
+                                Just user ->
+                                    SeqSet.member guildId user.notifyOnAllMessages
+
+                                Nothing ->
+                                    False
+                        )
+                        members
+                        |> SeqSet.fromList
+
+                GuildOrDmId_Dm _ ->
+                    SeqSet.empty
     in
     LocalState.usersToNotify sender threadRouteWithRepliedTo channel text
+        |> SeqSet.union alwaysNotify
         |> SeqSet.foldl
             (\userId2 cmds ->
                 case NonemptyDict.get userId2 model.users of
@@ -4086,7 +4116,15 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         |> ServerChange
                     )
                     model
-                , broadcastMessageNotification time userId threadRouteWithMaybeReplyTo channel2 text model
+                , broadcastMessageNotification
+                    time
+                    userId
+                    (GuildOrDmId_Guild guildId channelId)
+                    threadRouteWithMaybeReplyTo
+                    channel2
+                    text
+                    (guild.owner :: SeqDict.keys guild.members)
+                    model
                 , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let

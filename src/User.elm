@@ -4,6 +4,7 @@ module User exposing
     , EmailNotifications(..)
     , EmailStatus(..)
     , FrontendUser
+    , NotificationLevel(..)
     , backendToFrontend
     , backendToFrontendForUser
     , notifyOnAllChanges
@@ -47,15 +48,21 @@ type alias BackendUser =
     }
 
 
-notifyOnAllChanges : Id GuildId -> Bool -> BackendUser -> BackendUser
-notifyOnAllChanges guildId isEnabled user =
+type NotificationLevel
+    = NotifyOnEveryMessage
+    | NotifyOnMention
+
+
+notifyOnAllChanges : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser
+notifyOnAllChanges guildId notificationLevel user =
     { user
         | notifyOnAllMessages =
-            if isEnabled then
-                SeqSet.insert guildId user.notifyOnAllMessages
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    SeqSet.insert guildId user.notifyOnAllMessages
 
-            else
-                SeqSet.remove guildId user.notifyOnAllMessages
+                NotifyOnMention ->
+                    SeqSet.remove guildId user.notifyOnAllMessages
     }
 
 
