@@ -41,6 +41,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
+import Chess exposing (ChessGame)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -131,6 +132,7 @@ type alias LoadedFrontend =
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
     , enabledPushNotifications : Bool
+    , chess : ChessGame
     }
 
 
@@ -416,6 +418,7 @@ type FrontendMsg
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
+    | ChessMsg Chess.ChessMsg
 
 
 type ScrollPosition

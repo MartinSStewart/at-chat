@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
+import Chess
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel exposing (FrontendDmChannel, FrontendThread)
@@ -280,6 +281,7 @@ initLoadedFrontend loading time loginResult =
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
             , enabledPushNotifications = loading.enabledPushNotifications
+            , chess = Chess.initGame
             }
 
         ( model2, cmdA ) =
@@ -691,6 +693,11 @@ routeRequest previousRoute newRoute model =
                     Command.none
             )
 
+        ChessRoute ->
+            ( model2
+            , Command.none
+            )
+
 
 openChannelCmds :
     ThreadRouteWithMaybeMessage
@@ -746,6 +753,9 @@ routeRequiresLogin route =
             True
 
         SlackOAuthRedirect _ ->
+            False
+
+        ChessRoute ->
             False
 
 
@@ -1048,6 +1058,9 @@ isPressMsg msg =
 
         PressedGuildNotificationLevel _ notificationLevel ->
             True
+
+        ChessMsg chessMsg ->
+            Chess.isPressMsg chessMsg
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3086,6 +3099,9 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
+
+        ChessMsg chessMsg ->
+            ( { model | chess = Chess.updateGame chessMsg model.chess }, Command.none )
 
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
@@ -5581,6 +5597,9 @@ view model =
                                 Err () ->
                                     Ui.text "Something went wrong when linking Slack to at-chat..."
                             )
+
+                    ChessRoute ->
+                        Chess.viewChessBoard loaded.chess |> Html.map ChessMsg
         ]
     }
 

@@ -22,6 +22,7 @@ type Route
     | DmRoute (Id UserId) ThreadRouteWithMaybeMessage
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionId ))
+    | ChessRoute
 
 
 type ChannelRoute
@@ -131,6 +132,9 @@ decode url =
                 _ ->
                     SlackOAuthRedirect (Err ())
 
+        [ "chess" ] ->
+            ChessRoute
+
         _ ->
             HomePageRoute
 
@@ -210,6 +214,11 @@ encode route =
 
                 SlackOAuthRedirect _ ->
                     ( [ "slack-oauth" ]
+                    , []
+                    )
+
+                ChessRoute ->
+                    ( [ "chess" ]
                     , []
                     )
     in
