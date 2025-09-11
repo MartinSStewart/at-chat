@@ -577,7 +577,7 @@ type ServerChange
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
-    | Server_SetNotifyOnAllChanges (Id GuildId) NotificationLevel
+    | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
 
 
 type LocalChange
