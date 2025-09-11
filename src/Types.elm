@@ -87,7 +87,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, FrontendUser, NotificationLevel)
 
 
 type FrontendModel
@@ -415,6 +415,7 @@ type FrontendMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool
+    | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
 
 
 type ScrollPosition
@@ -576,7 +577,7 @@ type ServerChange
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
-    | Server_SetNotifyOnAllChanges (Id GuildId) Bool
+    | Server_SetNotifyOnAllChanges (Id GuildId) NotificationLevel
 
 
 type LocalChange
@@ -602,7 +603,7 @@ type LocalChange
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
-    | Local_SetNotifyOnAllChanges (Id GuildId) Bool
+    | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
 
 
 type ToBeFilledInByBackend a

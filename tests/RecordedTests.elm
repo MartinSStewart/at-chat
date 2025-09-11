@@ -588,6 +588,19 @@ tests fileData =
             )
         ]
     , T.start
+        "Change notification level"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ user.click 100 (Dom.id "guild_inviteLinkCreatorRoute")
+                , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
+                , writeMessage admin "Test"
+                , checkNotification "Test"
+                ]
+            )
+        ]
+    , T.start
         "Guild icon notification is shown"
         startTime
         normalConfig

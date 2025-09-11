@@ -66,7 +66,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser)
+import User exposing (BackendUser, NotificationLevel(..))
 import UserOptions
 import Vector2d
 import VisibleMessages exposing (VisibleMessages)
@@ -1045,6 +1045,9 @@ isPressMsg msg =
 
         SlackClientSecretEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
+
+        PressedGuildNotificationLevel _ notificationLevel ->
+            True
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3073,6 +3076,17 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedGuildNotificationLevel guildId notificationLevel ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Local_SetGuildNotificationLevel guildId notificationLevel |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
 setLastViewedToLatestMessage model loggedIn =
@@ -4118,14 +4132,20 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
-                Local_SetNotifyOnAllChanges guildId isEnabled ->
+                Local_SetGuildNotificationLevel guildId notificationLevel ->
                     let
                         localUser =
                             local.localUser
                     in
                     { local
                         | localUser =
-                            { localUser | user = User.notifyOnAllChanges guildId isEnabled localUser.user }
+                            { localUser
+                                | user =
+                                    User.notifyOnAllChanges
+                                        guildId
+                                        notificationLevel
+                                        localUser.user
+                            }
                     }
 
         ServerChange serverChange ->
@@ -4437,14 +4457,14 @@ changeUpdate localMsg local =
                 Server_PushNotificationsReset publicVapidKey ->
                     { local | publicVapidKey = publicVapidKey }
 
-                Server_SetNotifyOnAllChanges guildId isEnabled ->
+                Server_SetNotifyOnAllChanges guildId notificationLevel ->
                     let
                         localUser =
                             local.localUser
                     in
                     { local
                         | localUser =
-                            { localUser | user = User.notifyOnAllChanges guildId isEnabled localUser.user }
+                            { localUser | user = User.notifyOnAllChanges guildId notificationLevel localUser.user }
                     }
 
 
@@ -5220,12 +5240,13 @@ pendingChangesText localChange =
         Local_LoadThreadMessages _ _ _ _ ->
             "Load thread messages"
 
-        Local_SetNotifyOnAllChanges _ enabled ->
-            if enabled then
-                "Enabled notifications for all messages"
+        Local_SetGuildNotificationLevel _ notificationLevel ->
+            case notificationLevel of
+                NotifyOnEveryMessage ->
+                    "Enabled notifications for all messages"
 
-            else
-                "Disabled notifications for all messages"
+                NotifyOnMention ->
+                    "Disabled notifications for all messages"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
