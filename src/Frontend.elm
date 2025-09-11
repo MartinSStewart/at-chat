@@ -1046,7 +1046,7 @@ isPressMsg msg =
         SlackClientSecretEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
-        PressedGuildNotificationLevel _ notificationLevel ->
+        PressedGuildNotificationLevel _ _ ->
             True
 
 
