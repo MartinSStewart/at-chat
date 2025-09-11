@@ -69,11 +69,12 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 channelOrThreadHasNotifications :
-    Id UserId
+    Bool
+    -> Id UserId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId) }
     -> ChannelNotificationType
-channelOrThreadHasNotifications currentUserId lastViewed channel =
+channelOrThreadHasNotifications notifyOnAllMessages currentUserId lastViewed channel =
     Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
         |> Array.toList
         |> List.foldl
@@ -96,11 +97,18 @@ channelOrThreadHasNotifications currentUserId lastViewed channel =
                                         then
                                             NewMessageForUser
 
+                                        else if notifyOnAllMessages then
+                                            NewMessageForUser
+
                                         else
                                             NewMessage
 
                                     UserJoinedMessage _ _ _ ->
-                                        NewMessage
+                                        if notifyOnAllMessages then
+                                            NewMessageForUser
+
+                                        else
+                                            NewMessage
 
                                     DeletedMessage _ ->
                                         state
@@ -130,9 +138,15 @@ guildHasNotifications currentUserId currentUser guildId guild =
                                 Nothing ->
                                     Id.fromInt 0
                     in
-                    case channelOrThreadHasNotifications currentUserId lastViewed channel of
+                    case
+                        channelOrThreadHasNotifications
+                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
+                            currentUserId
+                            lastViewed
+                            channel
+                    of
                         NoNotification ->
-                            threadHasNotifications (GuildOrDmId_Guild guildId channelId) currentUserId currentUser channel
+                            threadHasNotifications guildId channelId currentUserId currentUser channel
 
                         notification ->
                             notification
@@ -172,12 +186,13 @@ dmHasNotifications currentUser otherUserId dmChannel =
 
 
 threadHasNotifications :
-    GuildOrDmIdNoThread
+    Id GuildId
+    -> Id ChannelId
     -> Id UserId
     -> BackendUser
     -> FrontendChannel
     -> ChannelNotificationType
-threadHasNotifications guildOrDmId currentUserId currentUser channel =
+threadHasNotifications guildId channelId currentUserId currentUser channel =
     SeqDict.foldl
         (\threadMessageIndex thread state2 ->
             case state2 of
@@ -188,7 +203,11 @@ threadHasNotifications guildOrDmId currentUserId currentUser channel =
                     let
                         lastViewed2 : Id ThreadMessageId
                         lastViewed2 =
-                            case SeqDict.get ( guildOrDmId, threadMessageIndex ) currentUser.lastViewedThreads of
+                            case
+                                SeqDict.get
+                                    ( GuildOrDmId_Guild guildId channelId, threadMessageIndex )
+                                    currentUser.lastViewedThreads
+                            of
                                 Just id ->
                                     Id.increment id
 
@@ -196,7 +215,11 @@ threadHasNotifications guildOrDmId currentUserId currentUser channel =
                                     Id.fromInt 0
                     in
                     case
-                        channelOrThreadHasNotifications currentUserId lastViewed2 thread
+                        channelOrThreadHasNotifications
+                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
+                            currentUserId
+                            lastViewed2
+                            thread
                     of
                         NoNotification ->
                             state2
@@ -968,34 +991,72 @@ inviteLinkCreatorForm model local guildId guild =
                                 ]
                         )
                 )
-            , guildNotificationLevelView guildId local
+            , radioColumn
+                (Dom.id "guild_notificationLevel")
+                (PressedGuildNotificationLevel guildId)
+                (if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
+                    Just NotifyOnEveryMessage
+
+                 else
+                    Just NotifyOnMention
+                )
+                "Guild notifications"
+                [ ( NotifyOnMention, "Only when mentioned" )
+                , ( NotifyOnEveryMessage, "On every message" )
+                ]
             ]
         )
 
 
-guildNotificationLevelView : Id GuildId -> LocalState -> Element FrontendMsg
-guildNotificationLevelView guildId local =
+radioOption : HtmlId -> value -> String -> Ui.Input.Option value msg
+radioOption htmlId value text =
+    Ui.Input.optionWith
+        value
+        (\option ->
+            Ui.row
+                [ Ui.spacing 6, Ui.id (Dom.idToString htmlId ++ "_" ++ text) ]
+                [ Ui.el
+                    [ Ui.width (Ui.px 23)
+                    , Ui.height (Ui.px 23)
+                    , Ui.background (Ui.rgb 250 250 255)
+                    , Ui.rounded 99
+                    , Ui.border 2
+                    , Ui.borderColor MyUi.background1
+                    ]
+                    (if option == Ui.Input.Selected then
+                        Ui.el
+                            [ Ui.width (Ui.px 15)
+                            , Ui.height (Ui.px 15)
+                            , Ui.centerX
+                            , Ui.centerY
+                            , Ui.background MyUi.background1
+                            , Ui.rounded 99
+                            ]
+                            Ui.none
+
+                     else
+                        Ui.none
+                    )
+                , Ui.text text
+                ]
+        )
+
+
+radioColumn : HtmlId -> (option -> msg) -> Maybe option -> String -> List ( option, String ) -> Element msg
+radioColumn htmlId onPress maybeValue title options =
     let
         label =
-            Ui.Input.label "guild_notificationLevel" [ Ui.Font.bold ] (Ui.text "Guild notifications")
+            Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] (Ui.text title)
     in
     Ui.column
         [ Ui.paddingXY 16 0, Ui.spacing 8 ]
         [ label.element
         , Ui.Input.chooseOne
             Ui.column
-            []
-            { onChange = PressedGuildNotificationLevel guildId
-            , options =
-                [ Ui.Input.option NotifyOnMention (Ui.text "Only when mentioned")
-                , Ui.Input.option NotifyOnEveryMessage (Ui.text "On every message")
-                ]
-            , selected =
-                if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
-                    Just NotifyOnEveryMessage
-
-                else
-                    Just NotifyOnMention
+            [ Ui.spacing 4 ]
+            { onChange = onPress
+            , options = List.map (\( value, text ) -> radioOption htmlId value text) options
+            , selected = maybeValue
             , label = label.id
             }
         ]
@@ -3815,6 +3876,7 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 
                                    else
                                     channelOrThreadHasNotifications
+                                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                                         localUser.userId
                                         (case SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads of
                                             Just id ->
@@ -3921,6 +3983,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
 
                    else
                     channelOrThreadHasNotifications
+                        (SeqSet.member guildId localUser.user.notifyOnAllMessages)
                         localUser.userId
                         (case SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed of
                             Just id ->
