@@ -4141,7 +4141,7 @@ changeUpdate localMsg local =
                         | localUser =
                             { localUser
                                 | user =
-                                    User.notifyOnAllChanges
+                                    User.setGuildNotificationLevel
                                         guildId
                                         notificationLevel
                                         localUser.user
@@ -4457,14 +4457,14 @@ changeUpdate localMsg local =
                 Server_PushNotificationsReset publicVapidKey ->
                     { local | publicVapidKey = publicVapidKey }
 
-                Server_SetNotifyOnAllChanges guildId notificationLevel ->
+                Server_SetGuildNotificationLevel guildId notificationLevel ->
                     let
                         localUser =
                             local.localUser
                     in
                     { local
                         | localUser =
-                            { localUser | user = User.notifyOnAllChanges guildId notificationLevel localUser.user }
+                            { localUser | user = User.setGuildNotificationLevel guildId notificationLevel localUser.user }
                     }
 
 

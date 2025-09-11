@@ -638,6 +638,10 @@ tests fileData =
                     windowSize
                     (\userReload ->
                         [ userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , writeMessage userReload "Another message"
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
                         , userReload.checkView
                             100
                             (Test.Html.Query.hasNot

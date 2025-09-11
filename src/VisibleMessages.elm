@@ -37,7 +37,7 @@ empty =
 
 increment : { a | messages : Array b } -> VisibleMessages messageId -> VisibleMessages messageId
 increment channel visibleMessages =
-    if visibleMessages.count == Array.length channel.messages then
+    if Id.toInt visibleMessages.oldest + visibleMessages.count == Array.length channel.messages then
         { oldest = visibleMessages.oldest, count = visibleMessages.count + 1 }
 
     else

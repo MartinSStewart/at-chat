@@ -7,10 +7,10 @@ module User exposing
     , NotificationLevel(..)
     , backendToFrontend
     , backendToFrontendForUser
-    , notifyOnAllChanges
     , profileImage
     , profileImageSize
     , sectionToString
+    , setGuildNotificationLevel
     , setLastChannelViewed
     , setLastDmViewed
     , setName
@@ -53,8 +53,8 @@ type NotificationLevel
     | NotifyOnMention
 
 
-notifyOnAllChanges : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser
-notifyOnAllChanges guildId notificationLevel user =
+setGuildNotificationLevel : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser
+setGuildNotificationLevel guildId notificationLevel user =
     { user
         | notifyOnAllMessages =
             case notificationLevel of
