@@ -51,9 +51,9 @@ module LocalState exposing
     , memberIsTyping
     , removeReactionEmoji
     , removeReactionEmojiFrontend
+    , repliedToUserId
     , repliedToUserIdFrontend
     , updateChannel
-    , usersToNotify
     , usersToNotifyFrontend
     )
 
@@ -1570,46 +1570,6 @@ getGuildAndChannel guildId channelId local =
 
         Nothing ->
             Nothing
-
-
-usersToNotify :
-    Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Nonempty RichText
-    -> SeqSet (Id UserId)
-usersToNotify senderId threadRouteWithRepliedTo channel content =
-    let
-        repliedToUserId2 : List (Id UserId)
-        repliedToUserId2 =
-            case threadRouteWithRepliedTo of
-                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    (case SeqDict.get threadId channel.threads of
-                        Just thread ->
-                            repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
-
-                        Nothing ->
-                            []
-                    )
-                        ++ (case DmChannel.getArray threadId channel.messages of
-                                Just (UserTextMessage data) ->
-                                    [ data.createdBy ]
-
-                                Just (UserJoinedMessage _ userJoined _) ->
-                                    [ userJoined ]
-
-                                Just (DeletedMessage _) ->
-                                    []
-
-                                Nothing ->
-                                    []
-                           )
-
-                NoThreadWithMaybeMessage maybeRepliedTo ->
-                    repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
-    in
-    List.foldl SeqSet.insert (RichText.mentionsUser content) repliedToUserId2
-        |> SeqSet.remove senderId
 
 
 usersToNotifyFrontend :

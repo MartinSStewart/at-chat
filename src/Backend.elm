@@ -45,6 +45,7 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
+import Maybe.Extra
 import Message exposing (Message(..))
 import NonemptyDict
 import OneToOne exposing (OneToOne)
@@ -4025,6 +4026,59 @@ broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo ch
         plainText : String
         plainText =
             RichText.toString (NonemptyDict.toSeqDict model.users) text
+    in
+    usersToNotify guildOrDmId members sender threadRouteWithRepliedTo channel text model
+        |> SeqSet.foldl
+            (\userId2 cmds ->
+                case NonemptyDict.get userId2 model.users of
+                    Just user2 ->
+                        broadcastNotification time userId2 user2 plainText model :: cmds
+
+                    Nothing ->
+                        cmds
+            )
+            []
+        |> Command.batch
+
+
+usersToNotify :
+    GuildOrDmIdNoThread
+    -> List (Id UserId)
+    -> Id UserId
+    -> ThreadRouteWithMaybeMessage
+    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> Nonempty RichText
+    -> BackendModel
+    -> SeqSet (Id UserId)
+usersToNotify guildOrDmId members senderId threadRouteWithRepliedTo channel content model =
+    let
+        repliedToUserId2 : List (Id UserId)
+        repliedToUserId2 =
+            case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
+                    (case SeqDict.get threadId channel.threads of
+                        Just thread ->
+                            LocalState.repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
+
+                        Nothing ->
+                            []
+                    )
+                        ++ (case DmChannel.getArray threadId channel.messages of
+                                Just (UserTextMessage data) ->
+                                    [ data.createdBy ]
+
+                                Just (UserJoinedMessage _ userJoined _) ->
+                                    [ userJoined ]
+
+                                Just (DeletedMessage _) ->
+                                    []
+
+                                Nothing ->
+                                    []
+                           )
+
+                NoThreadWithMaybeMessage maybeRepliedTo ->
+                    LocalState.repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -4045,19 +4099,9 @@ broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo ch
                 GuildOrDmId_Dm _ ->
                     SeqSet.empty
     in
-    LocalState.usersToNotify sender threadRouteWithRepliedTo channel text
+    List.foldl SeqSet.insert (RichText.mentionsUser content) repliedToUserId2
         |> SeqSet.union alwaysNotify
-        |> SeqSet.foldl
-            (\userId2 cmds ->
-                case NonemptyDict.get userId2 model.users of
-                    Just user2 ->
-                        broadcastNotification time userId2 user2 plainText model :: cmds
-
-                    Nothing ->
-                        cmds
-            )
-            []
-        |> Command.batch
+        |> SeqSet.remove senderId
 
 
 sendGuildMessage :
