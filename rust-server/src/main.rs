@@ -9,7 +9,7 @@ use axum::{
     routing::get,
     routing::post,
 };
-use image::{self, GenericImageView, ImageReader};
+use image::{self, GenericImageView, ImageDecoder, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
@@ -244,10 +244,14 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
 
     let size: usize = bytes.len();
 
-    match ImageReader::new(std::io::Cursor::new(&bytes))
-        .with_guessed_format()
-        .map(|a| a.decode())
-    {
+    let reader = ImageReader::new(std::io::Cursor::new(&bytes));
+
+    let orientation = ImageReader::new(std::io::Cursor::new(&bytes))
+        .into_decoder()
+        .and_then(|mut a| a.orientation())
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+
+    match reader.with_guessed_format().map(|a| a.decode()) {
         Ok(Ok(image)) => {
             let (width, height) = image.dimensions();
 
@@ -264,11 +268,12 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                             Ok(()) => {
                                 if height > MAX_THUMBNAIL_HEIGHT || width > MAX_THUMBNAIL_HEIGHT * 3
                                 {
-                                    let resized_image = image.resize(
+                                    let mut resized_image = image.resize(
                                         MAX_THUMBNAIL_HEIGHT * 3,
                                         MAX_THUMBNAIL_HEIGHT,
                                         image::imageops::FilterType::Triangle,
                                     );
+                                    resized_image.apply_orientation(orientation);
                                     let _ = resized_image.save_with_format(
                                         thumbnail_filepath(hash),
                                         image::ImageFormat::Jpeg,
