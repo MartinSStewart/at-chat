@@ -1,16 +1,19 @@
 module Backend exposing
-    ( adminUser
+    ( PushNotification
+    , adminUser
     , app
     , app_
     , emailToNotifyWhenErrorsAreLogged
     , getUserFromSessionId
     , loginEmailContent
     , loginEmailSubject
+    , pushNotificationCodec
     )
 
 import AiChat
 import Array exposing (Array)
 import ChannelName
+import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData(..))
@@ -3244,6 +3247,35 @@ handleMessagesRequest oldestVisibleMessage channel =
         |> FilledInByBackend
 
 
+type alias PushNotification =
+    { endpoint : String
+    , p256dh : String
+    , auth : String
+    , privateKey : PrivateVapidKey
+    , title : String
+    , body : String
+    , icon : String
+    }
+
+
+pushNotificationCodec : Codec PushNotification
+pushNotificationCodec =
+    Codec.object PushNotification
+        |> Codec.field "endpoint" .endpoint Codec.string
+        |> Codec.field "p256dh" .p256dh Codec.string
+        |> Codec.field "auth" .auth Codec.string
+        |> Codec.field "private_key" .privateKey privateKeyCodec
+        |> Codec.field "title" .title Codec.string
+        |> Codec.field "body" .body Codec.string
+        |> Codec.field "icon" .icon Codec.string
+        |> Codec.buildObject
+
+
+privateKeyCodec : Codec PrivateVapidKey
+privateKeyCodec =
+    Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
+
+
 pushNotification : Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
 pushNotification time title body icon pushSubscription model =
     Http.request
@@ -3251,15 +3283,16 @@ pushNotification time title body icon pushSubscription model =
         , headers = []
         , url = FileStatus.domain ++ "/file/push-notification"
         , body =
-            [ ( "endpoint", Url.toString pushSubscription.endpoint |> Json.Encode.string )
-            , ( "p256dh", Json.Encode.string pushSubscription.p256dh )
-            , ( "auth", Json.Encode.string pushSubscription.auth )
-            , ( "private_key", model.privateVapidKey |> (\(PrivateVapidKey a) -> a) |> Json.Encode.string )
-            , ( "title", Json.Encode.string title )
-            , ( "body", Json.Encode.string body )
-            , ( "icon", Json.Encode.string icon )
-            ]
-                |> Json.Encode.object
+            Codec.encodeToValue
+                pushNotificationCodec
+                { endpoint = Url.toString pushSubscription.endpoint
+                , p256dh = pushSubscription.p256dh
+                , auth = pushSubscription.auth
+                , privateKey = model.privateVapidKey
+                , title = title
+                , body = body
+                , icon = icon
+                }
                 |> Http.jsonBody
         , expect =
             Http.expectStringResponse
