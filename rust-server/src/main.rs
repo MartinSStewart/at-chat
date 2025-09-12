@@ -1,6 +1,6 @@
-use axum::RequestExt;
 use axum::body::Body;
 use axum::response::Response;
+use axum::{Json, RequestExt};
 use axum::{
     Router,
     body::Bytes,
@@ -10,7 +10,7 @@ use axum::{
     routing::post,
 };
 use imagesize::blob_size;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
 use vapid;
@@ -57,115 +57,115 @@ async fn vapid_endpoint(_request: Request) -> Response<String> {
     }
 }
 
-async fn push_notification_endpoint(request: Request) -> Response<String> {
-    let headers = request.headers();
+async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Response<String> {
+    // You would likely get this by deserializing a browser `pushSubscription` object.
+    let subscription_info: SubscriptionInfo =
+        SubscriptionInfo::new(body.endpoint, body.p256dh, body.auth);
+
+    let content: Notification<u8> = Notification::new(
+        body.title,
+        "https://at-chat.app".to_string(),
+        Some(body.body),
+        Some(body.icon),
+    );
+
     match (
-        headers.get("endpoint").map(|a| a.to_str()),
-        headers.get("p256dh").map(|a| a.to_str()),
-        headers.get("auth").map(|a| a.to_str()),
-        headers.get("private-key").map(|a| a.to_str()),
-        headers.get("title").map(|a| a.to_str()),
-        headers.get("body").map(|a| a.to_str()),
-        headers.get("icon").map(|a| a.to_str()),
+        web_push::VapidSignatureBuilder::from_base64(&body.private_key, &subscription_info),
+        content.to_payload(),
     ) {
-        (
-            Some(Ok(endpoint)),
-            Some(Ok(p256dh)),
-            Some(Ok(auth)),
-            Some(Ok(private_key)),
-            Some(Ok(title)),
-            Some(Ok(body)),
-            Some(Ok(icon)),
-        ) => {
-            // You would likely get this by deserializing a browser `pushSubscription` object.
-            let subscription_info: SubscriptionInfo = SubscriptionInfo::new(endpoint, p256dh, auth);
+        (Ok(key), Ok(content2)) => match key.build() {
+            Ok(sig_builder) => {
+                let mut builder: web_push::WebPushMessageBuilder<'_> =
+                    web_push::WebPushMessageBuilder::new(&subscription_info);
 
-            let content: Notification<u8> = Notification::new(
-                title.to_string(),
-                "https://at-chat.app".to_string(),
-                Some(body.to_string()),
-                Some(icon.to_string()),
-            );
+                builder.set_payload(web_push::ContentEncoding::Aes128Gcm, &content2);
+                builder.set_vapid_signature(sig_builder);
 
-            match (
-                web_push::VapidSignatureBuilder::from_base64(private_key, &subscription_info),
-                content.to_payload(),
-            ) {
-                (Ok(key), Ok(content2)) => {
-                    match key.build() {
-                        Ok(sig_builder) => {
-                            let mut builder: web_push::WebPushMessageBuilder<'_> =
-                                web_push::WebPushMessageBuilder::new(&subscription_info);
-
-                            builder.set_payload(web_push::ContentEncoding::Aes128Gcm, &content2);
-                            builder.set_vapid_signature(sig_builder);
-
-                            match web_push::IsahcWebPushClient::new() {
-                                Ok(client) => {
-                                    match builder.build() {
-                                        Ok(builder2) => {
-                                            match web_push::WebPushClient::send(&client, builder2).await {
-                                        Ok(()) => {
-                                            response_with_headers(StatusCode::OK, String::from(""))
-                                        }
-                                        Err(error) => response_with_headers(
-                                            StatusCode::BAD_REQUEST,
-                                            match error {
-                                                web_push::WebPushError::Unspecified => String::from("Error 5"),
-                                                web_push::WebPushError::Unauthorized(_) => String::from("Error 6"),
-                                                web_push::WebPushError::BadRequest(error_info) =>
-                                                    String::from("Bad request. Error: ") + &error_info.error + " Message: " + &error_info.message,
-                                                web_push::WebPushError::ServerError { retry_after: _, info: _ } => String::from("Error 8"),
-                                                web_push::WebPushError::NotImplemented(_) => String::from("Error 9"),
-                                                web_push::WebPushError::InvalidUri => String::from("Error 10"),
-                                                web_push::WebPushError::EndpointNotValid(_) => String::from("Error 11"),
-                                                web_push::WebPushError::EndpointNotFound(_) => String::from("Error 12"),
-                                                web_push::WebPushError::PayloadTooLarge => String::from("Error 13"),
-                                                web_push::WebPushError::Io(_) => String::from("Error 14"),
-                                                web_push::WebPushError::InvalidPackageName => String::from("Error 15"),
-                                                web_push::WebPushError::InvalidTtl => String::from("Error 16"),
-                                                web_push::WebPushError::InvalidTopic => String::from("Error 17"),
-                                                web_push::WebPushError::MissingCryptoKeys => String::from("Error 18"),
-                                                web_push::WebPushError::InvalidCryptoKeys => String::from("Error 19"),
-                                                web_push::WebPushError::InvalidResponse => String::from("Error 20"),
-                                                web_push::WebPushError::InvalidClaims => String::from("Error 21"),
-                                                web_push::WebPushError::ResponseTooLarge => String::from("Error 22"),
-                                                web_push::WebPushError::Other(_) => String::from("Error 23"),
-                                            },
-                                        ),
-                                    }
-                                        }
-                                        Err(_) => response_with_headers(
-                                            StatusCode::BAD_REQUEST,
-                                            String::from("Error 4"),
-                                        ),
-                                    }
-                                }
-                                Err(_) => response_with_headers(
+                match web_push::IsahcWebPushClient::new() {
+                    Ok(client) => match builder.build() {
+                        Ok(builder2) => {
+                            match web_push::WebPushClient::send(&client, builder2).await {
+                                Ok(()) => response_with_headers(StatusCode::OK, String::from("")),
+                                Err(error) => response_with_headers(
                                     StatusCode::BAD_REQUEST,
-                                    String::from("Error 3"),
+                                    match error {
+                                        web_push::WebPushError::Unspecified => {
+                                            String::from("Error 5")
+                                        }
+                                        web_push::WebPushError::Unauthorized(_) => {
+                                            String::from("Error 6")
+                                        }
+                                        web_push::WebPushError::BadRequest(error_info) => {
+                                            String::from("Bad request. Error: ")
+                                                + &error_info.error
+                                                + " Message: "
+                                                + &error_info.message
+                                        }
+                                        web_push::WebPushError::ServerError {
+                                            retry_after: _,
+                                            info: _,
+                                        } => String::from("Error 8"),
+                                        web_push::WebPushError::NotImplemented(_) => {
+                                            String::from("Error 9")
+                                        }
+                                        web_push::WebPushError::InvalidUri => {
+                                            String::from("Error 10")
+                                        }
+                                        web_push::WebPushError::EndpointNotValid(_) => {
+                                            String::from("Error 11")
+                                        }
+                                        web_push::WebPushError::EndpointNotFound(_) => {
+                                            String::from("Error 12")
+                                        }
+                                        web_push::WebPushError::PayloadTooLarge => {
+                                            String::from("Error 13")
+                                        }
+                                        web_push::WebPushError::Io(_) => String::from("Error 14"),
+                                        web_push::WebPushError::InvalidPackageName => {
+                                            String::from("Error 15")
+                                        }
+                                        web_push::WebPushError::InvalidTtl => {
+                                            String::from("Error 16")
+                                        }
+                                        web_push::WebPushError::InvalidTopic => {
+                                            String::from("Error 17")
+                                        }
+                                        web_push::WebPushError::MissingCryptoKeys => {
+                                            String::from("Error 18")
+                                        }
+                                        web_push::WebPushError::InvalidCryptoKeys => {
+                                            String::from("Error 19")
+                                        }
+                                        web_push::WebPushError::InvalidResponse => {
+                                            String::from("Error 20")
+                                        }
+                                        web_push::WebPushError::InvalidClaims => {
+                                            String::from("Error 21")
+                                        }
+                                        web_push::WebPushError::ResponseTooLarge => {
+                                            String::from("Error 22")
+                                        }
+                                        web_push::WebPushError::Other(_) => {
+                                            String::from("Error 23")
+                                        }
+                                    },
                                 ),
                             }
                         }
                         Err(_) => {
-                            response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2"))
+                            response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 4"))
                         }
+                    },
+                    Err(_) => {
+                        response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3"))
                     }
                 }
-
-                _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
             }
-        }
-        _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 0")),
+            Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2")),
+        },
+
+        _ => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
     }
-
-    // // Finally, send the notification!
-    // client.send(builder.build()?).await?;
-
-    // response_with_headers(
-    //     StatusCode::UNAUTHORIZED,
-    //     String::from("Invalid permissions 2"),
-    // )
 }
 
 async fn upload_endpoint(request: Request) -> Response<String> {
@@ -1156,4 +1156,15 @@ impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
             notification,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PushNotification {
+    pub endpoint: String,
+    pub p256dh: String,
+    pub auth: String,
+    pub private_key: String,
+    pub title: String,
+    pub body: String,
+    pub icon: String,
 }

@@ -34,6 +34,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -3247,17 +3248,19 @@ pushNotification : Time.Posix -> String -> String -> String -> PushSubscription 
 pushNotification time title body icon pushSubscription model =
     Http.request
         { method = "POST"
-        , headers =
-            [ Http.header "endpoint" (Url.toString pushSubscription.endpoint)
-            , Http.header "p256dh" pushSubscription.p256dh
-            , Http.header "auth" pushSubscription.auth
-            , Http.header "private-key" (model.privateVapidKey |> (\(PrivateVapidKey a) -> a))
-            , Http.header "title" title
-            , Http.header "body" body
-            , Http.header "icon" icon
-            ]
+        , headers = []
         , url = FileStatus.domain ++ "/file/push-notification"
-        , body = Http.emptyBody
+        , body =
+            [ ( "endpoint", Url.toString pushSubscription.endpoint |> Json.Encode.string )
+            , ( "p256dh", Json.Encode.string pushSubscription.p256dh )
+            , ( "auth", Json.Encode.string pushSubscription.auth )
+            , ( "private_key", model.privateVapidKey |> (\(PrivateVapidKey a) -> a) |> Json.Encode.string )
+            , ( "title", Json.Encode.string title )
+            , ( "body", Json.Encode.string body )
+            , ( "icon", Json.Encode.string icon )
+            ]
+                |> Json.Encode.object
+                |> Http.jsonBody
         , expect =
             Http.expectStringResponse
                 (SentNotification time)
