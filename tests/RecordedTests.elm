@@ -1,4 +1,4 @@
-module RecordedTests exposing (main, setup)
+module RecordedTests exposing (checkNoNotification, main, setup)
 
 import Backend
 import Bytes exposing (Bytes)
@@ -297,6 +297,37 @@ checkNotification body =
 
                 [] ->
                     Err ("Notification not found for \"" ++ body ++ "\"")
+        )
+
+
+checkNoNotification : String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+checkNoNotification body =
+    T.checkState
+        100
+        (\data ->
+            case
+                List.filter
+                    (\request ->
+                        case request.body of
+                            T.JsonBody json ->
+                                case Codec.decodeValue Backend.pushNotificationCodec json of
+                                    Ok pushNotification ->
+                                        (pushNotification.body == body)
+                                            && (request.url == "http://localhost:3000/file/push-notification")
+
+                                    Err _ ->
+                                        False
+
+                            _ ->
+                                False
+                    )
+                    data.httpRequests
+            of
+                _ :: _ ->
+                    Err ("Notification found for \"" ++ body ++ "\"")
+
+                [] ->
+                    Ok ()
         )
 
 
@@ -606,6 +637,9 @@ tests fileData =
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
                 , writeMessage admin "Test"
                 , checkNotification "Test"
+                , user.click 100 (Dom.id "guild_openChannel_0")
+                , writeMessage user "I shouldn't get notified"
+                , checkNoNotification "I shouldn't get notified"
                 ]
             )
         ]
