@@ -4,7 +4,8 @@
     "check": "lamdera check && elm-test-rs --compiler $(which lamdera) && npx elm-review --fix-all",
     "make": "lamdera make src/Frontend.elm src/Backend.elm",
     "deploy": "elm-test-rs --compiler $(which lamdera) && npx elm-review && lamdera deploy",
-    "end-to-end-tests": "lamdera make tests/EndToEndTestsRunner.elm --output tests/EndToEndTestsRunnerElm.js && cd tests && node EndToEndTestsRunner.js"
+    "end-to-end-tests": "lamdera make tests/EndToEndTestsRunner.elm --output tests/EndToEndTestsRunnerElm.js && cd tests && node EndToEndTestsRunner.js",
+    "rust-server": "cd tests && cargo run --manifest-path ../rust-server/Cargo.toml"
   },
   "devDependencies": {
     "elm-codegen": "^0.5.3",

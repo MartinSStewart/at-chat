@@ -5,6 +5,7 @@ module FileStatus exposing
     , FileHash(..)
     , FileId
     , FileStatus(..)
+    , UploadResponse
     , addFileHash
     , contentType
     , contentTypeType
@@ -15,6 +16,7 @@ module FileStatus exposing
     , onlyUploadedFiles
     , pngContent
     , sizeToString
+    , thumbnailUrl
     , upload
     , uploadBytes
     , uploadTrackerId
@@ -101,6 +103,11 @@ fileUrl (ContentType contentType2) (FileHash fileHash2) =
     domain ++ "/file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
 
 
+thumbnailUrl : ContentType -> FileHash -> String
+thumbnailUrl (ContentType contentType2) (FileHash fileHash2) =
+    domain ++ "/file/t/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+
+
 contentTypeType : ContentType -> ContentTypeType
 contentTypeType contentType2 =
     case OneToOne.second contentType2 contentTypes of
@@ -153,30 +160,37 @@ contentType a =
     OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
 
 
-uploadHelper : String -> Result Http.Error ( FileHash, Maybe (Coord units) )
+uploadHelper : String -> Result Http.Error UploadResponse
 uploadHelper text =
     case String.split "," text of
         [ fileHashValue, width, height ] ->
-            ( fileHash fileHashValue
-            , case ( String.toInt width, String.toInt height ) of
-                ( Just width2, Just height2 ) ->
-                    if width2 > 0 then
-                        Coord.xy width2 height2 |> Just
+            { fileHash = fileHash fileHashValue
+            , imageSize =
+                case ( String.toInt width, String.toInt height ) of
+                    ( Just width2, Just height2 ) ->
+                        if width2 > 0 then
+                            Coord.xy width2 height2 |> Just
 
-                    else
+                        else
+                            Nothing
+
+                    _ ->
                         Nothing
-
-                _ ->
-                    Nothing
-            )
+            }
                 |> Ok
 
         _ ->
             Err (Http.BadBody "Invalid format")
 
 
+type alias UploadResponse =
+    { fileHash : FileHash
+    , imageSize : Maybe (Coord CssPixels)
+    }
+
+
 upload :
-    (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> msg)
+    (Result Http.Error UploadResponse -> msg)
     -> SessionId
     -> GuildOrDmId
     -> Id FileId
@@ -227,7 +241,7 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
         ++ Id.toString fileId
 
 
-uploadBytes : String -> Bytes -> Task restriction Http.Error ( FileHash, Maybe (Coord units) )
+uploadBytes : String -> Bytes -> Task restriction Http.Error UploadResponse
 uploadBytes sessionId bytes =
     Http.task
         { method = "POST"
@@ -403,18 +417,18 @@ fileUploadPreview onPressDelete filesToUpload2 =
         )
 
 
-addFileHash : Result Http.Error ( FileHash, Maybe (Coord CssPixels) ) -> FileStatus -> FileStatus
+addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
             case result of
-                Ok ( fileHash2, imageSize ) ->
+                Ok data ->
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , imageSize = imageSize
+                        , imageSize = data.imageSize
                         , contentType = contentType2
-                        , fileHash = fileHash2
+                        , fileHash = data.fileHash
                         }
 
                 Err error ->

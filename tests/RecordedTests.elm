@@ -2,6 +2,7 @@ module RecordedTests exposing (main, setup)
 
 import Backend
 import Bytes exposing (Bytes)
+import Codec
 import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -273,10 +274,18 @@ checkNotification body =
             case
                 List.filter
                     (\request ->
-                        List.any
-                            (\( name, value ) -> name == "body" && value == body)
-                            request.headers
-                            && (request.url == "http://localhost:3000/file/push-notification")
+                        case request.body of
+                            T.JsonBody json ->
+                                case Codec.decodeValue Backend.pushNotificationCodec json of
+                                    Ok pushNotification ->
+                                        (pushNotification.body == body)
+                                            && (request.url == "http://localhost:3000/file/push-notification")
+
+                                    Err _ ->
+                                        False
+
+                            _ ->
+                                False
                     )
                     data.httpRequests
             of
