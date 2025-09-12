@@ -9,7 +9,7 @@ use axum::{
     routing::get,
     routing::post,
 };
-use imagesize::blob_size;
+use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
@@ -29,6 +29,10 @@ async fn main() {
         )
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
+        .route(
+            "/file/t/{content_type}/{filename}",
+            get(get_file_thumbnail_endpoint),
+        )
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .fallback(fallback);
 
@@ -42,6 +46,10 @@ async fn options_endpoint() -> Response<String> {
 
 fn filepath(hash: String) -> String {
     String::from("./var/lib/atchat/") + &hash
+}
+
+fn thumbnail_filepath(hash: String) -> String {
+    String::from("./var/lib/atchat/") + &hash + "_thumbnail"
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {
@@ -186,14 +194,16 @@ async fn upload_endpoint(request: Request) -> Response<String> {
     }
 }
 
-async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
-    let hash: String = hash_bytes(&bytes);
+/// Should match RichText.maxImageHeight
+const MAX_THUMBNAIL_HEIGHT: u32 = 300;
 
-    let size: imagesize::ImageSize = blob_size(&bytes).unwrap_or(imagesize::ImageSize {
-        width: 0,
-        height: 0,
-    });
-
+async fn is_file_upload_allowed(
+    hash: String,
+    size: usize,
+    session_id: String,
+    width: u32,
+    height: u32,
+) -> Result<(), ()> {
     match reqwest::Client::new()
         .post(if cfg!(debug_assertions) {
             "http://localhost:8000/_r/is-file-upload-allowed"
@@ -204,53 +214,106 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
         .body(
             hash.clone()
                 + ","
-                + &(bytes.len().to_string())
+                + &(size.to_string())
                 + ","
-                + &session_id2
+                + &session_id
                 + ","
-                + &size.width.to_string()
+                + &width.to_string()
                 + ","
-                + &size.height.to_string(),
+                + &height.to_string(),
         )
         .send()
         .await
     {
         Ok(response) => match response.text().await {
             Ok(text) => {
-                let path: String = filepath(hash.clone());
                 if text == "valid" {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
+            Err(_) => Err(()),
+        },
+        Err(_) => Err(()),
+    }
+}
+
+async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
+    let hash: String = hash_bytes(&bytes);
+
+    let size: usize = bytes.len();
+
+    match ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .map(|a| a.decode())
+    {
+        Ok(Ok(image)) => {
+            let (width, height) = image.dimensions();
+
+            match is_file_upload_allowed(hash.clone(), size, session_id2, width, height).await {
+                Ok(()) => {
+                    let path: String = filepath(hash.clone());
                     let response: String =
-                        hash + "," + &size.width.to_string() + "," + &size.height.to_string();
+                        hash.clone() + "," + &width.to_string() + "," + &height.to_string();
 
                     match fs::exists(&path) {
                         Ok(true) => response_with_headers(StatusCode::OK, response),
 
                         _ => match fs::write(path, bytes) {
-                            Ok(()) => response_with_headers(StatusCode::OK, response),
+                            Ok(()) => {
+                                if height > MAX_THUMBNAIL_HEIGHT || width > MAX_THUMBNAIL_HEIGHT * 3
+                                {
+                                    let resized_image = image.resize(
+                                        MAX_THUMBNAIL_HEIGHT * 3,
+                                        MAX_THUMBNAIL_HEIGHT,
+                                        image::imageops::FilterType::Triangle,
+                                    );
+                                    let _ = resized_image.save_with_format(
+                                        thumbnail_filepath(hash),
+                                        image::ImageFormat::Jpeg,
+                                    );
+                                }
+
+                                response_with_headers(StatusCode::OK, response)
+                            }
                             Err(_) => response_with_headers(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 String::from("Internal error"),
                             ),
                         },
                     }
-                } else {
-                    response_with_headers(
-                        StatusCode::UNAUTHORIZED,
-                        String::from("Invalid permissions 4: ") + &text,
-                    )
+                }
+
+                Err(()) => response_with_headers(
+                    StatusCode::UNAUTHORIZED,
+                    String::from("Invalid permissions 3"),
+                ),
+            }
+        }
+        _ => match is_file_upload_allowed(hash.clone(), size, session_id2, 0, 0).await {
+            Ok(()) => {
+                let path: String = filepath(hash.clone());
+                let response: String = hash + ",0,0";
+
+                match fs::exists(&path) {
+                    Ok(true) => response_with_headers(StatusCode::OK, response),
+
+                    _ => match fs::write(path, bytes) {
+                        Ok(()) => response_with_headers(StatusCode::OK, response),
+                        Err(_) => response_with_headers(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            String::from("Internal error"),
+                        ),
+                    },
                 }
             }
 
-            _ => response_with_headers(
+            Err(()) => response_with_headers(
                 StatusCode::UNAUTHORIZED,
                 String::from("Invalid permissions 3"),
             ),
         },
-
-        Err(_) => response_with_headers(
-            StatusCode::UNAUTHORIZED,
-            String::from("Invalid permissions 2"),
-        ),
     }
 }
 
@@ -266,6 +329,48 @@ fn response_with_headers(status_code: StatusCode, body: String) -> Response<Stri
 
 fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(Sha224::digest(&bytes).to_vec())
+}
+
+async fn get_file_thumbnail_endpoint(
+    Path((content_type_index, hash)): Path<(String, String)>,
+) -> http::Response<Body> {
+    let is_valid_hash: bool = hash
+        .chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
+
+    if is_valid_hash {
+        let data: Result<Vec<u8>, std::io::Error> = fs::read(thumbnail_filepath(hash));
+        match data {
+            Result::Ok(data) => {
+                let content_type = match content_type_index.parse::<usize>() {
+                    Ok(index) => CONTENT_TYPES.get(index),
+                    Err(_) => None,
+                };
+
+                match content_type {
+                    Some(content_type2) => Response::builder()
+                        .status(StatusCode::OK)
+                        .header("Content-Type", content_type2.to_string())
+                        .header("Content-Disposition", "inline")
+                        .body(Body::from(data))
+                        .unwrap(),
+                    None => Response::builder()
+                        .status(StatusCode::OK)
+                        .body(Body::from(data))
+                        .unwrap(),
+                }
+            }
+            Result::Err(_) => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("File not found"))
+                .unwrap(),
+        }
+    } else {
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(hash + " is an invalid filename"))
+            .unwrap()
+    }
 }
 
 async fn get_file_endpoint(

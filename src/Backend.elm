@@ -212,7 +212,7 @@ subscriptions model =
         ]
 
 
-loadImage : String -> Task restriction x (Maybe ( FileHash, Maybe (Coord units) ))
+loadImage : String -> Task restriction x (Maybe FileStatus.UploadResponse)
 loadImage url =
     Http.task
         { method = "GET"
@@ -668,7 +668,7 @@ update msg model =
                                     { model2
                                         | users =
                                             NonemptyDict.updateIfExists userId
-                                                (\user -> { user | icon = Maybe.map Tuple.first maybeAvatar })
+                                                (\user -> { user | icon = Maybe.map .fileHash maybeAvatar })
                                                 model2.users
                                     }
 
@@ -1408,7 +1408,7 @@ addDiscordGuilds :
             { guild : Discord.Guild
             , members : List Discord.GuildMember
             , channels : List ( Discord.Channel2, List Discord.Message )
-            , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
+            , icon : Maybe FileStatus.UploadResponse
             , threads : List ( Discord.Channel, List Discord.Message )
             }
     -> BackendModel
@@ -1478,7 +1478,7 @@ addDiscordGuilds time guilds model =
                             { createdAt = time
                             , createdBy = ownerId
                             , name = GuildName.fromStringLossy data.guild.name
-                            , icon = Maybe.map Tuple.first data.icon
+                            , icon = Maybe.map .fileHash data.icon
                             , channels = SeqDict.empty
                             , linkedChannelIds = OneToOne.empty
                             , members = members

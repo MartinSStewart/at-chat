@@ -402,12 +402,12 @@ type FrontendMsg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OneFrameAfterDragEnd
-    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
+    | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
-    | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error ( FileHash, Maybe (Coord CssPixels) ))
+    | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
     | PastedFiles GuildOrDmId (Nonempty File)
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
@@ -479,7 +479,7 @@ type BackendMsg
                 , { guild : Discord.Guild
                   , members : List Discord.GuildMember
                   , channels : List ( Discord.Channel2, List Discord.Message )
-                  , icon : Maybe ( FileHash, Maybe (Coord CssPixels) )
+                  , icon : Maybe FileStatus.UploadResponse
                   , threads : List ( Discord.Channel, List Discord.Message )
                   }
                 )
@@ -490,7 +490,7 @@ type BackendMsg
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
-    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe ( FileHash, Maybe (Coord CssPixels) ) )))
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse )))
     | SentNotification Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels

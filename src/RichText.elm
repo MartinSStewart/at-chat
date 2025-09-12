@@ -958,13 +958,16 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             ( spoilerIndex2
                             , case SeqDict.get fileId attachedFiles of
                                 Just fileData ->
-                                    let
-                                        fileUrl =
-                                            FileStatus.fileUrl fileData.contentType fileData.fileHash
-                                    in
                                     currentList
                                         ++ [ case FileStatus.contentTypeType fileData.contentType of
                                                 FileStatus.Image ->
+                                                    let
+                                                        fileUrl =
+                                                            FileStatus.fileUrl fileData.contentType fileData.fileHash
+
+                                                        thumbnailUrl =
+                                                            FileStatus.thumbnailUrl fileData.contentType fileData.fileHash
+                                                    in
                                                     Html.a
                                                         [ Html.Attributes.href fileUrl
                                                         , Html.Attributes.target "_blank"
@@ -972,13 +975,13 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                         , Html.Attributes.style "object-fit" "contain"
                                                         ]
                                                         [ case fileData.imageSize of
-                                                            Just imageSize ->
+                                                            Just size ->
                                                                 let
                                                                     w =
-                                                                        Coord.xRaw imageSize
+                                                                        Coord.xRaw size
 
                                                                     h =
-                                                                        Coord.yRaw imageSize
+                                                                        Coord.yRaw size
 
                                                                     aspect =
                                                                         toFloat h / toFloat w
@@ -987,13 +990,13 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                                         min w containerWidth2
 
                                                                     h2 =
-                                                                        min 400 (toFloat w2 * aspect)
+                                                                        min imageMaxHeight (toFloat w2 * aspect)
 
                                                                     w3 =
                                                                         h2 / aspect
                                                                 in
                                                                 Html.img
-                                                                    [ Html.Attributes.src fileUrl
+                                                                    [ Html.Attributes.src thumbnailUrl
                                                                     , Html.Attributes.style "display" "block"
                                                                     , Html.Attributes.width (round w3)
                                                                     , Html.Attributes.height (round h2)
@@ -1001,37 +1004,11 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                                     []
 
                                                             Nothing ->
-                                                                Html.img
-                                                                    [ Html.Attributes.src fileUrl
-                                                                    , Html.Attributes.style "display" "block"
-                                                                    , Html.Attributes.width containerWidth2
-                                                                    , Html.Attributes.style "max-width" "min(300px, 100%)"
-                                                                    , Html.Attributes.style "max-height" "400px"
-                                                                    ]
-                                                                    []
+                                                                fileDownloadView fileData
                                                         ]
 
                                                 _ ->
-                                                    Html.a
-                                                        [ Html.Attributes.style "max-width" "284px"
-                                                        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
-                                                        , Html.Attributes.style "border-radius" "4px"
-                                                        , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
-                                                        , Html.Attributes.style "display" "block"
-                                                        , Html.Attributes.href fileUrl
-                                                        , Html.Attributes.target "_blank"
-                                                        , Html.Attributes.rel "noreferrer"
-                                                        , Html.Attributes.style "font-size" "14px"
-                                                        , Html.Attributes.style "padding" "4px 8px 4px 8px"
-                                                        ]
-                                                        [ Html.text (FileName.toString fileData.fileName)
-                                                        , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
-                                                        , Html.div
-                                                            [ Html.Attributes.style "display" "inline-block"
-                                                            , Html.Attributes.style "transform" "translateY(4px)"
-                                                            ]
-                                                            [ Icons.download ]
-                                                        ]
+                                                    fileDownloadView fileData
                                            ]
 
                                 Nothing ->
@@ -1045,6 +1022,39 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)
+
+
+fileDownloadView : FileData -> Html msg
+fileDownloadView fileData =
+    let
+        fileUrl =
+            FileStatus.fileUrl fileData.contentType fileData.fileHash
+    in
+    Html.a
+        [ Html.Attributes.style "max-width" "284px"
+        , Html.Attributes.style "background-color" (MyUi.colorToStyle MyUi.background1)
+        , Html.Attributes.style "border-radius" "4px"
+        , Html.Attributes.style "border" ("solid 1px " ++ MyUi.colorToStyle MyUi.border1)
+        , Html.Attributes.style "display" "block"
+        , Html.Attributes.href fileUrl
+        , Html.Attributes.target "_blank"
+        , Html.Attributes.rel "noreferrer"
+        , Html.Attributes.style "font-size" "14px"
+        , Html.Attributes.style "padding" "4px 8px 4px 8px"
+        ]
+        [ Html.text (FileName.toString fileData.fileName)
+        , Html.text ("\n" ++ FileStatus.sizeToString fileData.fileSize ++ " ")
+        , Html.div
+            [ Html.Attributes.style "display" "inline-block"
+            , Html.Attributes.style "transform" "translateY(4px)"
+            ]
+            [ Icons.download ]
+        ]
+
+
+imageMaxHeight : number
+imageMaxHeight =
+    300
 
 
 textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
