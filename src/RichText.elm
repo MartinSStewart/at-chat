@@ -959,14 +959,35 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             , case SeqDict.get fileId attachedFiles of
                                 Just fileData ->
                                     currentList
-                                        ++ [ case FileStatus.contentTypeType fileData.contentType of
-                                                FileStatus.Image ->
+                                        ++ [ case fileData.imageSize of
+                                                Just imageSize ->
                                                     let
                                                         fileUrl =
                                                             FileStatus.fileUrl fileData.contentType fileData.fileHash
 
                                                         thumbnailUrl =
-                                                            FileStatus.thumbnailUrl fileData.contentType fileData.fileHash
+                                                            FileStatus.thumbnailUrl
+                                                                imageSize
+                                                                fileData.contentType
+                                                                fileData.fileHash
+
+                                                        w =
+                                                            Coord.xRaw imageSize
+
+                                                        h =
+                                                            Coord.yRaw imageSize
+
+                                                        aspect =
+                                                            toFloat h / toFloat w
+
+                                                        w2 =
+                                                            min w containerWidth2
+
+                                                        h2 =
+                                                            min FileStatus.imageMaxHeight (toFloat w2 * aspect)
+
+                                                        w3 =
+                                                            h2 / aspect
                                                     in
                                                     Html.a
                                                         [ Html.Attributes.href fileUrl
@@ -974,37 +995,13 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                         , Html.Attributes.rel "noreferrer"
                                                         , Html.Attributes.style "object-fit" "contain"
                                                         ]
-                                                        [ case fileData.imageSize of
-                                                            Just size ->
-                                                                let
-                                                                    w =
-                                                                        Coord.xRaw size
-
-                                                                    h =
-                                                                        Coord.yRaw size
-
-                                                                    aspect =
-                                                                        toFloat h / toFloat w
-
-                                                                    w2 =
-                                                                        min w containerWidth2
-
-                                                                    h2 =
-                                                                        min imageMaxHeight (toFloat w2 * aspect)
-
-                                                                    w3 =
-                                                                        h2 / aspect
-                                                                in
-                                                                Html.img
-                                                                    [ Html.Attributes.src thumbnailUrl
-                                                                    , Html.Attributes.style "display" "block"
-                                                                    , Html.Attributes.width (round w3)
-                                                                    , Html.Attributes.height (round h2)
-                                                                    ]
-                                                                    []
-
-                                                            Nothing ->
-                                                                fileDownloadView fileData
+                                                        [ Html.img
+                                                            [ Html.Attributes.src thumbnailUrl
+                                                            , Html.Attributes.style "display" "block"
+                                                            , Html.Attributes.width (round w3)
+                                                            , Html.Attributes.height (round h2)
+                                                            ]
+                                                            []
                                                         ]
 
                                                 _ ->
@@ -1050,11 +1047,6 @@ fileDownloadView fileData =
             ]
             [ Icons.download ]
         ]
-
-
-imageMaxHeight : number
-imageMaxHeight =
-    300
 
 
 textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
@@ -1561,12 +1553,19 @@ toDiscord mapping attachedFiles content =
                         string
 
                 AttachedFile fileId ->
-                    case SeqDict.get fileId attachedFiles of
+                    (case SeqDict.get fileId attachedFiles of
                         Just fileData ->
-                            Discord.Markdown.text (FileStatus.fileUrl fileData.contentType fileData.fileHash)
+                            case fileData.imageSize of
+                                Just imageSize ->
+                                    FileStatus.thumbnailUrl imageSize fileData.contentType fileData.fileHash
+
+                                Nothing ->
+                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
 
                         Nothing ->
-                            Discord.Markdown.text ""
+                            ""
+                    )
+                        |> Discord.Markdown.text
         )
         (List.Nonempty.toList content)
 

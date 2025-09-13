@@ -13,6 +13,7 @@ module FileStatus exposing
     , fileHash
     , fileUploadPreview
     , fileUrl
+    , imageMaxHeight
     , onlyUploadedFiles
     , pngContent
     , sizeToString
@@ -103,9 +104,23 @@ fileUrl (ContentType contentType2) (FileHash fileHash2) =
     domain ++ "/file/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
 
 
-thumbnailUrl : ContentType -> FileHash -> String
-thumbnailUrl (ContentType contentType2) (FileHash fileHash2) =
-    domain ++ "/file/t/" ++ String.fromInt contentType2 ++ "/" ++ fileHash2
+thumbnailUrl : Coord CssPixels -> ContentType -> FileHash -> String
+thumbnailUrl imageSize contentType2 (FileHash fileHash2) =
+    if hasThumbnailImage imageSize then
+        domain ++ "/file/t/" ++ fileHash2
+
+    else
+        fileUrl contentType2 (FileHash fileHash2)
+
+
+hasThumbnailImage : Coord units -> Bool
+hasThumbnailImage imageSize =
+    Coord.yRaw imageSize > imageMaxHeight || Coord.xRaw imageSize > imageMaxHeight * 3
+
+
+imageMaxHeight : number
+imageMaxHeight =
+    300
 
 
 contentTypeType : ContentType -> ContentTypeType
@@ -372,7 +387,14 @@ fileUploadPreview onPressDelete filesToUpload2 =
                             case contentTypeType fileData.contentType of
                                 Image ->
                                     Html.img
-                                        [ Html.Attributes.src (fileUrl fileData.contentType fileData.fileHash)
+                                        [ Html.Attributes.src
+                                            (case fileData.imageSize of
+                                                Just imageSize ->
+                                                    thumbnailUrl imageSize fileData.contentType fileData.fileHash
+
+                                                Nothing ->
+                                                    fileUrl fileData.contentType fileData.fileHash
+                                            )
                                         , Html.Attributes.style "object-fit" "cover"
                                         , Html.Attributes.width (previewSize - 2)
                                         , Html.Attributes.height (previewSize - 2)

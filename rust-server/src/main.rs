@@ -32,10 +32,7 @@ async fn main() {
         )
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
-        .route(
-            "/file/t/{content_type}/{filename}",
-            get(get_file_thumbnail_endpoint),
-        )
+        .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .fallback(fallback);
 
@@ -348,7 +345,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                                     }
                                     let _ = resized_image.save_with_format(
                                         thumbnail_filepath(hash),
-                                        image::ImageFormat::Jpeg,
+                                        image::ImageFormat::WebP,
                                     );
                                 }
 
@@ -408,35 +405,19 @@ fn hash_bytes(bytes: &Bytes) -> String {
     base64_encode(Sha224::digest(&bytes).to_vec())
 }
 
-async fn get_file_thumbnail_endpoint(
-    Path((content_type_index, hash)): Path<(String, String)>,
-) -> http::Response<Body> {
+async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
     let is_valid_hash: bool = hash
         .chars()
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
 
     if is_valid_hash {
-        let data: Result<Vec<u8>, std::io::Error> = fs::read(thumbnail_filepath(hash));
-        match data {
-            Result::Ok(data) => {
-                let content_type = match content_type_index.parse::<usize>() {
-                    Ok(index) => CONTENT_TYPES.get(index),
-                    Err(_) => None,
-                };
-
-                match content_type {
-                    Some(content_type2) => Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", content_type2.to_string())
-                        .header("Content-Disposition", "inline")
-                        .body(Body::from(data))
-                        .unwrap(),
-                    None => Response::builder()
-                        .status(StatusCode::OK)
-                        .body(Body::from(data))
-                        .unwrap(),
-                }
-            }
+        match fs::read(thumbnail_filepath(hash)) {
+            Result::Ok(data) => Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "image/webp")
+                .header("Content-Disposition", "inline")
+                .body(Body::from(data))
+                .unwrap(),
             Result::Err(_) => Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::from("File not found"))
@@ -458,8 +439,7 @@ async fn get_file_endpoint(
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
 
     if is_valid_hash {
-        let data: Result<Vec<u8>, std::io::Error> = fs::read(filepath(hash));
-        match data {
+        match fs::read(filepath(hash)) {
             Result::Ok(data) => {
                 let content_type = match content_type_index.parse::<usize>() {
                     Ok(index) => CONTENT_TYPES.get(index),
