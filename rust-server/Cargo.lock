@@ -1010,6 +1010,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "gufo-common"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98bebe9ba4be92d3932246ecfbe261106e3013266604f8cbf0ca9ee9df7edf99"
+dependencies = [
+ "paste",
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "gufo-exif"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d2b06ed83ed41cff519aeac7bc7ae4580c7b8ffd8f5688f4dcc362df1f1d349"
+dependencies = [
+ "gufo-common",
+ "thiserror 2.0.16",
+ "tracing",
+]
+
+[[package]]
+name = "gufo-jpeg"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ddb8a93bbd671390189f8dee0209731200bdfe403606c6abf6a2aaec5a935f5"
+dependencies = [
+ "gufo-common",
+ "indexmap",
+ "thiserror 2.0.16",
+ "tracing",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2409,6 +2442,9 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "fs",
+ "gufo-common",
+ "gufo-exif",
+ "gufo-jpeg",
  "http 1.3.1",
  "image",
  "reqwest",

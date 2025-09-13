@@ -9,7 +9,10 @@ use axum::{
     routing::get,
     routing::post,
 };
-use image::{self, GenericImageView, ImageDecoder, ImageReader};
+
+use gufo_exif;
+use image::metadata::Orientation;
+use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
@@ -239,6 +242,59 @@ async fn is_file_upload_allowed(
     }
 }
 
+fn get_jpeg_orientation(bytes: Vec<u8>) -> Result<Orientation, ()> {
+    match gufo_jpeg::Jpeg::new(bytes) {
+        Ok(jpeg) => match jpeg.exif_data().next() {
+            Some(raw_exif) => match gufo_exif::Exif::new(raw_exif.to_vec()) {
+                Ok(exif) => match exif.orientation() {
+                    Some(gufo_common::orientation::Orientation::Id) => {
+                        Ok(Orientation::NoTransforms)
+                    }
+                    Some(gufo_common::orientation::Orientation::Rotation90) => {
+                        Ok(Orientation::Rotate90)
+                    }
+                    Some(gufo_common::orientation::Orientation::Rotation180) => {
+                        Ok(Orientation::Rotate180)
+                    }
+                    Some(gufo_common::orientation::Orientation::Rotation270) => {
+                        Ok(Orientation::Rotate270)
+                    }
+                    Some(gufo_common::orientation::Orientation::Mirrored) => {
+                        Ok(Orientation::FlipHorizontal)
+                    }
+                    Some(gufo_common::orientation::Orientation::MirroredRotation90) => {
+                        Ok(Orientation::Rotate90FlipH)
+                    }
+                    Some(gufo_common::orientation::Orientation::MirroredRotation180) => {
+                        Ok(Orientation::FlipVertical)
+                    }
+                    Some(gufo_common::orientation::Orientation::MirroredRotation270) => {
+                        Ok(Orientation::Rotate270FlipH)
+                    }
+
+                    None => Err(()),
+                },
+                Err(_) => Err(()),
+            },
+            None => Err(()),
+        },
+        Err(_) => Err(()),
+    }
+}
+
+fn inverse_orientation(orientation: Orientation) -> Orientation {
+    match orientation {
+        Orientation::NoTransforms => Orientation::NoTransforms,
+        Orientation::Rotate90 => Orientation::Rotate270,
+        Orientation::Rotate180 => Orientation::Rotate180,
+        Orientation::Rotate270 => Orientation::Rotate90,
+        Orientation::FlipHorizontal => Orientation::FlipHorizontal,
+        Orientation::FlipVertical => Orientation::FlipVertical,
+        Orientation::Rotate90FlipH => Orientation::Rotate270FlipH,
+        Orientation::Rotate270FlipH => Orientation::Rotate90FlipH,
+    }
+}
+
 async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
     let hash: String = hash_bytes(&bytes);
 
@@ -246,34 +302,50 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
 
     let reader = ImageReader::new(std::io::Cursor::new(&bytes));
 
-    let orientation = ImageReader::new(std::io::Cursor::new(&bytes))
-        .into_decoder()
-        .and_then(|mut a| a.orientation())
-        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let orientation: Result<Orientation, ()> = get_jpeg_orientation(bytes.to_vec());
 
     match reader.with_guessed_format().map(|a| a.decode()) {
         Ok(Ok(image)) => {
             let (width, height) = image.dimensions();
 
-            match is_file_upload_allowed(hash.clone(), size, session_id2, width, height).await {
+            let (width2, height2) = match orientation {
+                Ok(orientation2) => match orientation2 {
+                    Orientation::NoTransforms => (width, height),
+                    Orientation::Rotate90 => (height, width),
+                    Orientation::Rotate180 => (width, height),
+                    Orientation::Rotate270 => (height, width),
+                    Orientation::FlipHorizontal => (width, height),
+                    Orientation::FlipVertical => (width, height),
+                    Orientation::Rotate90FlipH => (height, width),
+                    Orientation::Rotate270FlipH => (height, width),
+                },
+                Err(_) => (width, height),
+            };
+
+            match is_file_upload_allowed(hash.clone(), size, session_id2, width2, height2).await {
                 Ok(()) => {
                     let path: String = filepath(hash.clone());
                     let response: String =
-                        hash.clone() + "," + &width.to_string() + "," + &height.to_string();
+                        hash.clone() + "," + &width2.to_string() + "," + &height2.to_string();
 
                     match fs::exists(&path) {
                         Ok(true) => response_with_headers(StatusCode::OK, response),
 
                         _ => match fs::write(path, bytes) {
                             Ok(()) => {
-                                if height > MAX_THUMBNAIL_HEIGHT || width > MAX_THUMBNAIL_HEIGHT * 3
+                                if height2 > MAX_THUMBNAIL_HEIGHT
+                                    || width2 > MAX_THUMBNAIL_HEIGHT * 3
                                 {
                                     let mut resized_image = image.resize(
                                         MAX_THUMBNAIL_HEIGHT * 3,
                                         MAX_THUMBNAIL_HEIGHT,
                                         image::imageops::FilterType::Triangle,
                                     );
-                                    resized_image.apply_orientation(orientation);
+                                    match orientation {
+                                        Ok(orientation2) => resized_image
+                                            .apply_orientation(inverse_orientation(orientation2)),
+                                        Err(()) => {}
+                                    }
                                     let _ = resized_image.save_with_format(
                                         thumbnail_filepath(hash),
                                         image::ImageFormat::Jpeg,
@@ -292,7 +364,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
 
                 Err(()) => response_with_headers(
                     StatusCode::UNAUTHORIZED,
-                    String::from("Invalid permissions 3"),
+                    String::from("Invalid permissions"),
                 ),
             }
         }
@@ -316,7 +388,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
 
             Err(()) => response_with_headers(
                 StatusCode::UNAUTHORIZED,
-                String::from("Invalid permissions 3"),
+                String::from("Invalid permissions"),
             ),
         },
     }
