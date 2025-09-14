@@ -24,6 +24,8 @@ module FileStatus exposing
     )
 
 import Bytes exposing (Bytes)
+import Codec exposing (Codec)
+import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom
@@ -38,6 +40,7 @@ import Html
 import Html.Attributes
 import Icons
 import Id exposing (GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..))
+import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -51,7 +54,7 @@ import Ui.Shadow
 type alias FileData =
     { fileName : FileName
     , fileSize : Int
-    , imageSize : Maybe (Coord CssPixels)
+    , imageMetadata : Maybe ImageMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
@@ -175,33 +178,153 @@ contentType a =
     OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
 
 
-uploadHelper : String -> Result Http.Error UploadResponse
-uploadHelper text =
-    case String.split "," text of
-        [ fileHashValue, width, height ] ->
-            { fileHash = fileHash fileHashValue
-            , imageSize =
-                case ( String.toInt width, String.toInt height ) of
-                    ( Just width2, Just height2 ) ->
-                        if width2 > 0 then
-                            Coord.xy width2 height2 |> Just
-
-                        else
-                            Nothing
-
-                    _ ->
-                        Nothing
-            }
-                |> Ok
-
-        _ ->
-            Err (Http.BadBody "Invalid format")
-
-
 type alias UploadResponse =
     { fileHash : FileHash
-    , imageSize : Maybe (Coord CssPixels)
+    , imageSize : Maybe ImageMetadata
     }
+
+
+uploadResponseCodec : Codec UploadResponse
+uploadResponseCodec =
+    Codec.object UploadResponse
+        |> Codec.field "hash" .fileHash fileHashCodec
+        |> Codec.nullableField "image_metadata" .imageSize imageMetadataCodec
+        |> Codec.buildObject
+
+
+fileHashCodec : Codec FileHash
+fileHashCodec =
+    Codec.map fileHash (\(FileHash a) -> a) Codec.string
+
+
+imageMetadataCodec : Codec ImageMetadata
+imageMetadataCodec =
+    Codec.object ImageMetadata
+        |> Codec.field "image_size" .imageSize (Codec.tuple CodecExtra.quantityInt CodecExtra.quantityInt)
+        |> Codec.field "orientation" .orientation (Codec.nullable orientationCodec)
+        |> Codec.field "gps_location" .gpsLocation (Codec.nullable locationCodec)
+        |> Codec.field "camera_owner" .cameraOwner (Codec.nullable Codec.string)
+        |> Codec.field "exposure_time" .exposureTime (Codec.nullable exposureTimeCodec)
+        |> Codec.field "f_number" .fNumber (Codec.nullable Codec.float)
+        |> Codec.field "focal_length" .focalLength (Codec.nullable Codec.float)
+        |> Codec.field "iso_speed_rating" .isoSpeedRating (Codec.nullable Codec.int)
+        |> Codec.field "make" .make (Codec.nullable Codec.string)
+        |> Codec.field "model" .model (Codec.nullable Codec.string)
+        |> Codec.field "software" .software (Codec.nullable Codec.string)
+        |> Codec.field "user_comment" .userComment (Codec.nullable Codec.string)
+        |> Codec.buildObject
+
+
+locationCodec : Codec Location
+locationCodec =
+    Codec.object Location
+        |> Codec.field "lat" .lat Codec.float
+        |> Codec.field "lon" .lon Codec.float
+        |> Codec.buildObject
+
+
+exposureTimeCodec : Codec ExposureTime
+exposureTimeCodec =
+    Codec.object ExposureTime
+        |> Codec.field "numerator" .numerator Codec.int
+        |> Codec.field "denominator" .denominator Codec.int
+        |> Codec.buildObject
+
+
+type alias ImageMetadata =
+    { imageSize : Coord CssPixels
+    , orientation : Maybe Orientation
+    , gpsLocation : Maybe Location
+    , cameraOwner : Maybe String
+    , exposureTime : Maybe ExposureTime
+    , fNumber : Maybe Float
+    , focalLength : Maybe Float
+    , isoSpeedRating : Maybe Int
+    , make : Maybe String
+    , model : Maybe String
+    , software : Maybe String
+    , userComment : Maybe String
+    }
+
+
+type Orientation
+    = Id
+    | Rotation90
+    | Rotation180
+    | Rotation270
+    | Mirrored
+    | MirroredRotation90
+    | MirroredRotation180
+    | MirroredRotation270
+
+
+orientationCodec : Codec Orientation
+orientationCodec =
+    Codec.andThen
+        (\a ->
+            case a of
+                1 ->
+                    Codec.succeed Id
+
+                8 ->
+                    Codec.succeed Rotation90
+
+                3 ->
+                    Codec.succeed Rotation180
+
+                6 ->
+                    Codec.succeed Rotation270
+
+                2 ->
+                    Codec.succeed Mirrored
+
+                5 ->
+                    Codec.succeed MirroredRotation90
+
+                4 ->
+                    Codec.succeed MirroredRotation180
+
+                7 ->
+                    Codec.succeed MirroredRotation270
+
+                _ ->
+                    Codec.fail "Invalid orientation"
+        )
+        (\a ->
+            case a of
+                Id ->
+                    1
+
+                Rotation90 ->
+                    8
+
+                Rotation180 ->
+                    3
+
+                Rotation270 ->
+                    6
+
+                Mirrored ->
+                    2
+
+                MirroredRotation90 ->
+                    5
+
+                MirroredRotation180 ->
+                    4
+
+                MirroredRotation270 ->
+                    7
+        )
+        Codec.int
+
+
+type alias Location =
+    { lat : Float, lon : Float }
+
+
+type alias ExposureTime =
+    { numerator : Int, denominator : Int }
 
 
 upload :
@@ -217,18 +340,7 @@ upload onResult sessionId guildOrDmId fileId file2 =
         , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
-        , expect =
-            Http.expectString
-                (\result ->
-                    (case result of
-                        Ok text ->
-                            uploadHelper text
-
-                        Err error ->
-                            Err error
-                    )
-                        |> onResult
-                )
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Nothing
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
         }
@@ -268,7 +380,12 @@ uploadBytes sessionId bytes =
                 (\result ->
                     case result of
                         Http.GoodStatus_ _ text ->
-                            uploadHelper text
+                            case Codec.decodeString uploadResponseCodec text of
+                                Ok ok ->
+                                    Ok ok
+
+                                Err error ->
+                                    Json.Decode.errorToString error |> Http.BadBody |> Err
 
                         Http.BadUrl_ string ->
                             Err (Http.BadUrl string)
@@ -388,9 +505,9 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                 Image ->
                                     Html.img
                                         [ Html.Attributes.src
-                                            (case fileData.imageSize of
-                                                Just imageSize ->
-                                                    thumbnailUrl imageSize fileData.contentType fileData.fileHash
+                                            (case fileData.imageMetadata of
+                                                Just metadata ->
+                                                    thumbnailUrl metadata.imageSize fileData.contentType fileData.fileHash
 
                                                 Nothing ->
                                                     fileUrl fileData.contentType fileData.fileHash
@@ -448,7 +565,7 @@ addFileHash result fileStatus =
                     FileUploaded
                         { fileName = fileName
                         , fileSize = fileSize.size
-                        , imageSize = data.imageSize
+                        , imageMetadata = data.imageSize
                         , contentType = contentType2
                         , fileHash = data.fileHash
                         }
