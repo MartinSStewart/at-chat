@@ -10,7 +10,7 @@ use axum::{
     routing::post,
 };
 
-use gufo;
+use gufo::{self, Image};
 use gufo_common;
 use gufo_exif;
 use image::metadata::Orientation;
@@ -249,7 +249,7 @@ pub struct ImageMetadata {
     pub orientation: Option<u8>,
     pub gps_location: Option<Location>,
     pub camera_owner: Option<String>,
-    pub exposure_time: Option<(u32, u32)>,
+    pub exposure_time: Option<ExposureTime>,
     pub f_number: Option<f32>,
     pub focal_length: Option<f32>,
     pub iso_speed_rating: Option<u16>,
@@ -257,6 +257,18 @@ pub struct ImageMetadata {
     pub model: Option<String>,
     pub software: Option<String>,
     pub user_comment: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExposureTime {
+    numerator: u32,
+    demoninator: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UploadResponse {
+    image_metadata: Option<ImageMetadata>,
+    hash: String,
 }
 
 fn default_image_metadata(width: u32, height: u32) -> ImageMetadata {
@@ -279,8 +291,12 @@ fn default_image_metadata(width: u32, height: u32) -> ImageMetadata {
 
 #[derive(Debug, Serialize)]
 pub struct Location {
-    pub lat: (f64, f64, f64),
-    pub lon: (f64, f64, f64),
+    pub lat: f64,
+    pub lon: f64,
+}
+
+fn to_degrees((degrees, minutes, seconds): (f64, f64, f64)) -> f64 {
+    degrees + minutes / 60.0 + seconds / (60.0 * 60.0)
 }
 
 fn image_metadata(
@@ -298,11 +314,14 @@ fn image_metadata(
                         height: height,
                         orientation: exif.orientation().map(|a| a as u8),
                         gps_location: exif.gps_location().map(|a| Location {
-                            lat: a.lat.as_deg_min_sec(),
-                            lon: a.lon.as_deg_min_sec(),
+                            lat: to_degrees(a.lat.as_deg_min_sec()),
+                            lon: to_degrees(a.lon.as_deg_min_sec()),
                         }),
                         camera_owner: exif.camera_owner(),
-                        exposure_time: exif.exposure_time(),
+                        exposure_time: exif.exposure_time().map(|(a, b)| ExposureTime {
+                            numerator: a,
+                            demoninator: b,
+                        }),
                         f_number: exif.f_number(),
                         focal_length: exif.focal_length(),
                         iso_speed_rating: exif.iso_speed_rating(),
@@ -362,11 +381,11 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
         Ok((Some(format), Ok(image))) => {
             let (width, height) = image.dimensions();
 
-            let exif: ImageMetadata = image_metadata(width, height, format, bytes.to_vec());
+            let metadata: ImageMetadata = image_metadata(width, height, format, bytes.to_vec());
 
-            println!("{:?}", exif);
+            println!("{:?}", metadata);
 
-            let orientation: Orientation = match exif.orientation {
+            let orientation: Orientation = match metadata.orientation {
                 Some(orientation2) => {
                     Orientation::from_exif(orientation2).unwrap_or(Orientation::NoTransforms)
                 }
@@ -387,8 +406,11 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
             match is_file_upload_allowed(hash.clone(), size, session_id2, width2, height2).await {
                 Ok(()) => {
                     let path: String = filepath(hash.clone());
-                    let response: String =
-                        hash.clone() + "," + &width2.to_string() + "," + &height2.to_string();
+                    let response: String = serde_json::to_string(&UploadResponse {
+                        image_metadata: Some(metadata),
+                        hash: hash.clone(),
+                    })
+                    .unwrap();
 
                     match fs::exists(&path) {
                         Ok(true) => response_with_headers(StatusCode::OK, response),
@@ -431,7 +453,11 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
         _ => match is_file_upload_allowed(hash.clone(), size, session_id2, 0, 0).await {
             Ok(()) => {
                 let path: String = filepath(hash.clone());
-                let response: String = hash + ",0,0";
+                let response: String = serde_json::to_string(&UploadResponse {
+                    image_metadata: None,
+                    hash: hash.clone(),
+                })
+                .unwrap();
 
                 match fs::exists(&path) {
                     Ok(true) => response_with_headers(StatusCode::OK, response),
