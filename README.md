@@ -14,7 +14,7 @@ After you've finished a feature, make sure to run elm-review and elm-test!
 
 ## How do I run the rust server locally? (for file hosting)
 
-Run `cargo run` in the rust-server folder
+Run `npm run rust-server` in the root folder
 
 ## How do I deploy the rust server?
 
