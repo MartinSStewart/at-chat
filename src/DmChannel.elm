@@ -178,6 +178,7 @@ loadMessages preloadMessages messages =
             )
 
     else
+        -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
         Array.repeat messageCount MessageUnloaded
             |> Array.set
                 (messageCount - 1)
