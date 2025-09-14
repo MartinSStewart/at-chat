@@ -11,6 +11,7 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , getScrollbarWidth
     , hapticFeedback
     , isPushNotificationsRegistered
     , isPushNotificationsRegisteredSubscription
@@ -19,6 +20,7 @@ port module Ports exposing
     , registerPushSubscription
     , registerPushSubscriptionToJs
     , requestNotificationPermission
+    , scrollbarWidthSub
     , setFavicon
     , showNotification
     , textInputSelectAll
@@ -71,6 +73,28 @@ port martinsstewart_set_favicon_to_js : Json.Encode.Value -> Cmd msg
 
 
 port haptic_feedback : Json.Encode.Value -> Cmd msg
+
+
+port scrollbar_width_to_js : Json.Encode.Value -> Cmd msg
+
+
+port scrollbar_width_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
+getScrollbarWidth : Command FrontendOnly toMsg msg
+getScrollbarWidth =
+    Command.sendToJs "scrollbar_width_to_js" scrollbar_width_to_js Json.Encode.null
+
+
+scrollbarWidthSub : (Int -> value) -> Subscription FrontendOnly value
+scrollbarWidthSub msg =
+    Subscription.fromJs
+        "scrollbar_width_from_js"
+        scrollbar_width_from_js
+        (\json ->
+            Json.Decode.decodeValue (Json.Decode.map msg Json.Decode.int) json
+                |> Result.withDefault (msg 0)
+        )
 
 
 setFavicon : String -> Command FrontendOnly toMsg msg

@@ -115,6 +115,7 @@ subscriptions model =
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.isPushNotificationsRegisteredSubscription GotIsPushNotificationsRegistered
+        , Ports.scrollbarWidthSub GotScrollbarWidth
         , case model of
             Loading _ ->
                 Subscription.none
@@ -224,6 +225,7 @@ init url key =
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
         , enabledPushNotifications = False
+        , scrollbarWidth = 0
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -235,6 +237,7 @@ init url key =
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
         , Ports.isPushNotificationsRegistered
+        , Ports.getScrollbarWidth
         ]
     )
 
@@ -280,6 +283,7 @@ initLoadedFrontend loading time loginResult =
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
             , enabledPushNotifications = loading.enabledPushNotifications
+            , scrollbarWidth = loading.scrollbarWidth
             }
 
         ( model2, cmdA ) =
@@ -457,19 +461,22 @@ update msg model =
                     tryInitLoadedFrontend { loading | time = Just time }
 
                 GotWindowSize width height ->
-                    tryInitLoadedFrontend { loading | windowSize = Coord.xy width height }
+                    ( Loading { loading | windowSize = Coord.xy width height }, Command.none )
 
                 CheckedNotificationPermission permission ->
-                    tryInitLoadedFrontend { loading | notificationPermission = permission }
+                    ( Loading { loading | notificationPermission = permission }, Command.none )
 
                 CheckedPwaStatus pwaStatus ->
-                    tryInitLoadedFrontend { loading | pwaStatus = pwaStatus }
+                    ( Loading { loading | pwaStatus = pwaStatus }, Command.none )
 
                 GotTimezone timezone ->
-                    tryInitLoadedFrontend { loading | timezone = timezone }
+                    ( Loading { loading | timezone = timezone }, Command.none )
 
                 GotIsPushNotificationsRegistered isEnabled ->
-                    tryInitLoadedFrontend { loading | enabledPushNotifications = isEnabled }
+                    ( Loading { loading | enabledPushNotifications = isEnabled }, Command.none )
+
+                GotScrollbarWidth width ->
+                    ( Loading { loading | scrollbarWidth = width }, Command.none )
 
                 _ ->
                     ( model, Command.none )
@@ -1048,6 +1055,9 @@ isPressMsg msg =
 
         PressedGuildNotificationLevel _ _ ->
             True
+
+        GotScrollbarWidth int ->
+            False
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3086,6 +3096,9 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
+
+        GotScrollbarWidth width ->
+            ( { model | scrollbarWidth = width }, Command.none )
 
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )

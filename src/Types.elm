@@ -105,6 +105,7 @@ type alias LoadingFrontend =
     , pwaStatus : PwaStatus
     , timezone : Time.Zone
     , enabledPushNotifications : Bool
+    , scrollbarWidth : Int
     }
 
 
@@ -131,6 +132,7 @@ type alias LoadedFrontend =
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
     , enabledPushNotifications : Bool
+    , scrollbarWidth : Int
     }
 
 
@@ -416,6 +418,7 @@ type FrontendMsg
     | ToggledEnablePushNotifications Bool
     | GotIsPushNotificationsRegistered Bool
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
+    | GotScrollbarWidth Int
 
 
 type ScrollPosition

@@ -547,6 +547,7 @@ conversationWidth model =
             - (User.profileImageSize
                 + (messagePaddingX * 2)
                 + profileImagePaddingRight
+                + model.scrollbarWidth
               )
 
     else
@@ -557,6 +558,7 @@ conversationWidth model =
                 + User.profileImageSize
                 + (messagePaddingX * 2)
                 + profileImagePaddingRight
+                + model.scrollbarWidth
               )
 
 
