@@ -14,6 +14,7 @@ module Icons exposing
     , expandContainer
     , gear
     , hashtag
+    , image
     , inviteUserIcon
     , link
     , logoutSvg
@@ -447,6 +448,24 @@ person =
             [ Svg.Attributes.fillRule "evenodd"
             , Svg.Attributes.d "M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z"
             , Svg.Attributes.clipRule "evenodd"
+            ]
+            []
+        ]
+
+
+image : Html msg
+image =
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 4 24 16"
+        , Svg.Attributes.width "18"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
             ]
             []
         ]

@@ -1013,9 +1013,7 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             )
 
                         Nothing ->
-                            ( spoilerIndex2
-                            , currentList ++ [ Html.text "<file>" ]
-                            )
+                            ( spoilerIndex2, currentList ++ [ Icons.image ] )
         )
         ( spoilerIndex, [] )
         (List.Nonempty.toList nonempty)

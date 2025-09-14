@@ -2535,7 +2535,7 @@ updateLoaded msg model =
         UserNameEditableMsg editableMsg ->
             handleEditable
                 editableMsg
-                (\userOptions value -> { userOptions | botToken = value })
+                (\userOptions value -> { userOptions | name = value })
                 (\value loggedIn -> handleLocalChange model.time (Just (Local_SetName value)) loggedIn Command.none)
                 model
 
