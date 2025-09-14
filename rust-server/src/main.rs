@@ -287,8 +287,8 @@ fn inverse_orientation(orientation: Orientation) -> Orientation {
         Orientation::Rotate270 => Orientation::Rotate90,
         Orientation::FlipHorizontal => Orientation::FlipHorizontal,
         Orientation::FlipVertical => Orientation::FlipVertical,
-        Orientation::Rotate90FlipH => Orientation::Rotate270FlipH,
-        Orientation::Rotate270FlipH => Orientation::Rotate90FlipH,
+        Orientation::Rotate90FlipH => Orientation::Rotate90FlipH,
+        Orientation::Rotate270FlipH => Orientation::Rotate270FlipH,
     }
 }
 
