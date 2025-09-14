@@ -684,13 +684,16 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        SentNotification time result ->
+        SentNotification sessionId userId time result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.PushNotificationError error) model
+                    addLog
+                        time
+                        (Log.PushNotificationError userId error)
+                        { model | pushSubscriptions = SeqDict.remove sessionId model.pushSubscriptions }
 
         GotVapidKeys result ->
             ( case result of
@@ -3173,6 +3176,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\userId _ ->
                     ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
                     , pushNotification
+                        sessionId
+                        userId
                         time
                         "Success!"
                         "Push notifications enabled"
@@ -3277,8 +3282,8 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
-pushNotification time title body icon pushSubscription model =
+pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification sessionId userId time title body icon pushSubscription model =
     Http.request
         { method = "POST"
         , headers = []
@@ -3297,7 +3302,7 @@ pushNotification time title body icon pushSubscription model =
                 |> Http.jsonBody
         , expect =
             Http.expectStringResponse
-                (SentNotification time)
+                (SentNotification sessionId userId time)
                 (\response ->
                     case response of
                         Http.BadUrl_ url ->
@@ -3950,6 +3955,8 @@ broadcastNotification time userToNotify sender text model =
                 case SeqDict.get sessionId model.pushSubscriptions of
                     Just pushSubscription ->
                         pushNotification
+                            sessionId
+                            userIdKey
                             time
                             (PersonName.toString sender.name)
                             text

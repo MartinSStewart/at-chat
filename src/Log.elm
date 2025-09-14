@@ -19,7 +19,7 @@ type Log
     | LoginsRateLimited (Id UserId)
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
-    | PushNotificationError Http.Error
+    | PushNotificationError (Id UserId) Http.Error
     | RegisteredPushNotificationRequest (Id UserId)
 
 
@@ -38,7 +38,7 @@ shouldNotifyAdmin log =
         SendLogErrorEmailFailed _ _ ->
             Nothing
 
-        PushNotificationError _ ->
+        PushNotificationError _ _ ->
             Just "PushNotificationError"
 
         RegisteredPushNotificationRequest _ ->
@@ -185,10 +185,12 @@ logContent log =
                     :: sendEmailErrorToString error
                 )
 
-        PushNotificationError error ->
+        PushNotificationError userId error ->
             Ui.Prose.paragraph
                 []
-                [ Ui.text "PushNotificationError "
+                [ Ui.text "PushNotificationError for user "
+                , Ui.text (Id.toString userId)
+                , Ui.text " with error "
                 , Ui.text (httpErrorToString error)
                 ]
 
