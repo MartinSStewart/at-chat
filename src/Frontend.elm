@@ -2137,8 +2137,11 @@ updateLoaded msg model =
                                 averageMove =
                                     Touch.averageTouchMove dragging.touches newTouches |> Vector2d.unwrap
                             in
-                            ( case loggedIn.messageHover of
-                                MessageMenu messageMenu ->
+                            ( case ( loggedIn.showFileToUploadInfo, loggedIn.messageHover ) of
+                                ( Just _, _ ) ->
+                                    loggedIn
+
+                                ( Nothing, MessageMenu messageMenu ) ->
                                     if dragging.horizontalStart then
                                         loggedIn
 

@@ -434,8 +434,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                                         MAX_THUMBNAIL_HEIGHT,
                                         image::imageops::FilterType::Triangle,
                                     );
-                                    resized_image
-                                        .apply_orientation(inverse_orientation(orientation));
+                                    resized_image.apply_orientation(orientation);
 
                                     let _ = resized_image.save_with_format(
                                         thumbnail_filepath(hash),
