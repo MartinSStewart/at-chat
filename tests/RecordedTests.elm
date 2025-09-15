@@ -1,4 +1,4 @@
-module RecordedTests exposing (checkNoNotification, main, setup)
+module RecordedTests exposing (main, setup)
 
 import Backend
 import Bytes exposing (Bytes)

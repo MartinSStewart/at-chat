@@ -1056,7 +1056,7 @@ isPressMsg msg =
         PressedGuildNotificationLevel _ _ ->
             True
 
-        GotScrollbarWidth int ->
+        GotScrollbarWidth _ ->
             False
 
 

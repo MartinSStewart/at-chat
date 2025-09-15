@@ -1,14 +1,17 @@
 module FileStatus exposing
     ( ContentType(..)
     , ContentTypeType(..)
+    , ExposureTime
     , FileData
     , FileHash(..)
     , FileId
     , FileStatus(..)
+    , ImageMetadata
+    , Location
+    , Orientation
     , UploadResponse
     , addFileHash
     , contentType
-    , contentTypeType
     , domain
     , fileHash
     , fileUploadPreview

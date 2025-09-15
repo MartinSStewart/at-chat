@@ -14,8 +14,6 @@ import AiChat
 import Array exposing (Array)
 import ChannelName
 import Codec exposing (Codec)
-import Coord exposing (Coord)
-import CssPixels exposing (CssPixels)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -37,7 +35,6 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
