@@ -1059,6 +1059,12 @@ isPressMsg msg =
         GotScrollbarWidth _ ->
             False
 
+        PressedViewAttachedFileInfo guildOrDmId id ->
+            True
+
+        EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -3099,6 +3105,12 @@ updateLoaded msg model =
 
         GotScrollbarWidth width ->
             ( { model | scrollbarWidth = width }, Command.none )
+
+        PressedViewAttachedFileInfo guildOrDmId id ->
+            Debug.todo ""
+
+        EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
+            Debug.todo ""
 
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )

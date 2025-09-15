@@ -2072,7 +2072,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
+                    FileStatus.fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        filesToUpload2
                         |> Ui.inFront
 
                 Nothing ->
@@ -2352,7 +2355,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
+                    FileStatus.fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        filesToUpload2
                         |> Ui.inFront
 
                 Nothing ->
@@ -2645,6 +2651,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Just filesToUpload ->
                             FileStatus.fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 filesToUpload
                                 |> Ui.inFront
 
@@ -2765,6 +2772,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         Just filesToUpload ->
                             FileStatus.fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 filesToUpload
                                 |> Ui.inFront
 

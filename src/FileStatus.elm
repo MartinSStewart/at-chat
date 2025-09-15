@@ -16,6 +16,7 @@ module FileStatus exposing
     , fileHash
     , fileUploadPreview
     , fileUrl
+    , imageInfoView
     , imageMaxHeight
     , onlyUploadedFiles
     , pngContent
@@ -49,7 +50,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import StringExtra
-import Ui
+import Ui exposing (Element)
 import Ui.Font
 import Ui.Shadow
 
@@ -420,8 +421,8 @@ previewSize =
     150
 
 
-fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
-fileUploadPreview onPressDelete filesToUpload2 =
+fileUploadPreview : (Id FileId -> msg) -> (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
+fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
     Ui.row
         [ Ui.spacing 2
         , Ui.move { x = 0, y = -previewSize, z = 0 }
@@ -446,7 +447,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                     , Ui.border 1
                     , Ui.rounded 8
                     , MyUi.elButton
-                        (Dom.id ("fileStatus_" ++ Id.toString fileStatusId))
+                        (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
                         (onPressDelete fileStatusId)
                         [ Ui.width (Ui.px 42)
                         , Ui.height (Ui.px 42)
@@ -464,6 +465,44 @@ fileUploadPreview onPressDelete filesToUpload2 =
                             (Ui.html Icons.delete)
                         )
                         |> Ui.inFront
+                    , case fileStatus of
+                        FileUploaded fileData ->
+                            case fileData.imageMetadata of
+                                Just metadata ->
+                                    MyUi.elButton
+                                        (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+                                        (onPressInfo fileStatusId)
+                                        [ Ui.width (Ui.px 42)
+                                        , Ui.height (Ui.px 42)
+                                        , Ui.rounded 16
+                                        , Ui.move { x = -3, y = 40, z = 0 }
+                                        ]
+                                        (Ui.el
+                                            [ Ui.width (Ui.px 34)
+                                            , Ui.height (Ui.px 34)
+                                            , Ui.rounded 16
+                                            , Ui.contentCenterX
+                                            , Ui.contentCenterY
+                                            , Ui.background MyUi.buttonBackground
+                                            ]
+                                            (case metadata.gpsLocation of
+                                                Just _ ->
+                                                    Ui.html Icons.map
+
+                                                Nothing ->
+                                                    Ui.html Icons.info
+                                            )
+                                        )
+                                        |> Ui.inFront
+
+                                Nothing ->
+                                    Ui.noAttr
+
+                        FileUploading fileName record _ ->
+                            Ui.noAttr
+
+                        FileError fileName int _ error ->
+                            Ui.noAttr
                     , Ui.el
                         [ Ui.alignBottom
                         , Ui.padding 4
@@ -522,17 +561,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                         , Html.Attributes.style "align-self" "center"
                                         , Html.Attributes.style "border-radius" "8px"
                                         ]
-                                        [ case fileData.imageMetadata of
-                                            Just metadata ->
-                                                if imageHasMetadata metadata then
-                                                    Icons.info
-
-                                                else
-                                                    Html.text ""
-
-                                            Nothing ->
-                                                Html.text ""
-                                        ]
+                                        []
                                         |> Ui.html
 
                                 Text ->
@@ -567,6 +596,39 @@ fileUploadPreview onPressDelete filesToUpload2 =
             )
             (NonemptyDict.toList filesToUpload2)
         )
+
+
+imageInfoView : ContentType -> FileHash -> ImageMetadata -> Element msg
+imageInfoView contentType2 fileHash2 metadata =
+    Ui.el
+        [ Ui.column
+            [ Ui.background MyUi.background1
+            , Ui.paddingXY 8 0
+            , Ui.spacing 16
+            , Ui.alignBottom
+            ]
+            [ imageLabel
+                "Image size"
+                (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
+            ]
+            |> Ui.inFront
+        ]
+        (Ui.image
+            []
+            { source = fileUrl contentType2 fileHash2
+            , description = ""
+            , onLoad = Nothing
+            }
+        )
+
+
+imageLabel : String -> String -> Element msg
+imageLabel title value =
+    Ui.row
+        []
+        [ Ui.text title
+        , Ui.text value
+        ]
 
 
 imageHasMetadata : ImageMetadata -> Bool

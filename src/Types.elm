@@ -406,7 +406,9 @@ type FrontendMsg
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
     | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
