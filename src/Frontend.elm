@@ -1075,6 +1075,9 @@ isPressMsg msg =
         PressedShowMembers ->
             True
 
+        PressedMemberListBack ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -2323,32 +2326,7 @@ updateLoaded msg model =
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
         PressedShowMembers ->
-            case model.route of
-                GuildRoute guildId (ChannelRoute channelId threadRoute) ->
-                    case threadRoute of
-                        NoThreadWithFriends a _ ->
-                            routePush
-                                model
-                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a ShowMembersTab)))
-
-                        ViewThreadWithFriends threadId a _ ->
-                            routePush
-                                model
-                                (GuildRoute
-                                    guildId
-                                    (ChannelRoute channelId (ViewThreadWithFriends threadId a ShowMembersTab))
-                                )
-
-                DmRoute otherUserId threadRoute ->
-                    case threadRoute of
-                        NoThreadWithFriends a _ ->
-                            routePush model (DmRoute otherUserId (NoThreadWithFriends a ShowMembersTab))
-
-                        ViewThreadWithFriends threadId a _ ->
-                            routePush model (DmRoute otherUserId (ViewThreadWithFriends threadId a ShowMembersTab))
-
-                _ ->
-                    ( model, Command.none )
+            setShowMembers ShowMembersTab model
 
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             updateLoggedIn
@@ -3179,6 +3157,39 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn -> ( { loggedIn | showFileToUploadInfo = Nothing }, Command.none ))
                 model
+
+        PressedMemberListBack ->
+            setShowMembers HideMembersTab model
+
+
+setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+setShowMembers showMembers model =
+    case model.route of
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            case threadRoute of
+                NoThreadWithFriends a _ ->
+                    routePush
+                        model
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers)))
+
+                ViewThreadWithFriends threadId a _ ->
+                    routePush
+                        model
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers))
+                        )
+
+        DmRoute otherUserId threadRoute ->
+            case threadRoute of
+                NoThreadWithFriends a _ ->
+                    routePush model (DmRoute otherUserId (NoThreadWithFriends a showMembers))
+
+                ViewThreadWithFriends threadId a _ ->
+                    routePush model (DmRoute otherUserId (ViewThreadWithFriends threadId a showMembers))
+
+        _ ->
+            ( model, Command.none )
 
 
 viewImageInfo :

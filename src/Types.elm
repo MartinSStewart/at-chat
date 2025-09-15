@@ -424,6 +424,7 @@ type FrontendMsg
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | GotScrollbarWidth Int
     | PressedCloseImageInfo
+    | PressedMemberListBack
 
 
 type ScrollPosition

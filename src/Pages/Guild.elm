@@ -500,7 +500,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                         |> Maybe.withDefault DmChannel.frontendInit
             in
             case threadRoute of
-                ViewThreadWithFriends threadMessageIndex maybeUrlMessageId showMembers ->
+                ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                     SeqDict.get threadMessageIndex dmChannel.threads
                         |> Maybe.withDefault DmChannel.frontendThreadInit
                         |> threadConversationView
@@ -518,7 +518,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                             local
                             (PersonName.toString otherUser.name)
 
-                NoThreadWithFriends maybeUrlMessageId showMembers ->
+                NoThreadWithFriends maybeUrlMessageId _ ->
                     conversationView
                         (SeqDict.get
                             (GuildOrDmId_Dm otherUserId)
@@ -586,12 +586,33 @@ guildView model guildId channelRoute loggedIn local =
                         let
                             canScroll2 =
                                 canScroll model
+
+                            showMembers : ShowMembersTab
+                            showMembers =
+                                case channelRoute of
+                                    ChannelRoute _ threadRoute ->
+                                        case threadRoute of
+                                            ViewThreadWithFriends _ _ showMembers2 ->
+                                                showMembers2
+
+                                            NoThreadWithFriends maybeId showMembers2 ->
+                                                showMembers2
+
+                                    _ ->
+                                        HideMembersTab
                         in
                         Ui.column
                             [ Ui.height Ui.fill
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , Ui.clip
+                            , case showMembers of
+                                ShowMembersTab ->
+                                    Ui.Lazy.lazy3 memberColumnMobile local.localUser guild.owner guild.members
+                                        |> Ui.inFront
+
+                                HideMembersTab ->
+                                    Ui.noAttr
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
@@ -667,7 +688,7 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy4 memberColumn False local.localUser guild.owner guild.members
+                            , Ui.Lazy.lazy3 memberColumnNotMobile local.localUser guild.owner guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -738,8 +759,8 @@ memberColumnWidth =
     200
 
 
-memberColumn : Bool -> LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-memberColumn isMobile localUser guildOwner guildMembers =
+memberColumnNotMobile : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnNotMobile localUser guildOwner guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -751,22 +772,71 @@ memberColumn isMobile localUser guildOwner guildMembers =
         , Ui.Font.color MyUi.font1
         , Ui.width (Ui.px memberColumnWidth)
         , Ui.scrollable
+        , Ui.heightMin 0
         ]
         [ Ui.column
-            [ Ui.paddingXY 4 4 ]
+            [ Ui.paddingXY 8 4 ]
             [ Ui.text "Owner"
-            , memberLabel isMobile localUser guildOwner
+            , memberLabel False localUser guildOwner
             ]
         , Ui.column
-            [ Ui.paddingXY 4 4 ]
+            [ Ui.paddingXY 8 4 ]
             [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
-                    (\userId _ list -> memberLabel isMobile localUser userId :: list)
+                    (\userId _ list -> memberLabel False localUser userId :: list)
                     []
                     guildMembers
                 )
+            ]
+        ]
+
+
+memberColumnMobile : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnMobile localUser guildOwner guildMembers =
+    let
+        _ =
+            Debug.log "rerendered memberColumn" ()
+    in
+    Ui.column
+        [ Ui.height Ui.fill ]
+        [ Ui.row
+            [ Ui.contentCenterY
+            , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
+            , Ui.borderColor MyUi.border2
+            , Ui.background MyUi.background3
+            , Ui.height (Ui.px channelHeaderHeight)
+            , MyUi.noShrinking
+            ]
+            [ headerBackButton (Dom.id "guild_memberColumnBack") PressedMemberListBack
+            , Ui.el [ Ui.width (Ui.px 26), Ui.paddingRight 4 ] (Ui.html Icons.users)
+            , Ui.text "Channel members"
+            ]
+        , Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background2
+            , Ui.Font.color MyUi.font1
+            , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+            , Ui.scrollable
+            , Ui.heightMin 0
+            ]
+            [ Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text "Owner"
+                , memberLabel True localUser guildOwner
+                ]
+            , Ui.column
+                [ Ui.paddingXY 8 4 ]
+                [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+                , Ui.column
+                    [ Ui.height Ui.fill ]
+                    (SeqDict.foldr
+                        (\userId _ list -> memberLabel True localUser userId :: list)
+                        []
+                        guildMembers
+                    )
+                ]
             ]
         ]
 
@@ -777,7 +847,7 @@ memberLabel isMobile localUser userId =
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
         (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
         [ Ui.spacing 8
-        , Ui.paddingXY 4 4
+        , Ui.paddingXY 0 4
         , MyUi.hover
             isMobile
             [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
@@ -893,7 +963,7 @@ channelView channelRoute guildId guild loggedIn local model =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     case threadRoute of
-                        ViewThreadWithFriends threadMessageIndex maybeUrlMessageId showMembers ->
+                        ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex channel.threads
                                 |> Maybe.withDefault DmChannel.frontendThreadInit
                                 |> threadConversationView
@@ -914,7 +984,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                         ++ threadPreviewText threadMessageIndex channel local.localUser
                                     )
 
-                        NoThreadWithFriends maybeUrlMessageId showMembers ->
+                        NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
                                 (SeqDict.get
                                     (GuildOrDmId_Guild guildId channelId)
@@ -1858,17 +1928,7 @@ channelHeader isMobile2 content =
         , MyUi.noShrinking
         ]
         (if isMobile2 then
-            [ MyUi.elButton
-                (Dom.id "guild_headerBackButton")
-                PressedChannelHeaderBackButton
-                [ Ui.width (Ui.px 36)
-                , Ui.height Ui.fill
-                , Ui.Font.color MyUi.font3
-                , Ui.contentCenterY
-                , Ui.contentCenterX
-                , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
-                ]
-                (Ui.html Icons.arrowLeft)
+            [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
             , Ui.el [ Ui.centerY ] content
             , MyUi.elButton
                 (Dom.id "guild_showMembers")
@@ -1885,6 +1945,21 @@ channelHeader isMobile2 content =
          else
             [ Ui.el [ Ui.paddingXY 16 0 ] content ]
         )
+
+
+headerBackButton : HtmlId -> msg -> Element msg
+headerBackButton htmlId onPress =
+    MyUi.elButton
+        htmlId
+        onPress
+        [ Ui.width (Ui.px 36)
+        , Ui.height Ui.fill
+        , Ui.Font.color MyUi.font3
+        , Ui.contentCenterY
+        , Ui.contentCenterX
+        , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
+        ]
+        (Ui.html Icons.arrowLeft)
 
 
 channelHeaderHeight : number
@@ -3799,7 +3874,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channelId
                             channel
                             (case channelRoute of
-                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ showMembers) ->
+                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) ->
                                     if channelIdB == channelId then
                                         SeqDict.insert threadMessageIndex DmChannel.frontendThreadInit channel.threads
 

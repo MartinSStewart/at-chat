@@ -631,12 +631,14 @@ imageInfoView onPressClose fileData =
             [ Ui.height Ui.fill
             , Ui.scrollable
             , Ui.heightMin 0
+            , Ui.background MyUi.background1
+            , MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 0px " ++ MyUi.insetBottom ++ " 0px")
+            , Ui.spacing 16
             ]
             [ Ui.column
-                [ MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 8px 16px 8px")
-                , Ui.background MyUi.background1
-                , Ui.spacing 2
+                [ Ui.spacing 2
                 , Ui.alignBottom
+                , Ui.paddingXY 8 0
                 ]
                 ([ imageLabel
                     "Image size"
