@@ -12,6 +12,7 @@ when inside the directory containing this file.
 -}
 
 import BackendOnly
+import Derive
 import Docs.ReviewAtDocs
 import NoBrokenParserFunctions
 import NoConfusingPrefixOperator
@@ -39,6 +40,13 @@ import ReviewPipelineStyles
 import ReviewPipelineStyles.Fixes
 import RunUnsafeAtStartup
 import Simplify
+
+
+
+--config : List Rule
+--config =
+--    [ Derive.rule False [] ]
+--
 
 
 config : List Rule

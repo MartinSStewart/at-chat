@@ -1010,6 +1010,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gufo"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbd1a9cdb84d3166fa067fa352651f9212567af36701230e7dd7044919e1ce78"
+dependencies = [
+ "gufo-common",
+ "gufo-exif",
+ "gufo-xmp",
+ "static_assertions",
+ "thiserror 2.0.16",
+]
+
+[[package]]
 name = "gufo-common"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1040,6 +1053,17 @@ dependencies = [
  "indexmap",
  "thiserror 2.0.16",
  "tracing",
+]
+
+[[package]]
+name = "gufo-xmp"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86844cef8838b44b8750f95d3de02d5a17999ca61afc00026b058b3d18dec4c4"
+dependencies = [
+ "gufo-common",
+ "thiserror 2.0.16",
+ "xml-rs",
 ]
 
 [[package]]
@@ -2442,6 +2466,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "fs",
+ "gufo",
  "gufo-common",
  "gufo-exif",
  "gufo-jpeg",
@@ -2736,6 +2761,12 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "subtle"
@@ -3609,6 +3640,12 @@ name = "writeable"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea2f10b9bb0928dfb1b42b65e1f9e36f7f54dbdf08457afefb38afcdec4fa2bb"
+
+[[package]]
+name = "xml-rs"
+version = "0.8.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fd8403733700263c6eb89f192880191f1b83e332f7a20371ddcf421c4a337c7"
 
 [[package]]
 name = "yoke"

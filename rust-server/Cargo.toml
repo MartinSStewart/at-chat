@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 axum = "0.8.4"
 fs = "0.0.5"
+gufo = "0.3.0"
 gufo-common = "1.0.1"
 gufo-exif = "0.3.0"
 gufo-jpeg = "0.3.0"

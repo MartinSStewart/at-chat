@@ -22,7 +22,7 @@ type alias VisibleMessages messageId =
 init : Bool -> { a | messages : Array (Message messageId) } -> VisibleMessages messageId
 init preloadMessages channel =
     if preloadMessages then
-        { oldest = Array.length channel.messages - pageSize - 1 |> max 0 |> Id.fromInt
+        { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
         , count = pageSize
         }
 

@@ -724,6 +724,15 @@ tests fileData =
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "This is the start of #general" ])
+                        , T.backendUpdate
+                            5000
+                            (Types.UserDisconnected sessionId1 userReload.clientId)
+                        , T.backendUpdate
+                            100
+                            (Types.UserConnected sessionId1 userReload.clientId)
+                        , userReload.checkView
+                            100
+                            (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
                         ]
                     )
                 ]

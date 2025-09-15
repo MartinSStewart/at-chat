@@ -959,8 +959,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                             , case SeqDict.get fileId attachedFiles of
                                 Just fileData ->
                                     currentList
-                                        ++ [ case fileData.imageSize of
-                                                Just imageSize ->
+                                        ++ [ case fileData.imageMetadata of
+                                                Just { imageSize } ->
                                                     let
                                                         fileUrl =
                                                             FileStatus.fileUrl fileData.contentType fileData.fileHash
@@ -1553,8 +1553,8 @@ toDiscord mapping attachedFiles content =
                 AttachedFile fileId ->
                     (case SeqDict.get fileId attachedFiles of
                         Just fileData ->
-                            case fileData.imageSize of
-                                Just imageSize ->
+                            case fileData.imageMetadata of
+                                Just { imageSize } ->
                                     FileStatus.thumbnailUrl imageSize fileData.contentType fileData.fileHash
 
                                 Nothing ->
