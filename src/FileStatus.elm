@@ -126,7 +126,7 @@ hasThumbnailImage imageSize =
 
 imageMaxHeight : number
 imageMaxHeight =
-    300
+    600
 
 
 contentTypeType : ContentType -> ContentTypeType
@@ -191,7 +191,7 @@ uploadResponseCodec : Codec UploadResponse
 uploadResponseCodec =
     Codec.object UploadResponse
         |> Codec.field "hash" .fileHash fileHashCodec
-        |> Codec.nullableField "image_metadata" .imageSize imageMetadataCodec
+        |> Codec.field "image_metadata" .imageSize (Codec.nullable imageMetadataCodec)
         |> Codec.buildObject
 
 
@@ -522,7 +522,17 @@ fileUploadPreview onPressDelete filesToUpload2 =
                                         , Html.Attributes.style "align-self" "center"
                                         , Html.Attributes.style "border-radius" "8px"
                                         ]
-                                        []
+                                        [ case fileData.imageMetadata of
+                                            Just metadata ->
+                                                if imageHasMetadata metadata then
+                                                    Icons.info
+
+                                                else
+                                                    Html.text ""
+
+                                            Nothing ->
+                                                Html.text ""
+                                        ]
                                         |> Ui.html
 
                                 Text ->
@@ -559,11 +569,26 @@ fileUploadPreview onPressDelete filesToUpload2 =
         )
 
 
+imageHasMetadata : ImageMetadata -> Bool
+imageHasMetadata metadata =
+    (metadata.orientation /= Nothing)
+        || (metadata.gpsLocation /= Nothing)
+        || (metadata.cameraOwner /= Nothing)
+        || (metadata.exposureTime /= Nothing)
+        || (metadata.fNumber /= Nothing)
+        || (metadata.focalLength /= Nothing)
+        || (metadata.isoSpeedRating /= Nothing)
+        || (metadata.make /= Nothing)
+        || (metadata.model /= Nothing)
+        || (metadata.software /= Nothing)
+        || (metadata.userComment /= Nothing)
+
+
 addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
-            case result of
+            case result |> Debug.log "error" of
                 Ok data ->
                     FileUploaded
                         { fileName = fileName

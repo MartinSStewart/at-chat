@@ -984,7 +984,7 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                             min w containerWidth2
 
                                                         h2 =
-                                                            min FileStatus.imageMaxHeight (toFloat w2 * aspect)
+                                                            min (FileStatus.imageMaxHeight / 2) (toFloat w2 * aspect)
 
                                                         w3 =
                                                             h2 / aspect
