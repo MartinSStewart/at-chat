@@ -10,8 +10,6 @@ use axum::{
     routing::post,
 };
 
-use gufo::{self, Image};
-use gufo_common;
 use gufo_exif;
 use image::metadata::Orientation;
 use image::{self, GenericImageView, ImageReader};
@@ -382,8 +380,6 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
             let (width, height) = image.dimensions();
 
             let metadata: ImageMetadata = image_metadata(width, height, format, bytes.to_vec());
-
-            println!("{:?}", metadata);
 
             let orientation: Orientation = match metadata.orientation {
                 Some(orientation2) => {
