@@ -633,8 +633,8 @@ imageInfoView onPressClose fileData =
             , Ui.heightMin 0
             ]
             [ Ui.column
-                [ Ui.background MyUi.background1
-                , Ui.paddingXY 16 8
+                [ MyUi.htmlStyle "padding" ("calc(" ++ MyUi.insetTop ++ " + 16px) 8px 16px 8px")
+                , Ui.background MyUi.background1
                 , Ui.spacing 2
                 , Ui.alignBottom
                 ]

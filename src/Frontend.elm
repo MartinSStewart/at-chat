@@ -1072,6 +1072,9 @@ isPressMsg msg =
         PressedCloseImageInfo ->
             True
 
+        PressedShowMembers ->
+            True
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -2318,6 +2321,34 @@ updateLoaded msg model =
 
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
+
+        PressedShowMembers ->
+            case model.route of
+                GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+                    case threadRoute of
+                        NoThreadWithFriends a _ ->
+                            routePush
+                                model
+                                (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a ShowMembersTab)))
+
+                        ViewThreadWithFriends threadId a _ ->
+                            routePush
+                                model
+                                (GuildRoute
+                                    guildId
+                                    (ChannelRoute channelId (ViewThreadWithFriends threadId a ShowMembersTab))
+                                )
+
+                DmRoute otherUserId threadRoute ->
+                    case threadRoute of
+                        NoThreadWithFriends a _ ->
+                            routePush model (DmRoute otherUserId (NoThreadWithFriends a ShowMembersTab))
+
+                        ViewThreadWithFriends threadId a _ ->
+                            routePush model (DmRoute otherUserId (ViewThreadWithFriends threadId a ShowMembersTab))
+
+                _ ->
+                    ( model, Command.none )
 
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             updateLoggedIn

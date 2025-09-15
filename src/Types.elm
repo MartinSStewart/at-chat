@@ -384,6 +384,7 @@ type FrontendMsg
     | MessageMenuAnimated Duration
     | SetScrollToBottom
     | PressedChannelHeaderBackButton
+    | PressedShowMembers
     | UserScrolled GuildOrDmIdNoThread ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer

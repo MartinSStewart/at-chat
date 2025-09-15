@@ -1866,10 +1866,20 @@ channelHeader isMobile2 content =
                 , Ui.Font.color MyUi.font3
                 , Ui.contentCenterY
                 , Ui.contentCenterX
-                , Ui.padding 8
+                , Ui.paddingWith { left = 12, top = 8, bottom = 8, right = 8 }
                 ]
                 (Ui.html Icons.arrowLeft)
-            , Ui.el [] content
+            , Ui.el [ Ui.centerY ] content
+            , MyUi.elButton
+                (Dom.id "guild_showMembers")
+                PressedShowMembers
+                [ Ui.alignRight
+                , Ui.width (Ui.px (24 + 24))
+                , Ui.height Ui.fill
+                , Ui.paddingXY 12 0
+                , Ui.contentCenterY
+                ]
+                (Ui.html Icons.users)
             ]
 
          else
