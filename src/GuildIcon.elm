@@ -274,4 +274,4 @@ showFriendsButton isSelected onPress =
         , Ui.Font.color (Ui.rgb 20 20 20)
         , MyUi.hoverText "Show friends list"
         ]
-        (Ui.html Icons.users)
+        (Ui.html Icons.userGroup)

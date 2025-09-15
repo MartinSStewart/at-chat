@@ -1,6 +1,8 @@
 module Route exposing
     ( ChannelRoute(..)
     , Route(..)
+    , ShowMembersTab(..)
+    , ThreadRouteWithFriends(..)
     , decode
     , encode
     )
@@ -8,7 +10,7 @@ module Route exposing
 import AppUrl
 import Dict
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Id exposing (ChannelId, GuildId, Id, InviteLinkId, ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import Slack
 import Url exposing (Url)
@@ -19,17 +21,31 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
-    | DmRoute (Id UserId) ThreadRouteWithMaybeMessage
+    | DmRoute (Id UserId) ThreadRouteWithFriends
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionId ))
 
 
 type ChannelRoute
-    = ChannelRoute (Id ChannelId) ThreadRouteWithMaybeMessage
+    = ChannelRoute (Id ChannelId) ThreadRouteWithFriends
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
+
+
+type ThreadRouteWithFriends
+    = NoThreadWithFriends (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | ViewThreadWithFriends (Id ChannelMessageId) (Maybe (Id ThreadMessageId)) ShowMembersTab
+
+
+type ShowMembersTab
+    = ShowMembersTab
+    | HideMembersTab
+
+
+showMembersParam =
+    "show-members"
 
 
 decode : Url -> Route
@@ -37,6 +53,15 @@ decode url =
     let
         url2 =
             AppUrl.fromUrl url
+
+        showMembers : ShowMembersTab
+        showMembers =
+            case Dict.get showMembersParam url2.queryParameters of
+                Just [ "True" ] ->
+                    ShowMembersTab
+
+                _ ->
+                    HideMembersTab
     in
     case url2.path of
         [ "admin" ] ->
@@ -64,7 +89,7 @@ decode url =
                                         guildId2
                                         (ChannelRoute
                                             channelId2
-                                            (stringToThread threadMessageIndex messageIndex)
+                                            (stringToThread showMembers threadMessageIndex messageIndex)
                                         )
 
                                 ( Just channelId2, [ "t", threadMessageIndex ] ) ->
@@ -72,16 +97,24 @@ decode url =
                                         guildId2
                                         (ChannelRoute
                                             channelId2
-                                            (stringToThread threadMessageIndex "")
+                                            (stringToThread showMembers threadMessageIndex "")
                                         )
 
                                 ( Just channelId2, [ "m", messageIndex ] ) ->
                                     GuildRoute
                                         guildId2
-                                        (ChannelRoute channelId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex)))
+                                        (ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                        )
 
                                 ( Just channelId2, [] ) ->
-                                    GuildRoute guildId2 (ChannelRoute channelId2 (NoThreadWithMaybeMessage Nothing))
+                                    GuildRoute
+                                        guildId2
+                                        (ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends Nothing showMembers)
+                                        )
 
                                 ( Just channelId2, [ "edit" ] ) ->
                                     GuildRoute guildId2 (EditChannelRoute channelId2)
@@ -109,16 +142,16 @@ decode url =
                 Just userId2 ->
                     case rest of
                         [ "t", threadMessageIndex, "m", messageIndex ] ->
-                            DmRoute userId2 (stringToThread threadMessageIndex messageIndex)
+                            DmRoute userId2 (stringToThread showMembers threadMessageIndex messageIndex)
 
                         [ "t", threadMessageIndex ] ->
-                            DmRoute userId2 (stringToThread threadMessageIndex "")
+                            DmRoute userId2 (stringToThread showMembers threadMessageIndex "")
 
                         [ "m", messageIndex ] ->
-                            DmRoute userId2 (NoThreadWithMaybeMessage (Id.fromString messageIndex))
+                            DmRoute userId2 (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
 
                         _ ->
-                            DmRoute userId2 (NoThreadWithMaybeMessage Nothing)
+                            DmRoute userId2 (NoThreadWithFriends Nothing showMembers)
 
                 Nothing ->
                     HomePageRoute
@@ -135,14 +168,14 @@ decode url =
             HomePageRoute
 
 
-stringToThread : String -> String -> ThreadRouteWithMaybeMessage
-stringToThread text maybeMessageIndex =
+stringToThread : ShowMembersTab -> String -> String -> ThreadRouteWithFriends
+stringToThread showMembers text maybeMessageIndex =
     case Id.fromString text of
         Just messageIndex ->
-            ViewThreadWithMaybeMessage messageIndex (Id.fromString maybeMessageIndex)
+            ViewThreadWithFriends messageIndex (Id.fromString maybeMessageIndex) showMembers
 
         Nothing ->
-            NoThreadWithMaybeMessage (Id.fromString maybeMessageIndex)
+            NoThreadWithFriends (Id.fromString maybeMessageIndex) showMembers
 
 
 encode : Route -> String
@@ -167,46 +200,51 @@ encode route =
                     ( [ "ai-chat" ], [] )
 
                 GuildRoute guildId maybeChannelId ->
-                    ( [ "g", Id.toString guildId ]
-                        ++ (case maybeChannelId of
-                                ChannelRoute channelId thread ->
-                                    [ "c", Id.toString channelId ]
-                                        ++ (case thread of
-                                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
-                                                    [ "t", Id.toString threadMessageIndex ]
-                                                        ++ maybeMessageIdToString maybeMessageId
+                    case maybeChannelId of
+                        ChannelRoute channelId thread ->
+                            case thread of
+                                ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
+                                    ( [ "g"
+                                      , Id.toString guildId
+                                      , "c"
+                                      , Id.toString channelId
+                                      , "t"
+                                      , Id.toString threadMessageIndex
+                                      ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
 
-                                                NoThreadWithMaybeMessage maybeMessageId ->
-                                                    maybeMessageIdToString maybeMessageId
-                                           )
+                                NoThreadWithFriends maybeMessageId showMembers ->
+                                    ( [ "g", Id.toString guildId, "c", Id.toString channelId ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
 
-                                EditChannelRoute channelId ->
-                                    [ "c", Id.toString channelId, "edit" ]
+                        EditChannelRoute channelId ->
+                            ( [ "g", Id.toString guildId, "c", Id.toString channelId, "edit" ], [] )
 
-                                NewChannelRoute ->
-                                    [ "new" ]
+                        NewChannelRoute ->
+                            ( [ "g", Id.toString guildId, "new" ], [] )
 
-                                InviteLinkCreatorRoute ->
-                                    [ "invite" ]
+                        InviteLinkCreatorRoute ->
+                            ( [ "g", Id.toString guildId, "invite" ], [] )
 
-                                JoinRoute inviteLinkId ->
-                                    [ "join", SecretId.toString inviteLinkId ]
-                           )
-                    , []
-                    )
+                        JoinRoute inviteLinkId ->
+                            ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ], [] )
 
                 DmRoute userId thread ->
-                    ( [ "d", Id.toString userId ]
-                        ++ (case thread of
-                                ViewThreadWithMaybeMessage threadMessageIndex maybeMessageId ->
-                                    [ "t", Id.toString threadMessageIndex ]
-                                        ++ maybeMessageIdToString maybeMessageId
+                    case thread of
+                        ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
+                            ( [ "d", Id.toString userId, "t", Id.toString threadMessageIndex ]
+                                ++ maybeMessageIdToString maybeMessageId
+                            , encodeShowMembers showMembers
+                            )
 
-                                NoThreadWithMaybeMessage maybeMessageId ->
-                                    maybeMessageIdToString maybeMessageId
-                           )
-                    , []
-                    )
+                        NoThreadWithFriends maybeMessageId showMembers ->
+                            ( [ "d", Id.toString userId ] ++ maybeMessageIdToString maybeMessageId
+                            , encodeShowMembers showMembers
+                            )
 
                 SlackOAuthRedirect _ ->
                     ( [ "slack-oauth" ]
@@ -214,6 +252,16 @@ encode route =
                     )
     in
     Url.Builder.absolute path query
+
+
+encodeShowMembers : ShowMembersTab -> List Url.Builder.QueryParameter
+encodeShowMembers showMembers =
+    case showMembers of
+        ShowMembersTab ->
+            [ Url.Builder.string showMembersParam "True" ]
+
+        HideMembersTab ->
+            []
 
 
 maybeMessageIdToString : Maybe (Id a) -> List String

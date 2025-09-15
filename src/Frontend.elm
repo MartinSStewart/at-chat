@@ -54,7 +54,7 @@ import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
@@ -555,26 +555,50 @@ routeRequest previousRoute newRoute model =
             in
             case channelRoute of
                 ChannelRoute channelId threadRoute ->
+                    let
+                        showMembers : ShowMembersTab
+                        showMembers =
+                            case threadRoute of
+                                ViewThreadWithFriends _ _ showMembers2 ->
+                                    showMembers2
+
+                                NoThreadWithFriends _ showMembers2 ->
+                                    showMembers2
+
+                        --previousShowMembers : ShowMembersTab
+                        --previousShowMembers =
+                        --    case threadRoute of
+                        --        ViewThreadWithFriends threadId _ showMembers2 ->
+                        --            showMembers2
+                        --
+                        --        NoThreadWithFriends maybeId showMembers2 ->
+                        --            showMembers2
+                    in
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
                                 model3.time
                                 (if SeqDict.member guildId (Local.model loggedIn.localState).guilds then
                                     case threadRoute of
-                                        ViewThreadWithMaybeMessage threadId _ ->
+                                        ViewThreadWithFriends threadId _ _ ->
                                             Just (Local_ViewThread guildId channelId threadId EmptyPlaceholder)
 
-                                        NoThreadWithMaybeMessage _ ->
+                                        NoThreadWithFriends _ _ ->
                                             Just (Local_ViewChannel guildId channelId EmptyPlaceholder)
 
                                  else
                                     Nothing
                                 )
-                                (if sameGuild || previousRoute == Nothing then
-                                    startOpeningChannelSidebar loggedIn
+                                (case showMembers of
+                                    ShowMembersTab ->
+                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                                 else
-                                    loggedIn
+                                    HideMembersTab ->
+                                        if sameGuild || previousRoute == Nothing then
+                                            startOpeningChannelSidebar loggedIn
+
+                                        else
+                                            loggedIn
                                 )
                                 (openChannelCmds threadRoute model3)
                         )
@@ -644,7 +668,10 @@ routeRequest previousRoute newRoute model =
                                             model3
                                             (GuildRoute
                                                 guildId
-                                                (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
+                                                (ChannelRoute
+                                                    (LocalState.announcementChannel guild)
+                                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                                )
                                             )
 
                                     Nothing ->
@@ -675,10 +702,10 @@ routeRequest previousRoute newRoute model =
                         model3.time
                         (if SeqDict.member otherUserId (Local.model loggedIn.localState).dmChannels then
                             case threadRoute of
-                                ViewThreadWithMaybeMessage threadId _ ->
+                                ViewThreadWithFriends threadId _ _ ->
                                     Just (Local_ViewDmThread otherUserId threadId EmptyPlaceholder)
 
-                                NoThreadWithMaybeMessage _ ->
+                                NoThreadWithFriends _ _ ->
                                     Just (Local_ViewDm otherUserId EmptyPlaceholder)
 
                          else
@@ -701,7 +728,7 @@ routeRequest previousRoute newRoute model =
 
 
 openChannelCmds :
-    ThreadRouteWithMaybeMessage
+    ThreadRouteWithFriends
     -> LoadedFrontend
     -> Command FrontendOnly ToBackend FrontendMsg
 openChannelCmds threadRoute model3 =
@@ -715,7 +742,7 @@ openChannelCmds threadRoute model3 =
     Command.batch
         [ setFocus model3 Pages.Guild.channelTextInputId
         , case threadRoute of
-            ViewThreadWithMaybeMessage _ maybeMessageIndex ->
+            ViewThreadWithFriends _ maybeMessageIndex _ ->
                 case maybeMessageIndex of
                     Just messageIndex ->
                         smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
@@ -724,7 +751,7 @@ openChannelCmds threadRoute model3 =
                     Nothing ->
                         scrollToBottom
 
-            NoThreadWithMaybeMessage maybeMessageIndex ->
+            NoThreadWithFriends maybeMessageIndex _ ->
                 case maybeMessageIndex of
                     Just messageIndex ->
                         smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
@@ -1060,13 +1087,19 @@ isPressMsg msg =
         GotScrollbarWidth _ ->
             False
 
-        PressedViewAttachedFileInfo guildOrDmId id ->
+        PressedViewAttachedFileInfo _ _ ->
             True
 
-        EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
+        EditMessage_PressedViewAttachedFileInfo _ _ ->
             True
 
         PressedCloseImageInfo ->
+            True
+
+        PressedShowMembers ->
+            True
+
+        PressedMemberListBack ->
             True
 
 
@@ -1374,7 +1407,10 @@ updateLoaded msg model =
                                 ( model2, routeCmd ) =
                                     routePush
                                         { model | loginStatus = LoggedIn loggedIn2 }
-                                        (GuildRoute guildId (ChannelRoute nextChannelId (NoThreadWithMaybeMessage Nothing)))
+                                        (GuildRoute
+                                            guildId
+                                            (ChannelRoute nextChannelId (NoThreadWithFriends Nothing HideMembersTab))
+                                        )
                             in
                             ( model2, Command.batch [ routeCmd, cmd ] )
 
@@ -1446,7 +1482,10 @@ updateLoaded msg model =
                                             SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
                                     }
                         }
-                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab))
+                        )
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -1493,7 +1532,10 @@ updateLoaded msg model =
                                         model
                                         (GuildRoute
                                             guildId
-                                            (ChannelRoute (LocalState.announcementChannel guild) (NoThreadWithMaybeMessage Nothing))
+                                            (ChannelRoute
+                                                (LocalState.announcementChannel guild)
+                                                (NoThreadWithFriends Nothing HideMembersTab)
+                                            )
                                         )
 
                                 Nothing ->
@@ -2083,15 +2125,18 @@ updateLoaded msg model =
 
         MessageMenu_PressedOpenThread messageIndex ->
             case ( model.route, model.loginStatus ) of
-                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage _)), LoggedIn loggedIn ) ->
+                ( GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends _ _)), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageIndex Nothing)))
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
+                        )
 
-                ( DmRoute otherUserId (NoThreadWithMaybeMessage _), LoggedIn loggedIn ) ->
+                ( DmRoute otherUserId (NoThreadWithFriends _ _), LoggedIn loggedIn ) ->
                     routePush
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
-                        (DmRoute otherUserId (ViewThreadWithMaybeMessage messageIndex Nothing))
+                        (DmRoute otherUserId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
 
                 _ ->
                     ( model, Command.none )
@@ -2252,27 +2297,31 @@ updateLoaded msg model =
                 _ =
                     Debug.log "Animation frame" ()
             in
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     case loggedIn.sidebarMode of
                         ChannelSidebarClosed ->
-                            ( loggedIn, Command.none )
+                            ( model, Command.none )
 
                         ChannelSidebarOpened ->
-                            ( loggedIn, Command.none )
+                            ( model, Command.none )
 
                         ChannelSidebarOpening { offset } ->
                             let
                                 offset2 =
                                     offset - Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
-                            ( { loggedIn
-                                | sidebarMode =
-                                    if offset2 <= 0 then
-                                        ChannelSidebarOpened
+                            ( { model
+                                | loginStatus =
+                                    { loggedIn
+                                        | sidebarMode =
+                                            if offset2 <= 0 then
+                                                ChannelSidebarOpened
 
-                                    else
-                                        ChannelSidebarOpening { offset = offset2 }
+                                            else
+                                                ChannelSidebarOpening { offset = offset2 }
+                                    }
+                                        |> LoggedIn
                               }
                             , Command.none
                             )
@@ -2281,28 +2330,81 @@ updateLoaded msg model =
                             let
                                 offset2 =
                                     offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
+
+                                showMember =
+                                    case model.route of
+                                        GuildRoute _ (ChannelRoute _ threadRoute) ->
+                                            case threadRoute of
+                                                ViewThreadWithFriends _ _ showMembers2 ->
+                                                    showMembers2
+
+                                                NoThreadWithFriends _ showMembers2 ->
+                                                    showMembers2
+
+                                        DmRoute _ threadRoute ->
+                                            case threadRoute of
+                                                ViewThreadWithFriends _ _ showMembers2 ->
+                                                    showMembers2
+
+                                                NoThreadWithFriends _ showMembers2 ->
+                                                    showMembers2
+
+                                        _ ->
+                                            HideMembersTab
                             in
-                            ( { loggedIn
-                                | sidebarMode =
+                            case showMember of
+                                ShowMembersTab ->
                                     if offset2 >= 1 then
-                                        ChannelSidebarClosed
+                                        setShowMembers
+                                            HideMembersTab
+                                            { model
+                                                | loginStatus =
+                                                    { loggedIn | sidebarMode = ChannelSidebarOpened }
+                                                        |> LoggedIn
+                                            }
 
                                     else
-                                        ChannelSidebarClosing { offset = offset2 }
-                              }
-                            , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
-                            )
+                                        ( { model
+                                            | loginStatus =
+                                                { loggedIn
+                                                    | sidebarMode =
+                                                        ChannelSidebarClosing { offset = offset2 }
+                                                }
+                                                    |> LoggedIn
+                                          }
+                                        , Command.none
+                                        )
+
+                                HideMembersTab ->
+                                    ( { model
+                                        | loginStatus =
+                                            { loggedIn
+                                                | sidebarMode =
+                                                    if offset2 >= 1 then
+                                                        ChannelSidebarClosed
+
+                                                    else
+                                                        ChannelSidebarClosing { offset = offset2 }
+                                            }
+                                                |> LoggedIn
+                                      }
+                                    , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
+                                    )
 
                         ChannelSidebarDragging _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         SetScrollToBottom ->
             ( model, Command.none )
 
         PressedChannelHeaderBackButton ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
+
+        PressedShowMembers ->
+            setShowMembers ShowMembersTab model
 
         UserScrolled guildOrDmId threadRoute scrollPosition ->
             updateLoggedIn
@@ -2963,14 +3065,17 @@ updateLoaded msg model =
                                                 (GuildRoute guildId
                                                     (ChannelRoute
                                                         channelId
-                                                        (ViewThreadWithMaybeMessage threadId (Just repliedTo))
+                                                        (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
                                                     )
                                                 )
 
                                         ( GuildOrDmId_Dm otherUserId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
                                             routePush
                                                 model
-                                                (DmRoute otherUserId (NoThreadWithMaybeMessage (Just repliedTo)))
+                                                (DmRoute
+                                                    otherUserId
+                                                    (NoThreadWithFriends (Just repliedTo) HideMembersTab)
+                                                )
 
                                         _ ->
                                             ( model, Command.none )
@@ -3045,10 +3150,17 @@ updateLoaded msg model =
                 MessageView.MessageView_PressedViewThreadLink ->
                     case ( guildOrDmId, threadRoute ) of
                         ( GuildOrDmId_Guild guildId channelId, NoThreadWithMessage messageId ) ->
-                            routePush model (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage messageId Nothing)))
+                            routePush
+                                model
+                                (GuildRoute
+                                    guildId
+                                    (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
+                                )
 
                         ( GuildOrDmId_Dm otherUserId, NoThreadWithMessage messageId ) ->
-                            routePush model (DmRoute otherUserId (ViewThreadWithMaybeMessage messageId Nothing))
+                            routePush
+                                model
+                                (DmRoute otherUserId (ViewThreadWithFriends messageId Nothing HideMembersTab))
 
                         _ ->
                             ( model, Command.none )
@@ -3123,6 +3235,39 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn -> ( { loggedIn | showFileToUploadInfo = Nothing }, Command.none ))
                 model
+
+        PressedMemberListBack ->
+            updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
+
+
+setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+setShowMembers showMembers model =
+    case model.route of
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            case threadRoute of
+                NoThreadWithFriends a _ ->
+                    routePush
+                        model
+                        (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends a showMembers)))
+
+                ViewThreadWithFriends threadId a _ ->
+                    routePush
+                        model
+                        (GuildRoute
+                            guildId
+                            (ChannelRoute channelId (ViewThreadWithFriends threadId a showMembers))
+                        )
+
+        DmRoute otherUserId threadRoute ->
+            case threadRoute of
+                NoThreadWithFriends a _ ->
+                    routePush model (DmRoute otherUserId (NoThreadWithFriends a showMembers))
+
+                ViewThreadWithFriends threadId a _ ->
+                    routePush model (DmRoute otherUserId (ViewThreadWithFriends threadId a showMembers))
+
+        _ ->
+            ( model, Command.none )
 
 
 viewImageInfo :
@@ -4978,7 +5123,7 @@ updateLoadedFromBackend msg model =
                                             guildId
                                             (ChannelRoute
                                                 (LocalState.announcementChannel guild)
-                                                (NoThreadWithMaybeMessage Nothing)
+                                                (NoThreadWithFriends Nothing HideMembersTab)
                                             )
                                         )
 
@@ -5063,7 +5208,7 @@ updateLoadedFromBackend msg model =
                                                 guildId
                                                 (ChannelRoute
                                                     (LocalState.announcementChannel guild)
-                                                    (NoThreadWithMaybeMessage Nothing)
+                                                    (NoThreadWithFriends Nothing HideMembersTab)
                                                 )
                                             )
 
@@ -5861,10 +6006,10 @@ routeToGuildOrDmId route =
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->
             ( GuildOrDmId_Guild guildId channelId
             , case threadRoute of
-                ViewThreadWithMaybeMessage threadMessageId _ ->
+                ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId
 
-                NoThreadWithMaybeMessage _ ->
+                NoThreadWithFriends _ _ ->
                     NoThread
             )
                 |> Just
@@ -5872,10 +6017,10 @@ routeToGuildOrDmId route =
         DmRoute otherUserId threadRoute ->
             ( GuildOrDmId_Dm otherUserId
             , case threadRoute of
-                ViewThreadWithMaybeMessage threadMessageId _ ->
+                ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId
 
-                NoThreadWithMaybeMessage _ ->
+                NoThreadWithFriends _ _ ->
                     NoThread
             )
                 |> Just

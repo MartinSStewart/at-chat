@@ -69,7 +69,6 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
-import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
