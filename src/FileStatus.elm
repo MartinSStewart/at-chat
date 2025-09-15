@@ -3,6 +3,7 @@ module FileStatus exposing
     , ContentTypeType(..)
     , ExposureTime
     , FileData
+    , FileDataWithImage
     , FileHash(..)
     , FileId
     , FileStatus(..)
@@ -16,6 +17,7 @@ module FileStatus exposing
     , fileHash
     , fileUploadPreview
     , fileUrl
+    , imageInfoView
     , imageMaxHeight
     , onlyUploadedFiles
     , pngContent
@@ -49,7 +51,7 @@ import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import StringExtra
-import Ui
+import Ui exposing (Element)
 import Ui.Font
 import Ui.Shadow
 
@@ -58,6 +60,15 @@ type alias FileData =
     { fileName : FileName
     , fileSize : Int
     , imageMetadata : Maybe ImageMetadata
+    , contentType : ContentType
+    , fileHash : FileHash
+    }
+
+
+type alias FileDataWithImage =
+    { fileName : FileName
+    , fileSize : Int
+    , imageMetadata : ImageMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
@@ -126,7 +137,7 @@ hasThumbnailImage imageSize =
 
 imageMaxHeight : number
 imageMaxHeight =
-    300
+    600
 
 
 contentTypeType : ContentType -> ContentTypeType
@@ -191,7 +202,7 @@ uploadResponseCodec : Codec UploadResponse
 uploadResponseCodec =
     Codec.object UploadResponse
         |> Codec.field "hash" .fileHash fileHashCodec
-        |> Codec.nullableField "image_metadata" .imageSize imageMetadataCodec
+        |> Codec.field "image_metadata" .imageSize (Codec.nullable imageMetadataCodec)
         |> Codec.buildObject
 
 
@@ -420,8 +431,8 @@ previewSize =
     150
 
 
-fileUploadPreview : (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
-fileUploadPreview onPressDelete filesToUpload2 =
+fileUploadPreview : (Id FileId -> msg) -> (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
+fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
     Ui.row
         [ Ui.spacing 2
         , Ui.move { x = 0, y = -previewSize, z = 0 }
@@ -446,7 +457,7 @@ fileUploadPreview onPressDelete filesToUpload2 =
                     , Ui.border 1
                     , Ui.rounded 8
                     , MyUi.elButton
-                        (Dom.id ("fileStatus_" ++ Id.toString fileStatusId))
+                        (Dom.id ("fileStatus_delete_" ++ Id.toString fileStatusId))
                         (onPressDelete fileStatusId)
                         [ Ui.width (Ui.px 42)
                         , Ui.height (Ui.px 42)
@@ -464,6 +475,48 @@ fileUploadPreview onPressDelete filesToUpload2 =
                             (Ui.html Icons.delete)
                         )
                         |> Ui.inFront
+                    , case fileStatus of
+                        FileUploaded fileData ->
+                            case fileData.imageMetadata of
+                                Just metadata ->
+                                    if imageHasMetadata metadata then
+                                        MyUi.elButton
+                                            (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+                                            (onPressInfo fileStatusId)
+                                            [ Ui.width (Ui.px 42)
+                                            , Ui.height (Ui.px 42)
+                                            , Ui.rounded 16
+                                            , Ui.move { x = -3, y = 40, z = 0 }
+                                            ]
+                                            (Ui.el
+                                                [ Ui.width (Ui.px 34)
+                                                , Ui.height (Ui.px 34)
+                                                , Ui.rounded 16
+                                                , Ui.contentCenterX
+                                                , Ui.contentCenterY
+                                                , Ui.background MyUi.buttonBackground
+                                                ]
+                                                (case metadata.gpsLocation of
+                                                    Just _ ->
+                                                        Ui.html Icons.map
+
+                                                    Nothing ->
+                                                        Ui.html Icons.info
+                                                )
+                                            )
+                                            |> Ui.inFront
+
+                                    else
+                                        Ui.noAttr
+
+                                Nothing ->
+                                    Ui.noAttr
+
+                        FileUploading fileName record _ ->
+                            Ui.noAttr
+
+                        FileError fileName int _ error ->
+                            Ui.noAttr
                     , Ui.el
                         [ Ui.alignBottom
                         , Ui.padding 4
@@ -476,28 +529,27 @@ fileUploadPreview onPressDelete filesToUpload2 =
                         ]
                         (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
                         |> Ui.inFront
-                    , (case fileStatus of
+                    , case fileStatus of
                         FileUploading _ fileSize _ ->
                             progressToString fileSize
+                                |> Ui.text
+                                |> Ui.el
+                                    [ Ui.alignRight
+                                    , Ui.Font.size 14
+                                    , Ui.paddingRight 8
+                                    , Ui.Shadow.font
+                                        { offset = ( 0, 0 )
+                                        , blur = 3
+                                        , color = Ui.rgb 0 0 0
+                                        }
+                                    ]
+                                |> Ui.inFront
 
                         FileUploaded fileData ->
-                            sizeToString fileData.fileSize
+                            Ui.noAttr
 
                         FileError _ fileSize _ _ ->
-                            sizeToString fileSize
-                      )
-                        |> Ui.text
-                        |> Ui.el
-                            [ Ui.alignRight
-                            , Ui.Font.size 14
-                            , Ui.paddingRight 8
-                            , Ui.Shadow.font
-                                { offset = ( 0, 0 )
-                                , blur = 3
-                                , color = Ui.rgb 0 0 0
-                                }
-                            ]
-                        |> Ui.inFront
+                            Ui.noAttr
                     ]
                     (case fileStatus of
                         FileUploading _ _ _ ->
@@ -559,11 +611,133 @@ fileUploadPreview onPressDelete filesToUpload2 =
         )
 
 
+imageInfoView : msg -> FileDataWithImage -> Element msg
+imageInfoView onPressClose fileData =
+    let
+        metadata : ImageMetadata
+        metadata =
+            fileData.imageMetadata
+    in
+    Ui.el
+        [ Ui.inFront
+            (MyUi.elButton
+                (Dom.id "fileStatus_closeImageInfo")
+                onPressClose
+                [ Ui.alignRight, Ui.paddingXY 16 16 ]
+                (Ui.html Icons.x)
+            )
+        ]
+        (Ui.column
+            [ Ui.height Ui.fill
+            , Ui.scrollable
+            , Ui.heightMin 0
+            ]
+            [ Ui.column
+                [ Ui.background MyUi.background1
+                , Ui.paddingXY 16 8
+                , Ui.spacing 2
+                , Ui.alignBottom
+                ]
+                ([ imageLabel
+                    "Image size"
+                    (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
+                 ]
+                    ++ List.filterMap
+                        identity
+                        [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
+                        , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                        , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
+                        , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
+                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
+                        , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                        , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
+                        , Maybe.map (imageLabel "Make") metadata.make
+                        , Maybe.map (imageLabel "Model") metadata.model
+                        , Maybe.map (imageLabel "Software") metadata.software
+                        , Maybe.map (imageLabel "Comment") metadata.userComment
+                        ]
+                )
+            , Ui.image
+                [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
+                { source = fileUrl fileData.contentType fileData.fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+            ]
+        )
+
+
+imageLabel : String -> String -> Element msg
+imageLabel title value =
+    Ui.row
+        [ MyUi.htmlStyle "white-space" "pre-wrap" ]
+        [ Ui.text (title ++ ": ")
+        , Ui.text value
+        ]
+
+
+orientationToString : Orientation -> String
+orientationToString orientation =
+    case orientation of
+        Id ->
+            "Normal"
+
+        Rotation90 ->
+            "Rotate 90°"
+
+        Rotation180 ->
+            "Rotate 180°"
+
+        Rotation270 ->
+            "Rotate 270°"
+
+        Mirrored ->
+            "Mirrored"
+
+        MirroredRotation90 ->
+            "Mirrored, rotate 90°"
+
+        MirroredRotation180 ->
+            "Mirrored, rotate 180°"
+
+        MirroredRotation270 ->
+            "Mirrored, rotate 270°"
+
+
+locationToString : Location -> String
+locationToString location =
+    String.fromFloat location.lat ++ ", " ++ String.fromFloat location.lon
+
+
+exposureTimeToString : ExposureTime -> String
+exposureTimeToString exposure =
+    if exposure.numerator == 1 then
+        "1/" ++ String.fromInt exposure.denominator ++ "s"
+
+    else
+        String.fromInt exposure.numerator ++ "/" ++ String.fromInt exposure.denominator ++ "s"
+
+
+imageHasMetadata : ImageMetadata -> Bool
+imageHasMetadata metadata =
+    (metadata.orientation /= Nothing)
+        || (metadata.gpsLocation /= Nothing)
+        || (metadata.cameraOwner /= Nothing)
+        || (metadata.exposureTime /= Nothing)
+        || (metadata.fNumber /= Nothing)
+        || (metadata.focalLength /= Nothing)
+        || (metadata.isoSpeedRating /= Nothing)
+        || (metadata.make /= Nothing)
+        || (metadata.model /= Nothing)
+        || (metadata.software /= Nothing)
+        || (metadata.userComment /= Nothing)
+
+
 addFileHash : Result Http.Error UploadResponse -> FileStatus -> FileStatus
 addFileHash result fileStatus =
     case fileStatus of
         FileUploading fileName fileSize contentType2 ->
-            case result of
+            case result |> Debug.log "error" of
                 Ok data ->
                     FileUploaded
                         { fileName = fileName

@@ -196,14 +196,13 @@ async fn upload_endpoint(request: Request) -> Response<String> {
 }
 
 /// Should match RichText.maxImageHeight
-const MAX_THUMBNAIL_HEIGHT: u32 = 300;
+const MAX_THUMBNAIL_HEIGHT: u32 = 600;
 
 async fn is_file_upload_allowed(
     hash: String,
     size: usize,
     session_id: String,
-    width: u32,
-    height: u32,
+    (width, height): (u32, u32),
 ) -> Result<(), ()> {
     match reqwest::Client::new()
         .post(if cfg!(debug_assertions) {
@@ -242,8 +241,7 @@ async fn is_file_upload_allowed(
 
 #[derive(Debug, Serialize)]
 pub struct ImageMetadata {
-    pub width: u32,
-    pub height: u32,
+    pub image_size: (u32, u32),
     pub orientation: Option<u8>,
     pub gps_location: Option<Location>,
     pub camera_owner: Option<String>,
@@ -260,7 +258,7 @@ pub struct ImageMetadata {
 #[derive(Debug, Serialize)]
 pub struct ExposureTime {
     numerator: u32,
-    demoninator: u32,
+    denominator: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -271,8 +269,7 @@ pub struct UploadResponse {
 
 fn default_image_metadata(width: u32, height: u32) -> ImageMetadata {
     ImageMetadata {
-        width,
-        height,
+        image_size: (width, height),
         orientation: None,
         gps_location: None,
         camera_owner: None,
@@ -304,36 +301,60 @@ fn image_metadata(
     bytes: Vec<u8>,
 ) -> ImageMetadata {
     match format {
-        image::ImageFormat::Jpeg => match gufo_jpeg::Jpeg::new(bytes) {
-            Ok(jpeg) => match jpeg.exif_data().next() {
-                Some(raw_exif) => match gufo_exif::Exif::new(raw_exif.to_vec()) {
-                    Ok(exif) => ImageMetadata {
-                        width: width,
-                        height: height,
-                        orientation: exif.orientation().map(|a| a as u8),
-                        gps_location: exif.gps_location().map(|a| Location {
-                            lat: to_degrees(a.lat.as_deg_min_sec()),
-                            lon: to_degrees(a.lon.as_deg_min_sec()),
-                        }),
-                        camera_owner: exif.camera_owner(),
-                        exposure_time: exif.exposure_time().map(|(a, b)| ExposureTime {
-                            numerator: a,
-                            demoninator: b,
-                        }),
-                        f_number: exif.f_number(),
-                        focal_length: exif.focal_length(),
-                        iso_speed_rating: exif.iso_speed_rating(),
-                        make: exif.make(),
-                        model: exif.model(),
-                        software: exif.software(),
-                        user_comment: exif.user_comment(),
-                    },
-                    Err(_) => default_image_metadata(width, height),
-                },
-                None => default_image_metadata(width, height),
-            },
-            Err(_) => default_image_metadata(width, height),
-        },
+        image::ImageFormat::Jpeg => {
+            match gufo_jpeg::Jpeg::new(bytes) {
+                Ok(jpeg) => {
+                    match jpeg.exif_data().next() {
+                        Some(raw_exif) => match gufo_exif::Exif::new(raw_exif.to_vec()) {
+                            Ok(exif) => {
+                                let orientation: Option<gufo_common::orientation::Orientation> =
+                                    exif.orientation();
+
+                                let image_size: (u32, u32) = match orientation {
+                                    Some(orientation2) => match orientation2 {
+                                        gufo_common::orientation::Orientation::Id => (width, height),
+                                        gufo_common::orientation::Orientation::Rotation90 => (height, width),
+                                        gufo_common::orientation::Orientation::Rotation180 => (width, height),
+                                        gufo_common::orientation::Orientation::Rotation270 => (height, width),
+                                        gufo_common::orientation::Orientation::Mirrored => (width, height),
+                                        gufo_common::orientation::Orientation::MirroredRotation90 => (height, width),
+                                        gufo_common::orientation::Orientation::MirroredRotation180 => (width, height),
+                                        gufo_common::orientation::Orientation::MirroredRotation270 => (height, width),
+                                    },
+                                    None => (width, height),
+                                };
+
+                                ImageMetadata {
+                                    image_size,
+                                    orientation: orientation.map(|a| a as u8),
+                                    gps_location: exif.gps_location().map(|a| Location {
+                                        lat: to_degrees(a.lat.as_deg_min_sec()),
+                                        lon: to_degrees(a.lon.as_deg_min_sec()),
+                                    }),
+                                    camera_owner: exif.camera_owner(),
+                                    exposure_time: exif.exposure_time().map(|(a, b)| {
+                                        ExposureTime {
+                                            numerator: a,
+                                            denominator: b,
+                                        }
+                                    }),
+                                    f_number: exif.f_number(),
+                                    focal_length: exif.focal_length(),
+                                    iso_speed_rating: exif.iso_speed_rating(),
+                                    make: exif.make(),
+                                    model: exif.model(),
+                                    software: exif.software(),
+                                    user_comment: exif.user_comment(),
+                                }
+                            }
+                            Err(_) => default_image_metadata(width, height),
+                        },
+                        None => default_image_metadata(width, height),
+                    }
+                }
+                Err(_) => default_image_metadata(width, height),
+            }
+        }
         image::ImageFormat::Png => default_image_metadata(width, height),
         image::ImageFormat::Gif => default_image_metadata(width, height),
         image::ImageFormat::WebP => default_image_metadata(width, height),
@@ -388,18 +409,9 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                 None => Orientation::NoTransforms,
             };
 
-            let (width2, height2) = match orientation {
-                Orientation::NoTransforms => (width, height),
-                Orientation::Rotate90 => (height, width),
-                Orientation::Rotate180 => (width, height),
-                Orientation::Rotate270 => (height, width),
-                Orientation::FlipHorizontal => (width, height),
-                Orientation::FlipVertical => (width, height),
-                Orientation::Rotate90FlipH => (height, width),
-                Orientation::Rotate270FlipH => (height, width),
-            };
+            let image_size = metadata.image_size;
 
-            match is_file_upload_allowed(hash.clone(), size, session_id2, width2, height2).await {
+            match is_file_upload_allowed(hash.clone(), size, session_id2, image_size).await {
                 Ok(()) => {
                     let path: String = filepath(hash.clone());
                     let response: String = serde_json::to_string(&UploadResponse {
@@ -409,10 +421,11 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                     .unwrap();
 
                     match fs::exists(&path) {
-                        Ok(true) => response_with_headers(StatusCode::OK, response),
+                        Ok(true) => json_response_with_headers(StatusCode::OK, response),
 
                         _ => match fs::write(path, bytes) {
                             Ok(()) => {
+                                let (width2, height2) = image_size;
                                 if height2 > MAX_THUMBNAIL_HEIGHT
                                     || width2 > MAX_THUMBNAIL_HEIGHT * 3
                                 {
@@ -421,8 +434,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                                         MAX_THUMBNAIL_HEIGHT,
                                         image::imageops::FilterType::Triangle,
                                     );
-                                    resized_image
-                                        .apply_orientation(inverse_orientation(orientation));
+                                    resized_image.apply_orientation(orientation);
 
                                     let _ = resized_image.save_with_format(
                                         thumbnail_filepath(hash),
@@ -430,7 +442,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                                     );
                                 }
 
-                                response_with_headers(StatusCode::OK, response)
+                                json_response_with_headers(StatusCode::OK, response)
                             }
                             Err(_) => response_with_headers(
                                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -446,7 +458,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                 ),
             }
         }
-        _ => match is_file_upload_allowed(hash.clone(), size, session_id2, 0, 0).await {
+        _ => match is_file_upload_allowed(hash.clone(), size, session_id2, (0, 0)).await {
             Ok(()) => {
                 let path: String = filepath(hash.clone());
                 let response: String = serde_json::to_string(&UploadResponse {
@@ -456,10 +468,10 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                 .unwrap();
 
                 match fs::exists(&path) {
-                    Ok(true) => response_with_headers(StatusCode::OK, response),
+                    Ok(true) => json_response_with_headers(StatusCode::OK, response),
 
                     _ => match fs::write(path, bytes) {
-                        Ok(()) => response_with_headers(StatusCode::OK, response),
+                        Ok(()) => json_response_with_headers(StatusCode::OK, response),
                         Err(_) => response_with_headers(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             String::from("Internal error"),
@@ -482,6 +494,16 @@ fn response_with_headers(status_code: StatusCode, body: String) -> Response<Stri
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Headers", "*")
         .header("Content-Type", "text/plain")
+        .body(body)
+        .unwrap()
+}
+
+fn json_response_with_headers(status_code: StatusCode, body: String) -> Response<String> {
+    Response::builder()
+        .status(status_code)
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Headers", "*")
+        .header("Content-Type", "application/json")
         .body(body)
         .unwrap()
 }

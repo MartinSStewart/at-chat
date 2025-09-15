@@ -400,11 +400,14 @@ homePageLoggedInView :
     -> LocalState
     -> Element FrontendMsg
 homePageLoggedInView maybeOtherUserId model loggedIn local =
-    case loggedIn.newGuildForm of
-        Just form ->
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
+            FileStatus.imageInfoView PressedCloseImageInfo fileData
+
+        ( Nothing, Just form ) ->
             newGuildFormView form
 
-        Nothing ->
+        ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
                 Ui.row
                     [ Ui.height Ui.fill
@@ -569,11 +572,14 @@ channelColumnWidth =
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
-    case loggedIn.newGuildForm of
-        Just form ->
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
+            FileStatus.imageInfoView PressedCloseImageInfo fileData
+
+        ( Nothing, Just form ) ->
             newGuildFormView form
 
-        Nothing ->
+        ( Nothing, Nothing ) ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     if MyUi.isMobile model then
@@ -2072,7 +2078,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
+                    FileStatus.fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        filesToUpload2
                         |> Ui.inFront
 
                 Nothing ->
@@ -2352,7 +2361,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
             , MyUi.noShrinking
             , case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                 Just filesToUpload2 ->
-                    FileStatus.fileUploadPreview (PressedDeleteAttachedFile guildOrDmId) filesToUpload2
+                    FileStatus.fileUploadPreview
+                        (PressedDeleteAttachedFile guildOrDmId)
+                        (PressedViewAttachedFileInfo guildOrDmId)
+                        filesToUpload2
                         |> Ui.inFront
 
                 Nothing ->
@@ -2645,6 +2657,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
                         Just filesToUpload ->
                             FileStatus.fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 filesToUpload
                                 |> Ui.inFront
 
@@ -2765,6 +2778,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
                         Just filesToUpload ->
                             FileStatus.fileUploadPreview
                                 (EditMessage_PressedDeleteAttachedFile guildOrDmId)
+                                (EditMessage_PressedViewAttachedFileInfo guildOrDmId)
                                 filesToUpload
                                 |> Ui.inFront
 
@@ -3186,11 +3200,13 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 messageIdView : Id messageId -> Element msg
 messageIdView messageId =
-    if Env.isProduction then
-        Ui.none
+    --if Env.isProduction then
+    Ui.none
 
-    else
-        Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
+
+
+--else
+--    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg

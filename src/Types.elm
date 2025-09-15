@@ -58,7 +58,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileData, FileHash, FileId, FileStatus)
+import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus, ImageMetadata)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
@@ -166,6 +166,7 @@ type alias LoggedIn2 =
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
     , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
+    , showFileToUploadInfo : Maybe FileDataWithImage
     , sessionId : SessionId
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
@@ -406,7 +407,9 @@ type FrontendMsg
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
+    | EditMessage_PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
     | EditMessage_PressedAttachFiles GuildOrDmId
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
     | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
@@ -419,6 +422,7 @@ type FrontendMsg
     | GotIsPushNotificationsRegistered Bool
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | GotScrollbarWidth Int
+    | PressedCloseImageInfo
 
 
 type ScrollPosition
