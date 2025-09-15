@@ -834,7 +834,7 @@ memberColumnMobile canScroll2 localUser guildOwner guildMembers =
             [ Ui.height Ui.fill
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
-            , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+            , MyUi.htmlStyle "padding" ("16px 0 calc(" ++ MyUi.insetBottom ++ " + 16px) 0")
             , scrollable canScroll2
             , Ui.heightMin 0
             ]
