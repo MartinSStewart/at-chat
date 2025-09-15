@@ -363,6 +363,7 @@ loadedInitHelper time timezone loginData loading =
                     Nothing ->
                         TwoFactorNotStarted
             , filesToUpload = SeqDict.empty
+            , showFileToUploadInfo = Nothing
             , sessionId = loginData.sessionId
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
@@ -1063,6 +1064,9 @@ isPressMsg msg =
             True
 
         EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
+            True
+
+        PressedCloseImageInfo ->
             True
 
 
@@ -3106,11 +3110,55 @@ updateLoaded msg model =
         GotScrollbarWidth width ->
             ( { model | scrollbarWidth = width }, Command.none )
 
-        PressedViewAttachedFileInfo guildOrDmId id ->
-            Debug.todo ""
+        PressedViewAttachedFileInfo guildOrDmId fileId ->
+            viewImageInfo guildOrDmId fileId model
 
-        EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
-            Debug.todo ""
+        EditMessage_PressedViewAttachedFileInfo guildOrDmId fileId ->
+            viewImageInfo guildOrDmId fileId model
+
+        PressedCloseImageInfo ->
+            updateLoggedIn
+                (\loggedIn -> ( { loggedIn | showFileToUploadInfo = Nothing }, Command.none ))
+                model
+
+
+viewImageInfo :
+    GuildOrDmId
+    -> Id FileId
+    -> LoadedFrontend
+    -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+viewImageInfo guildOrDmId fileId model =
+    updateLoggedIn
+        (\loggedIn ->
+            ( { loggedIn
+                | showFileToUploadInfo =
+                    case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                        Just nonemptyDict ->
+                            case NonemptyDict.get fileId nonemptyDict of
+                                Just (FileStatus.FileUploaded fileData) ->
+                                    case fileData.imageMetadata of
+                                        Just metadata ->
+                                            { fileName = fileData.fileName
+                                            , fileSize = fileData.fileSize
+                                            , imageMetadata = metadata
+                                            , contentType = fileData.contentType
+                                            , fileHash = fileData.fileHash
+                                            }
+                                                |> Just
+
+                                        Nothing ->
+                                            Nothing
+
+                                _ ->
+                                    Nothing
+
+                        Nothing ->
+                            Nothing
+              }
+            , Command.none
+            )
+        )
+        model
 
 
 setLastViewedToLatestMessage : LoadedFrontend -> LoggedIn2 -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )

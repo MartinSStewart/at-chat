@@ -3,6 +3,7 @@ module FileStatus exposing
     , ContentTypeType(..)
     , ExposureTime
     , FileData
+    , FileDataWithImage
     , FileHash(..)
     , FileId
     , FileStatus(..)
@@ -59,6 +60,15 @@ type alias FileData =
     { fileName : FileName
     , fileSize : Int
     , imageMetadata : Maybe ImageMetadata
+    , contentType : ContentType
+    , fileHash : FileHash
+    }
+
+
+type alias FileDataWithImage =
+    { fileName : FileName
+    , fileSize : Int
+    , imageMetadata : ImageMetadata
     , contentType : ContentType
     , fileHash : FileHash
     }
@@ -601,61 +611,67 @@ fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
         )
 
 
-imageInfoView : ContentType -> FileHash -> ImageMetadata -> Element msg
-imageInfoView contentType2 fileHash2 metadata =
+imageInfoView : msg -> FileDataWithImage -> Element msg
+imageInfoView onPressClose fileData =
+    let
+        metadata : ImageMetadata
+        metadata =
+            fileData.imageMetadata
+    in
     Ui.el
-        [ Ui.column
-            [ Ui.background MyUi.background1
-            , Ui.paddingXY 8 0
-            , Ui.spacing 16
-            , Ui.alignBottom
-            ]
-            ([ imageLabel
-                "Image size"
-                (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
-             ]
-                ++ List.filterMap
-                    identity
-                    [ metadata.orientation
-                        |> Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation))
-                    , metadata.gpsLocation
-                        |> Maybe.map (\location -> imageLabel "Location" (locationToString location))
-                    , metadata.cameraOwner
-                        |> Maybe.map (\owner -> imageLabel "Camera owner" owner)
-                    , metadata.exposureTime
-                        |> Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure))
-                    , metadata.fNumber
-                        |> Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber))
-                    , metadata.focalLength
-                        |> Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm"))
-                    , metadata.isoSpeedRating
-                        |> Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso))
-                    , metadata.make
-                        |> Maybe.map (\make -> imageLabel "Make" make)
-                    , metadata.model
-                        |> Maybe.map (\model -> imageLabel "Model" model)
-                    , metadata.software
-                        |> Maybe.map (\software -> imageLabel "Software" software)
-                    , metadata.userComment
-                        |> Maybe.map (\comment -> imageLabel "Comment" comment)
-                    ]
+        [ Ui.inFront
+            (MyUi.elButton
+                (Dom.id "fileStatus_closeImageInfo")
+                onPressClose
+                [ Ui.alignRight, Ui.paddingXY 16 16 ]
+                (Ui.html Icons.x)
             )
-            |> Ui.inFront
         ]
-        (Ui.image
-            []
-            { source = fileUrl contentType2 fileHash2
-            , description = ""
-            , onLoad = Nothing
-            }
+        (Ui.column
+            [ Ui.height Ui.fill
+            , Ui.scrollable
+            , Ui.heightMin 0
+            ]
+            [ Ui.column
+                [ Ui.background MyUi.background1
+                , Ui.paddingXY 16 8
+                , Ui.spacing 2
+                , Ui.alignBottom
+                ]
+                ([ imageLabel
+                    "Image size"
+                    (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
+                 ]
+                    ++ List.filterMap
+                        identity
+                        [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
+                        , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
+                        , Maybe.map (imageLabel "Camera owner") metadata.cameraOwner
+                        , Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure)) metadata.exposureTime
+                        , Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber)) metadata.fNumber
+                        , Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm")) metadata.focalLength
+                        , Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso)) metadata.isoSpeedRating
+                        , Maybe.map (imageLabel "Make") metadata.make
+                        , Maybe.map (imageLabel "Model") metadata.model
+                        , Maybe.map (imageLabel "Software") metadata.software
+                        , Maybe.map (imageLabel "Comment") metadata.userComment
+                        ]
+                )
+            , Ui.image
+                [ Ui.widthMax (Coord.xRaw metadata.imageSize), Ui.centerX ]
+                { source = fileUrl fileData.contentType fileData.fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+            ]
         )
 
 
 imageLabel : String -> String -> Element msg
 imageLabel title value =
     Ui.row
-        []
-        [ Ui.text title
+        [ MyUi.htmlStyle "white-space" "pre-wrap" ]
+        [ Ui.text (title ++ ": ")
         , Ui.text value
         ]
 

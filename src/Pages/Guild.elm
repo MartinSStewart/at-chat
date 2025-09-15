@@ -400,11 +400,14 @@ homePageLoggedInView :
     -> LocalState
     -> Element FrontendMsg
 homePageLoggedInView maybeOtherUserId model loggedIn local =
-    case loggedIn.newGuildForm of
-        Just form ->
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
+            FileStatus.imageInfoView PressedCloseImageInfo fileData
+
+        ( Nothing, Just form ) ->
             newGuildFormView form
 
-        Nothing ->
+        ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
                 Ui.row
                     [ Ui.height Ui.fill
@@ -569,11 +572,14 @@ channelColumnWidth =
 
 guildView : LoadedFrontend -> Id GuildId -> ChannelRoute -> LoggedIn2 -> LocalState -> Element FrontendMsg
 guildView model guildId channelRoute loggedIn local =
-    case loggedIn.newGuildForm of
-        Just form ->
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
+            FileStatus.imageInfoView PressedCloseImageInfo fileData
+
+        ( Nothing, Just form ) ->
             newGuildFormView form
 
-        Nothing ->
+        ( Nothing, Nothing ) ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
                     if MyUi.isMobile model then
