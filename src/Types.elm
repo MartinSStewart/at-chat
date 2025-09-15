@@ -58,7 +58,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus, ImageMetadata)
+import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)

@@ -33,7 +33,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
@@ -595,7 +595,7 @@ guildView model guildId channelRoute loggedIn local =
                                             ViewThreadWithFriends _ _ showMembers2 ->
                                                 showMembers2
 
-                                            NoThreadWithFriends maybeId showMembers2 ->
+                                            NoThreadWithFriends _ showMembers2 ->
                                                 showMembers2
 
                                     _ ->

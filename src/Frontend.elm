@@ -559,10 +559,10 @@ routeRequest previousRoute newRoute model =
                         showMembers : ShowMembersTab
                         showMembers =
                             case threadRoute of
-                                ViewThreadWithFriends threadId _ showMembers2 ->
+                                ViewThreadWithFriends _ _ showMembers2 ->
                                     showMembers2
 
-                                NoThreadWithFriends maybeId showMembers2 ->
+                                NoThreadWithFriends _ showMembers2 ->
                                     showMembers2
 
                         --previousShowMembers : ShowMembersTab
@@ -1087,10 +1087,10 @@ isPressMsg msg =
         GotScrollbarWidth _ ->
             False
 
-        PressedViewAttachedFileInfo guildOrDmId id ->
+        PressedViewAttachedFileInfo _ _ ->
             True
 
-        EditMessage_PressedViewAttachedFileInfo guildOrDmId id ->
+        EditMessage_PressedViewAttachedFileInfo _ _ ->
             True
 
         PressedCloseImageInfo ->

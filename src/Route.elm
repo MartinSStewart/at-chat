@@ -7,10 +7,10 @@ module Route exposing
     , encode
     )
 
-import AppUrl exposing (QueryParameters)
+import AppUrl
 import Dict
 import Effect.Lamdera as Lamdera exposing (SessionId)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import Slack
 import Url exposing (Url)

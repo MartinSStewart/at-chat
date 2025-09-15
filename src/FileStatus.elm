@@ -431,7 +431,7 @@ previewSize =
     150
 
 
-fileUploadPreview : (Id FileId -> msg) -> (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Ui.Element msg
+fileUploadPreview : (Id FileId -> msg) -> (Id FileId -> msg) -> NonemptyDict (Id FileId) FileStatus -> Element msg
 fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
     Ui.row
         [ Ui.spacing 2
@@ -512,10 +512,10 @@ fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
                                 Nothing ->
                                     Ui.noAttr
 
-                        FileUploading fileName record _ ->
+                        FileUploading _ _ _ ->
                             Ui.noAttr
 
-                        FileError fileName int _ error ->
+                        FileError _ _ _ _ ->
                             Ui.noAttr
                     , Ui.el
                         [ Ui.alignBottom
@@ -545,10 +545,10 @@ fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
                                     ]
                                 |> Ui.inFront
 
-                        FileUploaded fileData ->
+                        FileUploaded _ ->
                             Ui.noAttr
 
-                        FileError _ fileSize _ _ ->
+                        FileError _ _ _ _ ->
                             Ui.noAttr
                     ]
                     (case fileStatus of
@@ -640,11 +640,10 @@ imageInfoView onPressClose fileData =
                 , Ui.alignBottom
                 , Ui.paddingXY 8 0
                 ]
-                ([ imageLabel
+                (imageLabel
                     "Image size"
                     (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
-                 ]
-                    ++ List.filterMap
+                    :: List.filterMap
                         identity
                         [ Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation)) metadata.orientation
                         , Maybe.map (\location -> imageLabel "Location" (locationToString location)) metadata.gpsLocation
