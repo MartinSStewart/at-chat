@@ -231,9 +231,9 @@ threadHasNotifications guildId channelId currentUserId currentUser channel =
         channel.threads
 
 
-canScroll : LoadedFrontend -> Bool
-canScroll model =
-    case model.drag of
+canScroll : Drag -> Bool
+canScroll drag =
+    case drag of
         Dragging dragging ->
             not dragging.horizontalStart
 
@@ -441,7 +441,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 local.localUser
                                 local.dmChannels
                                 local.guilds
-                                (canScroll model)
+                                (canScroll model.drag)
                             , friendsColumn True maybeOtherUserId local
                             ]
                         , loggedInAsView local
@@ -464,7 +464,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                 local.localUser
                                 local.dmChannels
                                 local.guilds
-                                (canScroll model)
+                                (canScroll model.drag)
                             , friendsColumn False maybeOtherUserId local
                             ]
                         , loggedInAsView local
@@ -585,7 +585,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                canScroll model
+                                canScroll model.drag
 
                             showMembers : ShowMembersTab
                             showMembers =
@@ -608,7 +608,19 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.clip
                             , case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy3 memberColumnMobile local.localUser guild.owner guild.members
+                                    Ui.Lazy.lazy4
+                                        memberColumnMobile
+                                        (canScroll model.drag)
+                                        local.localUser
+                                        guild.owner
+                                        guild.members
+                                        |> Ui.el
+                                            [ Ui.height Ui.fill
+                                            , Ui.background MyUi.background3
+                                            , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                            , sidebarOffsetAttr loggedIn model
+                                            , Ui.heightMin 0
+                                            ]
                                         |> Ui.inFront
 
                                 HideMembersTab ->
@@ -618,7 +630,12 @@ guildView model guildId channelRoute loggedIn local =
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
                                     , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
-                                    , sidebarOffsetAttr loggedIn model
+                                    , case showMembers of
+                                        ShowMembersTab ->
+                                            Ui.noAttr
+
+                                        HideMembersTab ->
+                                            sidebarOffsetAttr loggedIn model
                                     , Ui.heightMin 0
                                     ]
                                 |> Ui.inFront
@@ -700,7 +717,7 @@ guildView model guildId channelRoute loggedIn local =
                     if MyUi.isMobile model then
                         let
                             canScroll2 =
-                                canScroll model
+                                canScroll model.drag
                         in
                         Ui.column
                             [ Ui.height Ui.fill
@@ -793,8 +810,8 @@ memberColumnNotMobile localUser guildOwner guildMembers =
         ]
 
 
-memberColumnMobile : LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-memberColumnMobile localUser guildOwner guildMembers =
+memberColumnMobile : Bool -> LocalUser -> Id UserId -> SeqDict (Id UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
+memberColumnMobile canScroll2 localUser guildOwner guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -818,7 +835,7 @@ memberColumnMobile localUser guildOwner guildMembers =
             , Ui.background MyUi.background2
             , Ui.Font.color MyUi.font1
             , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
-            , Ui.scrollable
+            , scrollable canScroll2
             , Ui.heightMin 0
             ]
             [ Ui.column
@@ -1036,7 +1053,7 @@ inviteLinkCreatorForm model local guildId guild =
             [ Ui.Font.color MyUi.font1
             , Ui.alignTop
             , Ui.spacing 16
-            , scrollable (canScroll model)
+            , scrollable (canScroll model.drag)
             ]
             [ channelHeader (MyUi.isMobile model) (Ui.text "Invite member to guild")
             , Ui.el
@@ -2113,7 +2130,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
                 , Ui.paddingXY 0 16
-                , scrollable (canScroll model)
+                , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on
@@ -2376,7 +2393,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 [ Ui.height Ui.fill
                 , Ui.width Ui.fill
                 , Ui.paddingXY 0 16
-                , scrollable (canScroll model)
+                , scrollable (canScroll model.drag)
                 , MyUi.htmlStyle "overflow-wrap" "break-word"
                 , Ui.id (Dom.idToString conversationContainerId)
                 , Ui.Events.on

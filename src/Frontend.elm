@@ -2273,27 +2273,31 @@ updateLoaded msg model =
                 _ =
                     Debug.log "Animation frame" ()
             in
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     case loggedIn.sidebarMode of
                         ChannelSidebarClosed ->
-                            ( loggedIn, Command.none )
+                            ( model, Command.none )
 
                         ChannelSidebarOpened ->
-                            ( loggedIn, Command.none )
+                            ( model, Command.none )
 
                         ChannelSidebarOpening { offset } ->
                             let
                                 offset2 =
                                     offset - Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
                             in
-                            ( { loggedIn
-                                | sidebarMode =
-                                    if offset2 <= 0 then
-                                        ChannelSidebarOpened
+                            ( { model
+                                | loginStatus =
+                                    { loggedIn
+                                        | sidebarMode =
+                                            if offset2 <= 0 then
+                                                ChannelSidebarOpened
 
-                                    else
-                                        ChannelSidebarOpening { offset = offset2 }
+                                            else
+                                                ChannelSidebarOpening { offset = offset2 }
+                                    }
+                                        |> LoggedIn
                               }
                             , Command.none
                             )
@@ -2302,22 +2306,72 @@ updateLoaded msg model =
                             let
                                 offset2 =
                                     offset + Quantity.unwrap (Quantity.for elapsedTime sidebarSpeed)
+
+                                showMember =
+                                    case model.route of
+                                        GuildRoute _ (ChannelRoute _ threadRoute) ->
+                                            case threadRoute of
+                                                ViewThreadWithFriends _ _ showMembers2 ->
+                                                    showMembers2
+
+                                                NoThreadWithFriends _ showMembers2 ->
+                                                    showMembers2
+
+                                        DmRoute _ threadRoute ->
+                                            case threadRoute of
+                                                ViewThreadWithFriends _ _ showMembers2 ->
+                                                    showMembers2
+
+                                                NoThreadWithFriends _ showMembers2 ->
+                                                    showMembers2
+
+                                        _ ->
+                                            HideMembersTab
                             in
-                            ( { loggedIn
-                                | sidebarMode =
+                            case showMember of
+                                ShowMembersTab ->
                                     if offset2 >= 1 then
-                                        ChannelSidebarClosed
+                                        setShowMembers
+                                            HideMembersTab
+                                            { model
+                                                | loginStatus =
+                                                    { loggedIn | sidebarMode = ChannelSidebarOpened }
+                                                        |> LoggedIn
+                                            }
 
                                     else
-                                        ChannelSidebarClosing { offset = offset2 }
-                              }
-                            , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
-                            )
+                                        ( { model
+                                            | loginStatus =
+                                                { loggedIn
+                                                    | sidebarMode =
+                                                        ChannelSidebarClosing { offset = offset2 }
+                                                }
+                                                    |> LoggedIn
+                                          }
+                                        , Command.none
+                                        )
+
+                                HideMembersTab ->
+                                    ( { model
+                                        | loginStatus =
+                                            { loggedIn
+                                                | sidebarMode =
+                                                    if offset2 >= 1 then
+                                                        ChannelSidebarClosed
+
+                                                    else
+                                                        ChannelSidebarClosing { offset = offset2 }
+                                            }
+                                                |> LoggedIn
+                                      }
+                                    , Dom.blur Pages.Guild.channelTextInputId |> Task.attempt (\_ -> RemoveFocus)
+                                    )
 
                         ChannelSidebarDragging _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         SetScrollToBottom ->
             ( model, Command.none )
