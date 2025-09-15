@@ -1055,7 +1055,7 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ channelHeader (MyUi.isMobile model) (Ui.text "Invite member to guild")
+            [ channelHeader (MyUi.isMobile model) False (Ui.text "Invite member to guild")
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
@@ -1934,8 +1934,8 @@ messageViewDecode value =
     }
 
 
-channelHeader : Bool -> Element FrontendMsg -> Element FrontendMsg
-channelHeader isMobile2 content =
+channelHeader : Bool -> Bool -> Element FrontendMsg -> Element FrontendMsg
+channelHeader isMobile2 includeShowMembers content =
     Ui.row
         [ Ui.contentCenterY
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -1947,16 +1947,20 @@ channelHeader isMobile2 content =
         (if isMobile2 then
             [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
             , Ui.el [ Ui.centerY ] content
-            , MyUi.elButton
-                (Dom.id "guild_showMembers")
-                PressedShowMembers
-                [ Ui.alignRight
-                , Ui.width (Ui.px (24 + 24))
-                , Ui.height Ui.fill
-                , Ui.paddingXY 12 0
-                , Ui.contentCenterY
-                ]
-                (Ui.html Icons.users)
+            , if includeShowMembers then
+                MyUi.elButton
+                    (Dom.id "guild_showMembers")
+                    PressedShowMembers
+                    [ Ui.alignRight
+                    , Ui.width (Ui.px (24 + 24))
+                    , Ui.height Ui.fill
+                    , Ui.paddingXY 12 0
+                    , Ui.contentCenterY
+                    ]
+                    (Ui.html Icons.users)
+
+              else
+                Ui.none
             ]
 
          else
@@ -2082,6 +2086,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
         [ channelHeader
             isMobile
+            True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
@@ -2345,6 +2350,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         ]
         [ channelHeader
             isMobile
+            True
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
@@ -4277,7 +4283,7 @@ newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
-        [ channelHeader isMobile2 (Ui.text "Create new channel")
+        [ channelHeader isMobile2 False (Ui.text "Create new channel")
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)

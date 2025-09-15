@@ -555,6 +555,25 @@ routeRequest previousRoute newRoute model =
             in
             case channelRoute of
                 ChannelRoute channelId threadRoute ->
+                    let
+                        showMembers : ShowMembersTab
+                        showMembers =
+                            case threadRoute of
+                                ViewThreadWithFriends threadId _ showMembers2 ->
+                                    showMembers2
+
+                                NoThreadWithFriends maybeId showMembers2 ->
+                                    showMembers2
+
+                        --previousShowMembers : ShowMembersTab
+                        --previousShowMembers =
+                        --    case threadRoute of
+                        --        ViewThreadWithFriends threadId _ showMembers2 ->
+                        --            showMembers2
+                        --
+                        --        NoThreadWithFriends maybeId showMembers2 ->
+                        --            showMembers2
+                    in
                     updateLoggedIn
                         (\loggedIn ->
                             handleLocalChange
@@ -570,11 +589,16 @@ routeRequest previousRoute newRoute model =
                                  else
                                     Nothing
                                 )
-                                (if sameGuild || previousRoute == Nothing then
-                                    startOpeningChannelSidebar loggedIn
+                                (case showMembers of
+                                    ShowMembersTab ->
+                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                                 else
-                                    loggedIn
+                                    HideMembersTab ->
+                                        if sameGuild || previousRoute == Nothing then
+                                            startOpeningChannelSidebar loggedIn
+
+                                        else
+                                            loggedIn
                                 )
                                 (openChannelCmds threadRoute model3)
                         )
@@ -3213,7 +3237,7 @@ updateLoaded msg model =
                 model
 
         PressedMemberListBack ->
-            setShowMembers HideMembersTab model
+            updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
