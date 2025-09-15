@@ -48,7 +48,7 @@ import NonemptySet exposing (NonemptySet)
 import PersonName
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -288,7 +288,7 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                             if dmHasNotifications localUser.user otherUserId dmChannel then
                                 elLinkButton
                                     (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                    (DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
+                                    (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
                                     []
                                     (case SeqDict.get otherUserId allUsers of
                                         Just otherUser ->
@@ -327,16 +327,16 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                                             channelId
                                             (case threadRoute of
                                                 ViewThread threadId ->
-                                                    ViewThreadWithMaybeMessage threadId Nothing
+                                                    ViewThreadWithFriends threadId Nothing HideMembersTab
 
                                                 NoThread ->
-                                                    NoThreadWithMaybeMessage Nothing
+                                                    NoThreadWithFriends Nothing HideMembersTab
                                             )
 
                                     Nothing ->
                                         ChannelRoute
                                             (LocalState.announcementChannel guild)
-                                            (NoThreadWithMaybeMessage Nothing)
+                                            (NoThreadWithFriends Nothing HideMembersTab)
                                 )
                             )
                             []
@@ -394,7 +394,7 @@ loggedInAsView local =
 
 
 homePageLoggedInView :
-    Maybe ( Id UserId, ThreadRouteWithMaybeMessage )
+    Maybe ( Id UserId, ThreadRouteWithFriends )
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalState
@@ -489,7 +489,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     ]
 
 
-dmChannelView : Id UserId -> ThreadRouteWithMaybeMessage -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+dmChannelView : Id UserId -> ThreadRouteWithFriends -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 dmChannelView otherUserId threadRoute loggedIn local model =
     case LocalState.getUser otherUserId local.localUser of
         Just otherUser ->
@@ -500,7 +500,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                         |> Maybe.withDefault DmChannel.frontendInit
             in
             case threadRoute of
-                ViewThreadWithMaybeMessage threadMessageIndex maybeUrlMessageId ->
+                ViewThreadWithFriends threadMessageIndex maybeUrlMessageId showMembers ->
                     SeqDict.get threadMessageIndex dmChannel.threads
                         |> Maybe.withDefault DmChannel.frontendThreadInit
                         |> threadConversationView
@@ -518,7 +518,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                             local
                             (PersonName.toString otherUser.name)
 
-                NoThreadWithMaybeMessage maybeUrlMessageId ->
+                NoThreadWithFriends maybeUrlMessageId showMembers ->
                     conversationView
                         (SeqDict.get
                             (GuildOrDmId_Dm otherUserId)
@@ -775,7 +775,7 @@ memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
-        (DmRoute userId (NoThreadWithMaybeMessage Nothing))
+        (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
         [ Ui.spacing 8
         , Ui.paddingXY 4 4
         , MyUi.hover
@@ -893,7 +893,7 @@ channelView channelRoute guildId guild loggedIn local model =
             case SeqDict.get channelId guild.channels of
                 Just channel ->
                     case threadRoute of
-                        ViewThreadWithMaybeMessage threadMessageIndex maybeUrlMessageId ->
+                        ViewThreadWithFriends threadMessageIndex maybeUrlMessageId showMembers ->
                             SeqDict.get threadMessageIndex channel.threads
                                 |> Maybe.withDefault DmChannel.frontendThreadInit
                                 |> threadConversationView
@@ -914,7 +914,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                         ++ threadPreviewText threadMessageIndex channel local.localUser
                                     )
 
-                        NoThreadWithMaybeMessage maybeUrlMessageId ->
+                        NoThreadWithFriends maybeUrlMessageId showMembers ->
                             conversationView
                                 (SeqDict.get
                                     (GuildOrDmId_Guild guildId channelId)
@@ -3789,7 +3789,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             channelId
                             channel
                             (case channelRoute of
-                                ChannelRoute channelIdB (ViewThreadWithMaybeMessage threadMessageIndex _) ->
+                                ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ showMembers) ->
                                     if channelIdB == channelId then
                                         SeqDict.insert threadMessageIndex DmChannel.frontendThreadInit channel.threads
 
@@ -3854,7 +3854,7 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
                         isSelected : Bool
                         isSelected =
                             case channelRoute of
-                                ChannelRoute a (ViewThreadWithMaybeMessage b _) ->
+                                ChannelRoute a (ViewThreadWithFriends b _ _) ->
                                     a == channelId && b == threadMessageIndex
 
                                 _ ->
@@ -3879,7 +3879,7 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
                         ]
                         [ elLinkButton
                             (Dom.id ("guild_viewThread_" ++ Id.toString channelId ++ "_" ++ Id.toString threadMessageIndex))
-                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithMaybeMessage threadMessageIndex Nothing)))
+                            (GuildRoute guildId (ChannelRoute channelId (ViewThreadWithFriends threadMessageIndex Nothing HideMembersTab)))
                             [ Ui.height Ui.fill
                             , Ui.contentCenterY
                             , Ui.paddingWith
@@ -3952,7 +3952,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         isSelected : Bool
         isSelected =
             case channelRoute of
-                ChannelRoute a (NoThreadWithMaybeMessage _) ->
+                ChannelRoute a (NoThreadWithFriends _ _) ->
                     a == channelId
 
                 EditChannelRoute a ->
@@ -3981,7 +3981,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         ]
         [ elLinkButton
             (Dom.id ("guild_openChannel_" ++ Id.toString channelId))
-            (GuildRoute guildId (ChannelRoute channelId (NoThreadWithMaybeMessage Nothing)))
+            (GuildRoute guildId (ChannelRoute channelId (NoThreadWithFriends Nothing HideMembersTab)))
             [ Ui.height Ui.fill
             , Ui.contentCenterY
             , Ui.paddingWith
@@ -4046,7 +4046,7 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
         ]
 
 
-friendsColumn : Bool -> Maybe ( Id UserId, ThreadRouteWithMaybeMessage ) -> LocalState -> Element FrontendMsg
+friendsColumn : Bool -> Maybe ( Id UserId, ThreadRouteWithFriends ) -> LocalState -> Element FrontendMsg
 friendsColumn isMobile openedOtherUserId local =
     channelColumnContainer
         [ Ui.el
@@ -4093,7 +4093,7 @@ friendLabel isMobile isSelected otherUserId otherUser =
     in
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
-        (Route.DmRoute otherUserId (NoThreadWithMaybeMessage Nothing))
+        (Route.DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
