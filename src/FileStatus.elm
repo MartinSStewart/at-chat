@@ -469,31 +469,35 @@ fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
                         FileUploaded fileData ->
                             case fileData.imageMetadata of
                                 Just metadata ->
-                                    MyUi.elButton
-                                        (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
-                                        (onPressInfo fileStatusId)
-                                        [ Ui.width (Ui.px 42)
-                                        , Ui.height (Ui.px 42)
-                                        , Ui.rounded 16
-                                        , Ui.move { x = -3, y = 40, z = 0 }
-                                        ]
-                                        (Ui.el
-                                            [ Ui.width (Ui.px 34)
-                                            , Ui.height (Ui.px 34)
+                                    if imageHasMetadata metadata then
+                                        MyUi.elButton
+                                            (Dom.id ("fileStatus_info_" ++ Id.toString fileStatusId))
+                                            (onPressInfo fileStatusId)
+                                            [ Ui.width (Ui.px 42)
+                                            , Ui.height (Ui.px 42)
                                             , Ui.rounded 16
-                                            , Ui.contentCenterX
-                                            , Ui.contentCenterY
-                                            , Ui.background MyUi.buttonBackground
+                                            , Ui.move { x = -3, y = 40, z = 0 }
                                             ]
-                                            (case metadata.gpsLocation of
-                                                Just _ ->
-                                                    Ui.html Icons.map
+                                            (Ui.el
+                                                [ Ui.width (Ui.px 34)
+                                                , Ui.height (Ui.px 34)
+                                                , Ui.rounded 16
+                                                , Ui.contentCenterX
+                                                , Ui.contentCenterY
+                                                , Ui.background MyUi.buttonBackground
+                                                ]
+                                                (case metadata.gpsLocation of
+                                                    Just _ ->
+                                                        Ui.html Icons.map
 
-                                                Nothing ->
-                                                    Ui.html Icons.info
+                                                    Nothing ->
+                                                        Ui.html Icons.info
+                                                )
                                             )
-                                        )
-                                        |> Ui.inFront
+                                            |> Ui.inFront
+
+                                    else
+                                        Ui.noAttr
 
                                 Nothing ->
                                     Ui.noAttr
@@ -515,28 +519,27 @@ fileUploadPreview onPressDelete onPressInfo filesToUpload2 =
                         ]
                         (Ui.text ("[!" ++ Id.toString fileStatusId ++ "]"))
                         |> Ui.inFront
-                    , (case fileStatus of
+                    , case fileStatus of
                         FileUploading _ fileSize _ ->
                             progressToString fileSize
+                                |> Ui.text
+                                |> Ui.el
+                                    [ Ui.alignRight
+                                    , Ui.Font.size 14
+                                    , Ui.paddingRight 8
+                                    , Ui.Shadow.font
+                                        { offset = ( 0, 0 )
+                                        , blur = 3
+                                        , color = Ui.rgb 0 0 0
+                                        }
+                                    ]
+                                |> Ui.inFront
 
                         FileUploaded fileData ->
-                            sizeToString fileData.fileSize
+                            Ui.noAttr
 
                         FileError _ fileSize _ _ ->
-                            sizeToString fileSize
-                      )
-                        |> Ui.text
-                        |> Ui.el
-                            [ Ui.alignRight
-                            , Ui.Font.size 14
-                            , Ui.paddingRight 8
-                            , Ui.Shadow.font
-                                { offset = ( 0, 0 )
-                                , blur = 3
-                                , color = Ui.rgb 0 0 0
-                                }
-                            ]
-                        |> Ui.inFront
+                            Ui.noAttr
                     ]
                     (case fileStatus of
                         FileUploading _ _ _ ->
@@ -607,10 +610,36 @@ imageInfoView contentType2 fileHash2 metadata =
             , Ui.spacing 16
             , Ui.alignBottom
             ]
-            [ imageLabel
+            ([ imageLabel
                 "Image size"
                 (String.fromInt (Coord.xRaw metadata.imageSize) ++ "×" ++ String.fromInt (Coord.yRaw metadata.imageSize))
-            ]
+             ]
+                ++ List.filterMap
+                    identity
+                    [ metadata.orientation
+                        |> Maybe.map (\orientation -> imageLabel "Orientation" (orientationToString orientation))
+                    , metadata.gpsLocation
+                        |> Maybe.map (\location -> imageLabel "Location" (locationToString location))
+                    , metadata.cameraOwner
+                        |> Maybe.map (\owner -> imageLabel "Camera owner" owner)
+                    , metadata.exposureTime
+                        |> Maybe.map (\exposure -> imageLabel "Exposure time" (exposureTimeToString exposure))
+                    , metadata.fNumber
+                        |> Maybe.map (\fNumber -> imageLabel "F-number" ("f/" ++ String.fromFloat fNumber))
+                    , metadata.focalLength
+                        |> Maybe.map (\focal -> imageLabel "Focal length" (String.fromFloat focal ++ "mm"))
+                    , metadata.isoSpeedRating
+                        |> Maybe.map (\iso -> imageLabel "ISO" (String.fromInt iso))
+                    , metadata.make
+                        |> Maybe.map (\make -> imageLabel "Make" make)
+                    , metadata.model
+                        |> Maybe.map (\model -> imageLabel "Model" model)
+                    , metadata.software
+                        |> Maybe.map (\software -> imageLabel "Software" software)
+                    , metadata.userComment
+                        |> Maybe.map (\comment -> imageLabel "Comment" comment)
+                    ]
+            )
             |> Ui.inFront
         ]
         (Ui.image
@@ -629,6 +658,48 @@ imageLabel title value =
         [ Ui.text title
         , Ui.text value
         ]
+
+
+orientationToString : Orientation -> String
+orientationToString orientation =
+    case orientation of
+        Id ->
+            "Normal"
+
+        Rotation90 ->
+            "Rotate 90°"
+
+        Rotation180 ->
+            "Rotate 180°"
+
+        Rotation270 ->
+            "Rotate 270°"
+
+        Mirrored ->
+            "Mirrored"
+
+        MirroredRotation90 ->
+            "Mirrored, rotate 90°"
+
+        MirroredRotation180 ->
+            "Mirrored, rotate 180°"
+
+        MirroredRotation270 ->
+            "Mirrored, rotate 270°"
+
+
+locationToString : Location -> String
+locationToString location =
+    String.fromFloat location.lat ++ ", " ++ String.fromFloat location.lon
+
+
+exposureTimeToString : ExposureTime -> String
+exposureTimeToString exposure =
+    if exposure.numerator == 1 then
+        "1/" ++ String.fromInt exposure.denominator ++ "s"
+
+    else
+        String.fromInt exposure.numerator ++ "/" ++ String.fromInt exposure.denominator ++ "s"
 
 
 imageHasMetadata : ImageMetadata -> Bool
