@@ -9,7 +9,7 @@ module FileStatus exposing
     , FileStatus(..)
     , ImageMetadata
     , Location
-    , Orientation
+    , Orientation(..)
     , UploadResponse
     , addFileHash
     , contentType
@@ -262,7 +262,7 @@ type alias ImageMetadata =
 
 
 type Orientation
-    = Id
+    = NoChange
     | Rotation90
     | Rotation180
     | Rotation270
@@ -278,7 +278,7 @@ orientationCodec =
         (\a ->
             case a of
                 1 ->
-                    Codec.succeed Id
+                    Codec.succeed NoChange
 
                 8 ->
                     Codec.succeed Rotation90
@@ -306,7 +306,7 @@ orientationCodec =
         )
         (\a ->
             case a of
-                Id ->
+                NoChange ->
                     1
 
                 Rotation90 ->
@@ -679,7 +679,7 @@ imageLabel title value =
 orientationToString : Orientation -> String
 orientationToString orientation =
     case orientation of
-        Id ->
+        NoChange ->
             "Normal"
 
         Rotation90 ->
