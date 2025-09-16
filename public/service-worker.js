@@ -1,4 +1,3 @@
-console.log("service-worker");
 // Register event listener for the 'push' event.
 self.addEventListener('push', function(event) {
     try
@@ -25,23 +24,23 @@ const cacheName = 'resource_cache_v1';
 self.addEventListener('fetch', (event) => {
     // Check if this is a request for an image
     const url = event.request.url;
-    console.log(url);
 
-    //const domain = 'https://at-chat.app';
-    const domain = 'https://at-chat.app';
-    if (url.startsWith(domain + '/file/t/')
-        || url.startsWith(domain + '/file/0')
-        || url.startsWith(domain + '/file/1')
-        || url.startsWith(domain + '/file/2')
-        || url.startsWith(domain + '/file/3')
-        || url.startsWith(domain + '/file/4')
-        || url.startsWith(domain + '/file/5')
-        || url.startsWith(domain + '/file/6')
-        || url.startsWith(domain + '/file/7')
-        || url.startsWith(domain + '/file/8')
-        || url.startsWith(domain + '/file/9')
+    const domain = 'https://at-chat.app/';
+
+    if (url.startsWith(domain + 'frontend.')
+        || url.startsWith(domain + 'file/t/')
+        || url.startsWith(domain + 'file/0')
+        || url.startsWith(domain + 'file/1')
+        || url.startsWith(domain + 'file/2')
+        || url.startsWith(domain + 'file/3')
+        || url.startsWith(domain + 'file/4')
+        || url.startsWith(domain + 'file/5')
+        || url.startsWith(domain + 'file/6')
+        || url.startsWith(domain + 'file/7')
+        || url.startsWith(domain + 'file/8')
+        || url.startsWith(domain + 'file/9')
         ) {
-        console.log(event.request.destination);
+
         event.respondWith(caches.open(cacheName).then((cache) => {
             // Go to the cache first
             return cache.match(url).then((cachedResponse) => {
@@ -53,15 +52,10 @@ self.addEventListener('fetch', (event) => {
                 // Otherwise, hit the network
                 return fetch(event.request).then((fetchedResponse) => {
 
-                    console.log(fetchedResponse.ok);
-                    console.log(fetchedResponse.headers["Content-Length"]);
-                    console.log(fetchedResponse.headers.entries());
-                    console.log(fetchedResponse.headers.get("Content-Length"));
-                    console.log(fetchedResponse.headers["content-length"]);
-                    console.log(fetchedResponse.headers.entries());
-                    console.log(fetchedResponse.headers.get("content-length"));
+                    const size = Number(fetchedResponse.headers.get("content-length"));
+                    const isValid = url.startsWith(domain + 'frontend.') || size < 1000 * 1000);
 
-                    if (fetchedResponse.ok && Number(fetchedResponse.headers.get("content-length")) < 1000 * 1000) {
+                    if (fetchedResponse.ok && isValid) {
                         cache.put(event.request, fetchedResponse.clone());
                     }
 
