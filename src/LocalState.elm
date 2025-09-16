@@ -12,6 +12,7 @@ module LocalState exposing
     , LocalState
     , LocalUser
     , LogWithTime
+    , NotificationMode(..)
     , PrivateVapidKey(..)
     , addInvite
     , addMember
@@ -91,7 +92,14 @@ type alias LocalState =
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , publicVapidKey : String
+    , notificationMode : NotificationMode
     }
+
+
+type NotificationMode
+    = NoNotifications
+    | NotifyWhenRunning
+    | PushNotifications
 
 
 type alias LocalUser =

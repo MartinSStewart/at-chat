@@ -6,7 +6,7 @@ import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..))
 import MyUi
 import PersonName
 import Slack
@@ -165,21 +165,27 @@ view isMobile time local loggedIn loaded model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
-                , let
-                    enablePushNotificationsLabel =
-                        Ui.Input.label "userOptions_togglePushNotifications" [ Ui.padding 8 ] (Ui.text "Enable push notifications")
-                  in
-                  Ui.row
-                    []
-                    [ Ui.Input.checkbox
-                        [ Ui.padding 8 ]
-                        { onChange = ToggledEnablePushNotifications
-                        , icon = Nothing
-                        , checked = loaded.enabledPushNotifications
-                        , label = enablePushNotificationsLabel.id
-                        }
-                    , enablePushNotificationsLabel.element
-                    ]
+                , MyUi.radioColumn
+                    (Dom.id "userOptions_notificationMode")
+                    SelectedNotificationMode
+                    (Just local.notificationMode)
+                    (if isMobile then
+                        "Notifications"
+
+                     else
+                        "Desktop notifications"
+                    )
+                    (if isMobile then
+                        [ ( NoNotifications, "No notifications" )
+                        , ( PushNotifications, "Allow notifications" )
+                        ]
+
+                     else
+                        [ ( NoNotifications, "No notifications" )
+                        , ( NotifyWhenRunning, "When the app is open (recommended)" )
+                        , ( PushNotifications, "Even when the app isn't open (intended for mobile but you can use it on desktop too)" )
+                        ]
+                    )
                 , Ui.el
                     [ Ui.linkNewTab
                         (Slack.buildOAuthUrl

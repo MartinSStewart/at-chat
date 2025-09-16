@@ -114,7 +114,6 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
-        , Ports.isPushNotificationsRegisteredSubscription GotIsPushNotificationsRegistered
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , case model of
             Loading _ ->
@@ -224,7 +223,6 @@ init url key =
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
-        , enabledPushNotifications = False
         , scrollbarWidth = 0
         }
     , Command.batch
@@ -236,7 +234,6 @@ init url key =
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
-        , Ports.isPushNotificationsRegistered
         , Ports.getScrollbarWidth
         ]
     )
@@ -282,7 +279,6 @@ initLoadedFrontend loading time loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , enabledPushNotifications = loading.enabledPushNotifications
             , scrollbarWidth = loading.scrollbarWidth
             }
 
@@ -442,6 +438,7 @@ loginDataToLocalState timezone loginData =
         , timezone = timezone
         }
     , publicVapidKey = loginData.publicVapidKey
+    , notificationMode = loginData.enabledPushNotifications
     }
 
 
@@ -482,9 +479,6 @@ update msg model =
 
                 GotTimezone timezone ->
                     ( Loading { loading | timezone = timezone }, Command.none )
-
-                GotIsPushNotificationsRegistered isEnabled ->
-                    ( Loading { loading | enabledPushNotifications = isEnabled }, Command.none )
 
                 GotScrollbarWidth width ->
                     ( Loading { loading | scrollbarWidth = width }, Command.none )
@@ -1079,11 +1073,8 @@ isPressMsg msg =
         GotRegisterPushSubscription _ ->
             False
 
-        ToggledEnablePushNotifications _ ->
+        SelectedNotificationMode _ ->
             True
-
-        GotIsPushNotificationsRegistered _ ->
-            False
 
         PrivateVapidKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
@@ -3189,7 +3180,7 @@ updateLoaded msg model =
                     Command.none
             )
 
-        ToggledEnablePushNotifications isEnabled ->
+        SelectedNotificationMode isEnabled ->
             updateLoggedIn
                 (\loggedIn ->
                     ( loggedIn
@@ -3197,16 +3188,10 @@ updateLoaded msg model =
                         Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
 
                       else
-                        Command.batch
-                            [ Ports.unregisterPushSubscriptionToJs
-                            , Lamdera.sendToBackend UnregisterPushSubscriptionRequest
-                            ]
+                        Lamdera.sendToBackend UnregisterPushSubscriptionRequest
                     )
                 )
-                { model | enabledPushNotifications = isEnabled }
-
-        GotIsPushNotificationsRegistered isEnabled ->
-            ( { model | enabledPushNotifications = isEnabled }, Command.none )
+                model
 
         SlackClientSecretEditableMsg editableMsg ->
             handleEditable

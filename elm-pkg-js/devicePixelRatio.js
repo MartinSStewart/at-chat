@@ -54,26 +54,6 @@ exports.init = async function init(app)
         });
     });
 
-    app.ports.is_push_subscription_registered_to_js.subscribe((a) => {
-        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-            if (registration) {
-                app.ports.is_push_subscription_registered_from_js.send(true);
-            } else {
-                app.ports.is_push_subscription_registered_from_js.send(false);
-            }
-        });
-    });
-
-    app.ports.unregister_push_subscription_to_js.subscribe((a) => {
-        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-            if (registration) {
-                registration
-                    .unregister()
-                    .then((isSuccessful) => { });
-            }
-        });
-    });
-
     app.ports.scrollbar_width_to_js.subscribe((a) => {
         // original code found here https://stackoverflow.com/a/13382873
         // Creating invisible container

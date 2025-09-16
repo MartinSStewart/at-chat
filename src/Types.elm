@@ -33,6 +33,7 @@ module Types exposing
     , ToBeFilledInByBackend(..)
     , ToFrontend(..)
     , UserOptionsModel
+    , UserSession
     , WaitingForLoginTokenData
     , messageMenuMobileOffset
     )
@@ -63,7 +64,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, NotificationMode, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Message exposing (Message)
@@ -104,7 +105,6 @@ type alias LoadingFrontend =
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , timezone : Time.Zone
-    , enabledPushNotifications : Bool
     , scrollbarWidth : Int
     }
 
@@ -131,7 +131,6 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , enabledPushNotifications : Bool
     , scrollbarWidth : Int
     }
 
@@ -251,7 +250,7 @@ type EmojiSelector
 
 type alias BackendModel =
     { users : NonemptyDict (Id UserId) BackendUser
-    , sessions : SeqDict SessionId (Id UserId)
+    , sessions : SeqDict SessionId UserSession
     , connections : SeqDict SessionId (NonemptyDict ClientId LastRequest)
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
@@ -278,8 +277,14 @@ type alias BackendModel =
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
-    , pushSubscriptions : SeqDict SessionId PushSubscription
     , slackClientSecret : Maybe Slack.ClientSecret
+    }
+
+
+type alias UserSession =
+    { userId : Id UserId
+    , notificationMode : NotificationMode
+    , pushSubscription : Maybe PushSubscription
     }
 
 
@@ -419,8 +424,7 @@ type FrontendMsg
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
     | MessageViewMsg GuildOrDmIdNoThread ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String PushSubscription)
-    | ToggledEnablePushNotifications Bool
-    | GotIsPushNotificationsRegistered Bool
+    | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | GotScrollbarWidth Int
     | PressedCloseImageInfo
@@ -463,7 +467,6 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | RegisterPushSubscriptionRequest PushSubscription
-    | UnregisterPushSubscriptionRequest
     | LinkSlackOAuthCode Slack.OAuthCode SessionId
 
 
@@ -547,6 +550,7 @@ type alias LoginData =
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
     , publicVapidKey : String
+    , notificationMode : NotificationMode
     }
 
 
