@@ -63,7 +63,6 @@ type alias MsgConfig msg =
     , pressedUploadFile : msg
     , target : MentionUserTarget
     , onPasteFiles : Nonempty File -> msg
-    , noOp : msg
     }
 
 
@@ -251,7 +250,7 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     , Ui.centerY
                     , Html.Events.preventDefaultOn
                         "touchend"
-                        (Json.Decode.succeed ( msgConfig.noOp, True ))
+                        (Json.Decode.succeed ( msgConfig.pressedSendMessage, True ))
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.sendMessage)
