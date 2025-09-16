@@ -296,6 +296,7 @@ editMessageTextInputConfig guildOrDmId threadRoute =
     , pressedUploadFile = EditMessage_PressedAttachFiles ( guildOrDmId, threadRoute )
     , target = MessageInput.EditMessage
     , onPasteFiles = EditMessage_PastedFiles ( guildOrDmId, threadRoute )
+    , noOp = FrontendNoOp
     }
 
 
