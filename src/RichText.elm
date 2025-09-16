@@ -993,7 +993,8 @@ viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoiler
                                                         [ Html.Attributes.href fileUrl
                                                         , Html.Attributes.target "_blank"
                                                         , Html.Attributes.rel "noreferrer"
-                                                        , Html.Attributes.style "object-fit" "contain"
+                                                        , Html.Attributes.style "width" (String.fromInt (round w3) ++ "px")
+                                                        , Html.Attributes.style "display" "block"
                                                         ]
                                                         [ Html.img
                                                             [ Html.Attributes.src thumbnailUrl

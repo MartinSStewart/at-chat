@@ -606,7 +606,7 @@ guildView model guildId channelRoute loggedIn local =
                             , Ui.background MyUi.background1
                             , Ui.heightMin 0
                             , Ui.clip
-                            , case showMembers of
+                            , (case showMembers of
                                 ShowMembersTab ->
                                     Ui.Lazy.lazy4
                                         memberColumnMobile
@@ -621,10 +621,11 @@ guildView model guildId channelRoute loggedIn local =
                                             , sidebarOffsetAttr loggedIn model
                                             , Ui.heightMin 0
                                             ]
-                                        |> Ui.inFront
 
                                 HideMembersTab ->
-                                    Ui.noAttr
+                                    Ui.none
+                              )
+                                |> Ui.inFront
                             , channelView channelRoute guildId guild loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
