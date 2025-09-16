@@ -28,7 +28,7 @@ self.addEventListener('fetch', (event) => {
     console.log(url);
 
     //const domain = 'https://at-chat.app';
-    const domain = 'https://https://at-chat.app/';
+    const domain = 'https://at-chat.app';
     if (url.startsWith(domain + '/file/t/')
         || url.startsWith(domain + '/file/0')
         || url.startsWith(domain + '/file/1')
