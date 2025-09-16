@@ -19,6 +19,7 @@ port module Ports exposing
     , playSound
     , registerPushSubscription
     , registerPushSubscriptionToJs
+    , registerServiceWorker
     , requestNotificationPermission
     , scrollbarWidthSub
     , setFavicon
@@ -79,6 +80,14 @@ port scrollbar_width_to_js : Json.Encode.Value -> Cmd msg
 
 
 port scrollbar_width_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
+port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
+
+
+registerServiceWorker : Command FrontendOnly toMsg msg
+registerServiceWorker =
+    Command.sendToJs "register_service_worker_to_js" register_service_worker_to_js Json.Encode.null
 
 
 getScrollbarWidth : Command FrontendOnly toMsg msg

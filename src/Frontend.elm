@@ -290,7 +290,17 @@ initLoadedFrontend loading time loginResult =
             routeRequest Nothing model.route model
     in
     ( model2
-    , Command.batch [ cmdB, cmdA, Command.map AiChatToBackend AiChatMsg aiChatCmd ]
+    , Command.batch
+        [ cmdB
+        , cmdA
+        , Command.map AiChatToBackend AiChatMsg aiChatCmd
+        , case loginResult of
+            Ok _ ->
+                Ports.registerServiceWorker
+
+            Err _ ->
+                Command.none
+        ]
     )
 
 

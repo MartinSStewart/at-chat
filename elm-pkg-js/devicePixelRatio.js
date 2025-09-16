@@ -15,10 +15,19 @@ exports.init = async function init(app)
 
     const serviceWorkerJs = '/service-worker.js';
 
+    app.ports.register_service_worker_to_js.subscribe(() => {
+        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+            console.log(registration);
+            if (registration) {
+            }
+            else {
+                navigator.serviceWorker.register(serviceWorkerJs);
+            }
+        });
+
+    });
+
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
-
-        navigator.serviceWorker.register(serviceWorkerJs);
-
         navigator.serviceWorker.ready
         .then(function(registration) {
 
