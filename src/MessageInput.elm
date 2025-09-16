@@ -232,6 +232,10 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     , Ui.move { x = 2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
+                    , Html.Events.preventDefaultOn
+                        "touchend"
+                        (Json.Decode.succeed ( msgConfig.pressedUploadFile, True ))
+                        |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.attachment)
                 )

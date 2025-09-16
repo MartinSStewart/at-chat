@@ -1350,11 +1350,7 @@ updateLoaded msg model =
                                     , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
                                     , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
                                 }
-                                (Command.batch
-                                    [ scrollToBottomOfChannel
-                                    , setFocus model Pages.Guild.channelTextInputId
-                                    ]
-                                )
+                                scrollToBottomOfChannel
 
                         Nothing ->
                             ( loggedIn, Command.none )
