@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
                     console.log(fetchedResponse.headers.entries());
                     console.log(fetchedResponse.headers.get("content-length"));
 
-                    if (fetchedResponse.ok && Number(fetchedResponse.headers["content-length"]) < 1000 * 1000) {
+                    if (fetchedResponse.ok && Number(fetchedResponse.headers.get("content-length") < 1000 * 1000) {
                         cache.put(event.request, fetchedResponse.clone());
                     }
 
