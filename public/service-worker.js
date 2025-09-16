@@ -24,7 +24,7 @@ const cacheName = 'resource_cache_v1';
 
 self.addEventListener('fetch', (event) => {
     // Check if this is a request for an image
-    const url = event.request;
+    const url = event.request.url;
     console.log(url);
 
     //const domain = 'https://at-chat.app';
