@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
                 return fetch(event.request).then((fetchedResponse) => {
 
                     const size = Number(fetchedResponse.headers.get("content-length"));
-                    const isValid = url.startsWith(domain + 'frontend.') || size < 1000 * 1000);
+                    const isValid = url.startsWith(domain + 'frontend.') || size < 1000 * 1000;
 
                     if (fetchedResponse.ok && isValid) {
                         cache.put(event.request, fetchedResponse.clone());
