@@ -52,9 +52,8 @@ self.addEventListener('fetch', (event) => {
 
                 // Otherwise, hit the network
                 return fetch(event.request).then((fetchedResponse) => {
-                    const clone = fetchedResponse.clone();
 
-                    console.log(fetchedResponse);
+                    console.log(fetchedResponse.ok);
                     console.log(fetchedResponse.headers["Content-Length"]);
                     console.log(fetchedResponse.headers.entries());
                     console.log(fetchedResponse.headers.get("Content-Length"));
@@ -62,8 +61,8 @@ self.addEventListener('fetch', (event) => {
                     console.log(fetchedResponse.headers.entries());
                     console.log(fetchedResponse.headers.get("content-length"));
 
-                    if (fetchedResponse.ok && Number(fetchedResponse.headers["Content-Length"]) < 1000 * 1000) {
-                        cache.put(event.request, clone);
+                    if (fetchedResponse.ok && Number(fetchedResponse.headers["content-length"]) < 1000 * 1000) {
+                        cache.put(event.request, fetchedResponse.clone());
                     }
 
                     return fetchedResponse;
