@@ -36,6 +36,7 @@ import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
+import List.Nonempty
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -70,31 +71,82 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 channelOrThreadHasNotifications :
-    NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater
+    Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> Bool
-    -> Id UserId
-    -> Id messageId
+    -> Id ChannelId
+    -> ThreadRoute
+    -> Maybe (Id messageId)
     -> { a | messages : Array (MessageState messageId) }
     -> ChannelNotificationType
-channelOrThreadHasNotifications directMentions notifyOnAllMessages currentUserId lastViewed channel =
-    directMentions
+channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
+    if notifyOnAllMessages then
+        case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
+            Just count ->
+                NewMessageForUser count
+
+            Nothing ->
+                NoNotification
+
+    else
+        case Maybe.andThen (NonemptyDict.get ( channelId, threadRoute )) maybeDirectMentions of
+            Just count ->
+                NewMessageForUser count
+
+            Nothing ->
+                case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
+                    Just count ->
+                        NewMessage count
+
+                    Nothing ->
+                        NoNotification
 
 
-
---DmChannel.latestMessageId channel
-
-
-guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
-guildHasNotifications currentUserId currentUser guildId guild =
-    case SeqDict.get guildId currentUser.directMentions of
-        Just directMentions ->
-            NonemptyDict.foldl
-                (\_ channelCount count -> OneOrGreater.plus count channelCount)
-                0
-                directMentions
+newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId) } -> Int
+newMessageCount maybeLastViewed channel =
+    case maybeLastViewed of
+        Just lastViewed ->
+            Array.length channel.messages - 1 - Id.toInt lastViewed
 
         Nothing ->
-            NoNotification
+            Array.length channel.messages
+
+
+guildNewMessageCount currentUser guildId guild =
+    SeqDict.foldl
+        (\channelId channel count ->
+            newMessageCount
+                (SeqDict.get (GuildOrDmId_Guild guildId channelId) currentUser.lastViewed)
+                channel
+                + count
+        )
+        0
+        guild.channels
+
+
+guildHasNotifications : BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
+guildHasNotifications currentUser guildId guild =
+    if SeqSet.member guildId currentUser.notifyOnAllMessages then
+        case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+            Just count ->
+                NewMessageForUser count
+
+            Nothing ->
+                NoNotification
+
+    else
+        case SeqDict.get guildId currentUser.directMentions of
+            Just directMentions ->
+                NonemptyDict.values directMentions
+                    |> List.Nonempty.foldl1 OneOrGreater.plus
+                    |> NewMessageForUser
+
+            Nothing ->
+                case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+                    Just count ->
+                        NewMessage count
+
+                    Nothing ->
+                        NoNotification
 
 
 dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Bool
@@ -125,52 +177,6 @@ dmHasNotifications currentUser otherUserId dmChannel =
                 DmChannel.latestThreadMessageId thread == lastViewed2
             )
             (SeqDict.toList dmChannel.threads)
-
-
-threadHasNotifications :
-    Id GuildId
-    -> Id ChannelId
-    -> Id UserId
-    -> BackendUser
-    -> FrontendChannel
-    -> ChannelNotificationType
-threadHasNotifications guildId channelId currentUserId currentUser channel =
-    SeqDict.foldl
-        (\threadMessageIndex thread state2 ->
-            case state2 of
-                NewMessageForUser ->
-                    state2
-
-                _ ->
-                    let
-                        lastViewed2 : Id ThreadMessageId
-                        lastViewed2 =
-                            case
-                                SeqDict.get
-                                    ( GuildOrDmId_Guild guildId channelId, threadMessageIndex )
-                                    currentUser.lastViewedThreads
-                            of
-                                Just id ->
-                                    Id.increment id
-
-                                Nothing ->
-                                    Id.fromInt 0
-                    in
-                    case
-                        channelOrThreadHasNotifications
-                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
-                            currentUserId
-                            lastViewed2
-                            thread
-                    of
-                        NoNotification ->
-                            state2
-
-                        notification ->
-                            notification
-        )
-        NoNotification
-        channel.threads
 
 
 canScroll : Drag -> Bool
@@ -289,11 +295,11 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                                             GuildIcon.IsSelected
 
                                         else
-                                            guildHasNotifications localUser.session.userId localUser.user guildId guild
+                                            guildHasNotifications localUser.user guildId guild
                                                 |> GuildIcon.Normal
 
                                     _ ->
-                                        guildHasNotifications localUser.session.userId localUser.user guildId guild |> GuildIcon.Normal
+                                        guildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
                                 )
                                 guild
                             )
@@ -3742,6 +3748,10 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
         guildName : String
         guildName =
             GuildName.toString guild.name
+
+        directMentions : Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+        directMentions =
+            SeqDict.get guildId localUser.user.directMentions
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
@@ -3772,6 +3782,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                         [ channelColumnRow
                             isMobile
                             channelNameHover
+                            directMentions
                             channelRoute
                             localUser
                             guildId
@@ -3780,6 +3791,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                         , channelColumnThreads
                             isMobile
                             channelRoute
+                            directMentions
                             localUser
                             guildId
                             channelId
@@ -3830,13 +3842,14 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
 channelColumnThreads :
     Bool
     -> ChannelRoute
+    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg
-channelColumnThreads isMobile channelRoute localUser guildId channelId channel threads =
+channelColumnThreads isMobile channelRoute directMentions localUser guildId channelId channel threads =
     Ui.column
         []
         (SeqDict.toList threads
@@ -3890,15 +3903,11 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 
                                    else
                                     channelOrThreadHasNotifications
+                                        directMentions
                                         (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                                        localUser.session.userId
-                                        (case SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads of
-                                            Just id ->
-                                                Id.increment id
-
-                                            Nothing ->
-                                                Id.fromInt 0
-                                        )
+                                        channelId
+                                        (ViewThread threadMessageIndex)
+                                        (SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads)
                                         thread
                                   )
                                     |> GuildIcon.notificationView 4 5 MyUi.background2
@@ -3937,13 +3946,14 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 channelColumnRow :
     Bool
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> ChannelRoute
     -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg
-channelColumnRow isMobile channelNameHover channelRoute localUser guildId channelId channel =
+channelColumnRow isMobile channelNameHover directMentions channelRoute localUser guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -3997,15 +4007,11 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
 
                    else
                     channelOrThreadHasNotifications
+                        directMentions
                         (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                        localUser.session.userId
-                        (case SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed of
-                            Just id ->
-                                Id.increment id
-
-                            Nothing ->
-                                Id.fromInt 0
-                        )
+                        channelId
+                        NoThread
+                        (SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed)
                         channel
                   )
                     |> GuildIcon.notificationView 0 -3 MyUi.background2

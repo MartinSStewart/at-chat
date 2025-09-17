@@ -31,7 +31,7 @@ type Mode
 
 type ChannelNotificationType
     = NoNotification
-    | NewMessage
+    | NewMessage OneOrGreater
     | NewMessageForUser OneOrGreater
 
 
@@ -41,7 +41,7 @@ notificationView xOffset yOffset borderColor notification =
         NoNotification ->
             Ui.noAttr
 
-        NewMessage ->
+        NewMessage count ->
             Ui.inFront
                 (Ui.el
                     [ Ui.rounded 99
@@ -56,7 +56,7 @@ notificationView xOffset yOffset borderColor notification =
                     Ui.none
                 )
 
-        NewMessageForUser ->
+        NewMessageForUser count ->
             Ui.inFront
                 (Ui.el
                     [ Ui.rounded 99

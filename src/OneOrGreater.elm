@@ -1,4 +1,4 @@
-module OneOrGreater exposing (OneOrGreater, increment, one, plus, toInt)
+module OneOrGreater exposing (OneOrGreater, fromInt, increment, one, plus, toInt)
 
 
 type OneOrGreater
@@ -20,6 +20,15 @@ toInt (OneOrGreater a) =
     a
 
 
-plus : Int -> OneOrGreater -> OneOrGreater
-plus int (OneOrGreater a) =
-    OneOrGreater (int + a)
+fromInt : Int -> Maybe OneOrGreater
+fromInt int =
+    if int > 0 then
+        OneOrGreater int |> Just
+
+    else
+        Nothing
+
+
+plus : OneOrGreater -> OneOrGreater -> OneOrGreater
+plus (OneOrGreater a) (OneOrGreater b) =
+    OneOrGreater (a + b)
