@@ -12,7 +12,11 @@ module LocalState exposing
     , LocalState
     , LocalUser
     , LogWithTime
+    , NotificationMode(..)
     , PrivateVapidKey(..)
+    , PushSubscription(..)
+    , SubscribeData
+    , UserSession
     , addInvite
     , addMember
     , addMemberFrontend
@@ -51,10 +55,9 @@ module LocalState exposing
     , memberIsTyping
     , removeReactionEmoji
     , removeReactionEmojiFrontend
-    , repliedToUserId
-    , repliedToUserIdFrontend
     , updateChannel
-    , usersToNotifyFrontend
+    , usersMentionedOrRepliedToBackend
+    , usersMentionedOrRepliedToFrontend
     )
 
 import Array exposing (Array)
@@ -62,6 +65,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
+import Effect.Http as Http
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -69,6 +73,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
+import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -80,6 +85,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
 import Unsafe
+import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import VisibleMessages exposing (VisibleMessages)
 
@@ -94,13 +100,36 @@ type alias LocalState =
     }
 
 
+type NotificationMode
+    = NoNotifications
+    | NotifyWhenRunning
+    | PushNotifications
+
+
 type alias LocalUser =
-    { userId : Id UserId
+    { session : UserSession
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     }
+
+
+type alias UserSession =
+    { userId : Id UserId
+    , notificationMode : NotificationMode
+    , pushSubscription : PushSubscription
+    }
+
+
+type PushSubscription
+    = NotSubscribed
+    | Subscribed SubscribeData
+    | SubscriptionError Http.Error
+
+
+type alias SubscribeData =
+    { endpoint : Url, auth : String, p256dh : String }
 
 
 type JoinGuildError
@@ -302,6 +331,7 @@ createNewUser createdAt name email userIsAdmin =
     , lastChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
+    , directMentions = SeqDict.empty
     }
 
 
@@ -348,7 +378,7 @@ createNewUser createdAt name email userIsAdmin =
 
 getUser : Id UserId -> LocalUser -> Maybe FrontendUser
 getUser userId localUser =
-    if localUser.userId == userId then
+    if localUser.session.userId == userId then
         User.backendToFrontend localUser.user |> Just
 
     else
@@ -1003,7 +1033,7 @@ allUsers local =
 allUsers2 : LocalUser -> SeqDict (Id UserId) FrontendUser
 allUsers2 localUser =
     SeqDict.insert
-        localUser.userId
+        localUser.session.userId
         (User.backendToFrontendForUser localUser.user)
         localUser.otherUsers
 
@@ -1571,52 +1601,91 @@ getGuildAndChannel guildId channelId local =
             Nothing
 
 
-usersToNotifyFrontend :
-    Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> { a | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+usersMentionedOrRepliedToBackend :
+    ThreadRouteWithMaybeMessage
     -> Nonempty RichText
+    -> List (Id UserId)
+    -> BackendChannel
     -> SeqSet (Id UserId)
-usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content =
+usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channel =
     let
-        usersToNotify2 =
-            RichText.mentionsUser content
-
-        repliedToUserId2 : Maybe (Id UserId)
-        repliedToUserId2 =
-            case threadRouteWithRepliedTo of
+        userIds : SeqSet (Id UserId)
+        userIds =
+            (case threadRouteWithRepliedTo of
                 ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    case SeqDict.get threadId channel.threads of
+                    (case SeqDict.get threadId channel.threads of
                         Just thread ->
-                            repliedToUserIdFrontend maybeRepliedTo thread
+                            repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
 
                         Nothing ->
-                            case DmChannel.getArray threadId channel.messages of
-                                Just (MessageLoaded message) ->
-                                    case message of
-                                        UserTextMessage data ->
-                                            Just data.createdBy
+                            []
+                    )
+                        ++ (case DmChannel.getArray threadId channel.messages of
+                                Just (UserTextMessage data) ->
+                                    [ data.createdBy ]
 
-                                        UserJoinedMessage _ userJoined _ ->
-                                            Just userJoined
+                                Just (UserJoinedMessage _ userJoined _) ->
+                                    [ userJoined ]
 
-                                        DeletedMessage _ ->
-                                            Nothing
+                                Just (DeletedMessage _) ->
+                                    []
 
-                                _ ->
-                                    Nothing
+                                Nothing ->
+                                    []
+                           )
 
                 NoThreadWithMaybeMessage maybeRepliedTo ->
-                    repliedToUserIdFrontend maybeRepliedTo channel
+                    repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
+            )
+                |> List.foldl SeqSet.insert (RichText.mentionsUser content)
     in
-    (case repliedToUserId2 of
-        Just a ->
-            SeqSet.insert a usersToNotify2
+    List.foldl
+        (\userId validUserIds ->
+            if SeqSet.member userId userIds then
+                SeqSet.insert userId validUserIds
 
-        Nothing ->
-            usersToNotify2
+            else
+                validUserIds
+        )
+        SeqSet.empty
+        members
+
+
+usersMentionedOrRepliedToFrontend :
+    ThreadRouteWithMaybeMessage
+    -> Nonempty RichText
+    -> FrontendChannel
+    -> SeqSet (Id UserId)
+usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
+    (case threadRouteWithRepliedTo of
+        ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
+            (case SeqDict.get threadId channel.threads of
+                Just thread ->
+                    repliedToUserIdFrontend maybeRepliedTo thread |> Maybe.Extra.toList
+
+                Nothing ->
+                    []
+            )
+                ++ (case DmChannel.getArray threadId channel.messages of
+                        Just (MessageLoaded message) ->
+                            case message of
+                                UserTextMessage data ->
+                                    [ data.createdBy ]
+
+                                UserJoinedMessage _ userJoined _ ->
+                                    [ userJoined ]
+
+                                DeletedMessage _ ->
+                                    []
+
+                        _ ->
+                            []
+                   )
+
+        NoThreadWithMaybeMessage maybeRepliedTo ->
+            repliedToUserIdFrontend maybeRepliedTo channel |> Maybe.Extra.toList
     )
-        |> SeqSet.remove senderId
+        |> List.foldl SeqSet.insert (RichText.mentionsUser content)
 
 
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId) } -> Maybe (Id UserId)

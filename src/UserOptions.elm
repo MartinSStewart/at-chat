@@ -6,7 +6,8 @@ import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..), PushSubscription(..))
+import Log
 import MyUi
 import PersonName
 import Slack
@@ -15,7 +16,6 @@ import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Input
 
 
 init : UserOptionsModel
@@ -165,20 +165,41 @@ view isMobile time local loggedIn loaded model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
-                , let
-                    enablePushNotificationsLabel =
-                        Ui.Input.label "userOptions_togglePushNotifications" [ Ui.padding 8 ] (Ui.text "Enable push notifications")
-                  in
-                  Ui.row
+                , Ui.column
                     []
-                    [ Ui.Input.checkbox
-                        [ Ui.padding 8 ]
-                        { onChange = ToggledEnablePushNotifications
-                        , icon = Nothing
-                        , checked = loaded.enabledPushNotifications
-                        , label = enablePushNotificationsLabel.id
-                        }
-                    , enablePushNotificationsLabel.element
+                    [ MyUi.radioColumn
+                        (Dom.id "userOptions_notificationMode")
+                        SelectedNotificationMode
+                        (Just local.localUser.session.notificationMode)
+                        (if isMobile then
+                            "Notifications"
+
+                         else
+                            "Desktop notifications"
+                        )
+                        (if isMobile then
+                            [ ( NoNotifications, "No notifications" )
+                            , ( PushNotifications, "Allow notifications" )
+                            ]
+
+                         else
+                            [ ( NoNotifications, "No notifications" )
+                            , ( NotifyWhenRunning, "When the app is running" )
+                            , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
+                            ]
+                        )
+                    , case local.localUser.session.pushSubscription of
+                        NotSubscribed ->
+                            Ui.none
+
+                        Subscribed _ ->
+                            Ui.none
+
+                        SubscriptionError error ->
+                            MyUi.errorBox
+                                (Dom.id "userOptions_pushNotificationError")
+                                PressedCopyText
+                                (Log.httpErrorToString error)
                     ]
                 , Ui.el
                     [ Ui.linkNewTab

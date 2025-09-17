@@ -312,7 +312,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 Just (MessageLoaded message) ->
                     ( case message of
                         UserTextMessage data ->
-                            data.createdBy == local.localUser.userId
+                            data.createdBy == local.localUser.session.userId
 
                         _ ->
                             False

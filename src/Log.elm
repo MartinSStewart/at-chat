@@ -1,4 +1,4 @@
-module Log exposing (Log(..), addLog, shouldNotifyAdmin, view)
+module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, view)
 
 import Array exposing (Array)
 import Effect.Http as Http
@@ -20,7 +20,6 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
-    | RegisteredPushNotificationRequest (Id UserId)
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -40,9 +39,6 @@ shouldNotifyAdmin log =
 
         PushNotificationError _ _ ->
             Just "PushNotificationError"
-
-        RegisteredPushNotificationRequest _ ->
-            Nothing
 
 
 addLog :
@@ -192,13 +188,6 @@ logContent log =
                 , Ui.text (Id.toString userId)
                 , Ui.text " with error "
                 , Ui.text (httpErrorToString error)
-                ]
-
-        RegisteredPushNotificationRequest userId ->
-            Ui.Prose.paragraph
-                []
-                [ Ui.text "RegisteredPushNotificationRequest "
-                , Ui.text (Id.toString userId)
                 ]
 
 

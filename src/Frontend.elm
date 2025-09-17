@@ -38,7 +38,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser, NotificationMode(..), PushSubscription(..), UserSession)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -114,7 +114,6 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
-        , Ports.isPushNotificationsRegisteredSubscription GotIsPushNotificationsRegistered
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , case model of
             Loading _ ->
@@ -224,7 +223,6 @@ init url key =
         , loginStatus = LoadingData
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
-        , enabledPushNotifications = False
         , scrollbarWidth = 0
         }
     , Command.batch
@@ -236,7 +234,6 @@ init url key =
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
-        , Ports.isPushNotificationsRegistered
         , Ports.getScrollbarWidth
         ]
     )
@@ -282,7 +279,6 @@ initLoadedFrontend loading time loginResult =
             , drag = NoDrag
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
-            , enabledPushNotifications = loading.enabledPushNotifications
             , scrollbarWidth = loading.scrollbarWidth
             }
 
@@ -436,7 +432,7 @@ loginDataToLocalState timezone loginData =
     , dmChannels = loginData.dmChannels
     , joinGuildError = Nothing
     , localUser =
-        { userId = loginData.userId
+        { session = loginData.session
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , timezone = timezone
@@ -482,9 +478,6 @@ update msg model =
 
                 GotTimezone timezone ->
                     ( Loading { loading | timezone = timezone }, Command.none )
-
-                GotIsPushNotificationsRegistered isEnabled ->
-                    ( Loading { loading | enabledPushNotifications = isEnabled }, Command.none )
 
                 GotScrollbarWidth width ->
                     ( Loading { loading | scrollbarWidth = width }, Command.none )
@@ -1079,11 +1072,8 @@ isPressMsg msg =
         GotRegisterPushSubscription _ ->
             False
 
-        ToggledEnablePushNotifications _ ->
+        SelectedNotificationMode _ ->
             True
-
-        GotIsPushNotificationsRegistered _ ->
-            False
 
         PrivateVapidKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
@@ -2084,7 +2074,7 @@ updateLoaded msg model =
                                                     MessageLoaded_NoReply message2 ->
                                                         case message2 of
                                                             UserTextMessage_NoReply data ->
-                                                                if local.localUser.userId == data.createdBy then
+                                                                if local.localUser.session.userId == data.createdBy then
                                                                     Just ( index, data )
 
                                                                 else
@@ -3176,37 +3166,40 @@ updateLoaded msg model =
                             ( model, Command.none )
 
         GotRegisterPushSubscription result ->
-            let
-                _ =
-                    Debug.log "Got register PushSubscription" result
-            in
-            ( model
-            , case result of
-                Ok endpoint ->
-                    Lamdera.sendToBackend (RegisterPushSubscriptionRequest endpoint)
-
-                Err _ ->
-                    Command.none
-            )
-
-        ToggledEnablePushNotifications isEnabled ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( loggedIn
-                    , if isEnabled then
-                        Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
+                    case result of
+                        Ok endpoint ->
+                            handleLocalChange
+                                model.time
+                                (Local_RegisterPushSubscription endpoint |> Just)
+                                loggedIn
+                                Command.none
 
-                      else
-                        Command.batch
-                            [ Ports.unregisterPushSubscriptionToJs
-                            , Lamdera.sendToBackend UnregisterPushSubscriptionRequest
-                            ]
-                    )
+                        Err _ ->
+                            ( loggedIn, Command.none )
                 )
-                { model | enabledPushNotifications = isEnabled }
+                model
 
-        GotIsPushNotificationsRegistered isEnabled ->
-            ( { model | enabledPushNotifications = isEnabled }, Command.none )
+        SelectedNotificationMode notificationMode ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Local_SetNotificationMode notificationMode |> Just)
+                        loggedIn
+                        (case notificationMode of
+                            NoNotifications ->
+                                Command.none
+
+                            NotifyWhenRunning ->
+                                Command.none
+
+                            PushNotifications ->
+                                Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
+                        )
+                )
+                model
 
         SlackClientSecretEditableMsg editableMsg ->
             handleEditable
@@ -3990,7 +3983,7 @@ changeUpdate localMsg local =
                                                                         threadId
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
-                                                                            , createdBy = localUser.userId
+                                                                            , createdBy = localUser.session.userId
                                                                             , content = text
                                                                             , reactions = SeqDict.empty
                                                                             , editedAt = Nothing
@@ -4004,7 +3997,7 @@ changeUpdate localMsg local =
                                                                     LocalState.createChannelMessageFrontend
                                                                         (UserTextMessage
                                                                             { createdAt = createdAt
-                                                                            , createdBy = localUser.userId
+                                                                            , createdBy = localUser.session.userId
                                                                             , content = text
                                                                             , reactions = SeqDict.empty
                                                                             , editedAt = Nothing
@@ -4054,7 +4047,7 @@ changeUpdate localMsg local =
                                                 threadId
                                                 (UserTextMessage
                                                     { createdAt = createdAt
-                                                    , createdBy = localUser.userId
+                                                    , createdBy = localUser.session.userId
                                                     , content = text
                                                     , reactions = SeqDict.empty
                                                     , editedAt = Nothing
@@ -4068,7 +4061,7 @@ changeUpdate localMsg local =
                                             LocalState.createChannelMessageFrontend
                                                 (UserTextMessage
                                                     { createdAt = createdAt
-                                                    , createdBy = localUser.userId
+                                                    , createdBy = localUser.session.userId
                                                     , content = text
                                                     , reactions = SeqDict.empty
                                                     , editedAt = Nothing
@@ -4098,7 +4091,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
                                 local.guilds
                     }
 
@@ -4130,7 +4123,7 @@ changeUpdate localMsg local =
                                 | guilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.addInvite inviteLinkId2 local.localUser.userId time)
+                                        (LocalState.addInvite inviteLinkId2 local.localUser.session.userId time)
                                         local.guilds
                             }
 
@@ -4142,7 +4135,7 @@ changeUpdate localMsg local =
                         FilledInByBackend guildId ->
                             let
                                 guild =
-                                    LocalState.createGuild time local.localUser.userId guildName
+                                    LocalState.createGuild time local.localUser.session.userId guildName
                             in
                             { local
                                 | guilds =
@@ -4153,19 +4146,19 @@ changeUpdate localMsg local =
                             }
 
                 Local_MemberTyping time guildOrDmId ->
-                    memberTyping time local.localUser.userId guildOrDmId local
+                    memberTyping time local.localUser.session.userId guildOrDmId local
 
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
-                    addReactionEmoji local.localUser.userId guildOrDmId threadRoute emoji local
+                    addReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
-                    removeReactionEmoji local.localUser.userId guildOrDmId threadRoute emoji local
+                    removeReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
 
                 Local_SendEditMessage time guildOrDmId threadRoute newContent attachedFiles ->
-                    editMessage time local.localUser.userId guildOrDmId newContent attachedFiles threadRoute local
+                    editMessage time local.localUser.session.userId guildOrDmId newContent attachedFiles threadRoute local
 
                 Local_MemberEditTyping time guildOrDmId threadRoute ->
-                    memberEditTyping time local.localUser.userId guildOrDmId threadRoute local
+                    memberEditTyping time local.localUser.session.userId guildOrDmId threadRoute local
 
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     let
@@ -4201,7 +4194,7 @@ changeUpdate localMsg local =
                             }
 
                 Local_DeleteMessage guildOrDmId messageIndex ->
-                    deleteMessage local.localUser.userId guildOrDmId messageIndex local
+                    deleteMessage local.localUser.session.userId guildOrDmId messageIndex local
 
                 Local_ViewDm otherUserId messagesLoaded ->
                     let
@@ -4379,6 +4372,33 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Local_SetNotificationMode notificationMode ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        session : UserSession
+                        session =
+                            localUser.session
+                    in
+                    { local | localUser = { localUser | session = { session | notificationMode = notificationMode } } }
+
+                Local_RegisterPushSubscription pushSubscription ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        session : UserSession
+                        session =
+                            localUser.session
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = { session | pushSubscription = Subscribed pushSubscription } }
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -4439,7 +4459,7 @@ changeUpdate localMsg local =
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if userId == localUser.userId then
+                                                    if userId == localUser.session.userId then
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
@@ -4447,6 +4467,27 @@ changeUpdate localMsg local =
                                                                     (Array.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
+
+                                                    else if
+                                                        SeqSet.member
+                                                            local.localUser.session.userId
+                                                            (LocalState.usersMentionedOrRepliedToFrontend
+                                                                threadRouteWithRepliedTo
+                                                                text
+                                                                channel
+                                                            )
+                                                    then
+                                                        User.addDirectMention
+                                                            guildId
+                                                            channelId
+                                                            (case threadRouteWithRepliedTo of
+                                                                ViewThreadWithMaybeMessage threadId _ ->
+                                                                    ViewThread threadId
+
+                                                                NoThreadWithMaybeMessage _ ->
+                                                                    NoThread
+                                                            )
+                                                            user
 
                                                     else
                                                         user
@@ -4507,7 +4548,7 @@ changeUpdate localMsg local =
                                 , localUser =
                                     { localUser
                                         | user =
-                                            if userId == localUser.userId then
+                                            if userId == localUser.session.userId then
                                                 { user
                                                     | lastViewed =
                                                         SeqDict.insert
@@ -4526,7 +4567,7 @@ changeUpdate localMsg local =
                         | guilds =
                             SeqDict.updateIfExists
                                 guildId
-                                (LocalState.createChannelFrontend time local.localUser.userId channelName)
+                                (LocalState.createChannelFrontend time local.localUser.session.userId channelName)
                                 local.guilds
                     }
 
@@ -4696,6 +4737,21 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | user = User.setGuildNotificationLevel guildId notificationLevel localUser.user }
+                    }
+
+                Server_PushNotificationFailed error ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+
+                        session : UserSession
+                        session =
+                            localUser.session
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = { session | pushSubscription = SubscriptionError error } }
                     }
 
 
@@ -4934,7 +4990,7 @@ handleLocalChange time maybeLocalChange loggedIn cmds =
                     Local.update
                         changeUpdate
                         time
-                        (LocalChange (Local.model loggedIn.localState).localUser.userId localChange)
+                        (LocalChange (Local.model loggedIn.localState).localUser.session.userId localChange)
                         loggedIn.localState
             in
             ( { loggedIn | localState = localState2 }
@@ -5112,7 +5168,7 @@ updateLoadedFromBackend msg model =
                     let
                         userId : Id UserId
                         userId =
-                            (Local.model loggedIn.localState).localUser.userId
+                            (Local.model loggedIn.localState).localUser.session.userId
 
                         change : LocalMsg
                         change =
@@ -5345,30 +5401,38 @@ playNotificationSound :
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
-    if False then
-        if
-            SeqSet.member
-                local.localUser.userId
-                (LocalState.usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content)
-        then
-            Command.batch
-                [ Ports.playSound "pop"
-                , Ports.setFavicon "/favicon-red.ico"
-                , case model.notificationPermission of
-                    Ports.Granted ->
-                        Ports.showNotification
-                            (User.toString senderId (LocalState.allUsers local))
-                            (RichText.toString (LocalState.allUsers local) content)
-
-                    _ ->
-                        Command.none
-                ]
-
-        else
+    case local.localUser.session.notificationMode of
+        NoNotifications ->
             Command.none
 
-    else
-        Command.none
+        NotifyWhenRunning ->
+            if
+                SeqSet.member
+                    local.localUser.session.userId
+                    (LocalState.usersMentionedOrRepliedToFrontend
+                        threadRouteWithRepliedTo
+                        content
+                        channel
+                    )
+            then
+                Command.batch
+                    [ Ports.playSound "pop"
+                    , Ports.setFavicon "/favicon-red.ico"
+                    , case model.notificationPermission of
+                        Ports.Granted ->
+                            Ports.showNotification
+                                (User.toString senderId (LocalState.allUsers local))
+                                (RichText.toString (LocalState.allUsers local) content)
+
+                        _ ->
+                            Command.none
+                    ]
+
+            else
+                Command.none
+
+        PushNotifications ->
+            Command.none
 
 
 pendingChangesText : LocalChange -> String
@@ -5478,6 +5542,12 @@ pendingChangesText localChange =
 
                 NotifyOnMention ->
                     "Disabled notifications for all messages"
+
+        Local_SetNotificationMode _ ->
+            "Set notification mode"
+
+        Local_RegisterPushSubscription _ ->
+            "Register push subscription"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
@@ -5752,7 +5822,7 @@ view model =
                             (\loggedIn local ->
                                 case ( loggedIn.admin, local.adminData ) of
                                     ( Just admin, IsAdmin adminData ) ->
-                                        case NonemptyDict.get local.localUser.userId adminData.users of
+                                        case NonemptyDict.get local.localUser.session.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
                                                     loaded.timezone

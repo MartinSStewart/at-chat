@@ -36,6 +36,7 @@ import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
+import List.Nonempty
 import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -43,8 +44,9 @@ import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
 import RichText
@@ -68,167 +70,109 @@ import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
+{-| In the case of a channel, it's just the channel, not the threads it contains
+-}
 channelOrThreadHasNotifications :
-    Bool
-    -> Id UserId
-    -> Id messageId
+    Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    -> Bool
+    -> Id ChannelId
+    -> ThreadRoute
+    -> Maybe (Id messageId)
     -> { a | messages : Array (MessageState messageId) }
     -> ChannelNotificationType
-channelOrThreadHasNotifications notifyOnAllMessages currentUserId lastViewed channel =
-    Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
-        |> Array.toList
-        |> List.foldl
-            (\message state ->
-                case state of
-                    NewMessageForUser ->
-                        state
+channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
+    if notifyOnAllMessages then
+        case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
+            Just count ->
+                NewMessageForUser count
 
-                    _ ->
-                        case message of
-                            MessageLoaded message2 ->
-                                case message2 of
-                                    UserTextMessage data ->
-                                        if data.createdBy == currentUserId then
-                                            state
+            Nothing ->
+                NoNotification
 
-                                        else if
-                                            (LocalState.repliedToUserIdFrontend data.repliedTo channel == Just currentUserId)
-                                                || SeqSet.member currentUserId (RichText.mentionsUser data.content)
-                                        then
-                                            NewMessageForUser
+    else
+        case Maybe.andThen (NonemptyDict.get ( channelId, threadRoute )) maybeDirectMentions of
+            Just count ->
+                NewMessageForUser count
 
-                                        else if notifyOnAllMessages then
-                                            NewMessageForUser
+            Nothing ->
+                case newMessageCount maybeLastViewed channel |> OneOrGreater.fromInt of
+                    Just count ->
+                        NewMessage count
 
-                                        else
-                                            NewMessage
-
-                                    UserJoinedMessage _ _ _ ->
-                                        if notifyOnAllMessages then
-                                            NewMessageForUser
-
-                                        else
-                                            NewMessage
-
-                                    DeletedMessage _ ->
-                                        state
-
-                            MessageUnloaded ->
-                                state
-            )
-            NoNotification
+                    Nothing ->
+                        NoNotification
 
 
-guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
-guildHasNotifications currentUserId currentUser guildId guild =
+newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId) } -> Int
+newMessageCount maybeLastViewed channel =
+    case maybeLastViewed of
+        Just lastViewed ->
+            Array.length channel.messages - 1 - Id.toInt lastViewed
+
+        Nothing ->
+            Array.length channel.messages
+
+
+channelNewMessageCount :
+    GuildOrDmIdNoThread
+    -> BackendUser
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+        }
+    -> Int
+channelNewMessageCount guildOrDmId currentUser channel =
     SeqDict.foldl
-        (\channelId channel state ->
-            case state of
-                NewMessageForUser ->
-                    state
-
-                _ ->
-                    let
-                        lastViewed : Id ChannelMessageId
-                        lastViewed =
-                            case SeqDict.get (GuildOrDmId_Guild guildId channelId) currentUser.lastViewed of
-                                Just id ->
-                                    Id.increment id
-
-                                Nothing ->
-                                    Id.fromInt 0
-                    in
-                    case
-                        channelOrThreadHasNotifications
-                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
-                            currentUserId
-                            lastViewed
-                            channel
-                    of
-                        NoNotification ->
-                            threadHasNotifications guildId channelId currentUserId currentUser channel
-
-                        notification ->
-                            notification
+        (\threadId thread count ->
+            newMessageCount
+                (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                thread
+                + count
         )
-        NoNotification
+        (newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel)
+        channel.threads
+
+
+guildNewMessageCount : BackendUser -> Id GuildId -> FrontendGuild -> Int
+guildNewMessageCount currentUser guildId guild =
+    SeqDict.foldl
+        (\channelId channel count ->
+            channelNewMessageCount (GuildOrDmId_Guild guildId channelId) currentUser channel + count
+        )
+        0
         guild.channels
 
 
-dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Bool
+guildHasNotifications : BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
+guildHasNotifications currentUser guildId guild =
+    if SeqSet.member guildId currentUser.notifyOnAllMessages then
+        case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+            Just count ->
+                NewMessageForUser count
+
+            Nothing ->
+                NoNotification
+
+    else
+        case SeqDict.get guildId currentUser.directMentions of
+            Just directMentions ->
+                NonemptyDict.values directMentions
+                    |> List.Nonempty.foldl1 OneOrGreater.plus
+                    |> NewMessageForUser
+
+            Nothing ->
+                case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+                    Just count ->
+                        NewMessage count
+
+                    Nothing ->
+                        NoNotification
+
+
+dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
-    let
-        lastViewed : Id ChannelMessageId
-        lastViewed =
-            case SeqDict.get (GuildOrDmId_Dm otherUserId) currentUser.lastViewed of
-                Just id ->
-                    id
-
-                Nothing ->
-                    Id.fromInt -1
-    in
-    (DmChannel.latestMessageId dmChannel /= lastViewed)
-        || List.any
-            (\( threadId, thread ) ->
-                let
-                    lastViewed2 : Id ThreadMessageId
-                    lastViewed2 =
-                        case SeqDict.get ( GuildOrDmId_Dm otherUserId, threadId ) currentUser.lastViewedThreads of
-                            Just id ->
-                                Id.increment id
-
-                            Nothing ->
-                                Id.fromInt 0
-                in
-                DmChannel.latestThreadMessageId thread == lastViewed2
-            )
-            (SeqDict.toList dmChannel.threads)
-
-
-threadHasNotifications :
-    Id GuildId
-    -> Id ChannelId
-    -> Id UserId
-    -> BackendUser
-    -> FrontendChannel
-    -> ChannelNotificationType
-threadHasNotifications guildId channelId currentUserId currentUser channel =
-    SeqDict.foldl
-        (\threadMessageIndex thread state2 ->
-            case state2 of
-                NewMessageForUser ->
-                    state2
-
-                _ ->
-                    let
-                        lastViewed2 : Id ThreadMessageId
-                        lastViewed2 =
-                            case
-                                SeqDict.get
-                                    ( GuildOrDmId_Guild guildId channelId, threadMessageIndex )
-                                    currentUser.lastViewedThreads
-                            of
-                                Just id ->
-                                    Id.increment id
-
-                                Nothing ->
-                                    Id.fromInt 0
-                    in
-                    case
-                        channelOrThreadHasNotifications
-                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
-                            currentUserId
-                            lastViewed2
-                            thread
-                    of
-                        NoNotification ->
-                            state2
-
-                        notification ->
-                            notification
-        )
-        NoNotification
-        channel.threads
+    channelNewMessageCount (GuildOrDmId_Dm otherUserId) currentUser dmChannel |> OneOrGreater.fromInt
 
 
 canScroll : Drag -> Bool
@@ -285,22 +229,23 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                 (\( otherUserId, dmChannel ) ->
                     let
                         dmIcon =
-                            if dmHasNotifications localUser.user otherUserId dmChannel then
-                                elLinkButton
-                                    (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                    (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
-                                    []
-                                    (case SeqDict.get otherUserId allUsers of
-                                        Just otherUser ->
-                                            GuildIcon.userView NewMessageForUser otherUser.icon otherUserId
+                            case dmHasNotifications localUser.user otherUserId dmChannel of
+                                Just count ->
+                                    elLinkButton
+                                        (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
+                                        (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
+                                        []
+                                        (case SeqDict.get otherUserId allUsers of
+                                            Just otherUser ->
+                                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
 
-                                        Nothing ->
-                                            GuildIcon.userView NewMessageForUser Nothing otherUserId
-                                    )
-                                    |> Just
+                                            Nothing ->
+                                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
+                                        )
+                                        |> Just
 
-                            else
-                                Nothing
+                                Nothing ->
+                                    Nothing
                     in
                     case route of
                         DmRoute otherUserIdRoute _ ->
@@ -347,11 +292,11 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                                             GuildIcon.IsSelected
 
                                         else
-                                            guildHasNotifications localUser.userId localUser.user guildId guild
+                                            guildHasNotifications localUser.user guildId guild
                                                 |> GuildIcon.Normal
 
                                     _ ->
-                                        guildHasNotifications localUser.userId localUser.user guildId guild |> GuildIcon.Normal
+                                        guildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
                                 )
                                 guild
                             )
@@ -1055,18 +1000,17 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.alignTop
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
+            , Ui.paddingXY 16 0
             ]
             [ channelHeader (MyUi.isMobile model) False (Ui.text "Invite member to guild")
-            , Ui.el
-                [ Ui.paddingXY 16 0 ]
-                (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
+            , submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link"
             , if SeqDict.isEmpty guild.invites then
                 Ui.none
 
               else
-                Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Existing invites")
+                Ui.el [ Ui.Font.bold ] (Ui.text "Existing invites")
             , Ui.column
-                [ Ui.spacing 8, Ui.paddingXY 16 0 ]
+                [ Ui.spacing 8 ]
                 (SeqDict.toList guild.invites
                     |> List.sortBy (\( _, data ) -> -(Time.posixToMillis data.createdAt))
                     |> List.map
@@ -1087,7 +1031,7 @@ inviteLinkCreatorForm model local guildId guild =
                                 ]
                         )
                 )
-            , radioColumn
+            , MyUi.radioColumn
                 (Dom.id "guild_notificationLevel")
                 (PressedGuildNotificationLevel guildId)
                 (if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
@@ -1102,60 +1046,6 @@ inviteLinkCreatorForm model local guildId guild =
                 ]
             ]
         )
-
-
-radioOption : HtmlId -> value -> String -> Ui.Input.Option value msg
-radioOption htmlId value text =
-    Ui.Input.optionWith
-        value
-        (\option ->
-            Ui.row
-                [ Ui.spacing 6, Ui.id (Dom.idToString htmlId ++ "_" ++ text) ]
-                [ Ui.el
-                    [ Ui.width (Ui.px 23)
-                    , Ui.height (Ui.px 23)
-                    , Ui.background (Ui.rgb 250 250 255)
-                    , Ui.rounded 99
-                    , Ui.border 2
-                    , Ui.borderColor MyUi.background1
-                    ]
-                    (if option == Ui.Input.Selected then
-                        Ui.el
-                            [ Ui.width (Ui.px 15)
-                            , Ui.height (Ui.px 15)
-                            , Ui.centerX
-                            , Ui.centerY
-                            , Ui.background MyUi.background1
-                            , Ui.rounded 99
-                            ]
-                            Ui.none
-
-                     else
-                        Ui.none
-                    )
-                , Ui.text text
-                ]
-        )
-
-
-radioColumn : HtmlId -> (option -> msg) -> Maybe option -> String -> List ( option, String ) -> Element msg
-radioColumn htmlId onPress maybeValue title options =
-    let
-        label =
-            Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] (Ui.text title)
-    in
-    Ui.column
-        [ Ui.paddingXY 16 0, Ui.spacing 8 ]
-        [ label.element
-        , Ui.Input.chooseOne
-            Ui.column
-            [ Ui.spacing 4 ]
-            { onChange = onPress
-            , options = List.map (\( value, text ) -> radioOption htmlId value text) options
-            , selected = maybeValue
-            , label = label.id
-            }
-        ]
 
 
 copyableText : String -> LoadedFrontend -> Element FrontendMsg
@@ -1304,7 +1194,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
 
         othersEditing : SeqSet (Id ChannelMessageId)
         othersEditing =
-            SeqDict.remove local.localUser.userId channel.lastTypedAt
+            SeqDict.remove local.localUser.session.userId channel.lastTypedAt
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
@@ -1612,7 +1502,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
 
         othersEditing : SeqSet (Id ThreadMessageId)
         othersEditing =
-            SeqDict.remove local.localUser.userId thread.lastTypedAt
+            SeqDict.remove local.localUser.session.userId thread.lastTypedAt
                 |> SeqDict.values
                 |> List.filterMap
                     (\a ->
@@ -2092,7 +1982,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if otherUserId == local.localUser.userId then
+                        (if otherUserId == local.localUser.session.userId then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -2157,7 +2047,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 Ui.el
                                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                                     (Ui.text
-                                        (if otherUserId == local.localUser.userId then
+                                        (if otherUserId == local.localUser.session.userId then
                                             "This is the start of a conversation with yourself"
 
                                          else
@@ -2226,7 +2116,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
                     GuildOrDmId_Dm otherUserId ->
                         "Write a message to "
-                            ++ (if otherUserId == local.localUser.userId then
+                            ++ (if otherUserId == local.localUser.session.userId then
                                     "yourself"
 
                                 else
@@ -2267,7 +2157,7 @@ peopleAreTypingView allUsers channel local model =
                 (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
                     && (a.messageIndex == Nothing)
             )
-            (SeqDict.remove local.localUser.userId channel.lastTypedAt)
+            (SeqDict.remove local.localUser.session.userId channel.lastTypedAt)
             |> SeqDict.keys
      of
         [] ->
@@ -2356,7 +2246,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if otherUserId == local.localUser.userId then
+                        (if otherUserId == local.localUser.session.userId then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -2723,7 +2613,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView local.localUser.userId data.reactions
+                    reactionEmojiView local.localUser.session.userId data.reactions
 
                 ( guildOrDmIdNoThread, threadRoute ) =
                     guildOrDmId
@@ -2847,7 +2737,7 @@ threadMessageEditingView isMobile guildOrDmId threadId messageId message maybeRe
         UserTextMessage data ->
             let
                 maybeReactions =
-                    reactionEmojiView local.localUser.userId data.reactions
+                    reactionEmojiView local.localUser.session.userId data.reactions
 
                 ( guildOrDmIdNoThread, _ ) =
                     guildOrDmId
@@ -3074,7 +2964,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 allUsers
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member localUser.userId (RichText.mentionsUser data.content) then
+                        if SeqSet.member localUser.session.userId (RichText.mentionsUser data.content) then
                             MentionHighlight
 
                         else
@@ -3084,8 +2974,8 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                         highlight
                 )
                 messageIndex
-                (localUser.userId == data.createdBy)
-                localUser.userId
+                (localUser.session.userId == data.createdBy)
+                localUser.session.userId
                 data.reactions
                 maybeThreadStarter
                 isHovered
@@ -3110,7 +3000,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 highlight
                 messageIndex
                 False
-                localUser.userId
+                localUser.session.userId
                 reactions
                 maybeThreadStarter
                 isHovered
@@ -3130,7 +3020,7 @@ messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight i
                 highlight
                 messageIndex
                 False
-                localUser.userId
+                localUser.session.userId
                 SeqDict.empty
                 maybeThreadStarter
                 isHovered
@@ -3160,7 +3050,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
             threadMessageContainer
                 (case highlight of
                     NoHighlight ->
-                        if SeqSet.member localUser.userId (RichText.mentionsUser message2.content) then
+                        if SeqSet.member localUser.session.userId (RichText.mentionsUser message2.content) then
                             MentionHighlight
 
                         else
@@ -3170,8 +3060,8 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                         highlight
                 )
                 messageIndex
-                (localUser.userId == message2.createdBy)
-                localUser.userId
+                (localUser.session.userId == message2.createdBy)
+                localUser.session.userId
                 message2.reactions
                 isHovered
                 (userTextMessageContent
@@ -3192,7 +3082,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 highlight
                 messageIndex
                 False
-                localUser.userId
+                localUser.session.userId
                 reactions
                 isHovered
                 (Ui.row
@@ -3207,7 +3097,7 @@ threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered i
                 highlight
                 messageIndex
                 False
-                localUser.userId
+                localUser.session.userId
                 SeqDict.empty
                 isHovered
                 (deletedMessageContent highlight createdAt localUser.timezone)
@@ -3855,6 +3745,10 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
         guildName : String
         guildName =
             GuildName.toString guild.name
+
+        directMentions : Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+        directMentions =
+            SeqDict.get guildId localUser.user.directMentions
     in
     channelColumnContainer
         [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
@@ -3885,6 +3779,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                         [ channelColumnRow
                             isMobile
                             channelNameHover
+                            directMentions
                             channelRoute
                             localUser
                             guildId
@@ -3893,6 +3788,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                         , channelColumnThreads
                             isMobile
                             channelRoute
+                            directMentions
                             localUser
                             guildId
                             channelId
@@ -3911,7 +3807,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                         ]
                 )
                 (SeqDict.toList guild.channels)
-                ++ [ if localUser.userId == guild.owner then
+                ++ [ if localUser.session.userId == guild.owner then
                         let
                             isSelected =
                                 channelRoute == NewChannelRoute
@@ -3943,13 +3839,14 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
 channelColumnThreads :
     Bool
     -> ChannelRoute
+    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> SeqDict (Id ChannelMessageId) FrontendThread
     -> Element FrontendMsg
-channelColumnThreads isMobile channelRoute localUser guildId channelId channel threads =
+channelColumnThreads isMobile channelRoute directMentions localUser guildId channelId channel threads =
     Ui.column
         []
         (SeqDict.toList threads
@@ -4003,15 +3900,11 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 
                                    else
                                     channelOrThreadHasNotifications
+                                        directMentions
                                         (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                                        localUser.userId
-                                        (case SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads of
-                                            Just id ->
-                                                Id.increment id
-
-                                            Nothing ->
-                                                Id.fromInt 0
-                                        )
+                                        channelId
+                                        (ViewThread threadMessageIndex)
+                                        (SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads)
                                         thread
                                   )
                                     |> GuildIcon.notificationView 4 5 MyUi.background2
@@ -4050,13 +3943,14 @@ channelColumnThreads isMobile channelRoute localUser guildId channelId channel t
 channelColumnRow :
     Bool
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    -> Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> ChannelRoute
     -> LocalUser
     -> Id GuildId
     -> Id ChannelId
     -> FrontendChannel
     -> Element FrontendMsg
-channelColumnRow isMobile channelNameHover channelRoute localUser guildId channelId channel =
+channelColumnRow isMobile channelNameHover directMentions channelRoute localUser guildId channelId channel =
     let
         isSelected : Bool
         isSelected =
@@ -4110,15 +4004,11 @@ channelColumnRow isMobile channelNameHover channelRoute localUser guildId channe
 
                    else
                     channelOrThreadHasNotifications
+                        directMentions
                         (SeqSet.member guildId localUser.user.notifyOnAllMessages)
-                        localUser.userId
-                        (case SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed of
-                            Just id ->
-                                Id.increment id
-
-                            Nothing ->
-                                Id.fromInt 0
-                        )
+                        channelId
+                        NoThread
+                        (SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed)
                         channel
                   )
                     |> GuildIcon.notificationView 0 -3 MyUi.background2

@@ -14,7 +14,6 @@ module Id exposing
     , changeType
     , fromInt
     , fromString
-    , increment
     , nextId
     , threadRouteToMessageId
     , threadRouteWithMessage
@@ -107,11 +106,6 @@ type InviteLinkId
 
 type Id a
     = Id Int
-
-
-increment : Id a -> Id a
-increment (Id id) =
-    id + 1 |> Id
 
 
 nextId : SeqDict (Id a) b -> Id a

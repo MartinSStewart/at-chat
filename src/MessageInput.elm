@@ -378,7 +378,7 @@ userDropdownList guildOrDmId local =
                     []
 
         GuildOrDmId_Dm otherUserId ->
-            [ local.localUser.userId, otherUserId ]
+            [ local.localUser.session.userId, otherUserId ]
     )
         |> List.filterMap
             (\userId ->

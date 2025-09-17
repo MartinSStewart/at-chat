@@ -3,7 +3,7 @@ module RoutingTests exposing (roundtrip)
 import Expect
 import Fuzz exposing (Fuzzer)
 import Id exposing (Id, ThreadRouteWithMaybeMessage(..))
-import Route exposing (ChannelRoute(..), Route(..))
+import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import Test exposing (Test)
 import Url
@@ -60,11 +60,11 @@ secretIdFuzzer =
     Fuzz.map SecretId.fromString (Fuzz.map String.fromList (Fuzz.listOfLength 16 (Fuzz.oneOf (List.map Fuzz.constant (String.toList "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")))))
 
 
-threadRouteFuzzer : Fuzzer ThreadRouteWithMaybeMessage
+threadRouteFuzzer : Fuzzer ThreadRouteWithFriends
 threadRouteFuzzer =
     Fuzz.oneOf
-        [ Fuzz.map NoThreadWithMaybeMessage (Fuzz.maybe idFuzzer)
-        , Fuzz.map2 ViewThreadWithMaybeMessage idFuzzer (Fuzz.maybe idFuzzer)
+        [ Fuzz.map2 NoThreadWithFriends (Fuzz.maybe idFuzzer) showMemberTabFuzzer
+        , Fuzz.map3 ViewThreadWithFriends idFuzzer (Fuzz.maybe idFuzzer) showMemberTabFuzzer
         ]
 
 
@@ -76,4 +76,12 @@ channelRouteFuzzer =
         , Fuzz.map EditChannelRoute idFuzzer
         , Fuzz.constant InviteLinkCreatorRoute
         , Fuzz.map JoinRoute secretIdFuzzer
+        ]
+
+
+showMemberTabFuzzer : Fuzzer ShowMembersTab
+showMemberTabFuzzer =
+    Fuzz.oneOfValues
+        [ ShowMembersTab
+        , HideMembersTab
         ]

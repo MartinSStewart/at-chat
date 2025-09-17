@@ -5,6 +5,7 @@ module User exposing
     , EmailStatus(..)
     , FrontendUser
     , NotificationLevel(..)
+    , addDirectMention
     , backendToFrontend
     , backendToFrontendForUser
     , profileImage
@@ -21,6 +22,8 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
+import NonemptyDict exposing (NonemptyDict)
+import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -45,12 +48,42 @@ type alias BackendUser =
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
+    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     }
 
 
 type NotificationLevel
     = NotifyOnEveryMessage
     | NotifyOnMention
+
+
+addDirectMention : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
+addDirectMention guildId channelId threadRoute user =
+    { user
+        | directMentions =
+            SeqDict.update
+                guildId
+                (\maybeDict ->
+                    case maybeDict of
+                        Just dict ->
+                            NonemptyDict.updateOrInsert
+                                ( channelId, threadRoute )
+                                (\maybeCount ->
+                                    case maybeCount of
+                                        Just count ->
+                                            OneOrGreater.increment count
+
+                                        Nothing ->
+                                            OneOrGreater.one
+                                )
+                                dict
+                                |> Just
+
+                        Nothing ->
+                            NonemptyDict.singleton ( channelId, threadRoute ) OneOrGreater.one |> Just
+                )
+                user.directMentions
+    }
 
 
 setGuildNotificationLevel : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser
@@ -68,7 +101,23 @@ setGuildNotificationLevel guildId notificationLevel user =
 
 setLastChannelViewed : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
 setLastChannelViewed guildId channelId threadRoute user =
-    { user | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed }
+    { user
+        | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed
+        , directMentions =
+            SeqDict.update
+                guildId
+                (\maybeDict ->
+                    case maybeDict of
+                        Just dict ->
+                            NonemptyDict.toSeqDict dict
+                                |> SeqDict.remove ( channelId, threadRoute )
+                                |> NonemptyDict.fromSeqDict
+
+                        Nothing ->
+                            Nothing
+                )
+                user.directMentions
+    }
 
 
 setLastDmViewed : Id UserId -> ThreadRoute -> BackendUser -> BackendUser

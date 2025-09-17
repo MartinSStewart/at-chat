@@ -63,7 +63,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, NotificationMode, PrivateVapidKey, SubscribeData, UserSession)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Message exposing (Message)
@@ -74,7 +74,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import PersonName exposing (PersonName)
-import Ports exposing (NotificationPermission, PushSubscription, PwaStatus)
+import Ports exposing (NotificationPermission, PwaStatus)
 import Postmark
 import Quantity exposing (Quantity)
 import RichText exposing (RichText)
@@ -104,7 +104,6 @@ type alias LoadingFrontend =
     , notificationPermission : NotificationPermission
     , pwaStatus : PwaStatus
     , timezone : Time.Zone
-    , enabledPushNotifications : Bool
     , scrollbarWidth : Int
     }
 
@@ -131,7 +130,6 @@ type alias LoadedFrontend =
     , drag : Drag
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
-    , enabledPushNotifications : Bool
     , scrollbarWidth : Int
     }
 
@@ -251,7 +249,7 @@ type EmojiSelector
 
 type alias BackendModel =
     { users : NonemptyDict (Id UserId) BackendUser
-    , sessions : SeqDict SessionId (Id UserId)
+    , sessions : SeqDict SessionId UserSession
     , connections : SeqDict SessionId (NonemptyDict ClientId LastRequest)
     , secretCounter : Int
     , pendingLogins : SeqDict SessionId LoginTokenData
@@ -278,7 +276,6 @@ type alias BackendModel =
     , files : SeqDict FileHash BackendFileData
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
-    , pushSubscriptions : SeqDict SessionId PushSubscription
     , slackClientSecret : Maybe Slack.ClientSecret
     }
 
@@ -418,9 +415,8 @@ type FrontendMsg
     | PastedFiles GuildOrDmId (Nonempty File)
     | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
     | MessageViewMsg GuildOrDmIdNoThread ThreadRouteWithMessage MessageView.MessageViewMsg
-    | GotRegisterPushSubscription (Result String PushSubscription)
-    | ToggledEnablePushNotifications Bool
-    | GotIsPushNotificationsRegistered Bool
+    | GotRegisterPushSubscription (Result String SubscribeData)
+    | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
     | GotScrollbarWidth Int
     | PressedCloseImageInfo
@@ -462,8 +458,6 @@ type ToBackend
     | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
-    | RegisterPushSubscriptionRequest PushSubscription
-    | UnregisterPushSubscriptionRequest
     | LinkSlackOAuthCode Slack.OAuthCode SessionId
 
 
@@ -538,7 +532,7 @@ type ToFrontend
 
 
 type alias LoginData =
-    { userId : Id UserId
+    { session : UserSession
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
@@ -587,6 +581,7 @@ type ServerChange
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
+    | Server_PushNotificationFailed Http.Error
 
 
 type LocalChange
@@ -613,6 +608,8 @@ type LocalChange
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
+    | Local_SetNotificationMode NotificationMode
+    | Local_RegisterPushSubscription SubscribeData
 
 
 type ToBeFilledInByBackend a

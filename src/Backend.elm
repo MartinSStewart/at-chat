@@ -39,17 +39,15 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), NotificationMode(..), PrivateVapidKey(..), PushSubscription(..), SubscribeData, UserSession)
 import Log exposing (Log)
 import LoginForm
-import Maybe.Extra
 import Message exposing (Message(..))
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (InitAdminData)
 import Pagination
 import PersonName
-import Ports exposing (PushSubscription)
 import Postmark
 import Quantity
 import RichText exposing (RichText)
@@ -178,7 +176,6 @@ init =
       , files = SeqDict.empty
       , publicVapidKey = ""
       , privateVapidKey = PrivateVapidKey ""
-      , pushSubscriptions = SeqDict.empty
       , slackClientSecret = Nothing
       }
     , Command.none
@@ -665,7 +662,8 @@ update msg model =
                                 Just userId ->
                                     { model2
                                         | users =
-                                            NonemptyDict.updateIfExists userId
+                                            NonemptyDict.updateIfExists
+                                                userId
                                                 (\user -> { user | icon = Maybe.map .fileHash maybeAvatar })
                                                 model2.users
                                     }
@@ -690,7 +688,13 @@ update msg model =
                     addLog
                         time
                         (Log.PushNotificationError userId error)
-                        { model | pushSubscriptions = SeqDict.remove sessionId model.pushSubscriptions }
+                        { model
+                            | sessions =
+                                SeqDict.updateIfExists
+                                    sessionId
+                                    (\session -> { session | pushSubscription = SubscriptionError error })
+                                    model.sessions
+                        }
 
         GotVapidKeys result ->
             ( case result of
@@ -1745,6 +1749,16 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     in
     case maybeData of
         Just { guildId, guild, channelId, channel, threadRoute } ->
+            let
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+            in
             ( { model
                 | guilds =
                     SeqDict.insert
@@ -1765,6 +1779,21 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                     guild.channels
                         }
                         model.guilds
+                , users =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            NonemptyDict.updateIfExists
+                                userId2
+                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                                users
+                        )
+                        model.users
+                        (LocalState.usersMentionedOrRepliedToBackend
+                            threadRoute
+                            richText
+                            (guild.owner :: SeqDict.keys guild.members)
+                            channel
+                        )
               }
             , Command.batch
                 [ broadcastToGuild
@@ -1863,13 +1892,13 @@ updateFromFrontend sessionId clientId msg model =
 
 getLoginData :
     SessionId
-    -> Id UserId
+    -> UserSession
     -> BackendUser
     -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
     -> BackendModel
     -> LoginData
-getLoginData sessionId userId user requestMessagesFor model =
-    { userId = userId
+getLoginData sessionId session user requestMessagesFor model =
+    { session = session
     , adminData =
         if user.isAdmin then
             IsAdminLoginData (adminData model user.lastLogPageViewed)
@@ -1877,7 +1906,7 @@ getLoginData sessionId userId user requestMessagesFor model =
         else
             IsNotAdminLoginData
     , twoFactorAuthenticationEnabled =
-        SeqDict.get userId model.twoFactorAuthentication |> Maybe.map .finishedAt
+        SeqDict.get session.userId model.twoFactorAuthentication |> Maybe.map .finishedAt
     , guilds =
         SeqDict.filterMap
             (\guildId guild ->
@@ -1893,14 +1922,14 @@ getLoginData sessionId userId user requestMessagesFor model =
                         _ ->
                             Nothing
                     )
-                    userId
+                    session.userId
                     guild
             )
             model.guilds
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
-                case DmChannel.otherUserId userId dmChannelId of
+                case DmChannel.otherUserId session.userId dmChannelId of
                     Just otherUserId ->
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
@@ -1929,7 +1958,7 @@ getLoginData sessionId userId user requestMessagesFor model =
         NonemptyDict.toList model.users
             |> List.filterMap
                 (\( otherUserId, otherUser ) ->
-                    if otherUserId == userId then
+                    if otherUserId == session.userId then
                         Nothing
 
                     else
@@ -1966,8 +1995,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 cmd : Command BackendOnly ToFrontend backendMsg
                 cmd =
                     case getUserFromSessionId sessionId model2 of
-                        Just ( userId, user ) ->
-                            getLoginData sessionId userId user requestMessagesFor model2
+                        Just ( session, user ) ->
+                            getLoginData sessionId session user requestMessagesFor model2
                                 |> Ok
                                 |> CheckLoginResponse
                                 |> Lamdera.sendToFrontend clientId
@@ -2009,6 +2038,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             userId =
                                 Id.nextId (NonemptyDict.toSeqDict model2.users)
 
+                            session : UserSession
+                            session =
+                                initSession userId
+
                             newUser : BackendUser
                             newUser =
                                 LocalState.createNewUser
@@ -2020,13 +2053,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             model3 : BackendModel
                             model3 =
                                 { model2
-                                    | sessions = SeqDict.insert sessionId userId model2.sessions
+                                    | sessions = SeqDict.insert sessionId session model2.sessions
                                     , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
                                     , users = NonemptyDict.insert userId newUser model2.users
                                 }
                         in
                         ( model3
-                        , getLoginData sessionId userId newUser requestMessagesFor model3
+                        , getLoginData sessionId session newUser requestMessagesFor model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -2049,11 +2082,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         of
                             ( Just user, Just { secret } ) ->
                                 if TwoFactorAuthentication.isValidCode time loginCode secret then
+                                    let
+                                        session : UserSession
+                                        session =
+                                            initSession pendingLogin.userId
+                                    in
                                     ( { model2
-                                        | sessions = SeqDict.insert sessionId pendingLogin.userId model2.sessions
+                                        | sessions = SeqDict.insert sessionId session model2.sessions
                                         , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
                                       }
-                                    , getLoginData sessionId pendingLogin.userId user requestMessagesFor model2
+                                    , getLoginData sessionId session user requestMessagesFor model2
                                         |> LoginSuccess
                                         |> LoginWithTokenResponse
                                         |> Lamdera.sendToFrontends sessionId
@@ -2322,7 +2360,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId _ ->
+                        (\{ userId } _ ->
                             let
                                 guildId : Id GuildId
                                 guildId =
@@ -2384,7 +2422,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId =
                                             DmChannel.channelIdFromUserIds userId otherUserId
@@ -2445,7 +2483,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId =
                                             DmChannel.channelIdFromUserIds userId otherUserId
@@ -2513,7 +2551,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId : DmChannelId
                                         dmChannelId =
@@ -2575,7 +2613,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId : DmChannelId
                                         dmChannelId =
@@ -2698,7 +2736,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId : DmChannelId
                                         dmChannelId =
@@ -2745,7 +2783,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
+                        (\{ userId } user ->
                             ( { model2
                                 | users =
                                     NonemptyDict.insert
@@ -2826,7 +2864,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     let
                                         dmChannelId : DmChannelId
                                         dmChannelId =
@@ -2890,7 +2928,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
+                        (\{ userId } user ->
                             case SeqDict.get (DmChannel.channelIdFromUserIds otherUserId userId) model2.dmChannels of
                                 Just channel ->
                                     ( { model2
@@ -2915,7 +2953,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
+                        (\{ userId } user ->
                             case SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels of
                                 Just dmChannel ->
                                     ( { model2
@@ -3013,7 +3051,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
+                        (\{ userId } user ->
                             ( { model2
                                 | users = NonemptyDict.insert userId { user | name = name } model2.users
                               }
@@ -3054,7 +3092,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
                                         |> Maybe.withDefault DmChannel.init
@@ -3093,7 +3131,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             asUser
                                 model2
                                 sessionId
-                                (\userId _ ->
+                                (\{ userId } _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
                                         |> Maybe.withDefault DmChannel.init
@@ -3111,7 +3149,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\userId user ->
+                        (\{ userId } user ->
                             ( { model
                                 | users =
                                     NonemptyDict.insert
@@ -3131,13 +3169,54 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetNotificationMode notificationMode ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session _ ->
+                            ( { model2
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        { session | notificationMode = notificationMode }
+                                        model2.sessions
+                              }
+                            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
+                Local_RegisterPushSubscription pushSubscription ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session _ ->
+                            ( { model2
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        { session | pushSubscription = Subscribed pushSubscription }
+                                        model2.sessions
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , pushNotification
+                                    sessionId
+                                    session.userId
+                                    time
+                                    "Success!"
+                                    "Push notifications enabled"
+                                    "https://at-chat.app/at-logo-no-background.png"
+                                    pushSubscription
+                                    model2
+                                ]
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2
                 sessionId
-                (\userId user ->
-                    twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend2 model2
-                )
+                (twoFactorAuthenticationUpdateFromFrontend clientId time toBackend2 model2)
 
         AiChatToBackend aiChatToBackend ->
             ( model2
@@ -3166,35 +3245,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
             )
 
-        RegisterPushSubscriptionRequest pushSubscription ->
-            asUser
-                model2
-                sessionId
-                (\userId _ ->
-                    ( { model2 | pushSubscriptions = SeqDict.insert sessionId pushSubscription model2.pushSubscriptions }
-                    , pushNotification
-                        sessionId
-                        userId
-                        time
-                        "Success!"
-                        "Push notifications enabled"
-                        "https://at-chat.app/at-logo-no-background.png"
-                        pushSubscription
-                        model2
-                    )
-                        |> addLogWithCmd time (Log.RegisteredPushNotificationRequest userId)
-                )
-
-        UnregisterPushSubscriptionRequest ->
-            ( { model2 | pushSubscriptions = SeqDict.remove sessionId model2.pushSubscriptions }
-            , Command.none
-            )
-
         LinkSlackOAuthCode oAuthCode sessionId2 ->
             asUser
                 model2
                 sessionId2
-                (\userId _ ->
+                (\{ userId } _ ->
                     ( model2
                     , case model2.slackClientSecret of
                         Just clientSecret ->
@@ -3279,7 +3334,7 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
 pushNotification sessionId userId time title body icon pushSubscription model =
     Http.request
         { method = "POST"
@@ -3471,10 +3526,10 @@ joinGuildByInvite :
     -> ClientId
     -> Id GuildId
     -> BackendModel
-    -> Id UserId
+    -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user =
+joinGuildByInvite inviteLinkId time sessionId clientId guildId model { userId } user =
     case SeqDict.get guildId model.guilds of
         Just guild ->
             case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time userId guild ) of
@@ -3564,12 +3619,12 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model userId user
 twoFactorAuthenticationUpdateFromFrontend :
     ClientId
     -> Time.Posix
-    -> Id UserId
-    -> BackendUser
     -> TwoFactorAuthentication.ToBackend
     -> BackendModel
+    -> UserSession
+    -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-twoFactorAuthenticationUpdateFromFrontend clientId time userId user toBackend model =
+twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model { userId } user =
     case toBackend of
         TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest ->
             let
@@ -3666,7 +3721,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         | users = newUsers
                         , sessions =
                             SeqDict.filter
-                                (\_ sessionUserId -> SeqSet.member sessionUserId changes.deletedUsers |> not)
+                                (\_ session -> SeqSet.member session.userId changes.deletedUsers |> not)
                                 model2.sessions
                       }
                     , Command.batch
@@ -3751,7 +3806,10 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
         Pages.Admin.SetPrivateVapidKey privateKey ->
-            ( { model | privateVapidKey = privateKey, pushSubscriptions = SeqDict.empty }
+            ( { model
+                | privateVapidKey = privateKey
+                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = NotSubscribed }) model.sessions
+              }
             , Command.batch
                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                 , Server_PushNotificationsReset model.publicVapidKey
@@ -3762,7 +3820,10 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             )
 
         Pages.Admin.SetPublicVapidKey publicKey ->
-            ( { model | publicVapidKey = publicKey, pushSubscriptions = SeqDict.empty }
+            ( { model
+                | publicVapidKey = publicKey
+                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = NotSubscribed }) model.sessions
+              }
             , Command.batch
                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                 , Server_PushNotificationsReset model.publicVapidKey
@@ -3792,10 +3853,10 @@ sendDirectMessage :
     -> ThreadRouteWithMaybeMessage
     -> Nonempty RichText
     -> SeqDict (Id FileId) FileData
-    -> Id UserId
+    -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles userId user =
+sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles { userId } user =
     let
         dmChannelId : DmChannelId
         dmChannelId =
@@ -3947,13 +4008,13 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
 broadcastNotification : Time.Posix -> Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
 broadcastNotification time userToNotify sender text model =
     SeqDict.foldl
-        (\sessionId userIdKey cmds ->
-            if userIdKey == userToNotify then
-                case SeqDict.get sessionId model.pushSubscriptions of
-                    Just pushSubscription ->
+        (\sessionId session cmds ->
+            if session.userId == userToNotify then
+                case ( session.notificationMode, session.pushSubscription ) of
+                    ( PushNotifications, Subscribed pushSubscription ) ->
                         pushNotification
                             sessionId
-                            userIdKey
+                            session.userId
                             time
                             (PersonName.toString sender.name)
                             text
@@ -3968,7 +4029,7 @@ broadcastNotification time userToNotify sender text model =
                             model
                             :: cmds
 
-                    Nothing ->
+                    _ ->
                         cmds
 
             else
@@ -4025,64 +4086,11 @@ broadcastMessageNotification :
     -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo channel text members model =
+broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo channel content members model =
     let
         plainText : String
         plainText =
-            RichText.toString (NonemptyDict.toSeqDict model.users) text
-    in
-    usersToNotify guildOrDmId members sender threadRouteWithRepliedTo channel text model
-        |> SeqSet.foldl
-            (\userId2 cmds ->
-                case NonemptyDict.get userId2 model.users of
-                    Just user2 ->
-                        broadcastNotification time userId2 user2 plainText model :: cmds
-
-                    Nothing ->
-                        cmds
-            )
-            []
-        |> Command.batch
-
-
-usersToNotify :
-    GuildOrDmIdNoThread
-    -> List (Id UserId)
-    -> Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Nonempty RichText
-    -> BackendModel
-    -> SeqSet (Id UserId)
-usersToNotify guildOrDmId members senderId threadRouteWithRepliedTo channel content model =
-    let
-        repliedToUserId2 : List (Id UserId)
-        repliedToUserId2 =
-            case threadRouteWithRepliedTo of
-                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    (case SeqDict.get threadId channel.threads of
-                        Just thread ->
-                            LocalState.repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
-
-                        Nothing ->
-                            []
-                    )
-                        ++ (case DmChannel.getArray threadId channel.messages of
-                                Just (UserTextMessage data) ->
-                                    [ data.createdBy ]
-
-                                Just (UserJoinedMessage _ userJoined _) ->
-                                    [ userJoined ]
-
-                                Just (DeletedMessage _) ->
-                                    []
-
-                                Nothing ->
-                                    []
-                           )
-
-                NoThreadWithMaybeMessage maybeRepliedTo ->
-                    LocalState.repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
+            RichText.toString (NonemptyDict.toSeqDict model.users) content
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
@@ -4103,9 +4111,20 @@ usersToNotify guildOrDmId members senderId threadRouteWithRepliedTo channel cont
                 GuildOrDmId_Dm _ ->
                     SeqSet.empty
     in
-    List.foldl SeqSet.insert (RichText.mentionsUser content) repliedToUserId2
+    LocalState.usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channel
         |> SeqSet.union alwaysNotify
-        |> SeqSet.remove senderId
+        |> SeqSet.remove sender
+        |> SeqSet.foldl
+            (\userId2 cmds ->
+                case NonemptyDict.get userId2 model.users of
+                    Just user2 ->
+                        broadcastNotification time userId2 user2 plainText model :: cmds
+
+                    Nothing ->
+                        cmds
+            )
+            []
+        |> Command.batch
 
 
 sendGuildMessage :
@@ -4159,6 +4178,32 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                     }
                                 )
                                 channel
+
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+
+                users2 : NonemptyDict (Id UserId) BackendUser
+                users2 =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            NonemptyDict.updateIfExists
+                                userId2
+                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                                users
+                        )
+                        model.users
+                        (LocalState.usersMentionedOrRepliedToBackend
+                            threadRouteWithMaybeReplyTo
+                            text
+                            (guild.owner :: SeqDict.keys guild.members)
+                            channel
+                        )
             in
             ( { model
                 | guilds =
@@ -4191,7 +4236,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             user.lastViewed
                                 }
                         )
-                        model.users
+                        users2
               }
             , Command.batch
                 [ LocalChangeResponse
@@ -4363,8 +4408,8 @@ broadcastToGuild _ msg model =
 broadcastToUser : Maybe ClientId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 broadcastToUser clientToSkip userId msg model =
     SeqDict.filterMap
-        (\sessionId otherUserId ->
-            if userId == otherUserId then
+        (\sessionId otherUserSession ->
+            if userId == otherUserSession.userId then
                 case SeqDict.get sessionId model.connections of
                     Just clientIds ->
                         List.filterMap
@@ -4486,14 +4531,14 @@ updateFromFrontendAdmin clientId toBackend model =
 asUser :
     BackendModel
     -> SessionId
-    -> (Id UserId -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asUser model sessionId func =
     case SeqDict.get sessionId model.sessions of
-        Just userId ->
-            case NonemptyDict.get userId model.users of
+        Just session ->
+            case NonemptyDict.get session.userId model.users of
                 Just user ->
-                    func userId user
+                    func session user
 
                 Nothing ->
                     ( model, Command.none )
@@ -4510,10 +4555,10 @@ asGuildMember :
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildMember model sessionId guildId func =
     case SeqDict.get sessionId model.sessions of
-        Just userId ->
-            case ( NonemptyDict.get userId model.users, SeqDict.get guildId model.guilds ) of
+        Just session ->
+            case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
                 ( Just user, Just guild ) ->
-                    func userId user guild
+                    func session.userId user guild
 
                 _ ->
                     ( model, Command.none )
@@ -4550,7 +4595,7 @@ asAdmin model sessionId func =
     asUser
         model
         sessionId
-        (\userId user ->
+        (\{ userId } user ->
             if user.isAdmin then
                 func userId user
 
@@ -4687,11 +4732,16 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor model =
                             )
 
                         ( Just user, Nothing ) ->
+                            let
+                                session : UserSession
+                                session =
+                                    initSession pendingLogin.userId
+                            in
                             ( { model
-                                | sessions = SeqDict.insert sessionId pendingLogin.userId model.sessions
+                                | sessions = SeqDict.insert sessionId session model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
-                            , getLoginData sessionId pendingLogin.userId user requestMessagesFor model
+                            , getLoginData sessionId session user requestMessagesFor model
                                 |> LoginSuccess
                                 |> LoginWithTokenResponse
                                 |> Lamdera.sendToFrontends sessionId
@@ -4755,10 +4805,18 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor model =
             ( model, LoginTokenInvalid loginCode |> LoginWithTokenResponse |> Lamdera.sendToFrontend clientId )
 
 
-getUserFromSessionId : SessionId -> BackendModel -> Maybe ( Id UserId, BackendUser )
+initSession : Id UserId -> UserSession
+initSession userId =
+    { userId = userId
+    , notificationMode = NoNotifications
+    , pushSubscription = NotSubscribed
+    }
+
+
+getUserFromSessionId : SessionId -> BackendModel -> Maybe ( UserSession, BackendUser )
 getUserFromSessionId sessionId model =
     SeqDict.get sessionId model.sessions
-        |> Maybe.andThen (\userId -> NonemptyDict.get userId model.users |> Maybe.map (Tuple.pair userId))
+        |> Maybe.andThen (\session -> NonemptyDict.get session.userId model.users |> Maybe.map (Tuple.pair session))
 
 
 emailToNotifyWhenErrorsAreLogged : EmailAddress
@@ -4793,12 +4851,3 @@ addLog time log model =
 
         _ ->
             ( model2, Command.none )
-
-
-addLogWithCmd : Time.Posix -> Log -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addLogWithCmd time log ( model, cmd ) =
-    let
-        ( model2, logCmd ) =
-            addLog time log model
-    in
-    ( model2, Command.batch [ cmd, logCmd ] )
