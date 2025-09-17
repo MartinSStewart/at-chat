@@ -1789,7 +1789,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                 users
                         )
                         model.users
-                        (usersMentionedOrRepliedTo
+                        (LocalState.usersMentionedOrRepliedToBackend
                             threadRoute
                             richText
                             (guild.owner :: SeqDict.keys guild.members)
@@ -4112,7 +4112,7 @@ broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo ch
                 GuildOrDmId_Dm _ ->
                     SeqSet.empty
     in
-    usersMentionedOrRepliedTo threadRouteWithRepliedTo content members channel
+    LocalState.usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channel
         |> SeqSet.union alwaysNotify
         |> SeqSet.remove sender
         |> SeqSet.foldl
@@ -4199,7 +4199,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 users
                         )
                         model.users
-                        (usersMentionedOrRepliedTo
+                        (LocalState.usersMentionedOrRepliedToBackend
                             threadRouteWithMaybeReplyTo
                             text
                             (guild.owner :: SeqDict.keys guild.members)

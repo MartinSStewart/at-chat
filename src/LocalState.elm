@@ -58,6 +58,7 @@ module LocalState exposing
     , repliedToUserId
     , repliedToUserIdFrontend
     , updateChannel
+    , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
     )
 
@@ -1668,16 +1669,18 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
                     []
             )
                 ++ (case DmChannel.getArray threadId channel.messages of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            [ data.createdBy ]
+                        Just (MessageLoaded message) ->
+                            case message of
+                                UserTextMessage data ->
+                                    [ data.createdBy ]
 
-                        Just (MessageLoaded (UserJoinedMessage _ userJoined _)) ->
-                            [ userJoined ]
+                                UserJoinedMessage _ userJoined _ ->
+                                    [ userJoined ]
 
-                        Just (MessageLoaded (DeletedMessage _)) ->
-                            []
+                                DeletedMessage _ ->
+                                    []
 
-                        Nothing ->
+                        _ ->
                             []
                    )
 
