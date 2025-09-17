@@ -111,6 +111,18 @@ handlePortToJs { currentRequest } =
             )
                 |> Just
 
+        "scrollbar_width_to_js" ->
+            ( "scrollbar_width_from_js"
+            , Json.Encode.int 20
+            )
+                |> Just
+
+        "user_agent_to_js" ->
+            ( "user_agent_from_js"
+            , Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+            )
+                |> Just
+
         _ ->
             let
                 _ =

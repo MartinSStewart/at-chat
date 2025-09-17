@@ -5695,13 +5695,6 @@ view model =
     , body =
         [ case model of
             Loading loading ->
-                let
-                    supportEmail =
-                        EmailAddress.toString Env.contactEmail
-
-                    supportLink =
-                        Html.a [ Html.Attributes.href ("mailto:" ++ supportEmail) ] [ Html.text supportEmail ]
-                in
                 (case loading.loginStatus of
                     LoadingData ->
                         [ Html.div [ Html.Attributes.id "loading" ] []
@@ -5712,18 +5705,15 @@ view model =
                         case loading.time of
                             Just _ ->
                                 -- Make sure all of these error messages are slightly different so we know which branch was reached
-                                [ Html.text "Something went isn't working. Please contact "
-                                , supportLink
+                                [ Html.text "Something went isn't working."
                                 ]
 
                             Nothing ->
-                                [ Html.text "Something went wrong. Please contact "
-                                , supportLink
+                                [ Html.text "Something went wrong."
                                 ]
 
                     LoadError ->
-                        [ Html.text "Something went wrong when loading the page. Please contact "
-                        , supportLink
+                        [ Html.text "Something went wrong when loading the page."
                         ]
                 )
                     |> Html.span []
