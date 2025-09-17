@@ -6,7 +6,8 @@ import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..))
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..), PushSubscription(..))
+import Log
 import MyUi
 import PersonName
 import Slack
@@ -165,27 +166,42 @@ view isMobile time local loggedIn loaded model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
-                , MyUi.radioColumn
-                    (Dom.id "userOptions_notificationMode")
-                    SelectedNotificationMode
-                    (Just local.notificationMode)
-                    (if isMobile then
-                        "Notifications"
+                , Ui.column
+                    []
+                    [ MyUi.radioColumn
+                        (Dom.id "userOptions_notificationMode")
+                        SelectedNotificationMode
+                        (Just local.localUser.session.notificationMode)
+                        (if isMobile then
+                            "Notifications"
 
-                     else
-                        "Desktop notifications"
-                    )
-                    (if isMobile then
-                        [ ( NoNotifications, "No notifications" )
-                        , ( PushNotifications, "Allow notifications" )
-                        ]
+                         else
+                            "Desktop notifications"
+                        )
+                        (if isMobile then
+                            [ ( NoNotifications, "No notifications" )
+                            , ( PushNotifications, "Allow notifications" )
+                            ]
 
-                     else
-                        [ ( NoNotifications, "No notifications" )
-                        , ( NotifyWhenRunning, "When the app is open (recommended)" )
-                        , ( PushNotifications, "Even when the app isn't open (intended for mobile but you can use it on desktop too)" )
-                        ]
-                    )
+                         else
+                            [ ( NoNotifications, "No notifications" )
+                            , ( NotifyWhenRunning, "When the app is running (recommended)" )
+                            , ( PushNotifications, "Even when the app is closed (intended for mobile but you can use it on desktop too)" )
+                            ]
+                        )
+                    , case local.localUser.session.pushSubscription of
+                        NotSubscribed ->
+                            Ui.none
+
+                        Subscribed subscribeData ->
+                            Ui.none
+
+                        SubscriptionError error ->
+                            MyUi.errorBox
+                                (Dom.id "userOptions_pushNotificationError")
+                                PressedCopyText
+                                (Log.httpErrorToString error)
+                    ]
                 , Ui.el
                     [ Ui.linkNewTab
                         (Slack.buildOAuthUrl

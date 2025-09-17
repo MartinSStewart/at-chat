@@ -14,6 +14,9 @@ module LocalState exposing
     , LogWithTime
     , NotificationMode(..)
     , PrivateVapidKey(..)
+    , PushSubscription(..)
+    , SubscribeData
+    , UserSession
     , addInvite
     , addMember
     , addMemberFrontend
@@ -63,6 +66,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
+import Effect.Http as Http
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -81,6 +85,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
 import Unsafe
+import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import VisibleMessages exposing (VisibleMessages)
 
@@ -92,7 +97,6 @@ type alias LocalState =
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , publicVapidKey : String
-    , notificationMode : NotificationMode
     }
 
 
@@ -103,12 +107,29 @@ type NotificationMode
 
 
 type alias LocalUser =
-    { userId : Id UserId
+    { session : UserSession
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     }
+
+
+type alias UserSession =
+    { userId : Id UserId
+    , notificationMode : NotificationMode
+    , pushSubscription : PushSubscription
+    }
+
+
+type PushSubscription
+    = NotSubscribed
+    | Subscribed SubscribeData
+    | SubscriptionError Http.Error
+
+
+type alias SubscribeData =
+    { endpoint : Url, auth : String, p256dh : String }
 
 
 type JoinGuildError
@@ -356,7 +377,7 @@ createNewUser createdAt name email userIsAdmin =
 
 getUser : Id UserId -> LocalUser -> Maybe FrontendUser
 getUser userId localUser =
-    if localUser.userId == userId then
+    if localUser.session.userId == userId then
         User.backendToFrontend localUser.user |> Just
 
     else
@@ -1011,7 +1032,7 @@ allUsers local =
 allUsers2 : LocalUser -> SeqDict (Id UserId) FrontendUser
 allUsers2 localUser =
     SeqDict.insert
-        localUser.userId
+        localUser.session.userId
         (User.backendToFrontendForUser localUser.user)
         localUser.otherUsers
 

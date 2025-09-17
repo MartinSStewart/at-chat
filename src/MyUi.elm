@@ -416,7 +416,7 @@ radioColumn htmlId onPress maybeValue title options =
             Ui.Input.label (Dom.idToString htmlId) [ Ui.Font.bold ] (Ui.text title)
     in
     Ui.column
-        [ Ui.paddingXY 16 0, Ui.spacing 8 ]
+        [ Ui.spacing 4 ]
         [ label2.element
         , Ui.Input.chooseOne
             Ui.column
@@ -442,21 +442,35 @@ radioOption htmlId value text =
                     , Ui.background (Ui.rgb 250 250 255)
                     , Ui.rounded 99
                     , Ui.border 2
-                    , Ui.borderColor background1
+                    , Ui.borderColor
+                        (case option of
+                            Ui.Input.Selected ->
+                                background1
+
+                            Ui.Input.Idle ->
+                                background1
+
+                            Ui.Input.Focused ->
+                                white
+                        )
                     ]
-                    (if option == Ui.Input.Selected then
-                        Ui.el
-                            [ Ui.width (Ui.px 15)
-                            , Ui.height (Ui.px 15)
-                            , Ui.centerX
-                            , Ui.centerY
-                            , Ui.background background1
-                            , Ui.rounded 99
-                            ]
+                    (case option of
+                        Ui.Input.Selected ->
+                            Ui.el
+                                [ Ui.width (Ui.px 15)
+                                , Ui.height (Ui.px 15)
+                                , Ui.centerX
+                                , Ui.centerY
+                                , Ui.background background1
+                                , Ui.rounded 99
+                                ]
+                                Ui.none
+
+                        Ui.Input.Idle ->
                             Ui.none
 
-                     else
-                        Ui.none
+                        Ui.Input.Focused ->
+                            Ui.none
                     )
                 , Ui.text text
                 ]
@@ -627,7 +641,7 @@ container isMobile2 label2 contents =
             [ Ui.border 1
             , Ui.rounded 4
             , Ui.padding 16
-            , Ui.spacing 8
+            , Ui.spacing 16
             ]
             contents
         )

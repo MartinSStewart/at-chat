@@ -2,7 +2,6 @@ port module Ports exposing
     ( CropImageData
     , CropImageDataResponse
     , NotificationPermission(..)
-    , PushSubscription
     , PwaStatus(..)
     , checkNotificationPermission
     , checkNotificationPermissionResponse
@@ -32,6 +31,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
 import Json.Encode
+import LocalState exposing (PushSubscription, SubscribeData)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url exposing (Url)
@@ -130,14 +130,7 @@ registerPushSubscriptionToJs publicKey =
         (Json.Encode.string publicKey)
 
 
-type alias PushSubscription =
-    { endpoint : Url
-    , auth : String
-    , p256dh : String
-    }
-
-
-registerPushSubscription : (Result String PushSubscription -> msg) -> Subscription FrontendOnly msg
+registerPushSubscription : (Result String SubscribeData -> msg) -> Subscription FrontendOnly msg
 registerPushSubscription msg =
     Subscription.fromJs
         "register_push_subscription_from_js"
@@ -145,7 +138,7 @@ registerPushSubscription msg =
         (\json ->
             Json.Decode.decodeValue
                 (Json.Decode.map3
-                    PushSubscription
+                    SubscribeData
                     (Json.Decode.field "endpoint" Json.Decode.string
                         |> Json.Decode.andThen
                             (\text ->

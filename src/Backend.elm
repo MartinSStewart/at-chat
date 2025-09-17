@@ -39,7 +39,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), NotificationMode(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), NotificationMode(..), PrivateVapidKey(..), PushSubscription(..), SubscribeData, UserSession)
 import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
@@ -49,7 +49,6 @@ import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (InitAdminData)
 import Pagination
 import PersonName
-import Ports exposing (PushSubscription)
 import Postmark
 import Quantity
 import RichText exposing (RichText)
@@ -61,7 +60,7 @@ import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), UserSession)
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..))
 import UInt64
 import Unsafe
 import Url
@@ -693,7 +692,7 @@ update msg model =
                             | sessions =
                                 SeqDict.updateIfExists
                                     sessionId
-                                    (\session -> { session | pushSubscription = Nothing })
+                                    (\session -> { session | pushSubscription = SubscriptionError error })
                                     model.sessions
                         }
 
@@ -1874,7 +1873,7 @@ getLoginData :
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
-    { userId = session.userId
+    { session = session
     , adminData =
         if user.isAdmin then
             IsAdminLoginData (adminData model user.lastLogPageViewed)
@@ -1943,7 +1942,6 @@ getLoginData sessionId session user requestMessagesFor model =
             |> SeqDict.fromList
     , sessionId = sessionId
     , publicVapidKey = model.publicVapidKey
-    , notificationMode = session.notificationMode
     }
 
 
@@ -3146,6 +3144,49 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetNotificationMode notificationMode ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session _ ->
+                            ( { model2
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        { session | notificationMode = notificationMode }
+                                        model2.sessions
+                              }
+                            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                            )
+                        )
+
+                Local_RegisterPushSubscription pushSubscription ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session _ ->
+                            ( { model2
+                                | sessions =
+                                    SeqDict.insert
+                                        sessionId
+                                        { session | pushSubscription = Subscribed pushSubscription }
+                                        model2.sessions
+                              }
+                            , Command.batch
+                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                , pushNotification
+                                    sessionId
+                                    session.userId
+                                    time
+                                    "Success!"
+                                    "Push notifications enabled"
+                                    "https://at-chat.app/at-logo-no-background.png"
+                                    pushSubscription
+                                    model2
+                                ]
+                            )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2
@@ -3178,31 +3219,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Nothing ->
                     Lamdera.sendToFrontend clientId (ReloadDataResponse (Err ()))
             )
-
-        RegisterPushSubscriptionRequest pushSubscription ->
-            asUser
-                model2
-                sessionId
-                (\session _ ->
-                    ( { model2
-                        | sessions =
-                            SeqDict.insert
-                                sessionId
-                                { session | pushSubscription = Just pushSubscription }
-                                model2.sessions
-                      }
-                    , pushNotification
-                        sessionId
-                        session.userId
-                        time
-                        "Success!"
-                        "Push notifications enabled"
-                        "https://at-chat.app/at-logo-no-background.png"
-                        pushSubscription
-                        model2
-                    )
-                        |> addLogWithCmd time (Log.RegisteredPushNotificationRequest session.userId)
-                )
 
         LinkSlackOAuthCode oAuthCode sessionId2 ->
             asUser
@@ -3293,7 +3309,7 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> PushSubscription -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
 pushNotification sessionId userId time title body icon pushSubscription model =
     Http.request
         { method = "POST"
@@ -3767,7 +3783,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
         Pages.Admin.SetPrivateVapidKey privateKey ->
             ( { model
                 | privateVapidKey = privateKey
-                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = Nothing }) model.sessions
+                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = NotSubscribed }) model.sessions
               }
             , Command.batch
                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
@@ -3781,7 +3797,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
         Pages.Admin.SetPublicVapidKey publicKey ->
             ( { model
                 | publicVapidKey = publicKey
-                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = Nothing }) model.sessions
+                , sessions = SeqDict.map (\_ session -> { session | pushSubscription = NotSubscribed }) model.sessions
               }
             , Command.batch
                 [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
@@ -3970,7 +3986,7 @@ broadcastNotification time userToNotify sender text model =
         (\sessionId session cmds ->
             if session.userId == userToNotify then
                 case ( session.notificationMode, session.pushSubscription ) of
-                    ( PushNotifications, Just pushSubscription ) ->
+                    ( PushNotifications, Subscribed pushSubscription ) ->
                         pushNotification
                             sessionId
                             session.userId
@@ -4784,7 +4800,7 @@ initSession : Id UserId -> UserSession
 initSession userId =
     { userId = userId
     , notificationMode = NoNotifications
-    , pushSubscription = Nothing
+    , pushSubscription = NotSubscribed
     }
 
 

@@ -419,7 +419,7 @@ update navigationKey time adminData localState msg model =
                 result : Result UsersChangeError (NonemptyDict (Id UserId) BackendUser)
                 result =
                     applyChangesToBackendUsers
-                        localState.localUser.userId
+                        localState.localUser.session.userId
                         { time = time
                         , newUsers = userTable2.newUsers
                         , deletedUsers = userTable2.deletedUsers
