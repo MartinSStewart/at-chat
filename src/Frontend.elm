@@ -67,6 +67,7 @@ import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser, NotificationLevel(..))
+import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserOptions
 import Vector2d
 import VisibleMessages exposing (VisibleMessages)
@@ -115,6 +116,7 @@ subscriptions model =
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.scrollbarWidthSub GotScrollbarWidth
+        , Ports.userAgentSub GotUserAgent
         , case model of
             Loading _ ->
                 Subscription.none
@@ -224,6 +226,7 @@ init url key =
         , notificationPermission = Ports.Denied
         , pwaStatus = Ports.BrowserView
         , scrollbarWidth = 0
+        , userAgent = Nothing
         }
     , Command.batch
         [ Task.perform GotTime Time.now
@@ -235,6 +238,7 @@ init url key =
         , Ports.checkPwaStatus
         , Task.perform GotTimezone Time.here
         , Ports.getScrollbarWidth
+        , Ports.getUserAgent
         ]
     )
 
@@ -242,14 +246,15 @@ init url key =
 initLoadedFrontend :
     LoadingFrontend
     -> Time.Posix
+    -> UserAgent
     -> Result () LoginData
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-initLoadedFrontend loading time loginResult =
+initLoadedFrontend loading time userAgent loginResult =
     let
         ( loginStatus, cmdB ) =
             case loginResult of
                 Ok loginData ->
-                    loadedInitHelper time loading.timezone loginData loading |> Tuple.mapFirst LoggedIn
+                    loadedInitHelper time loading.timezone userAgent loginData loading |> Tuple.mapFirst LoggedIn
 
                 Err () ->
                     ( NotLoggedIn
@@ -280,6 +285,7 @@ initLoadedFrontend loading time loginResult =
             , dragPrevious = NoDrag
             , aiChatModel = aiChatModel
             , scrollbarWidth = loading.scrollbarWidth
+            , userAgent = userAgent
             }
 
         ( model2, cmdA ) =
@@ -303,14 +309,15 @@ initLoadedFrontend loading time loginResult =
 loadedInitHelper :
     Time.Posix
     -> Time.Zone
+    -> UserAgent
     -> LoginData
     -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
     -> ( LoggedIn2, Command FrontendOnly ToBackend FrontendMsg )
-loadedInitHelper time timezone loginData loading =
+loadedInitHelper time timezone userAgent loginData loading =
     let
         localState : LocalState
         localState =
-            loginDataToLocalState timezone loginData
+            loginDataToLocalState userAgent timezone loginData
 
         maybeAdmin : Maybe ( Pages.Admin.Model, Maybe Pages.Admin.AdminChange, Command FrontendOnly ToBackend msg )
         maybeAdmin =
@@ -412,8 +419,8 @@ loadedInitHelper time timezone loginData loading =
         cmds
 
 
-loginDataToLocalState : Time.Zone -> LoginData -> LocalState
-loginDataToLocalState timezone loginData =
+loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
+loginDataToLocalState userAgent timezone loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
@@ -436,6 +443,7 @@ loginDataToLocalState timezone loginData =
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , timezone = timezone
+        , userAgent = userAgent
         }
     , publicVapidKey = loginData.publicVapidKey
     }
@@ -443,20 +451,24 @@ loginDataToLocalState timezone loginData =
 
 tryInitLoadedFrontend : LoadingFrontend -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
 tryInitLoadedFrontend loading =
-    Maybe.map2
-        (\time loginResult -> initLoadedFrontend loading time loginResult |> Tuple.mapFirst Loaded)
-        loading.time
-        (case loading.loginStatus of
-            LoadingData ->
-                Nothing
+    let
+        maybeLoginStatus =
+            case loading.loginStatus of
+                LoadingData ->
+                    Nothing
 
-            LoadSuccess loginData ->
-                Just (Ok loginData)
+                LoadSuccess loginData ->
+                    Just (Ok loginData)
 
-            LoadError ->
-                Just (Err ())
-        )
-        |> Maybe.withDefault ( Loading loading, Command.none )
+                LoadError ->
+                    Just (Err ())
+    in
+    case ( loading.time, maybeLoginStatus, loading.userAgent ) of
+        ( Just time, Just loginStatus, Just userAgent ) ->
+            initLoadedFrontend loading time userAgent loginStatus |> Tuple.mapFirst Loaded
+
+        _ ->
+            ( Loading loading, Command.none )
 
 
 update : FrontendMsg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend FrontendMsg )
@@ -481,6 +493,9 @@ update msg model =
 
                 GotScrollbarWidth width ->
                     ( Loading { loading | scrollbarWidth = width }, Command.none )
+
+                GotUserAgent userAgent ->
+                    tryInitLoadedFrontend { loading | userAgent = Just userAgent }
 
                 _ ->
                     ( model, Command.none )
@@ -1101,6 +1116,9 @@ isPressMsg msg =
 
         PressedMemberListBack ->
             True
+
+        GotUserAgent _ ->
+            False
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3228,6 +3246,9 @@ updateLoaded msg model =
         GotScrollbarWidth width ->
             ( { model | scrollbarWidth = width }, Command.none )
 
+        GotUserAgent userAgent ->
+            ( { model | userAgent = userAgent }, Command.none )
+
         PressedViewAttachedFileInfo guildOrDmId fileId ->
             viewImageInfo guildOrDmId fileId model
 
@@ -5050,7 +5071,7 @@ updateLoadedFromBackend msg model =
                         LoginSuccess loginData ->
                             let
                                 ( loggedIn, cmdA ) =
-                                    loadedInitHelper model.time model.timezone loginData model
+                                    loadedInitHelper model.time model.timezone model.userAgent loginData model
 
                                 ( model2, cmdB ) =
                                     routeRequest
@@ -5353,7 +5374,8 @@ updateLoadedFromBackend msg model =
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn
-                                | localState = loginDataToLocalState model.timezone loginData |> Local.init
+                                | localState =
+                                    loginDataToLocalState model.userAgent model.timezone loginData |> Local.init
                                 , isReloading = False
                               }
                             , Command.none

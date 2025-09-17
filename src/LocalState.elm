@@ -87,6 +87,7 @@ import Slack
 import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
+import UserAgent exposing (UserAgent)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -112,6 +113,7 @@ type alias LocalUser =
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
+    , userAgent : UserAgent
     }
 
 
