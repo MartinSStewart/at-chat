@@ -35,6 +35,65 @@ type ChannelNotificationType
     | NewMessageForUser OneOrGreater
 
 
+maxNotifications =
+    99
+
+
+notificationHelper : Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
+notificationHelper color fontColor borderColor xOffset yOffset count =
+    let
+        count2 : Int
+        count2 =
+            OneOrGreater.toInt count
+    in
+    Ui.inFront
+        (Ui.el
+            [ Ui.rounded 99
+            , Ui.background color
+            , Ui.width
+                (Ui.px
+                    (if count2 < 10 then
+                        17
+
+                     else
+                        22
+                    )
+                )
+            , Ui.height (Ui.px 17)
+            , Ui.border 2
+            , Ui.borderColor borderColor
+            , Ui.move { x = xOffset + 2, y = yOffset, z = 0 }
+            , Ui.alignRight
+            , Ui.Font.lineHeight
+                (if count2 > maxNotifications then
+                    0.9
+
+                 else
+                    1.1
+                )
+            , Ui.Font.size
+                (if count2 > maxNotifications then
+                    13
+
+                 else
+                    11
+                )
+            , Ui.Font.bold
+            , Ui.Font.color fontColor
+            , Ui.contentCenterX
+            , Ui.Font.family [ Ui.Font.typeface "Arial" ]
+            ]
+            (Ui.text
+                (if count2 > maxNotifications then
+                    "∞"
+
+                 else
+                    String.fromInt count2
+                )
+            )
+        )
+
+
 notificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
 notificationView xOffset yOffset borderColor notification =
     case notification of
@@ -42,34 +101,10 @@ notificationView xOffset yOffset borderColor notification =
             Ui.noAttr
 
         NewMessage count ->
-            Ui.inFront
-                (Ui.el
-                    [ Ui.rounded 99
-                    , Ui.background (Ui.rgb 255 255 255)
-                    , Ui.width (Ui.px 14)
-                    , Ui.height (Ui.px 14)
-                    , Ui.border 2
-                    , Ui.borderColor borderColor
-                    , Ui.move { x = xOffset, y = yOffset, z = 0 }
-                    , Ui.alignRight
-                    ]
-                    Ui.none
-                )
+            notificationHelper MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
 
         NewMessageForUser count ->
-            Ui.inFront
-                (Ui.el
-                    [ Ui.rounded 99
-                    , Ui.background MyUi.alertColor
-                    , Ui.width (Ui.px 14)
-                    , Ui.height (Ui.px 14)
-                    , Ui.border 2
-                    , Ui.borderColor borderColor
-                    , Ui.move { x = xOffset, y = yOffset, z = 0 }
-                    , Ui.alignRight
-                    ]
-                    Ui.none
-                )
+            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
 view : Mode -> FrontendGuild -> Element msg

@@ -1,4 +1,4 @@
-module OneOrGreater exposing (OneOrGreater, fromInt, increment, one, plus, toInt)
+module OneOrGreater exposing (OneOrGreater, fromInt, increment, one, plus, toInt, toString)
 
 
 type OneOrGreater
@@ -13,6 +13,11 @@ one =
 increment : OneOrGreater -> Int
 increment (OneOrGreater a) =
     a + 1
+
+
+toString : OneOrGreater -> String
+toString (OneOrGreater a) =
+    String.fromInt a
 
 
 toInt : OneOrGreater -> Int

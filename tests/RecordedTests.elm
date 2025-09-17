@@ -639,6 +639,7 @@ tests fileData =
                 , user.keyUp 100 (Dom.id "guild_notificationLevel") "ArrowDown" []
                 , writeMessage admin "Test"
                 , checkNotification "Test"
+                , writeMessage admin "Test 2"
                 , user.click 100 (Dom.id "guild_openChannel_0")
                 , writeMessage user "I shouldn't get notified"
                 , checkNoNotification "I shouldn't get notified"

@@ -70,6 +70,8 @@ import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
+{-| In the case of a channel, it's just the channel, not the threads it contains
+-}
 channelOrThreadHasNotifications :
     Maybe (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     -> Bool
@@ -111,13 +113,32 @@ newMessageCount maybeLastViewed channel =
             Array.length channel.messages
 
 
+channelNewMessageCount :
+    GuildOrDmIdNoThread
+    -> BackendUser
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+        }
+    -> Int
+channelNewMessageCount guildOrDmId currentUser channel =
+    SeqDict.foldl
+        (\threadId thread count ->
+            newMessageCount
+                (SeqDict.get ( guildOrDmId, threadId ) currentUser.lastViewedThreads)
+                thread
+                + count
+        )
+        (newMessageCount (SeqDict.get guildOrDmId currentUser.lastViewed) channel)
+        channel.threads
+
+
+guildNewMessageCount : BackendUser -> Id GuildId -> FrontendGuild -> Int
 guildNewMessageCount currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel count ->
-            newMessageCount
-                (SeqDict.get (GuildOrDmId_Guild guildId channelId) currentUser.lastViewed)
-                channel
-                + count
+            channelNewMessageCount (GuildOrDmId_Guild guildId channelId) currentUser channel + count
         )
         0
         guild.channels
@@ -149,34 +170,9 @@ guildHasNotifications currentUser guildId guild =
                         NoNotification
 
 
-dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Bool
+dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
-    let
-        lastViewed : Id ChannelMessageId
-        lastViewed =
-            case SeqDict.get (GuildOrDmId_Dm otherUserId) currentUser.lastViewed of
-                Just id ->
-                    id
-
-                Nothing ->
-                    Id.fromInt -1
-    in
-    (DmChannel.latestMessageId dmChannel /= lastViewed)
-        || List.any
-            (\( threadId, thread ) ->
-                let
-                    lastViewed2 : Id ThreadMessageId
-                    lastViewed2 =
-                        case SeqDict.get ( GuildOrDmId_Dm otherUserId, threadId ) currentUser.lastViewedThreads of
-                            Just id ->
-                                Id.increment id
-
-                            Nothing ->
-                                Id.fromInt 0
-                in
-                DmChannel.latestThreadMessageId thread == lastViewed2
-            )
-            (SeqDict.toList dmChannel.threads)
+    channelNewMessageCount (GuildOrDmId_Dm otherUserId) currentUser dmChannel |> OneOrGreater.fromInt
 
 
 canScroll : Drag -> Bool
@@ -233,22 +229,23 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                 (\( otherUserId, dmChannel ) ->
                     let
                         dmIcon =
-                            if dmHasNotifications localUser.user otherUserId dmChannel then
-                                elLinkButton
-                                    (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
-                                    (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
-                                    []
-                                    (case SeqDict.get otherUserId allUsers of
-                                        Just otherUser ->
-                                            GuildIcon.userView NewMessageForUser otherUser.icon otherUserId
+                            case dmHasNotifications localUser.user otherUserId dmChannel of
+                                Just count ->
+                                    elLinkButton
+                                        (Dom.id ("guildsColumn_openDm_" ++ Id.toString otherUserId))
+                                        (DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
+                                        []
+                                        (case SeqDict.get otherUserId allUsers of
+                                            Just otherUser ->
+                                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
 
-                                        Nothing ->
-                                            GuildIcon.userView NewMessageForUser Nothing otherUserId
-                                    )
-                                    |> Just
+                                            Nothing ->
+                                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
+                                        )
+                                        |> Just
 
-                            else
-                                Nothing
+                                Nothing ->
+                                    Nothing
                     in
                     case route of
                         DmRoute otherUserIdRoute _ ->
