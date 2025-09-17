@@ -91,7 +91,7 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
                 , Ui.move
                     (case userAgent.browser of
                         Safari ->
-                            { x = 1, y = 1 + textYOffset, z = 0 }
+                            { x = 0, y = 1 + textYOffset, z = 0 }
 
                         Firefox ->
                             { x = 0, y = 1 + textYOffset, z = 0 }
