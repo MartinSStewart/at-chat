@@ -647,6 +647,36 @@ tests fileData =
             )
         ]
     , T.start
+        "Check notification icons appear"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ user.click 100 (Dom.id "guildIcon_showFriends")
+                , admin.click 100 (Dom.id "guild_newChannel")
+                , admin.input 100 (Dom.id "newChannelName") "Second-channel-goes-here"
+                , admin.click 100 (Dom.id "guild_createChannel")
+                , writeMessage admin "First message"
+                , writeMessage admin "Next message"
+                , writeMessage admin "Third message"
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+                , user.click 100 (Dom.id "guild_openGuild_1")
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+                , writeMessage admin "@Stevie Steve Hello!"
+                , writeMessage admin "@Stevie Steve Hello again!"
+                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\userReload ->
+                        [ userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ]) ]
+                    )
+                ]
+            )
+        ]
+    , T.start
         "Guild icon notification is shown"
         startTime
         normalConfig
