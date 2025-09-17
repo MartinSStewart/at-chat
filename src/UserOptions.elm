@@ -16,7 +16,6 @@ import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
-import Ui.Input
 
 
 init : UserOptionsModel
@@ -185,15 +184,15 @@ view isMobile time local loggedIn loaded model =
 
                          else
                             [ ( NoNotifications, "No notifications" )
-                            , ( NotifyWhenRunning, "When the app is running (recommended)" )
-                            , ( PushNotifications, "Even when the app is closed (intended for mobile but you can use it on desktop too)" )
+                            , ( NotifyWhenRunning, "When the app is running" )
+                            , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
                             ]
                         )
                     , case local.localUser.session.pushSubscription of
                         NotSubscribed ->
                             Ui.none
 
-                        Subscribed subscribeData ->
+                        Subscribed _ ->
                             Ui.none
 
                         SubscriptionError error ->

@@ -4842,12 +4842,3 @@ addLog time log model =
 
         _ ->
             ( model2, Command.none )
-
-
-addLogWithCmd : Time.Posix -> Log -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-addLogWithCmd time log ( model, cmd ) =
-    let
-        ( model2, logCmd ) =
-            addLog time log model
-    in
-    ( model2, Command.batch [ cmd, logCmd ] )

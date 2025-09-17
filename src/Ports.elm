@@ -31,10 +31,10 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Subscription as Subscription exposing (Subscription)
 import Json.Decode
 import Json.Encode
-import LocalState exposing (PushSubscription, SubscribeData)
+import LocalState exposing (SubscribeData)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
-import Url exposing (Url)
+import Url
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg

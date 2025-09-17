@@ -88,9 +88,6 @@ handlePortToJs { currentRequest } =
         "check_pwa_status_to_js" ->
             Just ( "check_pwa_status_from_js", Json.Encode.bool False )
 
-        "is_push_subscription_registered_to_js" ->
-            Just ( "is_push_subscription_registered_from_js", Json.Encode.bool False )
-
         "load_sounds_to_js" ->
             Nothing
 
@@ -257,10 +254,15 @@ userEmail =
     Unsafe.emailAddress "user@mail.com"
 
 
-enableNotifications : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
-enableNotifications user =
+enableNotifications : Bool -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+enableNotifications isMobile user =
     [ user.click 100 (Dom.id "guild_showUserOptions")
-    , user.click 100 (Dom.id "userOptions_togglePushNotifications")
+    , user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
+    , if isMobile then
+        T.group []
+
+      else
+        user.keyUp 100 (Dom.id "userOptions_notificationMode") "ArrowDown" []
     , user.click 100 (Dom.id "userOptions_closeUserOptions")
     ]
         |> T.group
@@ -385,7 +387,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
                                     , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
-                                    , enableNotifications user
+                                    , enableNotifications False user
                                     , checkNotification "Push notifications enabled"
                                     , admin.click 100 (Dom.id "guild_openChannel_0")
                                     , T.group (continueFunc admin user)
@@ -757,7 +759,7 @@ tests fileData =
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
                 , checkNotification "@Stevie Steve Hi!"
-                , enableNotifications admin
+                , enableNotifications False admin
                 , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , user.custom
                     100
@@ -840,7 +842,7 @@ tests fileData =
                     100
                     (\data ->
                         case SeqDict.get sessionId0 data.backend.sessions of
-                            Just userId ->
+                            Just { userId } ->
                                 case SeqDict.get userId data.backend.twoFactorAuthenticationSetup of
                                     Just { secret } ->
                                         case TwoFactorAuthentication.getConfig "" secret of
@@ -1065,7 +1067,6 @@ tests fileData =
             (\tabA ->
                 [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tabA.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tabA.portEvent 152 "is_push_subscription_registered_from_js" (stringToJson "false")
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
@@ -1075,7 +1076,6 @@ tests fileData =
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
                         , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
-                        , tabB.portEvent 39 "is_push_subscription_registered_from_js" (stringToJson "false")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
                         , tabA.click 3098 (Dom.id "homePage_loginButton")
                         , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
@@ -1151,7 +1151,6 @@ tests fileData =
             (\tab1 ->
                 [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
-                , tab1.portEvent 9 "is_push_subscription_registered_from_js" (stringToJson "true")
                 , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
                 , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
                 , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []

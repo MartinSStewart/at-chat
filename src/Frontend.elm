@@ -5518,10 +5518,10 @@ pendingChangesText localChange =
                 NotifyOnMention ->
                     "Disabled notifications for all messages"
 
-        Local_SetNotificationMode notificationMode ->
+        Local_SetNotificationMode _ ->
             "Set notification mode"
 
-        Local_RegisterPushSubscription pushSubscription ->
+        Local_RegisterPushSubscription _ ->
             "Register push subscription"
 
 
