@@ -58,7 +58,7 @@ module LocalState exposing
     , repliedToUserId
     , repliedToUserIdFrontend
     , updateChannel
-    , usersToNotifyFrontend
+    , usersMentionedOrRepliedToFrontend
     )
 
 import Array exposing (Array)
@@ -74,6 +74,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
+import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -1601,52 +1602,89 @@ getGuildAndChannel guildId channelId local =
             Nothing
 
 
-usersToNotifyFrontend :
-    Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> { a | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+usersMentionedOrRepliedToBackend :
+    ThreadRouteWithMaybeMessage
     -> Nonempty RichText
+    -> List (Id UserId)
+    -> BackendChannel
     -> SeqSet (Id UserId)
-usersToNotifyFrontend senderId threadRouteWithRepliedTo channel content =
+usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channel =
     let
-        usersToNotify2 =
-            RichText.mentionsUser content
-
-        repliedToUserId2 : Maybe (Id UserId)
-        repliedToUserId2 =
-            case threadRouteWithRepliedTo of
+        userIds : SeqSet (Id UserId)
+        userIds =
+            (case threadRouteWithRepliedTo of
                 ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    case SeqDict.get threadId channel.threads of
+                    (case SeqDict.get threadId channel.threads of
                         Just thread ->
-                            repliedToUserIdFrontend maybeRepliedTo thread
+                            repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
 
                         Nothing ->
-                            case DmChannel.getArray threadId channel.messages of
-                                Just (MessageLoaded message) ->
-                                    case message of
-                                        UserTextMessage data ->
-                                            Just data.createdBy
+                            []
+                    )
+                        ++ (case DmChannel.getArray threadId channel.messages of
+                                Just (UserTextMessage data) ->
+                                    [ data.createdBy ]
 
-                                        UserJoinedMessage _ userJoined _ ->
-                                            Just userJoined
+                                Just (UserJoinedMessage _ userJoined _) ->
+                                    [ userJoined ]
 
-                                        DeletedMessage _ ->
-                                            Nothing
+                                Just (DeletedMessage _) ->
+                                    []
 
-                                _ ->
-                                    Nothing
+                                Nothing ->
+                                    []
+                           )
 
                 NoThreadWithMaybeMessage maybeRepliedTo ->
-                    repliedToUserIdFrontend maybeRepliedTo channel
+                    repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
+            )
+                |> List.foldl SeqSet.insert (RichText.mentionsUser content)
     in
-    (case repliedToUserId2 of
-        Just a ->
-            SeqSet.insert a usersToNotify2
+    List.foldl
+        (\userId validUserIds ->
+            if SeqSet.member userId userIds then
+                SeqSet.insert userId validUserIds
 
-        Nothing ->
-            usersToNotify2
+            else
+                validUserIds
+        )
+        SeqSet.empty
+        members
+
+
+usersMentionedOrRepliedToFrontend :
+    ThreadRouteWithMaybeMessage
+    -> Nonempty RichText
+    -> FrontendChannel
+    -> SeqSet (Id UserId)
+usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
+    (case threadRouteWithRepliedTo of
+        ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
+            (case SeqDict.get threadId channel.threads of
+                Just thread ->
+                    repliedToUserIdFrontend maybeRepliedTo thread |> Maybe.Extra.toList
+
+                Nothing ->
+                    []
+            )
+                ++ (case DmChannel.getArray threadId channel.messages of
+                        Just (MessageLoaded (UserTextMessage data)) ->
+                            [ data.createdBy ]
+
+                        Just (MessageLoaded (UserJoinedMessage _ userJoined _)) ->
+                            [ userJoined ]
+
+                        Just (MessageLoaded (DeletedMessage _)) ->
+                            []
+
+                        Nothing ->
+                            []
+                   )
+
+        NoThreadWithMaybeMessage maybeRepliedTo ->
+            repliedToUserIdFrontend maybeRepliedTo channel |> Maybe.Extra.toList
     )
-        |> SeqSet.remove senderId
+        |> List.foldl SeqSet.insert (RichText.mentionsUser content)
 
 
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId) } -> Maybe (Id UserId)

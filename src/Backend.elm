@@ -4128,56 +4128,6 @@ broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo ch
         |> Command.batch
 
 
-usersMentionedOrRepliedTo :
-    ThreadRouteWithMaybeMessage
-    -> Nonempty RichText
-    -> List (Id UserId)
-    -> BackendChannel
-    -> SeqSet (Id UserId)
-usersMentionedOrRepliedTo threadRouteWithRepliedTo content members channel =
-    let
-        userIds : SeqSet (Id UserId)
-        userIds =
-            (case threadRouteWithRepliedTo of
-                ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
-                    (case SeqDict.get threadId channel.threads of
-                        Just thread ->
-                            LocalState.repliedToUserId maybeRepliedTo thread |> Maybe.Extra.toList
-
-                        Nothing ->
-                            []
-                    )
-                        ++ (case DmChannel.getArray threadId channel.messages of
-                                Just (UserTextMessage data) ->
-                                    [ data.createdBy ]
-
-                                Just (UserJoinedMessage _ userJoined _) ->
-                                    [ userJoined ]
-
-                                Just (DeletedMessage _) ->
-                                    []
-
-                                Nothing ->
-                                    []
-                           )
-
-                NoThreadWithMaybeMessage maybeRepliedTo ->
-                    LocalState.repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
-            )
-                |> List.foldl SeqSet.insert (RichText.mentionsUser content)
-    in
-    List.foldl
-        (\userId validUserIds ->
-            if SeqSet.member userId userIds then
-                SeqSet.insert userId validUserIds
-
-            else
-                validUserIds
-        )
-        SeqSet.empty
-        members
-
-
 sendGuildMessage :
     BackendModel
     -> Time.Posix
