@@ -101,7 +101,23 @@ setGuildNotificationLevel guildId notificationLevel user =
 
 setLastChannelViewed : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
 setLastChannelViewed guildId channelId threadRoute user =
-    { user | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed }
+    { user
+        | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed
+        , directMentions =
+            SeqDict.update
+                guildId
+                (\maybeDict ->
+                    case maybeDict of
+                        Just dict ->
+                            NonemptyDict.toSeqDict dict
+                                |> SeqDict.remove ( channelId, threadRoute )
+                                |> NonemptyDict.fromSeqDict
+
+                        Nothing ->
+                            Nothing
+                )
+                user.directMentions
+    }
 
 
 setLastDmViewed : Id UserId -> ThreadRoute -> BackendUser -> BackendUser
