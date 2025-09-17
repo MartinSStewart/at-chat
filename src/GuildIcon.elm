@@ -46,6 +46,14 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
         count2 : Int
         count2 =
             OneOrGreater.toInt count
+
+        textYOffset : number
+        textYOffset =
+            if count2 > maxNotifications then
+                -2
+
+            else
+                0
     in
     Ui.inFront
         (Ui.el
@@ -65,20 +73,7 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
             , Ui.borderColor borderColor
             , Ui.move { x = xOffset + 2, y = yOffset, z = 0 }
             , Ui.alignRight
-            , (if count2 > maxNotifications then
-                0.9
-
-               else
-                1.1
-              )
-                + (case userAgent.browser of
-                    Safari ->
-                        0.1
-
-                    _ ->
-                        0
-                  )
-                |> Ui.Font.lineHeight
+            , Ui.Font.lineHeight 1
             , Ui.Font.size
                 (if count2 > maxNotifications then
                     13
@@ -88,15 +83,29 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
                 )
             , Ui.Font.bold
             , Ui.Font.color fontColor
-            , Ui.contentCenterX
             , Ui.Font.family [ Ui.Font.typeface "Arial" ]
             ]
-            (Ui.text
-                (if count2 > maxNotifications then
-                    "∞"
+            (Ui.el
+                [ Ui.contentCenterX
+                , Ui.move
+                    (case userAgent.browser of
+                        Safari ->
+                            { x = 1, y = 1 + textYOffset, z = 0 }
 
-                 else
-                    String.fromInt count2
+                        Firefox ->
+                            { x = 0, y = 1 + textYOffset, z = 0 }
+
+                        _ ->
+                            { x = 0, y = textYOffset, z = 0 }
+                    )
+                ]
+                (Ui.text
+                    (if count2 > maxNotifications then
+                        "∞"
+
+                     else
+                        String.fromInt count2
+                    )
                 )
             )
         )
