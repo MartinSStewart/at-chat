@@ -5744,7 +5744,6 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
-                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -5770,6 +5769,7 @@ view model =
 
                             NotLoggedIn { loginForm } ->
                                 LoginForm.view
+                                    loaded.userAgent
                                     (Maybe.withDefault LoginForm.init loginForm)
                                     (MyUi.isMobile loaded)
                                     loaded.pwaStatus
@@ -5797,7 +5797,6 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
-                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -5822,7 +5821,7 @@ view model =
                                         ]
                                         (case loginForm of
                                             Just loginForm2 ->
-                                                LoginForm.view loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
+                                                LoginForm.view loaded.userAgent loginForm2 (MyUi.isMobile loaded) loaded.pwaStatus |> Ui.map LoginFormMsg
 
                                             Nothing ->
                                                 Ui.Lazy.lazy Pages.Home.view windowWidth

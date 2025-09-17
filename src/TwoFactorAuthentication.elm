@@ -33,6 +33,7 @@ import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
 import Ui.Prose
+import UserAgent exposing (UserAgent)
 
 
 type alias TwoFactorAuthentication =
@@ -201,8 +202,8 @@ updateFromBackend toFrontend model =
                     model
 
 
-view : Bool -> Time.Posix -> TwoFactorState -> Element Msg
-view isMobile time twoFactorStatus =
+view : UserAgent -> Bool -> Time.Posix -> TwoFactorState -> Element Msg
+view userAgent isMobile time twoFactorStatus =
     MyUi.container
         isMobile
         "Two-factor authentication"
@@ -220,7 +221,7 @@ view isMobile time twoFactorStatus =
                     (Ui.text "Loading...")
 
             TwoFactorSetup data ->
-                setupView isMobile data
+                setupView userAgent isMobile data
 
             TwoFactorComplete ->
                 Ui.column
@@ -239,8 +240,8 @@ view isMobile time twoFactorStatus =
         ]
 
 
-setupView : Bool -> TwoFactorSetupData -> Element Msg
-setupView isMobile { qrCodeUrl, code, attempts } =
+setupView : UserAgent -> Bool -> TwoFactorSetupData -> Element Msg
+setupView userAgent isMobile { qrCodeUrl, code, attempts } =
     case QRCode.fromString qrCodeUrl of
         Ok qrCode ->
             let
@@ -321,7 +322,7 @@ setupView isMobile { qrCodeUrl, code, attempts } =
                     (Ui.column
                         [ Ui.spacing 8 ]
                         [ label.element
-                        , LoginForm.loginCodeInput LoginForm.twoFactorCodeLength TypedTwoFactorCode code label
+                        , LoginForm.loginCodeInput userAgent LoginForm.twoFactorCodeLength TypedTwoFactorCode code label
                         , case LoginForm.validateCode LoginForm.twoFactorCodeLength code of
                             Ok code2 ->
                                 case SeqDict.get code2 attempts of

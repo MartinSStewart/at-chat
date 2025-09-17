@@ -28,8 +28,8 @@ init =
     }
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn loaded model =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -152,7 +152,7 @@ view isMobile time local loggedIn loaded model =
 
                 IsNotAdmin ->
                     Ui.none
-            , TwoFactorAuthentication.view isMobile time loggedIn.twoFactor
+            , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
             , MyUi.container
                 isMobile
