@@ -43,8 +43,9 @@ import MessageInput exposing (MentionUserDropdown, MsgConfig)
 import MessageMenu
 import MessageView exposing (MessageViewMsg(..))
 import MyUi
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
 import RichText
@@ -69,90 +70,31 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 channelOrThreadHasNotifications :
-    Bool
+    NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater
+    -> Bool
     -> Id UserId
     -> Id messageId
     -> { a | messages : Array (MessageState messageId) }
     -> ChannelNotificationType
-channelOrThreadHasNotifications notifyOnAllMessages currentUserId lastViewed channel =
-    Array.slice (Id.toInt lastViewed) (Array.length channel.messages) channel.messages
-        |> Array.toList
-        |> List.foldl
-            (\message state ->
-                case state of
-                    NewMessageForUser ->
-                        state
+channelOrThreadHasNotifications directMentions notifyOnAllMessages currentUserId lastViewed channel =
+    directMentions
 
-                    _ ->
-                        case message of
-                            MessageLoaded message2 ->
-                                case message2 of
-                                    UserTextMessage data ->
-                                        if data.createdBy == currentUserId then
-                                            state
 
-                                        else if
-                                            (LocalState.repliedToUserIdFrontend data.repliedTo channel == Just currentUserId)
-                                                || SeqSet.member currentUserId (RichText.mentionsUser data.content)
-                                        then
-                                            NewMessageForUser
 
-                                        else if notifyOnAllMessages then
-                                            NewMessageForUser
-
-                                        else
-                                            NewMessage
-
-                                    UserJoinedMessage _ _ _ ->
-                                        if notifyOnAllMessages then
-                                            NewMessageForUser
-
-                                        else
-                                            NewMessage
-
-                                    DeletedMessage _ ->
-                                        state
-
-                            MessageUnloaded ->
-                                state
-            )
-            NoNotification
+--DmChannel.latestMessageId channel
 
 
 guildHasNotifications : Id UserId -> BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
 guildHasNotifications currentUserId currentUser guildId guild =
-    SeqDict.foldl
-        (\channelId channel state ->
-            case state of
-                NewMessageForUser ->
-                    state
+    case SeqDict.get guildId currentUser.directMentions of
+        Just directMentions ->
+            NonemptyDict.foldl
+                (\_ channelCount count -> OneOrGreater.plus count channelCount)
+                0
+                directMentions
 
-                _ ->
-                    let
-                        lastViewed : Id ChannelMessageId
-                        lastViewed =
-                            case SeqDict.get (GuildOrDmId_Guild guildId channelId) currentUser.lastViewed of
-                                Just id ->
-                                    Id.increment id
-
-                                Nothing ->
-                                    Id.fromInt 0
-                    in
-                    case
-                        channelOrThreadHasNotifications
-                            (SeqSet.member guildId currentUser.notifyOnAllMessages)
-                            currentUserId
-                            lastViewed
-                            channel
-                    of
-                        NoNotification ->
-                            threadHasNotifications guildId channelId currentUserId currentUser channel
-
-                        notification ->
-                            notification
-        )
-        NoNotification
-        guild.channels
+        Nothing ->
+            NoNotification
 
 
 dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Bool

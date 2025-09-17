@@ -21,6 +21,8 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
+import NonemptyDict exposing (NonemptyDict)
+import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -45,6 +47,7 @@ type alias BackendUser =
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
+    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     }
 
 

@@ -331,6 +331,7 @@ createNewUser createdAt name email userIsAdmin =
     , lastChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
+    , directMentions = SeqDict.empty
     }
 
 

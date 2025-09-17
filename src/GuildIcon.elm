@@ -19,6 +19,7 @@ import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (FrontendGuild)
 import MyUi
+import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
 import Ui.Font
 
@@ -31,7 +32,7 @@ type Mode
 type ChannelNotificationType
     = NoNotification
     | NewMessage
-    | NewMessageForUser
+    | NewMessageForUser OneOrGreater
 
 
 notificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
