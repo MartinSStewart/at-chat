@@ -685,7 +685,7 @@ update msg model =
                     ( model, Command.none )
 
                 Err error ->
-                    addLog
+                    addLogWithCmd
                         time
                         (Log.PushNotificationError userId error)
                         { model
@@ -695,6 +695,11 @@ update msg model =
                                     (\session -> { session | pushSubscription = SubscriptionError error })
                                     model.sessions
                         }
+                        (broadcastToSession
+                            sessionId
+                            (Server_PushNotificationFailed error)
+                            model
+                        )
 
         GotVapidKeys result ->
             ( case result of
@@ -3155,7 +3160,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     NonemptyDict.insert
                                         userId
                                         (User.setGuildNotificationLevel guildId notificationLevel user)
-                                        model.users
+                                        model2.users
                               }
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
@@ -3164,7 +3169,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     (Just clientId)
                                     userId
                                     (Server_SetGuildNotificationLevel guildId notificationLevel |> ServerChange)
-                                    model
+                                    model2
                                 ]
                             )
                         )
@@ -4202,7 +4207,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                             threadRouteWithMaybeReplyTo
                             text
                             (guild.owner :: SeqDict.keys guild.members)
-                            channel
+                            channel2
                         )
             in
             ( { model
@@ -4403,6 +4408,24 @@ broadcastToGuild _ msg model =
         )
         (SeqDict.toList model.connections)
         |> Command.batch
+
+
+broadcastToSession : SessionId -> ServerChange -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToSession sessionId msg model =
+    let
+        toFrontend : ToFrontend
+        toFrontend =
+            ServerChange msg |> ChangeBroadcast
+    in
+    case SeqDict.get sessionId model.connections of
+        Just connections ->
+            NonemptyDict.keys connections
+                |> List.Nonempty.toList
+                |> List.map (\clientId -> Lamdera.sendToFrontend clientId toFrontend)
+                |> Command.batch
+
+        Nothing ->
+            Command.none
 
 
 broadcastToUser : Maybe ClientId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
@@ -4822,6 +4845,20 @@ getUserFromSessionId sessionId model =
 emailToNotifyWhenErrorsAreLogged : EmailAddress
 emailToNotifyWhenErrorsAreLogged =
     Unsafe.emailAddress "martinsstewart@gmail.com"
+
+
+addLogWithCmd :
+    Time.Posix
+    -> Log
+    -> BackendModel
+    -> Command BackendOnly ToFrontend BackendMsg
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addLogWithCmd time log model cmd =
+    let
+        ( model2, logCmd ) =
+            addLog time log model
+    in
+    ( model2, Command.batch [ logCmd, cmd ] )
 
 
 addLog : Time.Posix -> Log -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

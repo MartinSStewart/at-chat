@@ -36,6 +36,7 @@ type ChannelNotificationType
     | NewMessageForUser OneOrGreater
 
 
+maxNotifications : number
 maxNotifications =
     99
 

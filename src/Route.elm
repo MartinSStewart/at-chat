@@ -44,6 +44,7 @@ type ShowMembersTab
     | HideMembersTab
 
 
+showMembersParam : String
 showMembersParam =
     "show-members"
 

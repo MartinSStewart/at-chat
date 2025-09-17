@@ -23,9 +23,7 @@ import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
-import EmailAddress
 import Emoji exposing (Emoji)
-import Env
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
 import GuildName
@@ -67,7 +65,7 @@ import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
 import User exposing (BackendUser, NotificationLevel(..))
-import UserAgent exposing (Browser(..), Device(..), UserAgent)
+import UserAgent exposing (UserAgent)
 import UserOptions
 import Vector2d
 import VisibleMessages exposing (VisibleMessages)

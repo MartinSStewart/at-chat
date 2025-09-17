@@ -479,6 +479,9 @@ handleHttpRequests overrides fileData { currentRequest } =
             UnhandledHttpRequest
 
 
+scrollToTop :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 scrollToTop user =
     user.custom
         100
@@ -496,7 +499,9 @@ scrollToTop user =
         )
 
 
-scrollToMiddle : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+scrollToMiddle :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 scrollToMiddle user =
     user.custom
         100

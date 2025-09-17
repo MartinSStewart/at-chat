@@ -67,7 +67,6 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
-import UserAgent exposing (UserAgent)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -557,7 +556,7 @@ guildView model guildId channelRoute loggedIn local =
                                 ShowMembersTab ->
                                     Ui.Lazy.lazy4
                                         memberColumnMobile
-                                        (canScroll model.drag)
+                                        canScroll2
                                         local.localUser
                                         guild.owner
                                         guild.members
@@ -3200,7 +3199,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 
 messageIdView : Id messageId -> Element msg
-messageIdView messageId =
+messageIdView _ =
     --if Env.isProduction then
     Ui.none
 

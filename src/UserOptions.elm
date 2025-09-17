@@ -13,7 +13,7 @@ import PersonName
 import Slack
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 
