@@ -88,6 +88,7 @@ import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthe
 import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser, NotificationLevel)
+import UserAgent exposing (UserAgent)
 
 
 type FrontendModel
@@ -105,6 +106,7 @@ type alias LoadingFrontend =
     , pwaStatus : PwaStatus
     , timezone : Time.Zone
     , scrollbarWidth : Int
+    , userAgent : Maybe UserAgent
     }
 
 
@@ -131,6 +133,7 @@ type alias LoadedFrontend =
     , dragPrevious : Drag
     , aiChatModel : AiChat.FrontendModel
     , scrollbarWidth : Int
+    , userAgent : UserAgent
     }
 
 
@@ -421,6 +424,7 @@ type FrontendMsg
     | GotScrollbarWidth Int
     | PressedCloseImageInfo
     | PressedMemberListBack
+    | GotUserAgent UserAgent
 
 
 type ScrollPosition

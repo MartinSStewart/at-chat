@@ -17,7 +17,6 @@ exports.init = async function init(app)
 
     app.ports.register_service_worker_to_js.subscribe(() => {
         navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-            console.log(registration);
             if (registration) {
             }
             else {
@@ -76,6 +75,7 @@ exports.init = async function init(app)
         app.ports.scrollbar_width_from_js.send(scrollbarWidth);
     });
 
+    app.ports.user_agent_to_js.subscribe(() => { app.ports.user_agent_from_js.send(window.navigator.userAgent); });
 
     let context = null;
     let sounds = {};

@@ -22,6 +22,7 @@ import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
 import Ui.Font
+import UserAgent exposing (Browser(..), UserAgent)
 
 
 type Mode
@@ -39,8 +40,8 @@ maxNotifications =
     99
 
 
-notificationHelper : Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
-notificationHelper color fontColor borderColor xOffset yOffset count =
+notificationHelper : UserAgent -> Ui.Color -> Ui.Color -> Ui.Color -> Int -> Int -> OneOrGreater -> Ui.Attribute msg
+notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
     let
         count2 : Int
         count2 =
@@ -64,13 +65,20 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
             , Ui.borderColor borderColor
             , Ui.move { x = xOffset + 2, y = yOffset, z = 0 }
             , Ui.alignRight
-            , Ui.Font.lineHeight
-                (if count2 > maxNotifications then
-                    0.9
+            , (if count2 > maxNotifications then
+                0.9
 
-                 else
-                    1.1
-                )
+               else
+                1.1
+              )
+                + (case userAgent.browser of
+                    Safari ->
+                        0.1
+
+                    _ ->
+                        0
+                  )
+                |> Ui.Font.lineHeight
             , Ui.Font.size
                 (if count2 > maxNotifications then
                     13
@@ -94,21 +102,21 @@ notificationHelper color fontColor borderColor xOffset yOffset count =
         )
 
 
-notificationView : Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
-notificationView xOffset yOffset borderColor notification =
+notificationView : UserAgent -> Int -> Int -> Ui.Color -> ChannelNotificationType -> Ui.Attribute msg
+notificationView userAgent xOffset yOffset borderColor notification =
     case notification of
         NoNotification ->
             Ui.noAttr
 
         NewMessage count ->
-            notificationHelper MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
+            notificationHelper userAgent MyUi.white (Ui.rgb 0 0 0) borderColor xOffset yOffset count
 
         NewMessageForUser count ->
-            notificationHelper MyUi.alertColor MyUi.white borderColor xOffset yOffset count
+            notificationHelper userAgent MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-view : Mode -> FrontendGuild -> Element msg
-view mode guild =
+view : UserAgent -> Mode -> FrontendGuild -> Element msg
+view userAgent mode guild =
     let
         name : String
         name =
@@ -120,7 +128,7 @@ view mode guild =
                 Ui.noAttr
 
             Normal notification ->
-                notificationView 0 -3 MyUi.background1 notification
+                notificationView userAgent 0 -3 MyUi.background1 notification
         ]
         (case guild.icon of
             Just icon ->
@@ -163,10 +171,10 @@ view mode guild =
         )
 
 
-userView : ChannelNotificationType -> Maybe FileStatus.FileHash -> Id UserId -> Element msg
-userView notification maybeIcon userId =
+userView : UserAgent -> ChannelNotificationType -> Maybe FileStatus.FileHash -> Id UserId -> Element msg
+userView userAgent notification maybeIcon userId =
     Ui.el
-        [ notificationView 0 -3 MyUi.background1 notification
+        [ notificationView userAgent 0 -3 MyUi.background1 notification
         ]
         (case maybeIcon of
             Just icon ->

@@ -67,6 +67,7 @@ import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
 import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
+import UserAgent exposing (UserAgent)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -237,10 +238,10 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                                         []
                                         (case SeqDict.get otherUserId allUsers of
                                             Just otherUser ->
-                                                GuildIcon.userView (NewMessageForUser count) otherUser.icon otherUserId
+                                                GuildIcon.userView localUser.userAgent (NewMessageForUser count) otherUser.icon otherUserId
 
                                             Nothing ->
-                                                GuildIcon.userView (NewMessageForUser count) Nothing otherUserId
+                                                GuildIcon.userView localUser.userAgent (NewMessageForUser count) Nothing otherUserId
                                         )
                                         |> Just
 
@@ -286,6 +287,7 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                             )
                             []
                             (GuildIcon.view
+                                localUser.userAgent
                                 (case route of
                                     GuildRoute a _ ->
                                         if a == guildId then
@@ -3907,7 +3909,7 @@ channelColumnThreads isMobile channelRoute directMentions localUser guildId chan
                                         (SeqDict.get ( GuildOrDmId_Guild guildId channelId, threadMessageIndex ) localUser.user.lastViewedThreads)
                                         thread
                                   )
-                                    |> GuildIcon.notificationView 4 5 MyUi.background2
+                                    |> GuildIcon.notificationView localUser.userAgent 4 5 MyUi.background2
                                 , Ui.move { x = 0, y = 0, z = 0 }
                                 , Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -4011,7 +4013,7 @@ channelColumnRow isMobile channelNameHover directMentions channelRoute localUser
                         (SeqDict.get (GuildOrDmId_Guild guildId channelId) localUser.user.lastViewed)
                         channel
                   )
-                    |> GuildIcon.notificationView 0 -3 MyUi.background2
+                    |> GuildIcon.notificationView localUser.userAgent 0 -3 MyUi.background2
                 , Ui.width (Ui.px 20)
                 , Ui.move { x = 4, y = 0, z = 0 }
                 , Ui.centerY

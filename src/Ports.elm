@@ -11,6 +11,7 @@ port module Ports exposing
     , cropImageFromJs
     , cropImageToJs
     , getScrollbarWidth
+    , getUserAgent
     , hapticFeedback
     , loadSounds
     , playSound
@@ -22,6 +23,7 @@ port module Ports exposing
     , setFavicon
     , showNotification
     , textInputSelectAll
+    , userAgentSub
     )
 
 import Codec exposing (Codec)
@@ -35,6 +37,7 @@ import LocalState exposing (SubscribeData)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Url
+import UserAgent exposing (UserAgent)
 
 
 port load_sounds_to_js : Json.Encode.Value -> Cmd msg
@@ -79,6 +82,12 @@ port scrollbar_width_to_js : Json.Encode.Value -> Cmd msg
 port scrollbar_width_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
+port user_agent_to_js : Json.Encode.Value -> Cmd msg
+
+
+port user_agent_from_js : (Json.Encode.Value -> msg) -> Sub msg
+
+
 port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
 
 
@@ -100,6 +109,22 @@ scrollbarWidthSub msg =
         (\json ->
             Json.Decode.decodeValue (Json.Decode.map msg Json.Decode.int) json
                 |> Result.withDefault (msg 0)
+        )
+
+
+getUserAgent : Command FrontendOnly toMsg msg
+getUserAgent =
+    Command.sendToJs "user_agent_to_js" user_agent_to_js Json.Encode.null
+
+
+userAgentSub : (UserAgent -> value) -> Subscription FrontendOnly value
+userAgentSub msg =
+    Subscription.fromJs
+        "user_agent_from_js"
+        user_agent_from_js
+        (\json ->
+            Json.Decode.decodeValue (Json.Decode.map (\text -> UserAgent.parseUserAgent text |> msg) Json.Decode.string) json
+                |> Result.withDefault (msg UserAgent.init)
         )
 
 

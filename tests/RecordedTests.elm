@@ -111,6 +111,18 @@ handlePortToJs { currentRequest } =
             )
                 |> Just
 
+        "scrollbar_width_to_js" ->
+            ( "scrollbar_width_from_js"
+            , Json.Encode.int 20
+            )
+                |> Just
+
+        "user_agent_to_js" ->
+            ( "user_agent_from_js"
+            , Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+            )
+                |> Just
+
         _ ->
             let
                 _ =
@@ -1098,6 +1110,10 @@ tests fileData =
             (\tabA ->
                 [ tabA.portEvent 8 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tabA.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tabA.portEvent
+                    1
+                    "user_agent_from_js"
+                    (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
@@ -1107,6 +1123,10 @@ tests fileData =
                     (\tabB ->
                         [ tabB.portEvent 11 "check_notification_permission_from_js" (Json.Encode.string "granted")
                         , tabB.portEvent 0 "check_pwa_status_from_js" (stringToJson "false")
+                        , tabB.portEvent
+                            1
+                            "user_agent_from_js"
+                            (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                         , tabB.portEvent 8 "load_user_settings_from_js" (Json.Encode.string "")
                         , tabA.click 3098 (Dom.id "homePage_loginButton")
                         , tabA.input 1916 (Dom.id "loginForm_emailInput") "a@a.se"
@@ -1182,6 +1202,10 @@ tests fileData =
             (\tab1 ->
                 [ tab1.portEvent 10 "check_notification_permission_from_js" (Json.Encode.string "granted")
                 , tab1.portEvent 1 "check_pwa_status_from_js" (stringToJson "false")
+                , tab1.portEvent
+                    1
+                    "user_agent_from_js"
+                    (Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0")
                 , tab1.portEvent 990 "load_user_settings_from_js" (Json.Encode.string "")
                 , tab1.input 2099 (Dom.id "loginForm_emailInput") "a@a.se"
                 , tab1.keyUp 286 (Dom.id "loginForm_emailInput") "Enter" []

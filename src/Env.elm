@@ -35,11 +35,6 @@ postmarkServerToken =
     Postmark.apiKey postmarkServerToken_
 
 
-contactEmail : EmailAddress
-contactEmail =
-    Unsafe.emailAddress "help@email.com"
-
-
 noReplyEmailAddress : EmailAddress
 noReplyEmailAddress =
     Unsafe.emailAddress "no-reply@at-chat.app"
