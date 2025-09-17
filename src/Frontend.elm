@@ -38,7 +38,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, FrontendGuild, LocalState, LocalUser, NotificationMode(..), PushSubscription(..), UserSession)
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser, NotificationMode(..), PushSubscription(..), UserSession)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -4481,7 +4481,7 @@ changeUpdate localMsg local =
                                                             guildId
                                                             channelId
                                                             (case threadRouteWithRepliedTo of
-                                                                ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                                                                ViewThreadWithMaybeMessage threadId _ ->
                                                                     ViewThread threadId
 
                                                                 NoThreadWithMaybeMessage _ ->

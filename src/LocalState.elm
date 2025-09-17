@@ -55,8 +55,6 @@ module LocalState exposing
     , memberIsTyping
     , removeReactionEmoji
     , removeReactionEmojiFrontend
-    , repliedToUserId
-    , repliedToUserIdFrontend
     , updateChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend

@@ -42,7 +42,6 @@ import Local exposing (ChangeId)
 import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), NotificationMode(..), PrivateVapidKey(..), PushSubscription(..), SubscribeData, UserSession)
 import Log exposing (Log)
 import LoginForm
-import Maybe.Extra
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
