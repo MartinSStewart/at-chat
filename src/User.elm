@@ -5,6 +5,7 @@ module User exposing
     , EmailStatus(..)
     , FrontendUser
     , NotificationLevel(..)
+    , addDirectMention
     , backendToFrontend
     , backendToFrontendForUser
     , profileImage
@@ -54,6 +55,35 @@ type alias BackendUser =
 type NotificationLevel
     = NotifyOnEveryMessage
     | NotifyOnMention
+
+
+addDirectMention : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
+addDirectMention guildId channelId threadRoute user =
+    { user
+        | directMentions =
+            SeqDict.update
+                guildId
+                (\maybeDict ->
+                    case maybeDict of
+                        Just dict ->
+                            NonemptyDict.updateOrInsert
+                                ( channelId, threadRoute )
+                                (\maybeCount ->
+                                    case maybeCount of
+                                        Just count ->
+                                            OneOrGreater.increment count
+
+                                        Nothing ->
+                                            OneOrGreater.one
+                                )
+                                dict
+                                |> Just
+
+                        Nothing ->
+                            NonemptyDict.singleton ( channelId, threadRoute ) OneOrGreater.one |> Just
+                )
+                user.directMentions
+    }
 
 
 setGuildNotificationLevel : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser

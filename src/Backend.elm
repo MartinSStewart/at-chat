@@ -44,7 +44,7 @@ import Log exposing (Log)
 import LoginForm
 import Maybe.Extra
 import Message exposing (Message(..))
-import NonemptyDict
+import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (InitAdminData)
 import Pagination
@@ -663,7 +663,8 @@ update msg model =
                                 Just userId ->
                                     { model2
                                         | users =
-                                            NonemptyDict.updateIfExists userId
+                                            NonemptyDict.updateIfExists
+                                                userId
                                                 (\user -> { user | icon = Maybe.map .fileHash maybeAvatar })
                                                 model2.users
                                     }
@@ -1749,6 +1750,16 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     in
     case maybeData of
         Just { guildId, guild, channelId, channel, threadRoute } ->
+            let
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+            in
             ( { model
                 | guilds =
                     SeqDict.insert
@@ -1769,6 +1780,21 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                                     guild.channels
                         }
                         model.guilds
+                , users =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            NonemptyDict.updateIfExists
+                                userId2
+                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                                users
+                        )
+                        model.users
+                        (usersMentionedOrRepliedTo
+                            threadRoute
+                            richText
+                            (guild.owner :: SeqDict.keys guild.members)
+                            channel
+                        )
               }
             , Command.batch
                 [ broadcastToGuild
@@ -4061,13 +4087,34 @@ broadcastMessageNotification :
     -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo channel text members model =
+broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo channel content members model =
     let
         plainText : String
         plainText =
-            RichText.toString (NonemptyDict.toSeqDict model.users) text
+            RichText.toString (NonemptyDict.toSeqDict model.users) content
+
+        alwaysNotify : SeqSet (Id UserId)
+        alwaysNotify =
+            case guildOrDmId of
+                GuildOrDmId_Guild guildId _ ->
+                    List.filter
+                        (\userId ->
+                            case NonemptyDict.get userId model.users of
+                                Just user ->
+                                    SeqSet.member guildId user.notifyOnAllMessages
+
+                                Nothing ->
+                                    False
+                        )
+                        members
+                        |> SeqSet.fromList
+
+                GuildOrDmId_Dm _ ->
+                    SeqSet.empty
     in
-    usersToNotify guildOrDmId members sender threadRouteWithRepliedTo channel text model
+    usersMentionedOrRepliedTo threadRouteWithRepliedTo content members channel
+        |> SeqSet.union alwaysNotify
+        |> SeqSet.remove sender
         |> SeqSet.foldl
             (\userId2 cmds ->
                 case NonemptyDict.get userId2 model.users of
@@ -4081,20 +4128,17 @@ broadcastMessageNotification time sender guildOrDmId threadRouteWithRepliedTo ch
         |> Command.batch
 
 
-usersToNotify :
-    GuildOrDmIdNoThread
-    -> List (Id UserId)
-    -> Id UserId
-    -> ThreadRouteWithMaybeMessage
-    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+usersMentionedOrRepliedTo :
+    ThreadRouteWithMaybeMessage
     -> Nonempty RichText
-    -> BackendModel
+    -> List (Id UserId)
+    -> BackendChannel
     -> SeqSet (Id UserId)
-usersToNotify guildOrDmId members senderId threadRouteWithRepliedTo channel content model =
+usersMentionedOrRepliedTo threadRouteWithRepliedTo content members channel =
     let
-        repliedToUserId2 : List (Id UserId)
-        repliedToUserId2 =
-            case threadRouteWithRepliedTo of
+        userIds : SeqSet (Id UserId)
+        userIds =
+            (case threadRouteWithRepliedTo of
                 ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
                     (case SeqDict.get threadId channel.threads of
                         Just thread ->
@@ -4119,29 +4163,19 @@ usersToNotify guildOrDmId members senderId threadRouteWithRepliedTo channel cont
 
                 NoThreadWithMaybeMessage maybeRepliedTo ->
                     LocalState.repliedToUserId maybeRepliedTo channel |> Maybe.Extra.toList
-
-        alwaysNotify : SeqSet (Id UserId)
-        alwaysNotify =
-            case guildOrDmId of
-                GuildOrDmId_Guild guildId _ ->
-                    List.filter
-                        (\userId ->
-                            case NonemptyDict.get userId model.users of
-                                Just user ->
-                                    SeqSet.member guildId user.notifyOnAllMessages
-
-                                Nothing ->
-                                    False
-                        )
-                        members
-                        |> SeqSet.fromList
-
-                GuildOrDmId_Dm _ ->
-                    SeqSet.empty
+            )
+                |> List.foldl SeqSet.insert (RichText.mentionsUser content)
     in
-    List.foldl SeqSet.insert (RichText.mentionsUser content) repliedToUserId2
-        |> SeqSet.union alwaysNotify
-        |> SeqSet.remove senderId
+    List.foldl
+        (\userId validUserIds ->
+            if SeqSet.member userId userIds then
+                SeqSet.insert userId validUserIds
+
+            else
+                validUserIds
+        )
+        SeqSet.empty
+        members
 
 
 sendGuildMessage :
@@ -4195,6 +4229,32 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                     }
                                 )
                                 channel
+
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRouteWithMaybeReplyTo of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+
+                users2 : NonemptyDict (Id UserId) BackendUser
+                users2 =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            NonemptyDict.updateIfExists
+                                userId2
+                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                                users
+                        )
+                        model.users
+                        (usersMentionedOrRepliedTo
+                            threadRouteWithMaybeReplyTo
+                            text
+                            (guild.owner :: SeqDict.keys guild.members)
+                            channel
+                        )
             in
             ( { model
                 | guilds =
@@ -4227,7 +4287,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             user.lastViewed
                                 }
                         )
-                        model.users
+                        users2
               }
             , Command.batch
                 [ LocalChangeResponse

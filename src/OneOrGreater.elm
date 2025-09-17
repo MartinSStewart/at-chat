@@ -10,9 +10,9 @@ one =
     OneOrGreater 1
 
 
-increment : OneOrGreater -> Int
+increment : OneOrGreater -> OneOrGreater
 increment (OneOrGreater a) =
-    a + 1
+    OneOrGreater (a + 1)
 
 
 toString : OneOrGreater -> String
