@@ -72,7 +72,7 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
             , Ui.height (Ui.px 17)
             , Ui.border 2
             , Ui.borderColor borderColor
-            , Ui.move { x = xOffset + 2, y = yOffset, z = 0 }
+            , Ui.move { x = xOffset, y = yOffset, z = 0 }
             , Ui.alignRight
             , Ui.Font.lineHeight 1
             , Ui.Font.size
