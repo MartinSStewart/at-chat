@@ -85,11 +85,15 @@ exports.init = async function init(app)
         //app.ports.load_sounds_from_js.send(null);
     });
     app.ports.play_sound.subscribe((a) => {
-        const source = context.createBufferSource();
-        if (sounds[a]) {
-            source.buffer = sounds[a];
-            source.connect(context.destination);
-            source.start(0);
+        try {
+            const source = context.createBufferSource();
+            if (sounds[a]) {
+                source.buffer = sounds[a];
+                source.connect(context.destination);
+                source.start(0);
+            }
+        }
+        catch (error) {
         }
     });
 
