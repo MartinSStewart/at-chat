@@ -86,7 +86,7 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
                             { x = 0
                             , y =
                                 if count2 > maxNotifications then
-                                    -1
+                                    0
 
                                 else
                                     1
@@ -97,7 +97,7 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
                             { x = 0
                             , y =
                                 if count2 > maxNotifications then
-                                    0
+                                    -1
 
                                 else
                                     1
