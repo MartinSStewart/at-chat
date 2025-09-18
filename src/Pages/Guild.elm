@@ -4048,6 +4048,14 @@ channelColumnRow isMobile channelNameHover directMentions channelRoute localUser
 
 friendsColumn : Bool -> Maybe ( Id UserId, ThreadRouteWithFriends ) -> LocalState -> Element FrontendMsg
 friendsColumn isMobile openedOtherUserId local =
+    let
+        dmChannelsWithCurrentUser : SeqDict (Id UserId) FrontendDmChannel
+        dmChannelsWithCurrentUser =
+            SeqDict.update
+                local.localUser.session.userId
+                (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
+                local.dmChannels
+    in
     channelColumnContainer
         [ Ui.el
             [ Ui.Font.bold
@@ -4080,7 +4088,7 @@ friendsColumn isMobile openedOtherUserId local =
                         Nothing ->
                             Nothing
                 )
-                (SeqDict.toList local.dmChannels)
+                (SeqDict.toList dmChannelsWithCurrentUser)
             )
         )
 
