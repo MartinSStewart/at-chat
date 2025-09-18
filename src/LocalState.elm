@@ -12,11 +12,7 @@ module LocalState exposing
     , LocalState
     , LocalUser
     , LogWithTime
-    , NotificationMode(..)
     , PrivateVapidKey(..)
-    , PushSubscription(..)
-    , SubscribeData
-    , UserSession
     , addInvite
     , addMember
     , addMemberFrontend
@@ -66,6 +62,7 @@ import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Http as Http
+import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -88,6 +85,7 @@ import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import UserAgent exposing (UserAgent)
+import UserSession exposing (UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -101,12 +99,6 @@ type alias LocalState =
     }
 
 
-type NotificationMode
-    = NoNotifications
-    | NotifyWhenRunning
-    | PushNotifications
-
-
 type alias LocalUser =
     { session : UserSession
     , user : BackendUser
@@ -115,23 +107,6 @@ type alias LocalUser =
       timezone : Time.Zone
     , userAgent : UserAgent
     }
-
-
-type alias UserSession =
-    { userId : Id UserId
-    , notificationMode : NotificationMode
-    , pushSubscription : PushSubscription
-    }
-
-
-type PushSubscription
-    = NotSubscribed
-    | Subscribed SubscribeData
-    | SubscriptionError Http.Error
-
-
-type alias SubscribeData =
-    { endpoint : Url, auth : String, p256dh : String }
 
 
 type JoinGuildError

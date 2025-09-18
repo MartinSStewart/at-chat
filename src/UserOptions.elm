@@ -4,11 +4,9 @@ import Editable
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
 import Env
-import Html
-import Html.Attributes
 import Icons
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..), PushSubscription(..))
+import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
 import Log
 import MyUi
 import PersonName
@@ -19,6 +17,7 @@ import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
+import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
 
 init : UserOptionsModel
