@@ -16,6 +16,7 @@ import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
+import UserAgent exposing (Browser(..), Device(..), UserAgent)
 
 
 init : UserOptionsModel
@@ -28,8 +29,8 @@ init =
     }
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn model =
+view : UserAgent -> Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
+view userAgent isMobile time local loggedIn model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -188,6 +189,16 @@ view isMobile time local loggedIn model =
                             , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
                             ]
                         )
+                    , case ( userAgent.browser, userAgent.device ) of
+                        ( Safari, Mobile ) ->
+                            Ui.el
+                                [ Ui.linkNewTab "prefs:root=NOTIFICATIONS_ID"
+                                , Ui.Font.color MyUi.textLinkColor
+                                ]
+                                (Ui.text "Change notification appearance")
+
+                        _ ->
+                            Ui.none
                     , case local.localUser.session.pushSubscription of
                         NotSubscribed ->
                             Ui.none
