@@ -47,14 +47,6 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
         count2 : Int
         count2 =
             OneOrGreater.toInt count
-
-        textYOffset : number
-        textYOffset =
-            if count2 > maxNotifications then
-                -2
-
-            else
-                0
     in
     Ui.inFront
         (Ui.el
@@ -91,13 +83,37 @@ notificationHelper userAgent color fontColor borderColor xOffset yOffset count =
                 , Ui.move
                     (case userAgent.browser of
                         Safari ->
-                            { x = 0, y = 1 + textYOffset, z = 0 }
+                            { x = 0
+                            , y =
+                                if count2 > maxNotifications then
+                                    -1
+
+                                else
+                                    1
+                            , z = 0
+                            }
 
                         Firefox ->
-                            { x = 0, y = 1 + textYOffset, z = 0 }
+                            { x = 0
+                            , y =
+                                if count2 > maxNotifications then
+                                    0
+
+                                else
+                                    1
+                            , z = 0
+                            }
 
                         _ ->
-                            { x = 0, y = textYOffset, z = 0 }
+                            { x = 0
+                            , y =
+                                if count2 > maxNotifications then
+                                    -2
+
+                                else
+                                    0
+                            , z = 0
+                            }
                     )
                 ]
                 (Ui.text

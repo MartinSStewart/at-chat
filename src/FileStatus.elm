@@ -623,7 +623,10 @@ imageInfoView onPressClose fileData =
             (MyUi.elButton
                 (Dom.id "fileStatus_closeImageInfo")
                 onPressClose
-                [ Ui.alignRight, Ui.paddingXY 16 16 ]
+                [ Ui.alignRight
+                , Ui.paddingXY 16 16
+                , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
+                ]
                 (Ui.html Icons.x)
             )
         ]
