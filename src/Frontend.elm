@@ -5738,6 +5738,7 @@ view model =
                                     [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
+                                                loaded.userAgent
                                                 (MyUi.isMobile loaded)
                                                 loaded.time
                                                 local
