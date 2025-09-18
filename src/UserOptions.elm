@@ -189,42 +189,22 @@ view userAgent isMobile time local loggedIn model =
                             , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
                             ]
                         )
-                    , case ( userAgent.browser, userAgent.device ) of
-                        ( Safari, Mobile ) ->
-                            Ui.el
-                                [ Ui.link "App-Prefs://root=General"
-                                ]
-                                (Ui.text "App-Prefs://root=General")
-
-                        _ ->
-                            Ui.none
-                    , case ( userAgent.browser, userAgent.device ) of
-                        ( Safari, Mobile ) ->
-                            Ui.el
-                                [ Ui.link "App-Prefs:root=General"
-                                ]
-                                (Ui.text "App-Prefs:root=General")
-
-                        _ ->
-                            Ui.none
-                    , case ( userAgent.browser, userAgent.device ) of
-                        ( Safari, Mobile ) ->
-                            Ui.el
-                                [ Ui.link "prefs:NOTIFICATIONS_ID"
-                                ]
-                                (Ui.text "prefs:NOTIFICATIONS_ID")
-
-                        _ ->
-                            Ui.none
-                    , case ( userAgent.browser, userAgent.device ) of
-                        ( Safari, Mobile ) ->
-                            Ui.el
-                                [ Ui.link "prefs:root=NOTIFICATIONS_ID"
-                                ]
-                                (Ui.text "prefs:root=NOTIFICATIONS_ID")
-
-                        _ ->
-                            Ui.none
+                    , Ui.el
+                        [ Ui.link "settings-navigation://com.apple.Settings.Apps"
+                        ]
+                        (Ui.text "settings-navigation://com.apple.Settings.Apps")
+                    , Ui.el
+                        [ Ui.link "App-prefs:com.apple.MobileSMS"
+                        ]
+                        (Ui.text "App-prefs:com.apple.MobileSMS")
+                    , Ui.el
+                        [ Ui.link "prefs:NOTIFICATIONS_ID"
+                        ]
+                        (Ui.text "prefs:NOTIFICATIONS_ID")
+                    , Ui.el
+                        [ Ui.link "prefs:root=NOTIFICATIONS_ID"
+                        ]
+                        (Ui.text "prefs:root=NOTIFICATIONS_ID")
                     , case local.localUser.session.pushSubscription of
                         NotSubscribed ->
                             Ui.none
