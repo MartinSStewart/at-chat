@@ -192,27 +192,36 @@ view userAgent isMobile time local loggedIn model =
                     , case ( userAgent.browser, userAgent.device ) of
                         ( Safari, Mobile ) ->
                             Ui.el
-                                [ Ui.linkNewTab "App-Prefs://root=General"
+                                [ Ui.link "App-Prefs://root=General"
                                 ]
-                                (Ui.text "Change notification appearance")
+                                (Ui.text "App-Prefs://root=General")
 
                         _ ->
                             Ui.none
                     , case ( userAgent.browser, userAgent.device ) of
                         ( Safari, Mobile ) ->
                             Ui.el
-                                [ Ui.linkNewTab "App-Prefs:root=General"
+                                [ Ui.link "App-Prefs:root=General"
                                 ]
-                                (Ui.text "Change notification appearance 2")
+                                (Ui.text "App-Prefs:root=General")
 
                         _ ->
                             Ui.none
                     , case ( userAgent.browser, userAgent.device ) of
                         ( Safari, Mobile ) ->
                             Ui.el
-                                [ Ui.linkNewTab "prefs:NOTIFICATIONS_ID"
+                                [ Ui.link "prefs:NOTIFICATIONS_ID"
                                 ]
-                                (Ui.text "Change notification appearance 3")
+                                (Ui.text "prefs:NOTIFICATIONS_ID")
+
+                        _ ->
+                            Ui.none
+                    , case ( userAgent.browser, userAgent.device ) of
+                        ( Safari, Mobile ) ->
+                            Ui.el
+                                [ Ui.link "prefs:root=NOTIFICATIONS_ID"
+                                ]
+                                (Ui.text "prefs:root=NOTIFICATIONS_ID")
 
                         _ ->
                             Ui.none
