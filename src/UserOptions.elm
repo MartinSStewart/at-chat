@@ -191,26 +191,6 @@ view userAgent isMobile time local loggedIn model =
                             , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
                             ]
                         )
-                    , Html.a
-                        [ Html.Attributes.href "settings-navigation://com.apple.Settings.Apps"
-                        ]
-                        [ Html.text "settings-navigation://com.apple.Settings.Apps" ]
-                        |> Ui.html
-                    , Html.a
-                        [ Html.Attributes.href "App-prefs:com.apple.MobileSMS"
-                        ]
-                        [ Html.text "App-prefs:com.apple.MobileSMS" ]
-                        |> Ui.html
-                    , Html.a
-                        [ Html.Attributes.href "prefs:NOTIFICATIONS_ID"
-                        ]
-                        [ Html.text "prefs:NOTIFICATIONS_ID" ]
-                        |> Ui.html
-                    , Html.a
-                        [ Html.Attributes.href "prefs:root=NOTIFICATIONS_ID"
-                        ]
-                        [ Html.text "prefs:root=NOTIFICATIONS_ID" ]
-                        |> Ui.html
                     , case local.localUser.session.pushSubscription of
                         NotSubscribed ->
                             Ui.none
