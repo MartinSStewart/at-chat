@@ -4,6 +4,8 @@ import Editable
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
 import Env
+import Html
+import Html.Attributes
 import Icons
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, NotificationMode(..), PrivateVapidKey(..), PushSubscription(..))
@@ -189,22 +191,26 @@ view userAgent isMobile time local loggedIn model =
                             , ( PushNotifications, "Even when the app is closed (as long as your web browser is open)" )
                             ]
                         )
-                    , Ui.el
-                        [ Ui.link "settings-navigation://com.apple.Settings.Apps"
+                    , Html.a
+                        [ Html.Attributes.href "settings-navigation://com.apple.Settings.Apps"
                         ]
-                        (Ui.text "settings-navigation://com.apple.Settings.Apps")
-                    , Ui.el
-                        [ Ui.link "App-prefs:com.apple.MobileSMS"
+                        [ Html.text "settings-navigation://com.apple.Settings.Apps" ]
+                        |> Ui.html
+                    , Html.a
+                        [ Html.Attributes.href "App-prefs:com.apple.MobileSMS"
                         ]
-                        (Ui.text "App-prefs:com.apple.MobileSMS")
-                    , Ui.el
-                        [ Ui.link "prefs:NOTIFICATIONS_ID"
+                        [ Html.text "App-prefs:com.apple.MobileSMS" ]
+                        |> Ui.html
+                    , Html.a
+                        [ Html.Attributes.href "prefs:NOTIFICATIONS_ID"
                         ]
-                        (Ui.text "prefs:NOTIFICATIONS_ID")
-                    , Ui.el
-                        [ Ui.link "prefs:root=NOTIFICATIONS_ID"
+                        [ Html.text "prefs:NOTIFICATIONS_ID" ]
+                        |> Ui.html
+                    , Html.a
+                        [ Html.Attributes.href "prefs:root=NOTIFICATIONS_ID"
                         ]
-                        (Ui.text "prefs:root=NOTIFICATIONS_ID")
+                        [ Html.text "prefs:root=NOTIFICATIONS_ID" ]
+                        |> Ui.html
                     , case local.localUser.session.pushSubscription of
                         NotSubscribed ->
                             Ui.none
