@@ -192,7 +192,7 @@ view userAgent isMobile time local loggedIn model =
                     , case ( userAgent.browser, userAgent.device ) of
                         ( Safari, Mobile ) ->
                             Ui.el
-                                [ Ui.linkNewTab "App-prefs:root=NOTIFICATIONS_ID"
+                                [ Ui.linkNewTab "App-Prefs://root=General"
                                 ]
                                 (Ui.text "Change notification appearance")
 
@@ -201,7 +201,7 @@ view userAgent isMobile time local loggedIn model =
                     , case ( userAgent.browser, userAgent.device ) of
                         ( Safari, Mobile ) ->
                             Ui.el
-                                [ Ui.linkNewTab "App-prefs:NOTIFICATIONS_ID"
+                                [ Ui.linkNewTab "App-Prefs:root=General"
                                 ]
                                 (Ui.text "Change notification appearance 2")
 
