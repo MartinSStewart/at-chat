@@ -30,7 +30,7 @@ import Effect.Websocket as Websocket
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
-import Emoji
+import Emoji exposing (Emoji(..))
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -1034,12 +1034,26 @@ getGuildFromDiscordId discordGuildId model =
             Nothing
 
 
+discordEmojiToEmoji : Discord.EmojiData -> Emoji
+discordEmojiToEmoji emoji =
+    case emoji.type_ of
+        Discord.UnicodeEmojiType string ->
+            UnicodeEmoji string
+
+        Discord.CustomEmojiType record ->
+            UnicodeEmoji "❓"
+
+
 handleDiscordAddReaction : Discord.ReactionAdd -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordAddReaction reaction model =
     if Just reaction.userId == model.discordBotId then
         ( model, Command.none )
 
     else
+        let
+            emoji =
+                discordEmojiToEmoji reaction.emoji
+        in
         case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
             ( Included discordGuildId, Just userId ) ->
                 case OneToOne.second discordGuildId model.discordGuilds of
@@ -1061,8 +1075,7 @@ handleDiscordAddReaction reaction model =
                                                                             SeqDict.insert
                                                                                 channelId
                                                                                 (LocalState.addReactionEmoji
-                                                                                    (Emoji.UnicodeEmoji "☺️")
-                                                                                    --reaction.emoji
+                                                                                    emoji
                                                                                     userId
                                                                                     (NoThreadWithMessage messageId)
                                                                                     channel
@@ -1071,7 +1084,16 @@ handleDiscordAddReaction reaction model =
                                                                     }
                                                                     model.guilds
                                                           }
-                                                        , Command.none
+                                                        , broadcastToGuild
+                                                            guildId
+                                                            (Server_AddReactionEmoji
+                                                                userId
+                                                                (GuildOrDmId_Guild guildId channelId)
+                                                                (NoThreadWithMessage messageId)
+                                                                emoji
+                                                                |> ServerChange
+                                                            )
+                                                            model
                                                         )
 
                                                     Nothing ->
