@@ -1044,6 +1044,16 @@ discordEmojiToEmoji emoji =
             UnicodeEmoji "❓"
 
 
+discordGuildIdToGuild : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
+discordGuildIdToGuild discordGuildId model =
+    case OneToOne.second discordGuildId model.discordGuilds of
+        Just guildId ->
+            SeqDict.get guildId model.guilds |> Maybe.map (Tuple.pair guildId)
+
+        Nothing ->
+            Nothing
+
+
 handleDiscordAddReaction : Discord.ReactionAdd -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordAddReaction reaction model =
     if Just reaction.userId == model.discordBotId then
@@ -1056,48 +1066,43 @@ handleDiscordAddReaction reaction model =
         in
         case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
             ( Included discordGuildId, Just userId ) ->
-                case OneToOne.second discordGuildId model.discordGuilds of
-                    Just guildId ->
-                        case SeqDict.get guildId model.guilds of
-                            Just guild ->
-                                case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
-                                    Just channelId ->
-                                        case SeqDict.get channelId guild.channels of
-                                            Just channel ->
-                                                case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
-                                                    Just messageId ->
-                                                        ( { model
-                                                            | guilds =
-                                                                SeqDict.insert
-                                                                    guildId
-                                                                    { guild
-                                                                        | channels =
-                                                                            SeqDict.insert
-                                                                                channelId
-                                                                                (LocalState.addReactionEmoji
-                                                                                    emoji
-                                                                                    userId
-                                                                                    (NoThreadWithMessage messageId)
-                                                                                    channel
-                                                                                )
-                                                                                guild.channels
-                                                                    }
-                                                                    model.guilds
-                                                          }
-                                                        , broadcastToGuild
+                case discordGuildIdToGuild discordGuildId model of
+                    Just ( guildId, guild ) ->
+                        case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
+                            Just channelId ->
+                                case SeqDict.get channelId guild.channels of
+                                    Just channel ->
+                                        case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
+                                            Just messageId ->
+                                                ( { model
+                                                    | guilds =
+                                                        SeqDict.insert
                                                             guildId
-                                                            (Server_AddReactionEmoji
-                                                                userId
-                                                                (GuildOrDmId_Guild guildId channelId)
-                                                                (NoThreadWithMessage messageId)
-                                                                emoji
-                                                                |> ServerChange
-                                                            )
-                                                            model
-                                                        )
-
-                                                    Nothing ->
-                                                        ( model, Command.none )
+                                                            { guild
+                                                                | channels =
+                                                                    SeqDict.insert
+                                                                        channelId
+                                                                        (LocalState.addReactionEmoji
+                                                                            emoji
+                                                                            userId
+                                                                            (NoThreadWithMessage messageId)
+                                                                            channel
+                                                                        )
+                                                                        guild.channels
+                                                            }
+                                                            model.guilds
+                                                  }
+                                                , broadcastToGuild
+                                                    guildId
+                                                    (Server_AddReactionEmoji
+                                                        userId
+                                                        (GuildOrDmId_Guild guildId channelId)
+                                                        (NoThreadWithMessage messageId)
+                                                        emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model
+                                                )
 
                                             Nothing ->
                                                 ( model, Command.none )
@@ -1117,7 +1122,68 @@ handleDiscordAddReaction reaction model =
 
 handleDiscordRemoveReaction : Discord.ReactionRemove -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordRemoveReaction reaction model =
-    ( model, Command.none )
+    if Just reaction.userId == model.discordBotId then
+        ( model, Command.none )
+
+    else
+        let
+            emoji =
+                discordEmojiToEmoji reaction.emoji
+        in
+        case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
+            ( Included discordGuildId, Just userId ) ->
+                case discordGuildIdToGuild discordGuildId model of
+                    Just ( guildId, guild ) ->
+                        case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
+                            Just channelId ->
+                                case SeqDict.get channelId guild.channels of
+                                    Just channel ->
+                                        case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
+                                            Just messageId ->
+                                                ( { model
+                                                    | guilds =
+                                                        SeqDict.insert
+                                                            guildId
+                                                            { guild
+                                                                | channels =
+                                                                    SeqDict.insert
+                                                                        channelId
+                                                                        (LocalState.removeReactionEmoji
+                                                                            emoji
+                                                                            userId
+                                                                            (NoThreadWithMessage messageId)
+                                                                            channel
+                                                                        )
+                                                                        guild.channels
+                                                            }
+                                                            model.guilds
+                                                  }
+                                                , broadcastToGuild
+                                                    guildId
+                                                    (Server_RemoveReactionEmoji
+                                                        userId
+                                                        (GuildOrDmId_Guild guildId channelId)
+                                                        (NoThreadWithMessage messageId)
+                                                        emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model
+                                                )
+
+                                            Nothing ->
+                                                ( model, Command.none )
+
+                                    Nothing ->
+                                        ( model, Command.none )
+
+                            Nothing ->
+                                ( model, Command.none )
+
+                    Nothing ->
+                        ( model, Command.none )
+
+            _ ->
+                ( model, Command.none )
 
 
 handleDiscordRemoveAllReactions : Discord.ReactionRemoveAll -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -1853,50 +1919,45 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
 
         maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel, threadRoute : ThreadRouteWithMaybeMessage }
         maybeData =
-            case OneToOne.second discordGuildId model.discordGuilds of
-                Just guildId ->
-                    case SeqDict.get guildId model.guilds of
-                        Just guild ->
-                            case LocalState.linkedChannel (DiscordChannelId message.channelId) guild of
-                                Just ( channelId, channel ) ->
-                                    Just
-                                        { guildId = guildId
-                                        , guild = guild
-                                        , channelId = channelId
-                                        , channel = channel
-                                        , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
-                                        }
-
-                                Nothing ->
-                                    List.Extra.findMap
-                                        (\( channelId, channel ) ->
-                                            case
-                                                OneToOne.second
-                                                    (Discord.Id.toUInt64 message.channelId
-                                                        |> Discord.Id.fromUInt64
-                                                        |> DiscordMessageId
-                                                    )
-                                                    channel.linkedMessageIds
-                                            of
-                                                Just messageIndex ->
-                                                    { guildId = guildId
-                                                    , guild = guild
-                                                    , channelId = channelId
-                                                    , channel = channel
-                                                    , threadRoute =
-                                                        ViewThreadWithMaybeMessage
-                                                            messageIndex
-                                                            (discordReplyTo message channel |> Maybe.map Id.changeType)
-                                                    }
-                                                        |> Just
-
-                                                _ ->
-                                                    Nothing
-                                        )
-                                        (SeqDict.toList guild.channels)
+            case discordGuildIdToGuild discordGuildId model of
+                Just ( guildId, guild ) ->
+                    case LocalState.linkedChannel (DiscordChannelId message.channelId) guild of
+                        Just ( channelId, channel ) ->
+                            Just
+                                { guildId = guildId
+                                , guild = guild
+                                , channelId = channelId
+                                , channel = channel
+                                , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
+                                }
 
                         Nothing ->
-                            Nothing
+                            List.Extra.findMap
+                                (\( channelId, channel ) ->
+                                    case
+                                        OneToOne.second
+                                            (Discord.Id.toUInt64 message.channelId
+                                                |> Discord.Id.fromUInt64
+                                                |> DiscordMessageId
+                                            )
+                                            channel.linkedMessageIds
+                                    of
+                                        Just messageIndex ->
+                                            { guildId = guildId
+                                            , guild = guild
+                                            , channelId = channelId
+                                            , channel = channel
+                                            , threadRoute =
+                                                ViewThreadWithMaybeMessage
+                                                    messageIndex
+                                                    (discordReplyTo message channel |> Maybe.map Id.changeType)
+                                            }
+                                                |> Just
+
+                                        _ ->
+                                            Nothing
+                                )
+                                (SeqDict.toList guild.channels)
 
                 Nothing ->
                     Nothing
