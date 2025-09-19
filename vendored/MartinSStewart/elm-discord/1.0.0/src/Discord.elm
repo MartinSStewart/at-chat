@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), Intents, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, noIntents, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3393,7 +3393,7 @@ decodeGatewayEvent =
 
 
 type GatewayCommand
-    = OpIdentify Authentication
+    = OpIdentify Authentication Intents
     | OpResume Authentication SessionId SequenceCounter
     | OpHeatbeat
     | OpRequestGuildMembers
@@ -3601,10 +3601,95 @@ decodeGuildMemberUpdate =
         |> JD.andMap (decodeOptionalData "pending" JD.bool)
 
 
+type alias Intents =
+    { guild : Bool
+    , guildMembers : Bool
+    , guildModeration : Bool
+    , guildExpressions : Bool
+    , guildIntegrations : Bool
+    , guildWebhooks : Bool
+    , guildInvites : Bool
+    , guildVoiceStates : Bool
+    , guildPresences : Bool
+    , guildMessages : Bool
+    , guildMessageReactions : Bool
+    , guildMessageTyping : Bool
+    , directMessages : Bool
+    , directMessageReactions : Bool
+    , directMessageTyping : Bool
+    , messageContent : Bool
+    , guildScheduledEvents : Bool
+    , autoModerationConfiguration : Bool
+    , autoModerationExecution : Bool
+    , guildMessagePolls : Bool
+    , directMessagePolls : Bool
+    }
+
+
+noIntents : Intents
+noIntents =
+    { guild = False
+    , guildMembers = False
+    , guildModeration = False
+    , guildExpressions = False
+    , guildIntegrations = False
+    , guildWebhooks = False
+    , guildInvites = False
+    , guildVoiceStates = False
+    , guildPresences = False
+    , guildMessages = False
+    , guildMessageReactions = False
+    , guildMessageTyping = False
+    , directMessages = False
+    , directMessageReactions = False
+    , directMessageTyping = False
+    , messageContent = False
+    , guildScheduledEvents = False
+    , autoModerationConfiguration = False
+    , autoModerationExecution = False
+    , guildMessagePolls = False
+    , directMessagePolls = False
+    }
+
+
+encodeIntents : Intents -> JE.Value
+encodeIntents intents =
+    let
+        setBit position bool previousValue =
+            if bool then
+                Bitwise.shiftLeftBy position 1 |> Bitwise.or previousValue
+
+            else
+                previousValue
+    in
+    setBit 0 intents.guild 0
+        |> setBit 1 intents.guildMembers
+        |> setBit 2 intents.guildModeration
+        |> setBit 3 intents.guildExpressions
+        |> setBit 4 intents.guildIntegrations
+        |> setBit 5 intents.guildWebhooks
+        |> setBit 6 intents.guildInvites
+        |> setBit 7 intents.guildVoiceStates
+        |> setBit 8 intents.guildPresences
+        |> setBit 9 intents.guildMessages
+        |> setBit 10 intents.guildMessageReactions
+        |> setBit 11 intents.guildMessageTyping
+        |> setBit 12 intents.directMessages
+        |> setBit 13 intents.directMessageReactions
+        |> setBit 14 intents.directMessageTyping
+        |> setBit 15 intents.messageContent
+        |> setBit 16 intents.guildScheduledEvents
+        |> setBit 20 intents.autoModerationConfiguration
+        |> setBit 21 intents.autoModerationExecution
+        |> setBit 24 intents.guildMessagePolls
+        |> setBit 25 intents.directMessagePolls
+        |> JE.int
+
+
 encodeGatewayCommand : GatewayCommand -> JE.Value
 encodeGatewayCommand gatewayCommand =
     case gatewayCommand of
-        OpIdentify authToken ->
+        OpIdentify authToken intents ->
             JE.object
                 [ ( "op", JE.int 2 )
                 , ( "d"
@@ -3627,11 +3712,12 @@ encodeGatewayCommand gatewayCommand =
                                 ]
                           )
                         , ( "intents"
-                          , Bitwise.shiftLeftBy 1 1
-                                |> Bitwise.or (Bitwise.shiftLeftBy 2 1)
-                                |> Bitwise.or (Bitwise.shiftLeftBy 9 1)
-                                |> Bitwise.or (Bitwise.shiftLeftBy 12 1)
-                                |> JE.int
+                          , encodeIntents intents
+                            --, Bitwise.shiftLeftBy 1 1
+                            --      |> Bitwise.or (Bitwise.shiftLeftBy 2 1)
+                            --      |> Bitwise.or (Bitwise.shiftLeftBy 9 1)
+                            --      |> Bitwise.or (Bitwise.shiftLeftBy 12 1)
+                            --      |> JE.int
                           )
                         ]
                   )
@@ -3731,11 +3817,11 @@ subscription listen model =
             Nothing
 
 
-update : Authentication -> Msg -> Model connection -> ( Model connection, List (OutMsg connection) )
-update authToken msg model =
+update : Authentication -> Intents -> Msg -> Model connection -> ( Model connection, List (OutMsg connection) )
+update authToken intents msg model =
     case msg of
         GotWebsocketData data ->
-            handleGateway authToken data model
+            handleGateway authToken intents data model
 
         WebsocketClosed ->
             let
@@ -3745,9 +3831,9 @@ update authToken msg model =
             ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
 
-handleGateway : Authentication -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
-handleGateway authToken response model =
-    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) of
+handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
+handleGateway authToken intents response model =
+    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response |> Debug.log "event" ) of
         ( Just connection, Ok data ) ->
             let
                 heartbeat : String
@@ -3764,7 +3850,7 @@ handleGateway authToken response model =
                                     OpResume authToken discordSessionId sequenceCounter
 
                                 Nothing ->
-                                    OpIdentify authToken
+                                    OpIdentify authToken intents
                             )
                                 |> encodeGatewayCommand
                                 |> JE.encode 0

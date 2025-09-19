@@ -242,6 +242,28 @@ loadImage url =
             )
 
 
+discordGatewayIntents : Discord.Intents
+discordGatewayIntents =
+    let
+        a =
+            Discord.noIntents
+    in
+    { a
+        | guild = True
+        , guildMembers = True
+        , guildModeration = True
+        , guildExpressions = True
+        , guildVoiceStates = True
+        , guildMessages = True
+        , guildMessageReactions = True
+        , guildMessageTyping = True
+        , directMessages = True
+        , directMessageReactions = True
+        , directMessageTyping = True
+        , messageContent = True
+    }
+
+
 update : BackendMsg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 update msg model =
     case msg of
@@ -325,7 +347,7 @@ update msg model =
                 Just botToken ->
                     let
                         ( discordModel2, outMsgs ) =
-                            Discord.update (botTokenToAuth botToken) discordMsg model.discordModel
+                            Discord.update (botTokenToAuth botToken) discordGatewayIntents discordMsg model.discordModel
                     in
                     List.foldl
                         (\outMsg ( model2, cmds ) ->
