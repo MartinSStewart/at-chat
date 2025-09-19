@@ -30,6 +30,7 @@ import Effect.Websocket as Websocket
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
+import Emoji
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -1017,8 +1018,8 @@ handleDiscordAddReaction reaction model =
         ( model, Command.none )
 
     else
-        case reaction.guildId of
-            Included discordGuildId ->
+        case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
+            ( Included discordGuildId, Just userId ) ->
                 case OneToOne.second discordGuildId model.discordGuilds of
                     Just guildId ->
                         case SeqDict.get guildId model.guilds of
@@ -1027,11 +1028,62 @@ handleDiscordAddReaction reaction model =
                                     Just channelId ->
                                         case SeqDict.get channelId guild.channels of
                                             Just channel ->
-                                                case OneToOne.second reaction.messageId channel.linkedMessageIds of
+                                                case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
                                                     Just messageId ->
-                                                        case DmChannel.getArray messageId channel.messages of
-                                                            Just message ->
-                                                                LocalState.addReactionEmoji reaction.emoji
+                                                        ( { model
+                                                            | guilds =
+                                                                SeqDict.insert
+                                                                    guildId
+                                                                    { guild
+                                                                        | channels =
+                                                                            SeqDict.insert
+                                                                                channelId
+                                                                                (LocalState.addReactionEmoji
+                                                                                    (Emoji.UnicodeEmoji "☺️")
+                                                                                    --reaction.emoji
+                                                                                    userId
+                                                                                    (NoThreadWithMessage messageId)
+                                                                                    channel
+                                                                                )
+                                                                                guild.channels
+                                                                    }
+                                                                    model.guilds
+                                                          }
+                                                        , Command.none
+                                                        )
+
+                                                    Nothing ->
+                                                        ( model, Command.none )
+
+                                            Nothing ->
+                                                ( model, Command.none )
+
+                                    Nothing ->
+                                        ( model, Command.none )
+
+                            Nothing ->
+                                ( model, Command.none )
+
+                    Nothing ->
+                        ( model, Command.none )
+
+            _ ->
+                ( model, Command.none )
+
+
+handleDiscordRemoveReaction : Discord.ReactionRemove -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordRemoveReaction reaction model =
+    ( model, Command.none )
+
+
+handleDiscordRemoveAllReactions : Discord.ReactionRemoveAll -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordRemoveAllReactions reactionRemoveAll model =
+    ( model, Command.none )
+
+
+handleDiscordRemoveReactionForEmoji : Discord.ReactionRemoveEmoji -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model =
+    ( model, Command.none )
 
 
 handleDiscordEditMessage :
