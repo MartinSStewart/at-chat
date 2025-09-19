@@ -444,6 +444,7 @@ loginDataToLocalState userAgent timezone loginData =
         , timezone = timezone
         , userAgent = userAgent
         }
+    , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     }
 
@@ -1243,14 +1244,17 @@ updateLoaded msg model =
                         LoginForm.update
                             (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
                             (\loginToken ->
-                                LoginWithTokenRequest requestMessagesFor loginToken
+                                LoginWithTokenRequest requestMessagesFor loginToken model.userAgent
                                     |> Lamdera.sendToBackend
                             )
                             (\loginToken ->
-                                LoginWithTwoFactorRequest requestMessagesFor loginToken
+                                LoginWithTwoFactorRequest requestMessagesFor loginToken model.userAgent
                                     |> Lamdera.sendToBackend
                             )
-                            (\name -> FinishUserCreationRequest requestMessagesFor name |> Lamdera.sendToBackend)
+                            (\name ->
+                                FinishUserCreationRequest requestMessagesFor name model.userAgent
+                                    |> Lamdera.sendToBackend
+                            )
                             loginFormMsg
                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                     of

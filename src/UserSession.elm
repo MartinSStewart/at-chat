@@ -1,5 +1,6 @@
 module UserSession exposing
-    ( NotificationMode(..)
+    ( FrontendUserSession
+    , NotificationMode(..)
     , PushSubscription(..)
     , SetViewing(..)
     , SubscribeData
@@ -8,6 +9,7 @@ module UserSession exposing
     , init
     , setCurrentlyViewing
     , setViewingToCurrentlyViewing
+    , toFrontend
     )
 
 import Effect.Http as Http
@@ -15,6 +17,7 @@ import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..
 import Message exposing (Message)
 import SeqDict exposing (SeqDict)
 import Url exposing (Url)
+import UserAgent exposing (UserAgent)
 
 
 type alias UserSession =
@@ -22,6 +25,14 @@ type alias UserSession =
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
     , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , userAgent : UserAgent
+    }
+
+
+type alias FrontendUserSession =
+    { notificationMode : NotificationMode
+    , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , userAgent : UserAgent
     }
 
 
@@ -73,15 +84,29 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserSession
-init userId currentlyViewing =
+init : Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
+init userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
     , currentlyViewing = currentlyViewing
+    , userAgent = userAgent
     }
 
 
 setCurrentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserSession -> UserSession
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
+
+
+toFrontend : Id UserId -> UserSession -> Maybe FrontendUserSession
+toFrontend currentUserId userSession =
+    if currentUserId == userSession.userId then
+        { notificationMode = userSession.notificationMode
+        , currentlyViewing = userSession.currentlyViewing
+        , userAgent = userSession.userAgent
+        }
+            |> Just
+
+    else
+        Nothing

@@ -64,6 +64,7 @@ import UInt64
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
+import UserAgent exposing (UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), SubscribeData, ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 
@@ -1973,6 +1974,10 @@ getLoginData sessionId session user requestMessagesFor model =
                 )
             |> SeqDict.fromList
     , sessionId = sessionId
+    , otherSessions =
+        SeqDict.filterMap
+            (\_ session2 -> UserSession.toFrontend session.userId session2)
+            (SeqDict.remove sessionId model.sessions)
     , publicVapidKey = model.publicVapidKey
     }
 
@@ -2026,10 +2031,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             else
                 ( model2, cmd )
 
-        LoginWithTokenRequest requestMessagesFor loginCode ->
-            loginWithToken time sessionId clientId loginCode requestMessagesFor model2
+        LoginWithTokenRequest requestMessagesFor loginCode userAgent ->
+            loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model2
 
-        FinishUserCreationRequest requestMessagesFor personName ->
+        FinishUserCreationRequest requestMessagesFor personName userAgent ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForUserDataForSignup pendingLogin) ->
                     if
@@ -2047,7 +2052,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             session : UserSession
                             session =
-                                UserSession.init userId requestMessagesFor
+                                UserSession.init userId requestMessagesFor userAgent
 
                             newUser : BackendUser
                             newUser =
@@ -2075,7 +2080,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 _ ->
                     ( model2, Command.none )
 
-        LoginWithTwoFactorRequest requestMessagesFor loginCode ->
+        LoginWithTwoFactorRequest requestMessagesFor loginCode userAgent ->
             case SeqDict.get sessionId model2.pendingLogins of
                 Just (WaitingForTwoFactorToken pendingLogin) ->
                     if
@@ -2092,7 +2097,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         session : UserSession
                                         session =
-                                            UserSession.init pendingLogin.userId requestMessagesFor
+                                            UserSession.init pendingLogin.userId requestMessagesFor userAgent
                                     in
                                     ( { model2
                                         | sessions = SeqDict.insert sessionId session model2.sessions
@@ -4756,9 +4761,10 @@ loginWithToken :
     -> ClientId
     -> Int
     -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-loginWithToken time sessionId clientId loginCode requestMessagesFor model =
+loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent model =
     case SeqDict.get sessionId model.pendingLogins of
         Just (WaitingForLoginToken pendingLogin) ->
             if isLoginTooOld pendingLogin time then
@@ -4790,7 +4796,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor model =
                             let
                                 session : UserSession
                                 session =
-                                    UserSession.init pendingLogin.userId requestMessagesFor
+                                    UserSession.init pendingLogin.userId requestMessagesFor userAgent
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions

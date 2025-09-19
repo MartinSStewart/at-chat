@@ -85,7 +85,7 @@ import Unsafe
 import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (UserSession)
+import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -95,6 +95,7 @@ type alias LocalState =
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
+    , otherSessions : SeqDict SessionId FrontendUserSession
     , publicVapidKey : String
     }
 

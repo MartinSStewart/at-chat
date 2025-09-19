@@ -88,7 +88,7 @@ import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
 
 type FrontendModel
@@ -451,15 +451,15 @@ type alias GuildChannelAndMessageId =
 
 type ToBackend
     = CheckLoginRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
-    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
-    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
+    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
+    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName
+    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionId
@@ -544,6 +544,7 @@ type alias LoginData =
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
+    , otherSessions : SeqDict SessionId FrontendUserSession
     , publicVapidKey : String
     }
 
