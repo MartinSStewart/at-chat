@@ -386,7 +386,34 @@ update msg model =
 
                                 Discord.ThreadCreatedOrUserAddedToThread _ ->
                                     ( model2, cmds )
-                         --( handleDiscordThreadCreated channel model2, cmds )
+
+                                Discord.UserAddedReaction reactionAdd ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordAddReaction reactionAdd model
+                                    in
+                                    ( model3, cmd2 :: cmds )
+
+                                Discord.UserRemovedReaction reactionRemove ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordRemoveReaction reactionRemove model
+                                    in
+                                    ( model3, cmd2 :: cmds )
+
+                                Discord.AllReactionsRemoved reactionRemoveAll ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordRemoveAllReactions reactionRemoveAll model
+                                    in
+                                    ( model3, cmd2 :: cmds )
+
+                                Discord.ReactionsRemoveForEmoji reactionRemoveEmoji ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model
+                                    in
+                                    ( model3, cmd2 :: cmds )
                         )
                         ( { model | discordModel = discordModel2 }, [] )
                         outMsgs
@@ -982,6 +1009,29 @@ getGuildFromDiscordId discordGuildId model =
 
         Nothing ->
             Nothing
+
+
+handleDiscordAddReaction : Discord.ReactionAdd -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordAddReaction reaction model =
+    if Just reaction.userId == model.discordBotId then
+        ( model, Command.none )
+
+    else
+        case reaction.guildId of
+            Included discordGuildId ->
+                case OneToOne.second discordGuildId model.discordGuilds of
+                    Just guildId ->
+                        case SeqDict.get guildId model.guilds of
+                            Just guild ->
+                                case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
+                                    Just channelId ->
+                                        case SeqDict.get channelId guild.channels of
+                                            Just channel ->
+                                                case OneToOne.second reaction.messageId channel.linkedMessageIds of
+                                                    Just messageId ->
+                                                        case DmChannel.getArray messageId channel.messages of
+                                                            Just message ->
+                                                                LocalState.addReactionEmoji reaction.emoji
 
 
 handleDiscordEditMessage :

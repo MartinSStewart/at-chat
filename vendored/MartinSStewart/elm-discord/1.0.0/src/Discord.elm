@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3315,6 +3315,18 @@ decodeDispatchEvent eventName =
         "THREAD_CREATE" ->
             JD.field "d" decodeChannel |> JD.map ThreadCreatedOrUserAddedToThreadEvent
 
+        "MESSAGE_REACTION_ADD" ->
+            JD.field "d" decodeReactionAdd |> JD.map MessageReactionAdd
+
+        "MESSAGE_REACTION_REMOVE" ->
+            JD.field "d" decodeReactionRemove |> JD.map MessageReactionRemove
+
+        "MESSAGE_REACTION_REMOVE_ALL" ->
+            JD.field "d" decodeReactionRemoveAll |> JD.map MessageReactionRemoveAll
+
+        "MESSAGE_REACTION_REMOVE_EMOJI" ->
+            JD.field "d" decodeReactionRemoveEmoji |> JD.map MessageReactionRemoveEmoji
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -3408,6 +3420,92 @@ type OpDispatchEvent
     | GuildMemberRemoveEvent (Id GuildId) User
     | GuildMemberUpdateEvent GuildMemberUpdate
     | ThreadCreatedOrUserAddedToThreadEvent Channel
+    | MessageReactionAdd ReactionAdd
+    | MessageReactionRemove ReactionRemove
+    | MessageReactionRemoveAll ReactionRemoveAll
+    | MessageReactionRemoveEmoji ReactionRemoveEmoji
+
+
+type alias ReactionAdd =
+    { userId : Id UserId
+    , channelId : Id ChannelId
+    , messageId : Id MessageId
+    , guildId : OptionalData (Id GuildId)
+    , member : OptionalData GuildMember
+    , emoji : EmojiData
+    , messageAuthorId : OptionalData (Id UserId)
+    , burst : Bool
+    , burstColors : OptionalData (List String)
+    }
+
+
+decodeReactionAdd : JD.Decoder ReactionAdd
+decodeReactionAdd =
+    JD.succeed ReactionAdd
+        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
+        |> JD.andMap (JD.field "emoji" decodeEmoji)
+        |> JD.andMap (decodeOptionalData "message_author_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "burst" JD.bool)
+        |> JD.andMap (decodeOptionalData "burst_colors" (JD.list JD.string))
+
+
+type alias ReactionRemove =
+    { userId : Id UserId
+    , channelId : Id ChannelId
+    , messageId : Id MessageId
+    , guildId : OptionalData (Id GuildId)
+    , member : OptionalData GuildMember
+    , emoji : EmojiData
+    , burst : Bool
+    }
+
+
+decodeReactionRemove : JD.Decoder ReactionRemove
+decodeReactionRemove =
+    JD.succeed ReactionRemove
+        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "member" decodeGuildMember)
+        |> JD.andMap (JD.field "emoji" decodeEmoji)
+        |> JD.andMap (JD.field "burst" JD.bool)
+
+
+type alias ReactionRemoveAll =
+    { channelId : Id ChannelId
+    , messageId : Id MessageId
+    , guildId : OptionalData (Id GuildId)
+    }
+
+
+decodeReactionRemoveAll : JD.Decoder ReactionRemoveAll
+decodeReactionRemoveAll =
+    JD.succeed ReactionRemoveAll
+        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+
+
+type alias ReactionRemoveEmoji =
+    { channelId : Id ChannelId
+    , guildId : OptionalData (Id GuildId)
+    , messageId : Id MessageId
+    , emoji : EmojiData
+    }
+
+
+decodeReactionRemoveEmoji : JD.Decoder ReactionRemoveEmoji
+decodeReactionRemoveEmoji =
+    JD.succeed ReactionRemoveEmoji
+        |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "emoji" decodeEmoji)
 
 
 type GatewayCloseEventCode
@@ -3587,6 +3685,10 @@ type OutMsg connection
     | UserEditedMessage MessageUpdate
     | FailedToParseWebsocketMessage JD.Error
     | ThreadCreatedOrUserAddedToThread Channel
+    | UserAddedReaction ReactionAdd
+    | UserRemovedReaction ReactionRemove
+    | AllReactionsRemoved ReactionRemoveAll
+    | ReactionsRemoveForEmoji ReactionRemoveEmoji
 
 
 type alias Model connection =
@@ -3735,6 +3837,18 @@ handleGateway authToken response model =
 
                         ThreadCreatedOrUserAddedToThreadEvent channel ->
                             ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
+
+                        MessageReactionAdd reactionAdd ->
+                            ( model, [ UserAddedReaction reactionAdd ] )
+
+                        MessageReactionRemove reactionRemove ->
+                            ( model, [ UserRemovedReaction reactionRemove ] )
+
+                        MessageReactionRemoveAll reactionRemoveAll ->
+                            ( model, [ AllReactionsRemoved reactionRemoveAll ] )
+
+                        MessageReactionRemoveEmoji reactionRemoveEmoji ->
+                            ( model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )
