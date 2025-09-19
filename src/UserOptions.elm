@@ -2,14 +2,16 @@ module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
-import Effect.Lamdera as Lamdera
+import Effect.Lamdera as Lamdera exposing (SessionId)
 import Env
 import Icons
+import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
 import Log
 import MyUi
 import PersonName
+import SeqDict exposing (SeqDict)
 import Slack
 import Time
 import TwoFactorAuthentication
@@ -17,7 +19,7 @@ import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
-import UserSession exposing (NotificationMode(..), PushSubscription(..))
+import UserSession exposing (FrontendUserSession, NotificationMode(..), PushSubscription(..))
 
 
 init : UserOptionsModel
@@ -28,6 +30,99 @@ init =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     }
+
+
+viewConnectedDevice :
+    Bool
+    ->
+        { a
+            | notificationMode : NotificationMode
+            , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+            , userAgent : UserAgent
+        }
+    -> Element FrontendMsg
+viewConnectedDevice isCurrentSession session =
+    let
+        browserText : String
+        browserText =
+            case session.userAgent.browser of
+                Chrome ->
+                    "Chrome"
+
+                Firefox ->
+                    "Firefox"
+
+                Safari ->
+                    "Safari"
+
+                Edge ->
+                    "Edge"
+
+                Opera ->
+                    "Opera"
+
+                UnknownBrowser ->
+                    "Unknown browser"
+
+        deviceText : String
+        deviceText =
+            case session.userAgent.device of
+                Desktop ->
+                    "Desktop"
+
+                Mobile ->
+                    "Mobile"
+
+                Tablet ->
+                    "Tablet"
+
+        currentActivity : String
+        currentActivity =
+            case session.currentlyViewing of
+                Just ( guildOrDm, threadRoute ) ->
+                    "Active"
+
+                Nothing ->
+                    "Idle"
+    in
+    Ui.row
+        [ Ui.spacing 8
+        , Ui.width Ui.fill
+        ]
+        [ Ui.el
+            [ Ui.width (Ui.px 36)
+            , Ui.height (Ui.px 36)
+            ]
+            (case session.userAgent.device of
+                Desktop ->
+                    Ui.html Icons.desktop
+
+                Mobile ->
+                    Ui.html Icons.mobile
+
+                Tablet ->
+                    Ui.html Icons.tablet
+            )
+        , Ui.column
+            [ Ui.spacing 2, Ui.width Ui.fill ]
+            [ Ui.text
+                (deviceText
+                    ++ " • "
+                    ++ browserText
+                    ++ (if isCurrentSession then
+                            " (current device)"
+
+                        else
+                            ""
+                       )
+                )
+            , Ui.el
+                [ Ui.Font.size 14
+                , Ui.Font.color (Ui.rgb 128 128 128)
+                ]
+                (Ui.text currentActivity)
+            ]
+        ]
 
 
 view : UserAgent -> Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
@@ -236,6 +331,10 @@ view userAgent isMobile time local loggedIn model =
                     ]
                     (Ui.text "Link Slack account")
                 ]
+            , MyUi.container
+                isMobile
+                "Connected devices"
+                (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
             , Ui.el
                 [ Ui.paddingXY 16 0, Ui.width Ui.shrink ]
                 (MyUi.simpleButton
