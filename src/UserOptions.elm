@@ -2,7 +2,7 @@ module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
-import Effect.Lamdera as Lamdera exposing (SessionId)
+import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
@@ -11,7 +11,7 @@ import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, Pr
 import Log
 import MyUi
 import PersonName
-import SeqDict exposing (SeqDict)
+import SeqDict
 import Slack
 import Time
 import TwoFactorAuthentication
@@ -19,7 +19,7 @@ import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
-import UserSession exposing (FrontendUserSession, NotificationMode(..), PushSubscription(..))
+import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
 
 init : UserOptionsModel
@@ -79,7 +79,7 @@ viewConnectedDevice isCurrentSession session =
         currentActivity : String
         currentActivity =
             case session.currentlyViewing of
-                Just ( guildOrDm, threadRoute ) ->
+                Just _ ->
                     "Active"
 
                 Nothing ->
@@ -125,8 +125,8 @@ viewConnectedDevice isCurrentSession session =
         ]
 
 
-view : UserAgent -> Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
-view userAgent isMobile time local loggedIn model =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0

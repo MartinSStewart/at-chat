@@ -643,10 +643,10 @@ tests fileData =
             sessionId0
             "/"
             windowSize
-            (\admin ->
-                [ handleLogin firefoxDesktop adminEmail admin
-                , admin.click 100 (Dom.id "guild_showUserOptions")
-                , admin.checkView 100
+            (\adminA ->
+                [ handleLogin firefoxDesktop adminEmail adminA
+                , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , adminA.checkView 100
                     (Test.Html.Query.has
                         [ Test.Html.Selector.exactText "Desktop • Firefox (current device)"
                         ]
@@ -656,31 +656,31 @@ tests fileData =
                     sessionId1
                     "/"
                     windowSize
-                    (\admin2 ->
-                        [ handleLogin safariIphone adminEmail admin2
-                        , admin.checkView 100
+                    (\adminB ->
+                        [ handleLogin safariIphone adminEmail adminB
+                        , adminA.checkView 100
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Mobile • Safari"
                                 , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
                                 ]
                             )
-                        , admin2.click 100 (Dom.id "guild_showUserOptions")
+                        , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , T.connectFrontend
                             100
                             sessionId2
                             "/"
                             windowSize
-                            (\admin3 ->
-                                [ handleLogin chromeDesktop adminEmail admin3
-                                , admin.checkView 100
+                            (\adminC ->
+                                [ handleLogin chromeDesktop adminEmail adminC
+                                , adminA.checkView 100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.exactText "Mobile • Safari"
                                         , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
                                         , Test.Html.Selector.exactText "Desktop • Chrome"
                                         ]
                                     )
-                                , admin3.click 100 (Dom.id "guild_showUserOptions")
-                                , admin3.checkView 100
+                                , adminC.click 100 (Dom.id "guild_showUserOptions")
+                                , adminC.checkView 100
                                     (Test.Html.Query.has
                                         [ Test.Html.Selector.exactText "Mobile • Safari"
                                         , Test.Html.Selector.exactText "Desktop • Firefox"
@@ -689,13 +689,13 @@ tests fileData =
                                     )
                                 ]
                             )
-                        , admin2.click 100 (Dom.id "options_logout")
-                        , admin.checkView 100
+                        , adminB.click 100 (Dom.id "options_logout")
+                        , adminA.checkView 100
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.exactText "Mobile • Safari"
                                 ]
                             )
-                        , admin.checkView 0
+                        , adminA.checkView 0
                             (Test.Html.Query.has
                                 [ Test.Html.Selector.exactText "Desktop • Chrome"
                                 , Test.Html.Selector.exactText "Desktop • Firefox (current device)"

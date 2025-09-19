@@ -49,7 +49,6 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelper
     , memberIsEditTypingHelper
     , memberIsTyping
-    , removeAlreadyViewing
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , updateChannel
@@ -62,7 +61,6 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
-import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -83,7 +81,6 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
 import Unsafe
-import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)

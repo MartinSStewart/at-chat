@@ -517,43 +517,43 @@ routeViewingLocalChange local route =
                 HomePageRoute ->
                     StopViewingChannel
 
-                AdminRoute record ->
+                AdminRoute _ ->
                     StopViewingChannel
 
                 GuildRoute guildId channelRoute ->
                     case channelRoute of
                         ChannelRoute channelId threadRoute ->
                             case threadRoute of
-                                NoThreadWithFriends _ showMembersTab ->
+                                NoThreadWithFriends _ _ ->
                                     ViewChannel guildId channelId EmptyPlaceholder
 
-                                ViewThreadWithFriends threadId _ showMembersTab ->
+                                ViewThreadWithFriends threadId _ _ ->
                                     ViewChannelThread guildId channelId threadId EmptyPlaceholder
 
                         NewChannelRoute ->
                             StopViewingChannel
 
-                        EditChannelRoute id ->
+                        EditChannelRoute _ ->
                             StopViewingChannel
 
                         InviteLinkCreatorRoute ->
                             StopViewingChannel
 
-                        JoinRoute secretId ->
+                        JoinRoute _ ->
                             StopViewingChannel
 
                 DmRoute otherUserId threadRoute ->
                     case threadRoute of
-                        NoThreadWithFriends _ showMembersTab ->
+                        NoThreadWithFriends _ _ ->
                             ViewDm otherUserId EmptyPlaceholder
 
-                        ViewThreadWithFriends threadId _ showMembersTab ->
+                        ViewThreadWithFriends threadId _ _ ->
                             ViewDmThread otherUserId threadId EmptyPlaceholder
 
                 AiChatRoute ->
                     StopViewingChannel
 
-                SlackOAuthRedirect result ->
+                SlackOAuthRedirect _ ->
                     StopViewingChannel
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
@@ -633,7 +633,7 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId threadRoute ->
+                ChannelRoute _ threadRoute ->
                     let
                         showMembers : ShowMembersTab
                         showMembers =
@@ -748,7 +748,7 @@ routeRequest previousRoute newRoute model =
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
-        DmRoute otherUserId threadRoute ->
+        DmRoute _ threadRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -5823,7 +5823,6 @@ view model =
                                     [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                loaded.userAgent
                                                 (MyUi.isMobile loaded)
                                                 loaded.time
                                                 local
@@ -5877,7 +5876,6 @@ view model =
                                     case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                loaded.userAgent
                                                 (MyUi.isMobile loaded)
                                                 loaded.time
                                                 local

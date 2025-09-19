@@ -1847,7 +1847,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
 userGetAllSessions : Id UserId -> BackendModel -> List ( SessionId, UserSession )
 userGetAllSessions userId model =
     SeqDict.toList model.sessions
-        |> List.filter (\( sessionId, session ) -> session.userId == userId)
+        |> List.filter (\( _, session ) -> session.userId == userId)
 
 
 discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id ChannelMessageId)
@@ -1994,7 +1994,7 @@ getLoginData sessionId session user requestMessagesFor model =
     , sessionId = sessionId
     , otherSessions =
         SeqDict.filterMap
-            (\_ session2 -> UserSession.toFrontend session.userId session2)
+            (\_ otherSession -> UserSession.toFrontend session.userId otherSession)
             (SeqDict.remove sessionId model.sessions)
     , publicVapidKey = model.publicVapidKey
     }
@@ -2249,7 +2249,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asUser
                 model2
                 sessionId
-                (\session user ->
+                (\session _ ->
                     ( { model2 | sessions = SeqDict.remove sessionId model2.sessions }
                     , Command.batch
                         [ Lamdera.sendToFrontends sessionId LoggedOutSession
@@ -2987,13 +2987,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewing2 : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
-                        viewing2 =
+                        viewingChannel : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+                        viewingChannel =
                             UserSession.setViewingToCurrentlyViewing viewing
 
                         updateSession : UserSession -> UserSession
                         updateSession session =
-                            UserSession.setCurrentlyViewing viewing2 session
+                            UserSession.setCurrentlyViewing viewingChannel session
 
                         broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
                         broadcastCmd session =
@@ -3001,7 +3001,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Nothing
                                 (Just sessionId)
                                 session.userId
-                                (Server_CurrentlyViewing viewing2 |> ServerChange)
+                                (Server_CurrentlyViewing viewingChannel |> ServerChange)
                                 model2
                     in
                     case viewing of

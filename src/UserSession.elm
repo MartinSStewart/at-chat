@@ -69,10 +69,10 @@ setViewingToCurrentlyViewing viewing =
         ViewDmThread otherUserId threadId _ ->
             Just ( GuildOrDmId_Dm otherUserId, ViewThread threadId )
 
-        ViewChannel guildId channelId toBeFilledInByBackend ->
+        ViewChannel guildId channelId _ ->
             Just ( GuildOrDmId_Guild guildId channelId, NoThread )
 
-        ViewChannelThread guildId channelId threadId toBeFilledInByBackend ->
+        ViewChannelThread guildId channelId threadId _ ->
             Just ( GuildOrDmId_Guild guildId channelId, ViewThread threadId )
 
         StopViewingChannel ->
