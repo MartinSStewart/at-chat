@@ -2036,8 +2036,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                , MyUi.htmlStyle "background-repeat" "repeat"
-                , MyUi.htmlStyle "image-rendering" "pixelated"
                 ]
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
@@ -2303,8 +2301,6 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 , Ui.heightMin 0
                 , bounceScroll isMobile
                 , MyUi.htmlStyle "background-image" "url(/grid1.png)"
-                , MyUi.htmlStyle "background-repeat" "repeat"
-                , MyUi.htmlStyle "image-rendering" "pixelated"
                 ]
                 ((if VisibleMessages.startIsVisible channel.visibleMessages then
                     [ ( "a"
