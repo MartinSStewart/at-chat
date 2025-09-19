@@ -4825,6 +4825,9 @@ changeUpdate localMsg local =
                             { localUser | session = { session | pushSubscription = SubscriptionError error } }
                     }
 
+                Server_NewSession sessionId session ->
+                    { local | otherSessions = SeqDict.insert sessionId session local.otherSessions }
+
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =

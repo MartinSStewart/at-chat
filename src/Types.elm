@@ -587,6 +587,7 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
+    | Server_NewSession SessionId FrontendUserSession
 
 
 type LocalChange

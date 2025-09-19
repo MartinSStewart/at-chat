@@ -1662,6 +1662,7 @@ handleDiscordCreateMessage message model =
                     , Command.batch
                         [ broadcastToUser
                             Nothing
+                            Nothing
                             adminUserId
                             (Server_DiscordDirectMessage message.timestamp userId richText replyTo
                                 |> ServerChange
@@ -2103,10 +2104,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         | sessions = SeqDict.insert sessionId session model2.sessions
                                         , pendingLogins = SeqDict.remove sessionId model2.pendingLogins
                                       }
-                                    , getLoginData sessionId session user requestMessagesFor model2
-                                        |> LoginSuccess
-                                        |> LoginWithTokenResponse
-                                        |> Lamdera.sendToFrontends sessionId
+                                    , Command.batch
+                                        [ getLoginData sessionId session user requestMessagesFor model2
+                                            |> LoginSuccess
+                                            |> LoginWithTokenResponse
+                                            |> Lamdera.sendToFrontends sessionId
+                                        , broadcastToUser
+                                            (Just clientId)
+                                            Nothing
+                                            pendingLogin.userId
+                                            (Server_NewSession
+                                                sessionId
+                                                { notificationMode = session.notificationMode
+                                                , currentlyViewing = session.currentlyViewing
+                                                , userAgent = session.userAgent
+                                                }
+                                                |> ServerChange
+                                            )
+                                            model2
+                                        ]
                                     )
 
                                 else
@@ -2391,6 +2407,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToUser
                                     (Just clientId)
+                                    Nothing
                                     userId
                                     (Local_NewGuild time guildName (FilledInByBackend guildId) |> LocalChange userId)
                                     model2
@@ -2452,6 +2469,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             |> Lamdera.sendToFrontend clientId
                                         , broadcastToUser
                                             (Just clientId)
+                                            Nothing
                                             otherUserId
                                             (Server_MemberTyping time userId ( GuildOrDmId_Dm userId, threadRoute ) |> ServerChange)
                                             model2
@@ -2768,6 +2786,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             |> Lamdera.sendToFrontend clientId
                                                         , broadcastToUser
                                                             (Just clientId)
+                                                            Nothing
                                                             otherUserId
                                                             (Server_MemberEditTyping
                                                                 time
@@ -2820,7 +2839,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             , Command.batch
                                 [ LocalChangeResponse changeId localMsg
                                     |> Lamdera.sendToFrontend clientId
-                                , broadcastToUser (Just clientId) userId (LocalChange userId localMsg) model2
+                                , broadcastToUser (Just clientId) Nothing userId (LocalChange userId localMsg) model2
                                 ]
                             )
                         )
@@ -3204,6 +3223,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     |> Lamdera.sendToFrontend clientId
                                 , broadcastToUser
                                     (Just clientId)
+                                    Nothing
                                     userId
                                     (Server_SetGuildNotificationLevel guildId notificationLevel |> ServerChange)
                                     model2
@@ -3552,7 +3572,7 @@ broadcastToEveryoneWhoCanSeeUser clientId userId change model =
         )
         SeqSet.empty
         model.guilds
-        |> SeqSet.foldl (\userId2 cmds -> broadcastToUser (Just clientId) userId2 change model :: cmds) []
+        |> SeqSet.foldl (\userId2 cmds -> broadcastToUser (Just clientId) Nothing userId2 change model :: cmds) []
         |> Command.batch
 
 
@@ -4091,12 +4111,12 @@ broadcastToDmChannel :
     -> Command BackendOnly ToFrontend BackendMsg
 broadcastToDmChannel clientId userId otherUserId serverMsg model =
     if userId == otherUserId then
-        broadcastToUser (Just clientId) userId (serverMsg otherUserId |> ServerChange) model
+        broadcastToUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
 
     else
         Command.batch
-            [ broadcastToUser (Just clientId) userId (serverMsg otherUserId |> ServerChange) model
-            , broadcastToUser (Just clientId) otherUserId (serverMsg userId |> ServerChange) model
+            [ broadcastToUser (Just clientId) Nothing userId (serverMsg otherUserId |> ServerChange) model
+            , broadcastToUser (Just clientId) Nothing otherUserId (serverMsg userId |> ServerChange) model
             ]
 
 
@@ -4465,11 +4485,11 @@ broadcastToSession sessionId msg model =
             Command.none
 
 
-broadcastToUser : Maybe ClientId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-broadcastToUser clientToSkip userId msg model =
+broadcastToUser : Maybe ClientId -> Maybe SessionId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+broadcastToUser clientToSkip sessionToSkip userId msg model =
     SeqDict.filterMap
         (\sessionId otherUserSession ->
-            if userId == otherUserSession.userId then
+            if sessionToSkip /= Just sessionId && userId == otherUserSession.userId then
                 case SeqDict.get sessionId model.connections of
                     Just clientIds ->
                         List.filterMap
@@ -4802,10 +4822,25 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                 | sessions = SeqDict.insert sessionId session model.sessions
                                 , pendingLogins = SeqDict.remove sessionId model.pendingLogins
                               }
-                            , getLoginData sessionId session user requestMessagesFor model
-                                |> LoginSuccess
-                                |> LoginWithTokenResponse
-                                |> Lamdera.sendToFrontends sessionId
+                            , Command.batch
+                                [ getLoginData sessionId session user requestMessagesFor model
+                                    |> LoginSuccess
+                                    |> LoginWithTokenResponse
+                                    |> Lamdera.sendToFrontends sessionId
+                                , broadcastToUser
+                                    (Just clientId)
+                                    Nothing
+                                    pendingLogin.userId
+                                    (Server_NewSession
+                                        sessionId
+                                        { notificationMode = session.notificationMode
+                                        , currentlyViewing = session.currentlyViewing
+                                        , userAgent = session.userAgent
+                                        }
+                                        |> ServerChange
+                                    )
+                                    model
+                                ]
                             )
 
                         ( Nothing, _ ) ->
