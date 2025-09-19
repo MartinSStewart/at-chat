@@ -2008,7 +2008,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                        [ Ui.html Icons.hashtag, Ui.text name ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag), Ui.text name ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of
@@ -2275,7 +2275,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                        [ Ui.html Icons.hashtag, Ui.text name ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag), Ui.text name ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of

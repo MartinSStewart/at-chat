@@ -118,10 +118,7 @@ handlePortToJs { currentRequest } =
                 |> Just
 
         "user_agent_to_js" ->
-            ( "user_agent_from_js"
-            , Json.Encode.string "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
-            )
-                |> Just
+            Nothing
 
         _ ->
             let
@@ -219,12 +216,19 @@ sessionId1 =
     Effect.Lamdera.sessionIdFromString "sessionId1"
 
 
+sessionId2 : SessionId
+sessionId2 =
+    Effect.Lamdera.sessionIdFromString "sessionId2"
+
+
 handleLogin :
-    EmailAddress
+    String
+    -> EmailAddress
     -> T.FrontendActions toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
     -> T.Action toBackend frontendMsg frontendModel toFrontend backendMsg backendModel
-handleLogin emailAddress client =
-    [ client.click 100 Pages.Home.loginButtonId
+handleLogin userAgent emailAddress client =
+    [ client.portEvent 10 "user_agent_from_js" (Json.Encode.string userAgent)
+    , client.click 100 Pages.Home.loginButtonId
     , handleLoginFromLoginPage emailAddress client
     ]
         |> T.group
@@ -367,7 +371,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
         "/"
         windowSize
         (\admin ->
-            [ handleLogin adminEmail admin
+            [ handleLogin firefoxDesktop adminEmail admin
             , admin.click 100 (Dom.id "guild_createGuild")
             , admin.input 100 (Dom.id "newGuildName") "My new guild!"
             , admin.click 100 (Dom.id "guild_createGuildSubmit")
@@ -395,7 +399,8 @@ connectTwoUsersAndJoinNewGuild continueFunc =
                                 (dropPrefix Env.domain text)
                                 windowSize
                                 (\user ->
-                                    [ handleLoginFromLoginPage userEmail user
+                                    [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                                    , handleLoginFromLoginPage userEmail user
                                     , user.input 100 (Dom.id "loginForm_name") "Stevie Steve"
                                     , user.click 100 (Dom.id "loginForm_submit")
                                     , user.click 100 (Dom.id "guild_openChannel_0")
@@ -528,6 +533,21 @@ noMissingMessages delayInMs user =
         )
 
 
+firefoxDesktop : String
+firefoxDesktop =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+
+
+chromeDesktop : String
+chromeDesktop =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+
+
+safariIphone : String
+safariIphone =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 13_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1"
+
+
 tests : Dict String Bytes -> List (T.EndToEndTest ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel)
 tests fileData =
     let
@@ -615,6 +635,78 @@ tests fileData =
                 domain
     in
     [ T.start
+        "Connect multiple devices"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId0
+            "/"
+            windowSize
+            (\adminA ->
+                [ handleLogin firefoxDesktop adminEmail adminA
+                , adminA.click 100 (Dom.id "guild_showUserOptions")
+                , adminA.checkView 100
+                    (Test.Html.Query.has
+                        [ Test.Html.Selector.exactText "Desktop • Firefox (current device)"
+                        ]
+                    )
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    "/"
+                    windowSize
+                    (\adminB ->
+                        [ handleLogin safariIphone adminEmail adminB
+                        , adminA.checkView 100
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Mobile • Safari"
+                                , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
+                                ]
+                            )
+                        , adminB.click 100 (Dom.id "guild_showUserOptions")
+                        , T.connectFrontend
+                            100
+                            sessionId2
+                            "/"
+                            windowSize
+                            (\adminC ->
+                                [ handleLogin chromeDesktop adminEmail adminC
+                                , adminA.checkView 100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText "Mobile • Safari"
+                                        , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
+                                        , Test.Html.Selector.exactText "Desktop • Chrome"
+                                        ]
+                                    )
+                                , adminC.click 100 (Dom.id "guild_showUserOptions")
+                                , adminC.checkView 100
+                                    (Test.Html.Query.has
+                                        [ Test.Html.Selector.exactText "Mobile • Safari"
+                                        , Test.Html.Selector.exactText "Desktop • Firefox"
+                                        , Test.Html.Selector.exactText "Desktop • Chrome (current device)"
+                                        ]
+                                    )
+                                ]
+                            )
+                        , adminB.click 100 (Dom.id "options_logout")
+                        , adminA.checkView 100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Mobile • Safari"
+                                ]
+                            )
+                        , adminA.checkView 0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Desktop • Chrome"
+                                , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    , T.start
         "spoilers"
         startTime
         normalConfig
@@ -688,7 +780,9 @@ tests fileData =
                     (Route.encode Route.HomePageRoute)
                     windowSize
                     (\userReload ->
-                        [ userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ]) ]
+                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                        , userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
+                        ]
                     )
                 ]
             )
@@ -730,7 +824,8 @@ tests fileData =
                     (Route.encode Route.HomePageRoute)
                     windowSize
                     (\userReload ->
-                        [ userReload.click 100 (Dom.id "guild_openGuild_1")
+                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
                         , writeMessage userReload "Another message"
                         , userReload.checkView
                             100
@@ -806,7 +901,7 @@ tests fileData =
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
-                , checkNotification "@Stevie Steve Hi!"
+                , checkNoNotification "@Stevie Steve Hi!"
                 , enableNotifications False admin
                 , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , user.custom
@@ -830,7 +925,7 @@ tests fileData =
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
                     )
-                , checkNotification "Hello admin!"
+                , checkNoNotification "Hello admin!"
                 , createThread admin (Id.fromInt 2)
                 , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
                 , user.checkView
@@ -853,7 +948,8 @@ tests fileData =
                     (Route.encode Route.HomePageRoute)
                     windowSize
                     (\userReload ->
-                        [ userReload.checkView
+                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                        , userReload.checkView
                             100
                             (Test.Html.Query.hasNot
                                 [ Test.Html.Selector.id "guildsColumn_openDm_0" ]
@@ -880,7 +976,7 @@ tests fileData =
             "/"
             windowSize
             (\user ->
-                [ handleLogin adminEmail user
+                [ handleLogin firefoxDesktop adminEmail user
                 , user.click 100 (Dom.id "guild_showUserOptions")
                 , user.click 100 (Dom.id "userOverview_start2FaSetup")
                 , user.snapshotView 100 { name = "2FA setup" }
@@ -931,7 +1027,7 @@ tests fileData =
             "/"
             windowSize
             (\user ->
-                [ handleLogin adminEmail user
+                [ handleLogin firefoxDesktop adminEmail user
                 , user.snapshotView 100 { name = "2FA login step" }
                 , T.andThen
                     100
@@ -994,7 +1090,8 @@ tests fileData =
                     tooManyIncorrectAttempts =
                         [ Test.Html.Selector.text "Too many incorrect attempts." ]
                 in
-                [ openLoginAndSubmitEmail 100
+                [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , openLoginAndSubmitEmail 100
                 , List.range 0 9
                     |> List.map
                         (\index ->
@@ -1076,7 +1173,8 @@ tests fileData =
             "/"
             windowSize
             (\client ->
-                [ client.snapshotView 100 { name = "homepage" }
+                [ client.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                , client.snapshotView 100 { name = "homepage" }
                 , client.click 100 Pages.Home.loginButtonId
                 , client.snapshotView 100 { name = "login" }
                 , client.input 100 LoginForm.emailInputId "asdf123"

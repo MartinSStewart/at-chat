@@ -12,11 +12,7 @@ module LocalState exposing
     , LocalState
     , LocalUser
     , LogWithTime
-    , NotificationMode(..)
     , PrivateVapidKey(..)
-    , PushSubscription(..)
-    , SubscribeData
-    , UserSession
     , addInvite
     , addMember
     , addMemberFrontend
@@ -65,7 +61,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
-import Effect.Http as Http
+import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -85,9 +81,9 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
 import Unsafe
-import Url exposing (Url)
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
 import UserAgent exposing (UserAgent)
+import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -97,14 +93,9 @@ type alias LocalState =
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
+    , otherSessions : SeqDict SessionId FrontendUserSession
     , publicVapidKey : String
     }
-
-
-type NotificationMode
-    = NoNotifications
-    | NotifyWhenRunning
-    | PushNotifications
 
 
 type alias LocalUser =
@@ -115,23 +106,6 @@ type alias LocalUser =
       timezone : Time.Zone
     , userAgent : UserAgent
     }
-
-
-type alias UserSession =
-    { userId : Id UserId
-    , notificationMode : NotificationMode
-    , pushSubscription : PushSubscription
-    }
-
-
-type PushSubscription
-    = NotSubscribed
-    | Subscribed SubscribeData
-    | SubscriptionError Http.Error
-
-
-type alias SubscribeData =
-    { endpoint : Url, auth : String, p256dh : String }
 
 
 type JoinGuildError
@@ -1653,12 +1627,33 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
         members
 
 
+removeAlreadyViewing :
+    GuildOrDmIdNoThread
+    -> ThreadRoute
+    -> SeqDict (Id UserId) (SeqSet ( GuildOrDmIdNoThread, ThreadRoute ))
+    -> SeqSet (Id UserId)
+    -> SeqSet (Id UserId)
+removeAlreadyViewing guildOrDmId threadRoute currentlyViewing usersMentionedOrRepliedTo =
+    SeqSet.filter
+        (\userId ->
+            case SeqDict.get userId currentlyViewing of
+                Just currentlyViewing2 ->
+                    not (SeqSet.member ( guildOrDmId, threadRoute ) currentlyViewing2)
+
+                Nothing ->
+                    True
+        )
+        usersMentionedOrRepliedTo
+
+
 usersMentionedOrRepliedToFrontend :
-    ThreadRouteWithMaybeMessage
+    GuildOrDmIdNoThread
+    -> ThreadRouteWithMaybeMessage
     -> Nonempty RichText
     -> FrontendChannel
+    -> SeqDict (Id UserId) (SeqSet ( GuildOrDmIdNoThread, ThreadRoute ))
     -> SeqSet (Id UserId)
-usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
+usersMentionedOrRepliedToFrontend guildOrDmId threadRouteWithRepliedTo content channel usersMentionedOrRepliedTo =
     (case threadRouteWithRepliedTo of
         ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
             (case SeqDict.get threadId channel.threads of
@@ -1688,6 +1683,16 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
             repliedToUserIdFrontend maybeRepliedTo channel |> Maybe.Extra.toList
     )
         |> List.foldl SeqSet.insert (RichText.mentionsUser content)
+        |> removeAlreadyViewing
+            guildOrDmId
+            (case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+            )
+            usersMentionedOrRepliedTo
 
 
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId) } -> Maybe (Id UserId)

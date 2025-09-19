@@ -30,7 +30,6 @@ module Types exposing
     , ScrollPosition(..)
     , ServerChange(..)
     , ToBackend(..)
-    , ToBeFilledInByBackend(..)
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
@@ -63,7 +62,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, NotificationMode, PrivateVapidKey, SubscribeData, UserSession)
+import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Message exposing (Message)
@@ -89,6 +88,7 @@ import Ui.Anim
 import Url exposing (Url)
 import User exposing (BackendUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
+import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
 
 type FrontendModel
@@ -451,15 +451,15 @@ type alias GuildChannelAndMessageId =
 
 type ToBackend
     = CheckLoginRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
-    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
-    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int
+    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
+    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName
+    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionId
@@ -544,6 +544,7 @@ type alias LoginData =
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , sessionId : SessionId
+    , otherSessions : SeqDict SessionId FrontendUserSession
     , publicVapidKey : String
     }
 
@@ -586,6 +587,9 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
+    | Server_NewSession SessionId FrontendUserSession
+    | Server_LoggedOut SessionId
+    | Server_CurrentlyViewing (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
 
 
 type LocalChange
@@ -604,18 +608,10 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
-    | Local_ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
-    | Local_ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
-    | Local_ViewThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
+    | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
-
-
-type ToBeFilledInByBackend a
-    = EmptyPlaceholder
-    | FilledInByBackend a

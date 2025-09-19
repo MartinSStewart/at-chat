@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser, NotificationMode(..), PushSubscription(..), UserSession)
+import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -58,7 +58,7 @@ import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToBeFilledInByBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -67,6 +67,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
+import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import Vector2d
 import VisibleMessages exposing (VisibleMessages)
 
@@ -443,6 +444,7 @@ loginDataToLocalState userAgent timezone loginData =
         , timezone = timezone
         , userAgent = userAgent
         }
+    , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
     }
 
@@ -507,12 +509,73 @@ update msg model =
                     updateLoaded msg loaded |> Tuple.mapFirst Loaded
 
 
+routeViewingLocalChange : LocalState -> Route -> Maybe LocalChange
+routeViewingLocalChange local route =
+    let
+        localChange =
+            case route of
+                HomePageRoute ->
+                    StopViewingChannel
+
+                AdminRoute _ ->
+                    StopViewingChannel
+
+                GuildRoute guildId channelRoute ->
+                    case channelRoute of
+                        ChannelRoute channelId threadRoute ->
+                            case threadRoute of
+                                NoThreadWithFriends _ _ ->
+                                    ViewChannel guildId channelId EmptyPlaceholder
+
+                                ViewThreadWithFriends threadId _ _ ->
+                                    ViewChannelThread guildId channelId threadId EmptyPlaceholder
+
+                        NewChannelRoute ->
+                            StopViewingChannel
+
+                        EditChannelRoute _ ->
+                            StopViewingChannel
+
+                        InviteLinkCreatorRoute ->
+                            StopViewingChannel
+
+                        JoinRoute _ ->
+                            StopViewingChannel
+
+                DmRoute otherUserId threadRoute ->
+                    case threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            ViewDm otherUserId EmptyPlaceholder
+
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewDmThread otherUserId threadId EmptyPlaceholder
+
+                AiChatRoute ->
+                    StopViewingChannel
+
+                SlackOAuthRedirect _ ->
+                    StopViewingChannel
+    in
+    if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
+        Nothing
+
+    else
+        Just (Local_CurrentlyViewing localChange)
+
+
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 routeRequest previousRoute newRoute model =
     let
-        model2 : LoadedFrontend
-        model2 =
-            { model | route = newRoute }
+        ( model2, viewCmd ) =
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (routeViewingLocalChange (Local.model loggedIn.localState) newRoute)
+                        loggedIn
+                        Command.none
+                )
+                { model | route = newRoute }
     in
     case newRoute of
         HomePageRoute ->
@@ -525,7 +588,7 @@ routeRequest previousRoute newRoute model =
                         LoggedIn _ ->
                             model2.loginStatus
               }
-            , Command.none
+            , viewCmd
             )
 
         AdminRoute { highlightLog } ->
@@ -540,7 +603,7 @@ routeRequest previousRoute newRoute model =
                                 Nothing ->
                                     loggedIn.admin
                       }
-                    , Command.none
+                    , viewCmd
                     )
                 )
                 model2
@@ -570,7 +633,7 @@ routeRequest previousRoute newRoute model =
                             ( False, False )
             in
             case channelRoute of
-                ChannelRoute channelId threadRoute ->
+                ChannelRoute _ threadRoute ->
                     let
                         showMembers : ShowMembersTab
                         showMembers =
@@ -592,31 +655,18 @@ routeRequest previousRoute newRoute model =
                     in
                     updateLoggedIn
                         (\loggedIn ->
-                            handleLocalChange
-                                model3.time
-                                (if SeqDict.member guildId (Local.model loggedIn.localState).guilds then
-                                    case threadRoute of
-                                        ViewThreadWithFriends threadId _ _ ->
-                                            Just (Local_ViewThread guildId channelId threadId EmptyPlaceholder)
+                            ( case showMembers of
+                                ShowMembersTab ->
+                                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
 
-                                        NoThreadWithFriends _ _ ->
-                                            Just (Local_ViewChannel guildId channelId EmptyPlaceholder)
+                                HideMembersTab ->
+                                    if sameGuild || previousRoute == Nothing then
+                                        startOpeningChannelSidebar loggedIn
 
-                                 else
-                                    Nothing
-                                )
-                                (case showMembers of
-                                    ShowMembersTab ->
-                                        startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
-
-                                    HideMembersTab ->
-                                        if sameGuild || previousRoute == Nothing then
-                                            startOpeningChannelSidebar loggedIn
-
-                                        else
-                                            loggedIn
-                                )
-                                (openChannelCmds threadRoute model3)
+                                    else
+                                        loggedIn
+                            , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                            )
                         )
                         model3
 
@@ -628,7 +678,7 @@ routeRequest previousRoute newRoute model =
 
                               else
                                 loggedIn
-                            , Command.none
+                            , viewCmd
                             )
                         )
                         model3
@@ -641,7 +691,7 @@ routeRequest previousRoute newRoute model =
 
                               else
                                 loggedIn
-                            , Command.none
+                            , viewCmd
                             )
                         )
                         model3
@@ -654,7 +704,7 @@ routeRequest previousRoute newRoute model =
 
                               else
                                 loggedIn
-                            , Command.none
+                            , viewCmd
                             )
                         )
                         model3
@@ -667,7 +717,7 @@ routeRequest previousRoute newRoute model =
                                     { notLoggedIn | useInviteAfterLoggedIn = Just inviteLinkId }
                                         |> NotLoggedIn
                               }
-                            , Command.none
+                            , viewCmd
                             )
 
                         LoggedIn loggedIn ->
@@ -691,14 +741,14 @@ routeRequest previousRoute newRoute model =
                                             )
 
                                     Nothing ->
-                                        Command.none
+                                        viewCmd
                                 ]
                             )
 
         AiChatRoute ->
-            ( model2, Command.map AiChatToBackend AiChatMsg AiChat.getModels )
+            ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
-        DmRoute otherUserId threadRoute ->
+        DmRoute _ threadRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -714,21 +764,9 @@ routeRequest previousRoute newRoute model =
             in
             updateLoggedIn
                 (\loggedIn ->
-                    handleLocalChange
-                        model3.time
-                        (if SeqDict.member otherUserId (Local.model loggedIn.localState).dmChannels then
-                            case threadRoute of
-                                ViewThreadWithFriends threadId _ _ ->
-                                    Just (Local_ViewDmThread otherUserId threadId EmptyPlaceholder)
-
-                                NoThreadWithFriends _ _ ->
-                                    Just (Local_ViewDm otherUserId EmptyPlaceholder)
-
-                         else
-                            Nothing
-                        )
-                        (startOpeningChannelSidebar loggedIn)
-                        (openChannelCmds threadRoute model3)
+                    ( startOpeningChannelSidebar loggedIn
+                    , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                    )
                 )
                 model3
 
@@ -739,7 +777,7 @@ routeRequest previousRoute newRoute model =
                     Lamdera.sendToBackend (LinkSlackOAuthCode code sessionId)
 
                 Err () ->
-                    Command.none
+                    viewCmd
             )
 
 
@@ -1206,14 +1244,17 @@ updateLoaded msg model =
                         LoginForm.update
                             (\email -> GetLoginTokenRequest email |> Lamdera.sendToBackend)
                             (\loginToken ->
-                                LoginWithTokenRequest requestMessagesFor loginToken
+                                LoginWithTokenRequest requestMessagesFor loginToken model.userAgent
                                     |> Lamdera.sendToBackend
                             )
                             (\loginToken ->
-                                LoginWithTwoFactorRequest requestMessagesFor loginToken
+                                LoginWithTwoFactorRequest requestMessagesFor loginToken model.userAgent
                                     |> Lamdera.sendToBackend
                             )
-                            (\name -> FinishUserCreationRequest requestMessagesFor name |> Lamdera.sendToBackend)
+                            (\name ->
+                                FinishUserCreationRequest requestMessagesFor name model.userAgent
+                                    |> Lamdera.sendToBackend
+                            )
                             loginFormMsg
                             (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
                     of
@@ -4215,90 +4256,101 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.session.userId guildOrDmId messageIndex local
 
-                Local_ViewDm otherUserId messagesLoaded ->
+                Local_CurrentlyViewing viewing ->
                     let
+                        localUser : LocalUser
                         localUser =
                             local.localUser
-                    in
-                    { local
-                        | localUser =
-                            { localUser | user = User.setLastDmViewed otherUserId NoThread localUser.user }
-                        , dmChannels =
-                            SeqDict.updateIfExists
-                                otherUserId
-                                (loadMessages messagesLoaded)
-                                local.dmChannels
-                    }
 
-                Local_ViewDmThread otherUserId threadId messagesLoaded ->
-                    let
-                        localUser =
-                            local.localUser
+                        session : UserSession
+                        session =
+                            UserSession.setCurrentlyViewing
+                                (UserSession.setViewingToCurrentlyViewing viewing)
+                                localUser.session
                     in
-                    { local
-                        | localUser =
-                            { localUser
-                                | user =
-                                    User.setLastDmViewed otherUserId (ViewThread threadId) localUser.user
-                            }
-                        , dmChannels =
-                            SeqDict.updateIfExists
-                                otherUserId
-                                (\dmChannel ->
-                                    { dmChannel
-                                        | threads =
-                                            SeqDict.updateIfExists
-                                                threadId
-                                                (loadMessages messagesLoaded)
-                                                dmChannel.threads
+                    case viewing of
+                        ViewDm otherUserId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user = User.setLastDmViewed otherUserId NoThread localUser.user
+                                        , session =
+                                            UserSession.setCurrentlyViewing
+                                                (Just ( GuildOrDmId_Dm otherUserId, NoThread ))
+                                                localUser.session
                                     }
-                                )
-                                local.dmChannels
-                    }
-
-                Local_ViewChannel guildId channelId messagesLoaded ->
-                    let
-                        localUser =
-                            local.localUser
-                    in
-                    { local
-                        | localUser =
-                            { localUser | user = User.setLastChannelViewed guildId channelId NoThread localUser.user }
-                        , guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
-                                local.guilds
-                    }
-
-                Local_ViewThread guildId channelId threadId messagesLoaded ->
-                    let
-                        localUser =
-                            local.localUser
-                    in
-                    { local
-                        | localUser =
-                            { localUser
-                                | user =
-                                    User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
+                                , dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (loadMessages messagesLoaded)
+                                        local.dmChannels
                             }
-                        , guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (LocalState.updateChannel
-                                    (\channel ->
-                                        { channel
-                                            | threads =
-                                                SeqDict.updateIfExists
-                                                    threadId
-                                                    (loadMessages messagesLoaded)
-                                                    channel.threads
-                                        }
-                                    )
-                                    channelId
-                                )
-                                local.guilds
-                    }
+
+                        ViewDmThread otherUserId threadId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastDmViewed otherUserId (ViewThread threadId) localUser.user
+                                        , session = session
+                                    }
+                                , dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (\dmChannel ->
+                                            { dmChannel
+                                                | threads =
+                                                    SeqDict.updateIfExists
+                                                        threadId
+                                                        (loadMessages messagesLoaded)
+                                                        dmChannel.threads
+                                            }
+                                        )
+                                        local.dmChannels
+                            }
+
+                        ViewChannel guildId channelId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user = User.setLastChannelViewed guildId channelId NoThread localUser.user
+                                        , session = session
+                                    }
+                                , guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
+                                        local.guilds
+                            }
+
+                        ViewChannelThread guildId channelId threadId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastChannelViewed guildId channelId (ViewThread threadId) localUser.user
+                                        , session = session
+                                    }
+                                , guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (loadMessages messagesLoaded)
+                                                            channel.threads
+                                                }
+                                            )
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        StopViewingChannel ->
+                            { local | localUser = { localUser | session = session } }
 
                 Local_SetName name ->
                     let
@@ -4489,11 +4541,20 @@ changeUpdate localMsg local =
 
                                                     else if
                                                         SeqSet.member
-                                                            local.localUser.session.userId
+                                                            localUser.session.userId
                                                             (LocalState.usersMentionedOrRepliedToFrontend
+                                                                guildOrDmId
                                                                 threadRouteWithRepliedTo
                                                                 text
                                                                 channel
+                                                                (SeqDict.singleton
+                                                                    localUser.session.userId
+                                                                    (local.localUser.session.currentlyViewing
+                                                                        :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
+                                                                        |> List.filterMap identity
+                                                                        |> SeqSet.fromList
+                                                                    )
+                                                                )
                                                             )
                                                     then
                                                         User.addDirectMention
@@ -4771,6 +4832,23 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | session = { session | pushSubscription = SubscriptionError error } }
+                    }
+
+                Server_NewSession sessionId session ->
+                    { local | otherSessions = SeqDict.insert sessionId session local.otherSessions }
+
+                Server_LoggedOut sessionId ->
+                    { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
+
+                Server_CurrentlyViewing currentlyViewing ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.setCurrentlyViewing currentlyViewing localUser.session }
                     }
 
 
@@ -5215,52 +5293,57 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_ViewChannel guildId channelId _ ->
-                            case routeToGuildOrDmId model.route of
-                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, NoThread ) ->
-                                    if guildId == guildIdRoute && channelId == channelIdRoute then
-                                        scrollToBottomOfChannel
+                        Local_CurrentlyViewing viewing ->
+                            case viewing of
+                                ViewChannel guildId channelId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, NoThread ) ->
+                                            if guildId == guildIdRoute && channelId == channelIdRoute then
+                                                scrollToBottomOfChannel
 
-                                    else
-                                        Command.none
+                                            else
+                                                Command.none
 
-                                _ ->
-                                    Command.none
+                                        _ ->
+                                            Command.none
 
-                        Local_ViewDm otherUserId _ ->
-                            case routeToGuildOrDmId model.route of
-                                Just ( GuildOrDmId_Dm otherUserIdRoute, NoThread ) ->
-                                    if otherUserId == otherUserIdRoute then
-                                        scrollToBottomOfChannel
+                                ViewDm otherUserId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( GuildOrDmId_Dm otherUserIdRoute, NoThread ) ->
+                                            if otherUserId == otherUserIdRoute then
+                                                scrollToBottomOfChannel
 
-                                    else
-                                        Command.none
+                                            else
+                                                Command.none
 
-                                _ ->
-                                    Command.none
+                                        _ ->
+                                            Command.none
 
-                        Local_ViewThread guildId channelId threadId _ ->
-                            case routeToGuildOrDmId model.route of
-                                Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, ViewThread threadIdRoute ) ->
-                                    if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                        scrollToBottomOfChannel
+                                ViewChannelThread guildId channelId threadId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, ViewThread threadIdRoute ) ->
+                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                                scrollToBottomOfChannel
 
-                                    else
-                                        Command.none
+                                            else
+                                                Command.none
 
-                                _ ->
-                                    Command.none
+                                        _ ->
+                                            Command.none
 
-                        Local_ViewDmThread otherUserId threadId _ ->
-                            case routeToGuildOrDmId model.route of
-                                Just ( GuildOrDmId_Dm otherUserIdRoute, ViewThread threadIdRoute ) ->
-                                    if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
-                                        scrollToBottomOfChannel
+                                ViewDmThread otherUserId threadId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( GuildOrDmId_Dm otherUserIdRoute, ViewThread threadIdRoute ) ->
+                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                                                scrollToBottomOfChannel
 
-                                    else
-                                        Command.none
+                                            else
+                                                Command.none
 
-                                _ ->
+                                        _ ->
+                                            Command.none
+
+                                StopViewingChannel ->
                                     Command.none
 
                         _ ->
@@ -5311,6 +5394,7 @@ updateLoadedFromBackend msg model =
                                             Command.batch
                                                 [ playNotificationSound
                                                     senderId
+                                                    guildOrDmId
                                                     maybeRepliedTo
                                                     channel
                                                     local
@@ -5414,13 +5498,14 @@ scrollToBottomOfChannel =
 
 playNotificationSound :
     Id UserId
+    -> GuildOrDmIdNoThread
     -> ThreadRouteWithMaybeMessage
     -> FrontendChannel
     -> LocalState
     -> Nonempty RichText
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
-playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
+playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
     case local.localUser.session.notificationMode of
         NoNotifications ->
             Command.none
@@ -5430,9 +5515,18 @@ playNotificationSound senderId threadRouteWithRepliedTo channel local content mo
                 SeqSet.member
                     local.localUser.session.userId
                     (LocalState.usersMentionedOrRepliedToFrontend
+                        guildOrDmId
                         threadRouteWithRepliedTo
                         content
                         channel
+                        (SeqDict.singleton
+                            local.localUser.session.userId
+                            (local.localUser.session.currentlyViewing
+                                :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
+                                |> List.filterMap identity
+                                |> SeqSet.fromList
+                            )
+                        )
                     )
             then
                 Command.batch
@@ -5534,17 +5628,8 @@ pendingChangesText localChange =
         Local_DeleteMessage _ _ ->
             "Delete message"
 
-        Local_ViewDm _ _ ->
-            "View direct messages"
-
-        Local_ViewDmThread _ _ _ ->
-            "View thread"
-
-        Local_ViewChannel _ _ _ ->
-            "View channel"
-
-        Local_ViewThread _ _ _ _ ->
-            "View thread"
+        Local_CurrentlyViewing _ ->
+            "Change view"
 
         Local_SetName _ ->
             "Set display name"
@@ -5738,7 +5823,6 @@ view model =
                                     [ case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                loaded.userAgent
                                                 (MyUi.isMobile loaded)
                                                 loaded.time
                                                 local
@@ -5792,7 +5876,6 @@ view model =
                                     case loggedIn.userOptions of
                                         Just userOptions ->
                                             UserOptions.view
-                                                loaded.userAgent
                                                 (MyUi.isMobile loaded)
                                                 loaded.time
                                                 local
