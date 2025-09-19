@@ -901,7 +901,7 @@ tests fileData =
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "AT is typing..." ]
                     )
-                , checkNotification "@Stevie Steve Hi!"
+                , checkNoNotification "@Stevie Steve Hi!"
                 , enableNotifications False admin
                 , user.mouseEnter 100 (Dom.id "guild_message_1") ( 10, 10 ) []
                 , user.custom
@@ -925,7 +925,7 @@ tests fileData =
                     (Test.Html.Query.hasNot
                         [ Test.Html.Selector.exactText "Stevie Steve is typing..." ]
                     )
-                , checkNotification "Hello admin!"
+                , checkNoNotification "Hello admin!"
                 , createThread admin (Id.fromInt 2)
                 , admin.input 100 (Dom.id "channel_textinput") "Lets move this to a thread..."
                 , user.checkView
