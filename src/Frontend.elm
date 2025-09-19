@@ -560,7 +560,7 @@ routeViewingLocalChange local route =
         Nothing
 
     else
-        Just (Local_View localChange)
+        Just (Local_CurrentlyViewing localChange)
 
 
 routeRequest : Maybe Route -> Route -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4256,7 +4256,7 @@ changeUpdate localMsg local =
                 Local_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage local.localUser.session.userId guildOrDmId messageIndex local
 
-                Local_View viewing ->
+                Local_CurrentlyViewing viewing ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -4541,11 +4541,20 @@ changeUpdate localMsg local =
 
                                                     else if
                                                         SeqSet.member
-                                                            local.localUser.session.userId
+                                                            localUser.session.userId
                                                             (LocalState.usersMentionedOrRepliedToFrontend
+                                                                guildOrDmId
                                                                 threadRouteWithRepliedTo
                                                                 text
                                                                 channel
+                                                                (SeqDict.singleton
+                                                                    localUser.session.userId
+                                                                    (local.localUser.session.currentlyViewing
+                                                                        :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
+                                                                        |> List.filterMap identity
+                                                                        |> SeqSet.fromList
+                                                                    )
+                                                                )
                                                             )
                                                     then
                                                         User.addDirectMention
@@ -4830,6 +4839,17 @@ changeUpdate localMsg local =
 
                 Server_LoggedOut sessionId ->
                     { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
+
+                Server_CurrentlyViewing currentlyViewing ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | session = UserSession.setCurrentlyViewing currentlyViewing localUser.session }
+                    }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
@@ -5273,7 +5293,7 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_View viewing ->
+                        Local_CurrentlyViewing viewing ->
                             case viewing of
                                 ViewChannel guildId channelId _ ->
                                     case routeToGuildOrDmId model.route of
@@ -5374,6 +5394,7 @@ updateLoadedFromBackend msg model =
                                             Command.batch
                                                 [ playNotificationSound
                                                     senderId
+                                                    guildOrDmId
                                                     maybeRepliedTo
                                                     channel
                                                     local
@@ -5477,13 +5498,14 @@ scrollToBottomOfChannel =
 
 playNotificationSound :
     Id UserId
+    -> GuildOrDmIdNoThread
     -> ThreadRouteWithMaybeMessage
     -> FrontendChannel
     -> LocalState
     -> Nonempty RichText
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
-playNotificationSound senderId threadRouteWithRepliedTo channel local content model =
+playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
     case local.localUser.session.notificationMode of
         NoNotifications ->
             Command.none
@@ -5493,9 +5515,18 @@ playNotificationSound senderId threadRouteWithRepliedTo channel local content mo
                 SeqSet.member
                     local.localUser.session.userId
                     (LocalState.usersMentionedOrRepliedToFrontend
+                        guildOrDmId
                         threadRouteWithRepliedTo
                         content
                         channel
+                        (SeqDict.singleton
+                            local.localUser.session.userId
+                            (local.localUser.session.currentlyViewing
+                                :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
+                                |> List.filterMap identity
+                                |> SeqSet.fromList
+                            )
+                        )
                     )
             then
                 Command.batch
@@ -5597,7 +5628,7 @@ pendingChangesText localChange =
         Local_DeleteMessage _ _ ->
             "Delete message"
 
-        Local_View _ ->
+        Local_CurrentlyViewing _ ->
             "Change view"
 
         Local_SetName _ ->

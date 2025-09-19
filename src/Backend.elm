@@ -1767,12 +1767,16 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                         NoThreadWithMaybeMessage _ ->
                             NoThread
 
+                usersMentioned : SeqSet (Id UserId)
                 usersMentioned =
                     LocalState.usersMentionedOrRepliedToBackend
                         threadRoute
                         richText
                         (guild.owner :: SeqDict.keys guild.members)
                         channel
+
+                guildOrDmId =
+                    GuildOrDmId_Guild guildId channelId
             in
             ( { model
                 | guilds =
@@ -1797,10 +1801,22 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                 , users =
                     SeqSet.foldl
                         (\userId2 users ->
-                            NonemptyDict.updateIfExists
-                                userId2
-                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                            let
+                                isViewing =
+                                    userGetAllSessions userId2 model
+                                        |> List.any
+                                            (\( _, userSession ) ->
+                                                userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                            )
+                            in
+                            if isViewing then
                                 users
+
+                            else
+                                NonemptyDict.updateIfExists
+                                    userId2
+                                    (User.addDirectMention guildId channelId threadRouteNoReply)
+                                    users
                         )
                         model.users
                         usersMentioned
@@ -1808,13 +1824,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
             , Command.batch
                 [ broadcastToGuild
                     guildId
-                    (Server_SendMessage
-                        userId
-                        message.timestamp
-                        (GuildOrDmId_Guild guildId channelId)
-                        richText
-                        threadRoute
-                        SeqDict.empty
+                    (Server_SendMessage userId message.timestamp guildOrDmId richText threadRoute SeqDict.empty
                         |> ServerChange
                     )
                     model
@@ -1822,7 +1832,8 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                     usersMentioned
                     message.timestamp
                     userId
-                    (GuildOrDmId_Guild guildId channelId)
+                    guildOrDmId
+                    threadRouteNoReply
                     richText
                     (guild.owner :: SeqDict.keys guild.members)
                     model
@@ -1831,6 +1842,12 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
 
         _ ->
             ( model, Command.none )
+
+
+userGetAllSessions : Id UserId -> BackendModel -> List ( SessionId, UserSession )
+userGetAllSessions userId model =
+    SeqDict.toList model.sessions
+        |> List.filter (\( sessionId, session ) -> session.userId == userId)
 
 
 discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id ChannelMessageId)
@@ -2968,13 +2985,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                Local_View viewing ->
+                Local_CurrentlyViewing viewing ->
                     let
+                        viewing2 : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+                        viewing2 =
+                            UserSession.setViewingToCurrentlyViewing viewing
+
                         updateSession : UserSession -> UserSession
                         updateSession session =
-                            UserSession.setCurrentlyViewing
-                                (UserSession.setViewingToCurrentlyViewing viewing)
-                                session
+                            UserSession.setCurrentlyViewing viewing2 session
+
+                        broadcastCmd : UserSession -> Command BackendOnly ToFrontend msg
+                        broadcastCmd session =
+                            broadcastToUser
+                                Nothing
+                                (Just sessionId)
+                                session.userId
+                                (Server_CurrentlyViewing viewing2 |> ServerChange)
+                                model2
                     in
                     case viewing of
                         ViewDm otherUserId _ ->
@@ -2993,10 +3021,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
                                               }
-                                            , ViewDm otherUserId (loadMessagesHelper channel)
-                                                |> Local_View
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
+                                            , Command.batch
+                                                [ ViewDm otherUserId (loadMessagesHelper channel)
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
                                             )
 
                                         Nothing ->
@@ -3021,16 +3052,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
                                               }
-                                            , ViewDmThread
-                                                otherUserId
-                                                threadId
-                                                (SeqDict.get threadId dmChannel.threads
-                                                    |> Maybe.withDefault DmChannel.threadInit
-                                                    |> loadMessagesHelper
-                                                )
-                                                |> Local_View
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
+                                            , Command.batch
+                                                [ ViewDmThread
+                                                    otherUserId
+                                                    threadId
+                                                    (SeqDict.get threadId dmChannel.threads
+                                                        |> Maybe.withDefault DmChannel.threadInit
+                                                        |> loadMessagesHelper
+                                                    )
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
                                             )
 
                                         Nothing ->
@@ -3056,10 +3090,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
                                               }
-                                            , ViewChannel guildId channelId (loadMessagesHelper channel)
-                                                |> Local_View
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
+                                            , Command.batch
+                                                [ ViewChannel guildId channelId (loadMessagesHelper channel)
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
                                             )
 
                                         Nothing ->
@@ -3090,22 +3127,28 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
                                               }
-                                            , ViewChannelThread
-                                                guildId
-                                                channelId
-                                                threadId
-                                                (SeqDict.get threadId channel.threads
-                                                    |> Maybe.withDefault DmChannel.threadInit
-                                                    |> loadMessagesHelper
-                                                )
-                                                |> Local_View
-                                                |> LocalChangeResponse changeId
-                                                |> Lamdera.sendToFrontend clientId
+                                            , Command.batch
+                                                [ ViewChannelThread
+                                                    guildId
+                                                    channelId
+                                                    threadId
+                                                    (SeqDict.get threadId channel.threads
+                                                        |> Maybe.withDefault DmChannel.threadInit
+                                                        |> loadMessagesHelper
+                                                    )
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
                                             )
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                                , broadcastCmd session
+                                                ]
                                             )
                                 )
 
@@ -4156,11 +4199,12 @@ broadcastMessageNotification :
     -> Time.Posix
     -> Id UserId
     -> GuildOrDmIdNoThread
+    -> ThreadRoute
     -> Nonempty RichText
     -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-broadcastMessageNotification usersMentioned time sender guildOrDmId content members model =
+broadcastMessageNotification usersMentioned time sender guildOrDmId threadRoute content members model =
     let
         plainText : String
         plainText =
@@ -4189,12 +4233,24 @@ broadcastMessageNotification usersMentioned time sender guildOrDmId content memb
         |> SeqSet.remove sender
         |> SeqSet.foldl
             (\userId2 cmds ->
-                case NonemptyDict.get userId2 model.users of
-                    Just user2 ->
-                        broadcastNotification time userId2 user2 plainText model :: cmds
+                let
+                    isViewing =
+                        userGetAllSessions userId2 model
+                            |> List.any
+                                (\( _, userSession ) ->
+                                    userSession.currentlyViewing == Just ( guildOrDmId, threadRoute )
+                                )
+                in
+                if isViewing then
+                    cmds
 
-                    Nothing ->
-                        cmds
+                else
+                    case NonemptyDict.get userId2 model.users of
+                        Just user2 ->
+                            broadcastNotification time userId2 user2 plainText model :: cmds
+
+                        Nothing ->
+                            cmds
             )
             []
         |> Command.batch
@@ -4252,6 +4308,10 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 )
                                 channel
 
+                guildOrDmId : GuildOrDmIdNoThread
+                guildOrDmId =
+                    GuildOrDmId_Guild guildId channelId
+
                 threadRouteNoReply : ThreadRoute
                 threadRouteNoReply =
                     case threadRouteWithMaybeReplyTo of
@@ -4273,10 +4333,22 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 users2 =
                     SeqSet.foldl
                         (\userId2 users ->
-                            NonemptyDict.updateIfExists
-                                userId2
-                                (User.addDirectMention guildId channelId threadRouteNoReply)
+                            let
+                                isViewing =
+                                    userGetAllSessions userId2 model
+                                        |> List.any
+                                            (\( _, userSession ) ->
+                                                userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                            )
+                            in
+                            if isViewing then
                                 users
+
+                            else
+                                NonemptyDict.updateIfExists
+                                    userId2
+                                    (User.addDirectMention guildId channelId threadRouteNoReply)
+                                    users
                         )
                         model.users
                         usersMentioned
@@ -4295,7 +4367,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 { user
                                     | lastViewedThreads =
                                         SeqDict.insert
-                                            ( GuildOrDmId_Guild guildId channelId, threadMessageIndex )
+                                            ( guildOrDmId, threadMessageIndex )
                                             (SeqDict.get threadMessageIndex channel2.threads
                                                 |> Maybe.withDefault DmChannel.threadInit
                                                 |> DmChannel.latestThreadMessageId
@@ -4307,7 +4379,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 { user
                                     | lastViewed =
                                         SeqDict.insert
-                                            (GuildOrDmId_Guild guildId channelId)
+                                            guildOrDmId
                                             (DmChannel.latestMessageId channel2)
                                             user.lastViewed
                                 }
@@ -4317,12 +4389,12 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
             , Command.batch
                 [ LocalChangeResponse
                     changeId
-                    (Local_SendMessage time (GuildOrDmId_Guild guildId channelId) text threadRouteWithMaybeReplyTo attachedFiles)
+                    (Local_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
                     |> Lamdera.sendToFrontend clientId
                 , broadcastToGuildExcludingOne
                     clientId
                     guildId
-                    (Server_SendMessage userId time (GuildOrDmId_Guild guildId channelId) text threadRouteWithMaybeReplyTo attachedFiles
+                    (Server_SendMessage userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
                         |> ServerChange
                     )
                     model
@@ -4330,7 +4402,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     usersMentioned
                     time
                     userId
-                    (GuildOrDmId_Guild guildId channelId)
+                    guildOrDmId
+                    threadRouteNoReply
                     text
                     (guild.owner :: SeqDict.keys guild.members)
                     model

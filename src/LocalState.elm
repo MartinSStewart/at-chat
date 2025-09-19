@@ -49,6 +49,7 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelper
     , memberIsEditTypingHelper
     , memberIsTyping
+    , removeAlreadyViewing
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , updateChannel
@@ -1629,12 +1630,33 @@ usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channe
         members
 
 
+removeAlreadyViewing :
+    GuildOrDmIdNoThread
+    -> ThreadRoute
+    -> SeqDict (Id UserId) (SeqSet ( GuildOrDmIdNoThread, ThreadRoute ))
+    -> SeqSet (Id UserId)
+    -> SeqSet (Id UserId)
+removeAlreadyViewing guildOrDmId threadRoute currentlyViewing usersMentionedOrRepliedTo =
+    SeqSet.filter
+        (\userId ->
+            case SeqDict.get userId currentlyViewing of
+                Just currentlyViewing2 ->
+                    not (SeqSet.member ( guildOrDmId, threadRoute ) currentlyViewing2)
+
+                Nothing ->
+                    True
+        )
+        usersMentionedOrRepliedTo
+
+
 usersMentionedOrRepliedToFrontend :
-    ThreadRouteWithMaybeMessage
+    GuildOrDmIdNoThread
+    -> ThreadRouteWithMaybeMessage
     -> Nonempty RichText
     -> FrontendChannel
+    -> SeqDict (Id UserId) (SeqSet ( GuildOrDmIdNoThread, ThreadRoute ))
     -> SeqSet (Id UserId)
-usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
+usersMentionedOrRepliedToFrontend guildOrDmId threadRouteWithRepliedTo content channel usersMentionedOrRepliedTo =
     (case threadRouteWithRepliedTo of
         ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
             (case SeqDict.get threadId channel.threads of
@@ -1664,6 +1686,16 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
             repliedToUserIdFrontend maybeRepliedTo channel |> Maybe.Extra.toList
     )
         |> List.foldl SeqSet.insert (RichText.mentionsUser content)
+        |> removeAlreadyViewing
+            guildOrDmId
+            (case threadRouteWithRepliedTo of
+                ViewThreadWithMaybeMessage threadId _ ->
+                    ViewThread threadId
+
+                NoThreadWithMaybeMessage _ ->
+                    NoThread
+            )
+            usersMentionedOrRepliedTo
 
 
 repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId) } -> Maybe (Id UserId)

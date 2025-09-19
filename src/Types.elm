@@ -589,6 +589,7 @@ type ServerChange
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionId FrontendUserSession
     | Server_LoggedOut SessionId
+    | Server_CurrentlyViewing (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
 
 
 type LocalChange
@@ -607,7 +608,7 @@ type LocalChange
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_View SetViewing
+    | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
     | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
