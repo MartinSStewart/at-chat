@@ -588,6 +588,7 @@ type ServerChange
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionId FrontendUserSession
+    | Server_LoggedOut SessionId
 
 
 type LocalChange

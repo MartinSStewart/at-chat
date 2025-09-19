@@ -4828,6 +4828,9 @@ changeUpdate localMsg local =
                 Server_NewSession sessionId session ->
                     { local | otherSessions = SeqDict.insert sessionId session local.otherSessions }
 
+                Server_LoggedOut sessionId ->
+                    { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
+
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =

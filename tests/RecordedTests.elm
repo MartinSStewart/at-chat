@@ -689,6 +689,18 @@ tests fileData =
                                     )
                                 ]
                             )
+                        , admin2.click 100 (Dom.id "options_logout")
+                        , admin.checkView 100
+                            (Test.Html.Query.hasNot
+                                [ Test.Html.Selector.exactText "Mobile • Safari"
+                                ]
+                            )
+                        , admin.checkView 0
+                            (Test.Html.Query.has
+                                [ Test.Html.Selector.exactText "Desktop • Chrome"
+                                , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
+                                ]
+                            )
                         ]
                     )
                 ]

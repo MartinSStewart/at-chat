@@ -2229,9 +2229,22 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\_ _ -> updateFromFrontendAdmin clientId adminToBackend model2)
 
         LogOutRequest ->
-            ( { model2 | sessions = SeqDict.remove sessionId model2.sessions }
-            , Lamdera.sendToFrontends sessionId LoggedOutSession
-            )
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    ( { model2 | sessions = SeqDict.remove sessionId model2.sessions }
+                    , Command.batch
+                        [ Lamdera.sendToFrontends sessionId LoggedOutSession
+                        , broadcastToUser
+                            Nothing
+                            (Just sessionId)
+                            session.userId
+                            (Server_LoggedOut sessionId |> ServerChange)
+                            model2
+                        ]
+                    )
+                )
 
         LocalModelChangeRequest changeId localMsg ->
             case localMsg of
