@@ -1155,7 +1155,7 @@ tests fileData =
             (\data ->
                 case
                     List.filterMap
-                        (isLogErrorEmail Broadcast.emailToNotifyWhenErrorsAreLogged)
+                        (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged)
                         data.httpRequests
                 of
                     [ "LoginsRateLimited" ] ->
@@ -1330,7 +1330,7 @@ checkNoErrorLogs =
     T.checkState
         100
         (\data ->
-            case List.filterMap (isLogErrorEmail Broadcast.emailToNotifyWhenErrorsAreLogged) data.httpRequests of
+            case List.filterMap (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged) data.httpRequests of
                 [] ->
                     Ok ()
 

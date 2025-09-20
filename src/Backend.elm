@@ -2,6 +2,7 @@ module Backend exposing
     ( adminUser
     , app
     , app_
+    , emailToNotifyWhenErrorsAreLogged
     , loginEmailContent
     , loginEmailSubject
     )
@@ -20,7 +21,7 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task exposing (Task)
+import Effect.Task as Task
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Email.Html
@@ -35,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -59,7 +60,7 @@ import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, 
 import Unsafe
 import User exposing (BackendUser, EmailStatus(..))
 import UserAgent exposing (UserAgent)
-import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), SubscribeData, ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
 
 

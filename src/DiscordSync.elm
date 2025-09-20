@@ -1,4 +1,12 @@
-module DiscordSync exposing (..)
+module DiscordSync exposing
+    ( addDiscordGuilds
+    , addDiscordUsers
+    , addReactionEmoji
+    , botTokenToAuth
+    , discordWebsocketMsg
+    , gotCurrentUserGuilds
+    , loadImage
+    )
 
 import Array
 import Broadcast
@@ -1147,6 +1155,12 @@ discordWebsocketMsg discordMsg model =
             ( model, Command.none )
 
 
+gotCurrentUserGuilds :
+    Time.Posix
+    -> DiscordBotToken
+    -> Result error ( Discord.User, List Discord.PartialGuild )
+    -> BackendModel
+    -> ( BackendModel, Command restriction toMsg BackendMsg )
 gotCurrentUserGuilds time botToken result model =
     case result of
         Ok ( botUser, guilds ) ->
