@@ -1,6 +1,6 @@
 module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
-import Backend
+import Broadcast
 import Coord
 import Effect.Lamdera as Lamdera
 import Env
@@ -20,7 +20,7 @@ checkFileUpload _ model _ text =
         [ fileHash, fileSize, sessionId, width, height ] ->
             case
                 T4
-                    (sessionId == Env.secretKey || Backend.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing)
+                    (sessionId == Env.secretKey || Broadcast.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing)
                     (String.toInt fileSize)
                     (String.toInt width)
                     (String.toInt height)
