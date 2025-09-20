@@ -3057,11 +3057,11 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         (\userId2 users ->
                             let
                                 isViewing =
-                                    Broadcast.userGetAllSessions userId2 model
-                                        |> List.any
-                                            (\( _, userSession ) ->
-                                                userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
-                                            )
+                                    List.any
+                                        (\( _, userSession ) ->
+                                            userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                        )
+                                        (Broadcast.userGetAllSessions userId2 model)
                             in
                             if isViewing then
                                 users

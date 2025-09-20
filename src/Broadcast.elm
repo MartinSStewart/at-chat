@@ -229,11 +229,11 @@ messageNotification usersMentioned time sender guildOrDmId threadRoute content m
             (\userId2 cmds ->
                 let
                     isViewing =
-                        userGetAllSessions userId2 model
-                            |> List.any
-                                (\( _, userSession ) ->
-                                    userSession.currentlyViewing == Just ( guildOrDmId, threadRoute )
-                                )
+                        List.any
+                            (\( _, userSession ) ->
+                                userSession.currentlyViewing == Just ( guildOrDmId, threadRoute )
+                            )
+                            (userGetAllSessions userId2 model)
                 in
                 if isViewing then
                     cmds
