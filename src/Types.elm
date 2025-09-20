@@ -425,6 +425,7 @@ type FrontendMsg
     | PressedCloseImageInfo
     | PressedMemberListBack
     | GotUserAgent UserAgent
+    | WindowHasFocusChanged Bool
 
 
 type ScrollPosition
