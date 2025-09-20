@@ -410,17 +410,17 @@ update msg model =
                                 Discord.ThreadCreatedOrUserAddedToThread _ ->
                                     ( model2, cmds )
 
-                                Discord.UserAddedReaction reactionAdd ->
+                                Discord.UserAddedReaction reaction ->
                                     let
                                         ( model3, cmd2 ) =
-                                            handleDiscordAddReaction reactionAdd model
+                                            addOrRemoveDiscordReaction True reaction model
                                     in
                                     ( model3, cmd2 :: cmds )
 
-                                Discord.UserRemovedReaction reactionRemove ->
+                                Discord.UserRemovedReaction reaction ->
                                     let
                                         ( model3, cmd2 ) =
-                                            handleDiscordRemoveReaction reactionRemove model
+                                            addOrRemoveDiscordReaction False reaction model
                                     in
                                     ( model3, cmd2 :: cmds )
 
@@ -1054,18 +1054,85 @@ discordGuildIdToGuild discordGuildId model =
             Nothing
 
 
-handleDiscordAddReaction : Discord.ReactionAdd -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordAddReaction reaction model =
+addReactionEmoji :
+    Id GuildId
+    -> BackendGuild
+    -> Id ChannelId
+    -> ThreadRouteWithMessage
+    -> Id UserId
+    -> Emoji
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+addReactionEmoji guildId guild channelId threadRoute userId emoji model cmds =
+    ( { model
+        | guilds =
+            SeqDict.insert
+                guildId
+                (LocalState.updateChannel (LocalState.addReactionEmoji emoji userId threadRoute) channelId guild)
+                model.guilds
+      }
+    , Command.batch
+        [ cmds
+        , broadcastToGuild
+            guildId
+            (Server_AddReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji |> ServerChange)
+            model
+        ]
+    )
+
+
+removeReactionEmoji :
+    Id GuildId
+    -> BackendGuild
+    -> Id ChannelId
+    -> ThreadRouteWithMessage
+    -> Id UserId
+    -> Emoji
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+    -> ( BackendModel, Command BackendOnly ToFrontend msg )
+removeReactionEmoji guildId guild channelId threadRoute userId emoji model cmds =
+    ( { model
+        | guilds =
+            SeqDict.insert
+                guildId
+                (LocalState.updateChannel (LocalState.removeReactionEmoji emoji userId threadRoute) channelId guild)
+                model.guilds
+      }
+    , Command.batch
+        [ cmds
+        , broadcastToGuild
+            guildId
+            (Server_RemoveReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji |> ServerChange)
+            model
+        ]
+    )
+
+
+addOrRemoveDiscordReaction :
+    Bool
+    ->
+        { a
+            | userId : Discord.Id.Id Discord.Id.UserId
+            , channelId : Discord.Id.Id Discord.Id.ChannelId
+            , messageId : Discord.Id.Id Discord.Id.MessageId
+            , guildId : OptionalData (Discord.Id.Id Discord.Id.GuildId)
+            , emoji : Discord.EmojiData
+        }
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+addOrRemoveDiscordReaction isAdding reaction model =
     if Just reaction.userId == model.discordBotId then
         ( model, Command.none )
 
     else
-        let
-            emoji =
-                discordEmojiToEmoji reaction.emoji
-        in
         case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
             ( Included discordGuildId, Just userId ) ->
+                let
+                    emoji =
+                        discordEmojiToEmoji reaction.emoji
+                in
                 case discordGuildIdToGuild discordGuildId model of
                     Just ( guildId, guild ) ->
                         case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
@@ -1074,35 +1141,20 @@ handleDiscordAddReaction reaction model =
                                     Just channel ->
                                         case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
                                             Just messageId ->
-                                                ( { model
-                                                    | guilds =
-                                                        SeqDict.insert
-                                                            guildId
-                                                            { guild
-                                                                | channels =
-                                                                    SeqDict.insert
-                                                                        channelId
-                                                                        (LocalState.addReactionEmoji
-                                                                            emoji
-                                                                            userId
-                                                                            (NoThreadWithMessage messageId)
-                                                                            channel
-                                                                        )
-                                                                        guild.channels
-                                                            }
-                                                            model.guilds
-                                                  }
-                                                , broadcastToGuild
-                                                    guildId
-                                                    (Server_AddReactionEmoji
-                                                        userId
-                                                        (GuildOrDmId_Guild guildId channelId)
-                                                        (NoThreadWithMessage messageId)
-                                                        emoji
-                                                        |> ServerChange
-                                                    )
-                                                    model
+                                                (if isAdding then
+                                                    addReactionEmoji
+
+                                                 else
+                                                    removeReactionEmoji
                                                 )
+                                                    guildId
+                                                    guild
+                                                    channelId
+                                                    (NoThreadWithMessage messageId)
+                                                    userId
+                                                    emoji
+                                                    model
+                                                    Command.none
 
                                             Nothing ->
                                                 ( model, Command.none )
@@ -1110,74 +1162,55 @@ handleDiscordAddReaction reaction model =
                                     Nothing ->
                                         ( model, Command.none )
 
+                            -- If we don't find the channel ID among the guild channels then the Discord channel ID is actually a thread channel ID
                             Nothing ->
-                                ( model, Command.none )
+                                let
+                                    maybeThread : Maybe ( Id ChannelId, BackendChannel, Id ChannelMessageId )
+                                    maybeThread =
+                                        List.Extra.findMap
+                                            (\( channelId, channel ) ->
+                                                case
+                                                    OneToOne.second
+                                                        (DiscordChannelId reaction.channelId)
+                                                        channel.linkedThreadIds
+                                                of
+                                                    Just threadId ->
+                                                        Just ( channelId, channel, threadId )
 
-                    Nothing ->
-                        ( model, Command.none )
+                                                    Nothing ->
+                                                        Nothing
+                                            )
+                                            (SeqDict.toList guild.channels)
+                                in
+                                case maybeThread of
+                                    Just ( channelId, channel, threadId ) ->
+                                        case SeqDict.get threadId channel.threads of
+                                            Just thread ->
+                                                case OneToOne.second (DiscordMessageId reaction.messageId) thread.linkedMessageIds of
+                                                    Just messageId ->
+                                                        (if isAdding then
+                                                            addReactionEmoji
 
-            _ ->
-                ( model, Command.none )
-
-
-handleDiscordRemoveReaction : Discord.ReactionRemove -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordRemoveReaction reaction model =
-    if Just reaction.userId == model.discordBotId then
-        ( model, Command.none )
-
-    else
-        let
-            emoji =
-                discordEmojiToEmoji reaction.emoji
-        in
-        case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
-            ( Included discordGuildId, Just userId ) ->
-                case discordGuildIdToGuild discordGuildId model of
-                    Just ( guildId, guild ) ->
-                        case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
-                            Just channelId ->
-                                case SeqDict.get channelId guild.channels of
-                                    Just channel ->
-                                        case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
-                                            Just messageId ->
-                                                ( { model
-                                                    | guilds =
-                                                        SeqDict.insert
+                                                         else
+                                                            removeReactionEmoji
+                                                        )
                                                             guildId
-                                                            { guild
-                                                                | channels =
-                                                                    SeqDict.insert
-                                                                        channelId
-                                                                        (LocalState.removeReactionEmoji
-                                                                            emoji
-                                                                            userId
-                                                                            (NoThreadWithMessage messageId)
-                                                                            channel
-                                                                        )
-                                                                        guild.channels
-                                                            }
-                                                            model.guilds
-                                                  }
-                                                , broadcastToGuild
-                                                    guildId
-                                                    (Server_RemoveReactionEmoji
-                                                        userId
-                                                        (GuildOrDmId_Guild guildId channelId)
-                                                        (NoThreadWithMessage messageId)
-                                                        emoji
-                                                        |> ServerChange
-                                                    )
-                                                    model
-                                                )
+                                                            guild
+                                                            channelId
+                                                            (ViewThreadWithMessage threadId messageId)
+                                                            userId
+                                                            emoji
+                                                            model
+                                                            Command.none
+
+                                                    Nothing ->
+                                                        ( model, Command.none )
 
                                             Nothing ->
                                                 ( model, Command.none )
 
                                     Nothing ->
                                         ( model, Command.none )
-
-                            Nothing ->
-                                ( model, Command.none )
 
                     Nothing ->
                         ( model, Command.none )
@@ -2722,28 +2755,15 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 (\{ userId } _ guild ->
-                                    ( { model2
-                                        | guilds =
-                                            SeqDict.insert
-                                                guildId
-                                                (LocalState.updateChannel
-                                                    (LocalState.addReactionEmoji emoji userId threadRoute)
-                                                    channelId
-                                                    guild
-                                                )
-                                                model2.guilds
-                                      }
-                                    , Command.batch
-                                        [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-                                        , broadcastToGuildExcludingOne
-                                            clientId
-                                            guildId
-                                            (Server_AddReactionEmoji userId guildOrDmId threadRoute emoji
-                                                |> ServerChange
-                                            )
-                                            model2
-                                        ]
-                                    )
+                                    addReactionEmoji
+                                        guildId
+                                        guild
+                                        channelId
+                                        threadRoute
+                                        userId
+                                        emoji
+                                        model
+                                        (Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg))
                                 )
 
                         GuildOrDmId_Dm otherUserId ->
