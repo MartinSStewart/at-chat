@@ -2,6 +2,7 @@ module Broadcast exposing
     ( PushNotification
     , adminUserId
     , broadcastDm
+    , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
     , notification
@@ -34,6 +35,7 @@ import PersonName
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SessionIdHash exposing (SessionIdHash)
 import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
@@ -165,6 +167,25 @@ getUserFromSessionId : SessionId -> BackendModel -> Maybe ( UserSession, Backend
 getUserFromSessionId sessionId model =
     SeqDict.get sessionId model.sessions
         |> Maybe.andThen (\session -> NonemptyDict.get session.userId model.users |> Maybe.map (Tuple.pair session))
+
+
+getSessionFromSessionIdHash : SessionIdHash -> BackendModel -> Maybe ( SessionId, UserSession )
+getSessionFromSessionIdHash sessionIdHash model =
+    SeqDict.foldl
+        (\sessionId session state ->
+            case state of
+                Just _ ->
+                    state
+
+                Nothing ->
+                    if session.sessionIdHash == sessionIdHash then
+                        Just ( sessionId, session )
+
+                    else
+                        Nothing
+        )
+        Nothing
+        model.sessions
 
 
 messageNotification :

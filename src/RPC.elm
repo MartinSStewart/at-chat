@@ -10,6 +10,7 @@ import Json.Encode as Json
 import Lamdera exposing (SessionId)
 import LamderaRPC exposing (Headers, HttpRequest, RPCResult(..))
 import SeqDict
+import SessionIdHash
 import Toop exposing (T4(..))
 import Types exposing (BackendModel, BackendMsg)
 
@@ -20,7 +21,7 @@ checkFileUpload _ model _ text =
         [ fileHash, fileSize, sessionId, width, height ] ->
             case
                 T4
-                    (sessionId == Env.secretKey || Broadcast.getUserFromSessionId (Lamdera.sessionIdFromString sessionId) model /= Nothing)
+                    (sessionId == Env.secretKey || Broadcast.getSessionFromSessionIdHash (SessionIdHash.fromString sessionId) model /= Nothing)
                     (String.toInt fileSize)
                     (String.toInt width)
                     (String.toInt height)

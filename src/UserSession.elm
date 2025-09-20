@@ -14,10 +14,13 @@ module UserSession exposing
     )
 
 import Effect.Http as Http
+import Effect.Lamdera exposing (SessionId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
 import Route exposing (ChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
+import SessionIdHash exposing (SessionIdHash)
+import Sha256
 import Url exposing (Url)
 import UserAgent exposing (UserAgent)
 
@@ -28,6 +31,7 @@ type alias UserSession =
     , pushSubscription : PushSubscription
     , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
     , userAgent : UserAgent
+    , sessionIdHash : SessionIdHash
     }
 
 
@@ -86,13 +90,14 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
-init userId currentlyViewing userAgent =
+init : SessionId -> Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
+init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
     , pushSubscription = NotSubscribed
     , currentlyViewing = currentlyViewing
     , userAgent = userAgent
+    , sessionIdHash = SessionIdHash.fromSessionId sessionId
     }
 
 

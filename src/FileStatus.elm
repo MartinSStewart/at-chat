@@ -50,6 +50,7 @@ import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
+import SessionIdHash exposing (SessionIdHash)
 import StringExtra
 import Ui exposing (Element)
 import Ui.Font
@@ -343,7 +344,7 @@ type alias ExposureTime =
 
 upload :
     (Result Http.Error UploadResponse -> msg)
-    -> SessionId
+    -> SessionIdHash
     -> GuildOrDmId
     -> Id FileId
     -> File
@@ -351,7 +352,7 @@ upload :
 upload onResult sessionId guildOrDmId fileId file2 =
     Http.request
         { method = "POST"
-        , headers = [ Http.header "sid" (Lamdera.sessionIdToString sessionId) ]
+        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
         , url = domain ++ "/file/upload"
         , body = Http.fileBody file2
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)

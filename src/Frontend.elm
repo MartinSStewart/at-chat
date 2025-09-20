@@ -378,7 +378,6 @@ loadedInitHelper time timezone userAgent loginData loading =
                         TwoFactorNotStarted
             , filesToUpload = SeqDict.empty
             , showFileToUploadInfo = Nothing
-            , sessionId = loginData.sessionId
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
             }
@@ -3556,6 +3555,10 @@ gotFiles guildOrDmId files model =
     updateLoggedIn
         (\loggedIn ->
             let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
                 ( fileText, cmds, dict ) =
                     case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                         Just dict2 ->
@@ -3572,7 +3575,7 @@ gotFiles guildOrDmId files model =
                                            ]
                                     , FileStatus.upload
                                         (GotFileHashName guildOrDmId id)
-                                        loggedIn.sessionId
+                                        local.localUser.session.sessionIdHash
                                         guildOrDmId
                                         id
                                         file2
@@ -3607,7 +3610,7 @@ gotFiles guildOrDmId files model =
                                     in
                                     FileStatus.upload
                                         (GotFileHashName guildOrDmId id)
-                                        loggedIn.sessionId
+                                        local.localUser.session.sessionIdHash
                                         guildOrDmId
                                         id
                                         file2
@@ -3681,7 +3684,7 @@ editMessage_gotFiles guildOrDmId files model =
                                            ]
                                     , FileStatus.upload
                                         (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        loggedIn.sessionId
+                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
                                         guildOrDmId
                                         fileId
                                         file2
