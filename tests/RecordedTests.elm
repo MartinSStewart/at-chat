@@ -1,6 +1,7 @@
 module RecordedTests exposing (main, setup)
 
 import Backend
+import Broadcast
 import Bytes exposing (Bytes)
 import Codec
 import Dict exposing (Dict)
@@ -294,7 +295,7 @@ checkNotification body =
                     (\request ->
                         case request.body of
                             T.JsonBody json ->
-                                case Codec.decodeValue Backend.pushNotificationCodec json of
+                                case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
                                         (pushNotification.body == body)
                                             && (request.url == "http://localhost:3000/file/push-notification")
@@ -328,7 +329,7 @@ checkNoNotification body =
                     (\request ->
                         case request.body of
                             T.JsonBody json ->
-                                case Codec.decodeValue Backend.pushNotificationCodec json of
+                                case Codec.decodeValue Broadcast.pushNotificationCodec json of
                                     Ok pushNotification ->
                                         (pushNotification.body == body)
                                             && (request.url == "http://localhost:3000/file/push-notification")
@@ -1154,7 +1155,7 @@ tests fileData =
             (\data ->
                 case
                     List.filterMap
-                        (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged)
+                        (isLogErrorEmail Broadcast.emailToNotifyWhenErrorsAreLogged)
                         data.httpRequests
                 of
                     [ "LoginsRateLimited" ] ->
@@ -1329,7 +1330,7 @@ checkNoErrorLogs =
     T.checkState
         100
         (\data ->
-            case List.filterMap (isLogErrorEmail Backend.emailToNotifyWhenErrorsAreLogged) data.httpRequests of
+            case List.filterMap (isLogErrorEmail Broadcast.emailToNotifyWhenErrorsAreLogged) data.httpRequests of
                 [] ->
                     Ok ()
 
