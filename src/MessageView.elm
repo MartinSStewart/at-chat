@@ -121,7 +121,8 @@ miniButton htmlId onPress svg =
         , Ui.paddingXY 4 3
         , Ui.height Ui.fill
         , Ui.id (Dom.idToString htmlId)
-        , Ui.Input.button onPress
+        , Ui.Events.stopPropagationOn "click" (Json.Decode.succeed ( onPress, True ))
+        , Ui.pointer
         ]
         (Ui.html svg)
 
