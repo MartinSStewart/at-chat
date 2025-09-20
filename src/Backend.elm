@@ -48,6 +48,7 @@ import PersonName
 import Postmark
 import Quantity
 import RichText exposing (RichText)
+import Route exposing (Route(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -90,7 +91,7 @@ app_ =
 
 adminUser : BackendUser
 adminUser =
-    LocalState.createNewUser
+    User.init
         (Time.millisToPosix 0)
         (Unsafe.personName "AT")
         (Unsafe.emailAddress Env.adminEmail |> RegisteredDirectly)
@@ -752,7 +753,7 @@ addSlackUsers time currentUserId currentUser newUsers model =
 
                         user : BackendUser
                         user =
-                            LocalState.createNewUser
+                            User.init
                                 time
                                 (PersonName.fromStringLossy slackUser.name)
                                 RegisteredFromSlack
@@ -1071,7 +1072,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             newUser : BackendUser
                             newUser =
-                                LocalState.createNewUser
+                                User.init
                                     time
                                     personName
                                     (RegisteredDirectly pendingLogin.emailAddress)
@@ -2308,6 +2309,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     "Success!"
                                     "Push notifications enabled"
                                     "https://at-chat.app/at-logo-no-background.png"
+                                    HomePageRoute
                                     pushSubscription
                                     model2
                                 ]
@@ -3124,7 +3126,8 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     usersMentioned
                     time
                     userId
-                    guildOrDmId
+                    guildId
+                    channelId
                     threadRouteNoReply
                     text
                     (guild.owner :: SeqDict.keys guild.members)

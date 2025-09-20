@@ -34,6 +34,7 @@ import NonemptyDict
 import OneToOne
 import PersonName
 import RichText exposing (RichText)
+import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Types exposing (BackendModel, BackendMsg(..), LocalMsg(..), ServerChange(..), ToFrontend)
@@ -389,7 +390,7 @@ addDiscordUsers time newUsers model =
 
                         user : BackendUser
                         user =
-                            LocalState.createNewUser
+                            User.init
                                 time
                                 (PersonName.fromStringLossy discordUser.user.username)
                                 RegisteredFromDiscord
@@ -803,6 +804,7 @@ handleDiscordCreateMessage message model =
                                     Broadcast.adminUserId
                                     user
                                     (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
+                                    (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
                                     model
 
                             Nothing ->
@@ -955,7 +957,8 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
                     usersMentioned
                     message.timestamp
                     userId
-                    guildOrDmId
+                    guildId
+                    channelId
                     threadRouteNoReply
                     richText
                     (guild.owner :: SeqDict.keys guild.members)

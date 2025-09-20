@@ -26,13 +26,14 @@ import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileId)
-import Id exposing (GuildId, GuildOrDmIdNoThread(..), Id, ThreadRoute, ThreadRouteWithMaybeMessage, UserId)
+import Id exposing (ChannelId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import NonemptyDict
 import PersonName
 import RichText exposing (RichText)
+import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
@@ -192,13 +193,14 @@ messageNotification :
     SeqSet (Id UserId)
     -> Time.Posix
     -> Id UserId
-    -> GuildOrDmIdNoThread
+    -> Id GuildId
+    -> Id ChannelId
     -> ThreadRoute
     -> Nonempty RichText
     -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
-messageNotification usersMentioned time sender guildOrDmId threadRoute content members model =
+messageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
         plainText : String
         plainText =
@@ -206,22 +208,26 @@ messageNotification usersMentioned time sender guildOrDmId threadRoute content m
 
         alwaysNotify : SeqSet (Id UserId)
         alwaysNotify =
-            case guildOrDmId of
-                GuildOrDmId_Guild guildId _ ->
-                    List.filter
-                        (\userId ->
-                            case NonemptyDict.get userId model.users of
-                                Just user ->
-                                    SeqSet.member guildId user.notifyOnAllMessages
+            List.filter
+                (\userId ->
+                    case NonemptyDict.get userId model.users of
+                        Just user ->
+                            SeqSet.member guildId user.notifyOnAllMessages
 
-                                Nothing ->
-                                    False
-                        )
-                        members
-                        |> SeqSet.fromList
+                        Nothing ->
+                            False
+                )
+                members
+                |> SeqSet.fromList
 
-                GuildOrDmId_Dm _ ->
-                    SeqSet.empty
+        threadRouteWithFriends : ThreadRouteWithFriends
+        threadRouteWithFriends =
+            case threadRoute of
+                NoThread ->
+                    NoThreadWithFriends Nothing HideMembersTab
+
+                ViewThread threadId ->
+                    ViewThreadWithFriends threadId Nothing HideMembersTab
     in
     SeqSet.union alwaysNotify usersMentioned
         |> SeqSet.remove sender
@@ -231,7 +237,12 @@ messageNotification usersMentioned time sender guildOrDmId threadRoute content m
                     isViewing =
                         List.any
                             (\( _, userSession ) ->
-                                userSession.currentlyViewing == Just ( guildOrDmId, threadRoute )
+                                case userSession.currentlyViewing of
+                                    Just ( GuildOrDmId_Guild viewingGuildId viewingChannelId, viewingThreadRoute ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
+
+                                    _ ->
+                                        False
                             )
                             (userGetAllSessions userId2 model)
                 in
@@ -241,7 +252,14 @@ messageNotification usersMentioned time sender guildOrDmId threadRoute content m
                 else
                     case NonemptyDict.get userId2 model.users of
                         Just user2 ->
-                            notification time userId2 user2 plainText model :: cmds
+                            notification
+                                time
+                                userId2
+                                user2
+                                plainText
+                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends))
+                                model
+                                :: cmds
 
                         Nothing ->
                             cmds
@@ -256,8 +274,15 @@ userGetAllSessions userId model =
         |> List.filter (\( _, session ) -> session.userId == userId)
 
 
-notification : Time.Posix -> Id UserId -> BackendUser -> String -> BackendModel -> Command restriction toMsg BackendMsg
-notification time userToNotify sender text model =
+notification :
+    Time.Posix
+    -> Id UserId
+    -> BackendUser
+    -> String
+    -> Route
+    -> BackendModel
+    -> Command restriction toMsg BackendMsg
+notification time userToNotify sender text navigateTo model =
     SeqDict.foldl
         (\sessionId session cmds ->
             if session.userId == userToNotify then
@@ -276,6 +301,7 @@ notification time userToNotify sender text model =
                                 Nothing ->
                                     Env.domain ++ "/at-logo-no-background.png"
                             )
+                            navigateTo
                             pushSubscription
                             model
                             :: cmds
@@ -317,6 +343,7 @@ type alias PushNotification =
     , title : String
     , body : String
     , icon : String
+    , navigate : String
     }
 
 
@@ -330,6 +357,7 @@ pushNotificationCodec =
         |> Codec.field "title" .title Codec.string
         |> Codec.field "body" .body Codec.string
         |> Codec.field "icon" .icon Codec.string
+        |> Codec.field "navigate" .navigate Codec.string
         |> Codec.buildObject
 
 
@@ -338,8 +366,8 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
-pushNotification sessionId userId time title body icon pushSubscription model =
+pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> Route -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
     Http.request
         { method = "POST"
         , headers = []
@@ -354,6 +382,7 @@ pushNotification sessionId userId time title body icon pushSubscription model =
                 , title = title
                 , body = body
                 , icon = icon
+                , navigate = Env.domain ++ Route.encode navigateTo
                 }
                 |> Http.jsonBody
         , expect =
@@ -444,6 +473,16 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                         otherUserId
                         otherUser
                         (RichText.toString (NonemptyDict.toSeqDict model.users) text)
+                        (DmRoute
+                            otherUserId
+                            (case threadRouteWithReplyTo of
+                                NoThreadWithMaybeMessage _ ->
+                                    NoThreadWithFriends Nothing HideMembersTab
+
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    ViewThreadWithFriends threadId Nothing HideMembersTab
+                            )
+                        )
                         model
 
                 Nothing ->

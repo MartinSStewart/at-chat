@@ -71,12 +71,8 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
     let subscription_info: SubscriptionInfo =
         SubscriptionInfo::new(body.endpoint, body.p256dh, body.auth);
 
-    let content: Notification<u8> = Notification::new(
-        body.title,
-        "https://at-chat.app".to_string(),
-        Some(body.body),
-        Some(body.icon),
-    );
+    let content: Notification<u8> =
+        Notification::new(body.title, body.navigate, Some(body.body), Some(body.icon));
 
     match (
         web_push::VapidSignatureBuilder::from_base64(&body.private_key, &subscription_info),
@@ -370,19 +366,6 @@ fn image_metadata(
         image::ImageFormat::Avif => default_image_metadata(width, height),
         image::ImageFormat::Qoi => default_image_metadata(width, height),
         _ => default_image_metadata(width, height),
-    }
-}
-
-fn inverse_orientation(orientation: Orientation) -> Orientation {
-    match orientation {
-        Orientation::NoTransforms => Orientation::NoTransforms,
-        Orientation::Rotate90 => Orientation::Rotate270,
-        Orientation::Rotate180 => Orientation::Rotate180,
-        Orientation::Rotate270 => Orientation::Rotate90,
-        Orientation::FlipHorizontal => Orientation::FlipHorizontal,
-        Orientation::FlipVertical => Orientation::FlipVertical,
-        Orientation::Rotate90FlipH => Orientation::Rotate90FlipH,
-        Orientation::Rotate270FlipH => Orientation::Rotate270FlipH,
     }
 }
 
@@ -746,4 +729,5 @@ pub struct PushNotification {
     pub title: String,
     pub body: String,
     pub icon: String,
+    pub navigate: String,
 }

@@ -26,7 +26,6 @@ module LocalState exposing
     , createChannelMessageBackend
     , createChannelMessageFrontend
     , createGuild
-    , createNewUser
     , createThreadMessageBackend
     , createThreadMessageFrontend
     , deleteChannel
@@ -289,27 +288,6 @@ type PrivateVapidKey
 
 type DiscordBotToken
     = DiscordBotToken String
-
-
-createNewUser : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
-createNewUser createdAt name email userIsAdmin =
-    { name = name
-    , isAdmin = userIsAdmin
-    , email = email
-    , recentLoginEmails = []
-    , lastLogPageViewed = 0
-    , expandedSections = SeqSet.empty
-    , createdAt = createdAt
-    , emailNotifications = CheckEvery5Minutes
-    , lastEmailNotification = createdAt
-    , lastViewed = SeqDict.empty
-    , lastViewedThreads = SeqDict.empty
-    , lastDmViewed = Nothing
-    , lastChannelViewed = SeqDict.empty
-    , icon = Nothing
-    , notifyOnAllMessages = SeqSet.empty
-    , directMentions = SeqDict.empty
-    }
 
 
 

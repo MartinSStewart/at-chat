@@ -1442,7 +1442,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))
-                                (LocalState.createNewUser time name (RegisteredDirectly email) a.isAdmin)
+                                (User.init time name (RegisteredDirectly email) a.isAdmin)
                                 dict
                                 |> Ok
 

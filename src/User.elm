@@ -8,6 +8,7 @@ module User exposing
     , addDirectMention
     , backendToFrontend
     , backendToFrontendForUser
+    , init
     , profileImage
     , profileImageSize
     , sectionToString
@@ -49,12 +50,35 @@ type alias BackendUser =
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    , lastPushNotification : Maybe Time.Posix
     }
 
 
 type NotificationLevel
     = NotifyOnEveryMessage
     | NotifyOnMention
+
+
+init : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
+init createdAt name email userIsAdmin =
+    { name = name
+    , isAdmin = userIsAdmin
+    , email = email
+    , recentLoginEmails = []
+    , lastLogPageViewed = 0
+    , expandedSections = SeqSet.empty
+    , createdAt = createdAt
+    , emailNotifications = CheckEvery5Minutes
+    , lastEmailNotification = createdAt
+    , lastViewed = SeqDict.empty
+    , lastViewedThreads = SeqDict.empty
+    , lastDmViewed = Nothing
+    , lastChannelViewed = SeqDict.empty
+    , icon = Nothing
+    , notifyOnAllMessages = SeqSet.empty
+    , directMentions = SeqDict.empty
+    , lastPushNotification = Nothing
+    }
 
 
 addDirectMention : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
