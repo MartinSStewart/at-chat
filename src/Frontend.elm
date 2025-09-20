@@ -61,6 +61,7 @@ import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
+import Ui.Events
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
@@ -115,6 +116,7 @@ subscriptions model =
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.scrollbarWidthSub GotScrollbarWidth
+        , Ports.windowHasFocus WindowHasFocusChanged
         , Ports.userAgentSub GotUserAgent
         , case model of
             Loading _ ->
@@ -376,7 +378,6 @@ loadedInitHelper time timezone userAgent loginData loading =
                         TwoFactorNotStarted
             , filesToUpload = SeqDict.empty
             , showFileToUploadInfo = Nothing
-            , sessionId = loginData.sessionId
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
             }
@@ -512,49 +513,9 @@ update msg model =
 routeViewingLocalChange : LocalState -> Route -> Maybe LocalChange
 routeViewingLocalChange local route =
     let
+        localChange : SetViewing
         localChange =
-            case route of
-                HomePageRoute ->
-                    StopViewingChannel
-
-                AdminRoute _ ->
-                    StopViewingChannel
-
-                GuildRoute guildId channelRoute ->
-                    case channelRoute of
-                        ChannelRoute channelId threadRoute ->
-                            case threadRoute of
-                                NoThreadWithFriends _ _ ->
-                                    ViewChannel guildId channelId EmptyPlaceholder
-
-                                ViewThreadWithFriends threadId _ _ ->
-                                    ViewChannelThread guildId channelId threadId EmptyPlaceholder
-
-                        NewChannelRoute ->
-                            StopViewingChannel
-
-                        EditChannelRoute _ ->
-                            StopViewingChannel
-
-                        InviteLinkCreatorRoute ->
-                            StopViewingChannel
-
-                        JoinRoute _ ->
-                            StopViewingChannel
-
-                DmRoute otherUserId threadRoute ->
-                    case threadRoute of
-                        NoThreadWithFriends _ _ ->
-                            ViewDm otherUserId EmptyPlaceholder
-
-                        ViewThreadWithFriends threadId _ _ ->
-                            ViewDmThread otherUserId threadId EmptyPlaceholder
-
-                AiChatRoute ->
-                    StopViewingChannel
-
-                SlackOAuthRedirect _ ->
-                    StopViewingChannel
+            UserSession.routeToViewing route
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -1154,6 +1115,9 @@ isPressMsg msg =
             True
 
         GotUserAgent _ ->
+            False
+
+        WindowHasFocusChanged _ ->
             False
 
 
@@ -2218,7 +2182,7 @@ updateLoaded msg model =
                     )
 
                 Effect.Browser.Events.Hidden ->
-                    updateLoggedIn (setLastViewedToLatestMessage model) model
+                    ( model, Command.none )
 
         CheckedNotificationPermission notificationPermission ->
             ( { model | notificationPermission = notificationPermission }, Command.none )
@@ -3302,6 +3266,22 @@ updateLoaded msg model =
         PressedMemberListBack ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
+        WindowHasFocusChanged hasFocus ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (if hasFocus then
+                            Local_CurrentlyViewing (UserSession.routeToViewing model.route) |> Just
+
+                         else
+                            Local_CurrentlyViewing StopViewingChannel |> Just
+                        )
+                        loggedIn
+                        Command.none
+                )
+                model
+
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =
@@ -3575,6 +3555,10 @@ gotFiles guildOrDmId files model =
     updateLoggedIn
         (\loggedIn ->
             let
+                local : LocalState
+                local =
+                    Local.model loggedIn.localState
+
                 ( fileText, cmds, dict ) =
                     case SeqDict.get guildOrDmId loggedIn.filesToUpload of
                         Just dict2 ->
@@ -3591,7 +3575,7 @@ gotFiles guildOrDmId files model =
                                            ]
                                     , FileStatus.upload
                                         (GotFileHashName guildOrDmId id)
-                                        loggedIn.sessionId
+                                        local.localUser.session.sessionIdHash
                                         guildOrDmId
                                         id
                                         file2
@@ -3626,7 +3610,7 @@ gotFiles guildOrDmId files model =
                                     in
                                     FileStatus.upload
                                         (GotFileHashName guildOrDmId id)
-                                        loggedIn.sessionId
+                                        local.localUser.session.sessionIdHash
                                         guildOrDmId
                                         id
                                         file2
@@ -3700,7 +3684,7 @@ editMessage_gotFiles guildOrDmId files model =
                                            ]
                                     , FileStatus.upload
                                         (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
-                                        loggedIn.sessionId
+                                        (Local.model loggedIn.localState).localUser.session.sessionIdHash
                                         guildOrDmId
                                         fileId
                                         file2

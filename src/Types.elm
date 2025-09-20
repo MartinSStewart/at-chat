@@ -80,6 +80,7 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
 import Touch exposing (Touch)
@@ -168,7 +169,6 @@ type alias LoggedIn2 =
     , twoFactor : TwoFactorState
     , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
     , showFileToUploadInfo : Maybe FileDataWithImage
-    , sessionId : SessionId
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
     }
@@ -425,6 +425,7 @@ type FrontendMsg
     | PressedCloseImageInfo
     | PressedMemberListBack
     | GotUserAgent UserAgent
+    | WindowHasFocusChanged Bool
 
 
 type ScrollPosition
@@ -462,7 +463,7 @@ type ToBackend
     | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
-    | LinkSlackOAuthCode Slack.OAuthCode SessionId
+    | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
 
 
 type BackendMsg
@@ -543,8 +544,7 @@ type alias LoginData =
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , user : BackendUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
-    , sessionId : SessionId
-    , otherSessions : SeqDict SessionId FrontendUserSession
+    , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     }
 
@@ -587,8 +587,8 @@ type ServerChange
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
-    | Server_NewSession SessionId FrontendUserSession
-    | Server_LoggedOut SessionId
+    | Server_NewSession SessionIdHash FrontendUserSession
+    | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
 
 

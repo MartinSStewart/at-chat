@@ -154,9 +154,9 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
                                         web_push::WebPushError::ResponseTooLarge => {
                                             String::from("Error 22")
                                         }
-                                        web_push::WebPushError::Other(_) => {
-                                            String::from("Error 23")
-                                        }
+                                        web_push::WebPushError::Other(other) => String::from(
+                                            String::from("Error 23: ") + &other.message,
+                                        ),
                                     },
                                 ),
                             }

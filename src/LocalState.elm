@@ -79,6 +79,7 @@ import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Unsafe
 import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
@@ -93,7 +94,7 @@ type alias LocalState =
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
-    , otherSessions : SeqDict SessionId FrontendUserSession
+    , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     }
 

@@ -176,6 +176,9 @@ exports.init = async function init(app)
         }
     });
 
+    window.addEventListener('focus', () => { app.ports.window_has_focus_from_js.send(true); });
+    window.addEventListener('blur', () => { app.ports.window_has_focus_from_js.send(false); });
+
     function copyTextToClipboard(text) {
         if (!navigator.clipboard) {
             fallbackCopyTextToClipboard(text);

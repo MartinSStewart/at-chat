@@ -24,6 +24,7 @@ port module Ports exposing
     , showNotification
     , textInputSelectAll
     , userAgentSub
+    , windowHasFocus
     )
 
 import Codec exposing (Codec)
@@ -145,6 +146,21 @@ port register_push_subscription_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
 port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
+
+
+port window_has_focus_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+windowHasFocus : (Bool -> msg) -> Subscription FrontendOnly msg
+windowHasFocus msg =
+    Subscription.fromJs
+        "window_has_focus_from_js"
+        window_has_focus_from_js
+        (\json ->
+            Json.Decode.decodeValue Json.Decode.bool json
+                |> Result.withDefault True
+                |> msg
+        )
 
 
 registerPushSubscriptionToJs : String -> Command FrontendOnly toMsg msg

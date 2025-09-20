@@ -12,6 +12,7 @@ import Log
 import MyUi
 import PersonName
 import SeqDict
+import SessionIdHash
 import Slack
 import Time
 import TwoFactorAuthentication
@@ -325,7 +326,7 @@ view isMobile time local loggedIn model =
                                     , "im:history"
                                     , "im:write"
                                     ]
-                            , state = Lamdera.sessionIdToString loggedIn.sessionId
+                            , state = SessionIdHash.toString local.localUser.session.sessionIdHash
                             }
                         )
                     ]

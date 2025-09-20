@@ -980,11 +980,19 @@ getLoginData sessionId session user requestMessagesFor model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
-    , sessionId = sessionId
     , otherSessions =
-        SeqDict.filterMap
-            (\_ otherSession -> UserSession.toFrontend session.userId otherSession)
-            (SeqDict.remove sessionId model.sessions)
+        SeqDict.remove sessionId model.sessions
+            |> SeqDict.toList
+            |> List.filterMap
+                (\( _, otherSession ) ->
+                    case UserSession.toFrontend session.userId otherSession of
+                        Just frontendSession ->
+                            Just ( otherSession.sessionIdHash, frontendSession )
+
+                        Nothing ->
+                            Nothing
+                )
+            |> SeqDict.fromList
     , publicVapidKey = model.publicVapidKey
     }
 
@@ -1059,7 +1067,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             session : UserSession
                             session =
-                                UserSession.init userId requestMessagesFor userAgent
+                                UserSession.init sessionId userId requestMessagesFor userAgent
 
                             newUser : BackendUser
                             newUser =
@@ -1104,7 +1112,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         session : UserSession
                                         session =
-                                            UserSession.init pendingLogin.userId requestMessagesFor userAgent
+                                            UserSession.init sessionId pendingLogin.userId requestMessagesFor userAgent
                                     in
                                     ( { model2
                                         | sessions = SeqDict.insert sessionId session model2.sessions
@@ -1120,7 +1128,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             Nothing
                                             pendingLogin.userId
                                             (Server_NewSession
-                                                sessionId
+                                                session.sessionIdHash
                                                 { notificationMode = session.notificationMode
                                                 , currentlyViewing = session.currentlyViewing
                                                 , userAgent = session.userAgent
@@ -1246,7 +1254,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             Nothing
                             (Just sessionId)
                             session.userId
-                            (Server_LoggedOut sessionId |> ServerChange)
+                            (Server_LoggedOut session.sessionIdHash |> ServerChange)
                             model2
                         ]
                     )
@@ -2340,20 +2348,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             )
 
         LinkSlackOAuthCode oAuthCode sessionId2 ->
-            asUser
-                model2
-                sessionId2
-                (\{ userId } _ ->
+            case Broadcast.getSessionFromSessionIdHash sessionId2 model2 of
+                Just ( _, session ) ->
                     ( model2
                     , case model2.slackClientSecret of
                         Just clientSecret ->
                             Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
-                                |> Task.attempt (GotSlackOAuth time userId)
+                                |> Task.attempt (GotSlackOAuth time session.userId)
 
                         Nothing ->
                             Command.none
                     )
-                )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 loadMessagesHelper :
@@ -3049,11 +3057,11 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         (\userId2 users ->
                             let
                                 isViewing =
-                                    Broadcast.userGetAllSessions userId2 model
-                                        |> List.any
-                                            (\( _, userSession ) ->
-                                                userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
-                                            )
+                                    List.any
+                                        (\( _, userSession ) ->
+                                            userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                        )
+                                        (Broadcast.userGetAllSessions userId2 model)
                             in
                             if isViewing then
                                 users
@@ -3478,7 +3486,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                             let
                                 session : UserSession
                                 session =
-                                    UserSession.init pendingLogin.userId requestMessagesFor userAgent
+                                    UserSession.init sessionId pendingLogin.userId requestMessagesFor userAgent
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions
@@ -3494,7 +3502,7 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                                     Nothing
                                     pendingLogin.userId
                                     (Server_NewSession
-                                        sessionId
+                                        session.sessionIdHash
                                         { notificationMode = session.notificationMode
                                         , currentlyViewing = session.currentlyViewing
                                         , userAgent = session.userAgent

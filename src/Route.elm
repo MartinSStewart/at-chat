@@ -12,6 +12,7 @@ import Dict
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
+import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Url exposing (Url)
 import Url.Builder
@@ -23,7 +24,7 @@ type Route
     | GuildRoute (Id GuildId) ChannelRoute
     | DmRoute (Id UserId) ThreadRouteWithFriends
     | AiChatRoute
-    | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionId ))
+    | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
 
 
 type ChannelRoute
@@ -160,7 +161,7 @@ decode url =
         [ "slack-oauth" ] ->
             case ( Dict.get "code" url2.queryParameters, Dict.get "state" url2.queryParameters ) of
                 ( Just [ code ], Just [ state ] ) ->
-                    SlackOAuthRedirect (Ok ( Slack.OAuthCode code, Lamdera.sessionIdFromString state ))
+                    SlackOAuthRedirect (Ok ( Slack.OAuthCode code, SessionIdHash.fromString state ))
 
                 _ ->
                     SlackOAuthRedirect (Err ())
