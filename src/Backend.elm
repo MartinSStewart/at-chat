@@ -30,7 +30,7 @@ import Effect.Websocket as Websocket
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
-import Emoji exposing (Emoji(..))
+import Emoji exposing (Emoji)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
@@ -413,28 +413,28 @@ update msg model =
                                 Discord.UserAddedReaction reaction ->
                                     let
                                         ( model3, cmd2 ) =
-                                            addOrRemoveDiscordReaction True reaction model
+                                            addOrRemoveDiscordReaction True reaction model2
                                     in
                                     ( model3, cmd2 :: cmds )
 
                                 Discord.UserRemovedReaction reaction ->
                                     let
                                         ( model3, cmd2 ) =
-                                            addOrRemoveDiscordReaction False reaction model
+                                            addOrRemoveDiscordReaction False reaction model2
                                     in
                                     ( model3, cmd2 :: cmds )
 
                                 Discord.AllReactionsRemoved reactionRemoveAll ->
                                     let
                                         ( model3, cmd2 ) =
-                                            handleDiscordRemoveAllReactions reactionRemoveAll model
+                                            handleDiscordRemoveAllReactions reactionRemoveAll model2
                                     in
                                     ( model3, cmd2 :: cmds )
 
                                 Discord.ReactionsRemoveForEmoji reactionRemoveEmoji ->
                                     let
                                         ( model3, cmd2 ) =
-                                            handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model
+                                            handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model2
                                     in
                                     ( model3, cmd2 :: cmds )
                         )
@@ -1034,16 +1034,6 @@ getGuildFromDiscordId discordGuildId model =
             Nothing
 
 
-discordEmojiToEmoji : Discord.EmojiData -> Emoji
-discordEmojiToEmoji emoji =
-    case emoji.type_ of
-        Discord.UnicodeEmojiType string ->
-            UnicodeEmoji string
-
-        Discord.CustomEmojiType record ->
-            UnicodeEmoji "❓"
-
-
 discordGuildIdToGuild : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
 discordGuildIdToGuild discordGuildId model =
     case OneToOne.second discordGuildId model.discordGuilds of
@@ -1129,10 +1119,6 @@ addOrRemoveDiscordReaction isAdding reaction model =
     else
         case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
             ( Included discordGuildId, Just userId ) ->
-                let
-                    emoji =
-                        discordEmojiToEmoji reaction.emoji
-                in
                 case discordGuildIdToGuild discordGuildId model of
                     Just ( guildId, guild ) ->
                         case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
@@ -1152,7 +1138,7 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                                     channelId
                                                     (NoThreadWithMessage messageId)
                                                     userId
-                                                    emoji
+                                                    (Emoji.fromDiscord reaction.emoji)
                                                     model
                                                     Command.none
 
@@ -1199,7 +1185,7 @@ addOrRemoveDiscordReaction isAdding reaction model =
                                                             channelId
                                                             (ViewThreadWithMessage threadId messageId)
                                                             userId
-                                                            emoji
+                                                            (Emoji.fromDiscord reaction.emoji)
                                                             model
                                                             Command.none
 
@@ -1220,12 +1206,12 @@ addOrRemoveDiscordReaction isAdding reaction model =
 
 
 handleDiscordRemoveAllReactions : Discord.ReactionRemoveAll -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordRemoveAllReactions reactionRemoveAll model =
+handleDiscordRemoveAllReactions _ model =
     ( model, Command.none )
 
 
 handleDiscordRemoveReactionForEmoji : Discord.ReactionRemoveEmoji -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model =
+handleDiscordRemoveReactionForEmoji _ model =
     ( model, Command.none )
 
 
@@ -2762,7 +2748,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         threadRoute
                                         userId
                                         emoji
-                                        model
+                                        model2
                                         (Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg))
                                 )
 

@@ -1,5 +1,6 @@
-module Emoji exposing (Emoji(..), emojis, toString, view)
+module Emoji exposing (Emoji(..), emojis, fromDiscord, toString, view)
 
+import Discord
 import Ui
 import Ui.Font
 
@@ -29,3 +30,13 @@ view emoji =
     case emoji of
         UnicodeEmoji text ->
             Ui.el [ Ui.Font.size 20 ] (Ui.text text)
+
+
+fromDiscord : Discord.EmojiData -> Emoji
+fromDiscord emoji =
+    case emoji.type_ of
+        Discord.UnicodeEmojiType string ->
+            UnicodeEmoji string
+
+        Discord.CustomEmojiType _ ->
+            UnicodeEmoji "❓"
