@@ -2338,6 +2338,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        LinkDiscordOAuthCode oAuthCode sessionId2 ->
+            asUser
+                model2
+                sessionId2
+                (\{ userId } _ ->
+                    ( model2
+                    , Command.none
+                      --, case model2.discordClientSecret of
+                      --    Just clientSecret ->
+                      --        Slack.exchangeCodeForToken clientSecret Env.slackClientId oAuthCode
+                      --            |> Task.attempt (GotSlackOAuth time userId)
+                      --
+                      --    Nothing ->
+                      --        Command.none
+                    )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId) }

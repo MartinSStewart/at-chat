@@ -555,6 +555,9 @@ routeViewingLocalChange local route =
 
                 SlackOAuthRedirect _ ->
                     StopViewingChannel
+
+                DiscordOAuthRedirect result ->
+                    StopViewingChannel
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -780,6 +783,16 @@ routeRequest previousRoute newRoute model =
                     viewCmd
             )
 
+        DiscordOAuthRedirect result ->
+            ( model2
+            , case result of
+                Ok ( code, sessionId ) ->
+                    Lamdera.sendToBackend (LinkDiscordOAuthCode code sessionId)
+
+                Err () ->
+                    viewCmd
+            )
+
 
 openChannelCmds :
     ThreadRouteWithFriends
@@ -835,6 +848,9 @@ routeRequiresLogin route =
             True
 
         SlackOAuthRedirect _ ->
+            False
+
+        DiscordOAuthRedirect result ->
             False
 
 
@@ -5975,6 +5991,18 @@ view model =
 
                                 Err () ->
                                     Ui.text "Something went wrong when linking Slack to at-chat..."
+                            )
+
+                    DiscordOAuthRedirect result ->
+                        layout
+                            loaded
+                            [ Ui.contentCenterX, Ui.contentCenterY ]
+                            (case result of
+                                Ok _ ->
+                                    Ui.text "Discord is now linked with your account. You can return to the original page."
+
+                                Err () ->
+                                    Ui.text "Something went wrong when linking Discord to at-chat..."
                             )
         ]
     }

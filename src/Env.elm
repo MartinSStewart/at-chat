@@ -1,7 +1,9 @@
 module Env exposing (..)
 
+import Discord
 import EmailAddress exposing (EmailAddress)
 import Postmark
+import UInt64
 import Unsafe
 
 
@@ -53,3 +55,13 @@ openRouterKey =
 slackClientId : String
 slackClientId =
     "9460466681300.9470334175105"
+
+
+discordClientId_ : String
+discordClientId_ =
+    "1401255355928936478"
+
+
+discordClientId : Discord.ClientId
+discordClientId =
+    UInt64.fromString discordClientId_ |> Maybe.withDefault UInt64.zero |> Discord.clientId

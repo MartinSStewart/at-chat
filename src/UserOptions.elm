@@ -1,5 +1,6 @@
 module UserOptions exposing (init, view)
 
+import Discord
 import Editable
 import Effect.Browser.Dom as Dom
 import Effect.Lamdera as Lamdera
@@ -300,7 +301,29 @@ view isMobile time local loggedIn model =
                     ]
                 , Ui.el
                     [ Ui.linkNewTab
-                        (Slack.buildOAuthUrl
+                        (Discord.oAuthUrl
+                            { clientId = Env.discordClientId
+                            , redirectUri = Slack.redirectUri ++ "/discord-oauth"
+                            , scopes =
+                                [ "identify"
+
+                                --, "guilds.join"
+                                --, "guilds.channels.read"
+                                --, "dm_channels.messages.read"
+                                --, "dm_channels.messages.write"
+                                --, "dm_channels.read"
+                                , "messages.read"
+                                , "guilds"
+                                , "guilds.members.read"
+                                ]
+                            , state = Lamdera.sessionIdToString loggedIn.sessionId
+                            }
+                        )
+                    ]
+                    (Ui.text "Link Discord account")
+                , Ui.el
+                    [ Ui.linkNewTab
+                        (Slack.oAuthUrl
                             { clientId = Env.slackClientId
                             , redirectUri = Slack.redirectUri
                             , botScopes =

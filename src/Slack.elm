@@ -21,13 +21,13 @@ module Slack exposing
     , TokenResponse
     , User
     , UserId
-    , buildOAuthUrl
     , channelId
     , exchangeCodeForToken
     , getCurrentUser
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
+    , oAuthUrl
     , redirectUri
     , teamInfo
     )
@@ -91,7 +91,7 @@ type alias TokenResponse =
     }
 
 
-buildOAuthUrl :
+oAuthUrl :
     { clientId : String
     , redirectUri : String
     , botScopes : Nonempty String
@@ -99,7 +99,7 @@ buildOAuthUrl :
     , state : String
     }
     -> String
-buildOAuthUrl config =
+oAuthUrl config =
     Url.Builder.crossOrigin "https://slack.com"
         [ "oauth", "v2", "authorize" ]
         [ Url.Builder.string "client_id" config.clientId
@@ -112,18 +112,16 @@ buildOAuthUrl config =
 
 redirectUri : String
 redirectUri =
-    (if Env.isProduction then
+    if Env.isProduction then
         Env.domain
 
-     else
+    else
         ngrokPath
-    )
-        ++ "/slack-oauth"
 
 
 ngrokPath : String
 ngrokPath =
-    "https://181c7d3c0e1f.ngrok-free.app"
+    "https://44ffb7743ace.ngrok-free.app"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse
@@ -136,7 +134,7 @@ exchangeCodeForToken (ClientSecret clientSecret) clientId (OAuthCode code) =
             [ ( "client_id", clientId )
             , ( "client_secret", clientSecret )
             , ( "code", code )
-            , ( "redirect_uri", redirectUri )
+            , ( "redirect_uri", redirectUri ++ "/slack-oauth" )
             ]
                 |> List.map (\( key, value ) -> key ++ "=" ++ value)
                 |> String.join "&"

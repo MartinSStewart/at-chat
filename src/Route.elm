@@ -9,6 +9,7 @@ module Route exposing
 
 import AppUrl
 import Dict
+import Discord
 import Effect.Lamdera as Lamdera exposing (SessionId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
@@ -24,6 +25,7 @@ type Route
     | DmRoute (Id UserId) ThreadRouteWithFriends
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionId ))
+    | DiscordOAuthRedirect (Result () ( Discord.OAuthCode, SessionId ))
 
 
 type ChannelRoute
@@ -165,6 +167,14 @@ decode url =
                 _ ->
                     SlackOAuthRedirect (Err ())
 
+        [ "discord-oauth" ] ->
+            case ( Dict.get "code" url2.queryParameters, Dict.get "state" url2.queryParameters ) of
+                ( Just [ code ], Just [ state ] ) ->
+                    DiscordOAuthRedirect (Ok ( Discord.oAuthCode code, Lamdera.sessionIdFromString state ))
+
+                _ ->
+                    DiscordOAuthRedirect (Err ())
+
         _ ->
             HomePageRoute
 
@@ -249,6 +259,11 @@ encode route =
 
                 SlackOAuthRedirect _ ->
                     ( [ "slack-oauth" ]
+                    , []
+                    )
+
+                DiscordOAuthRedirect _ ->
+                    ( [ "discord-oauth" ]
                     , []
                     )
     in

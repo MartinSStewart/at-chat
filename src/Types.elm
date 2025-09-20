@@ -463,6 +463,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionId
+    | LinkDiscordOAuthCode Discord.OAuthCode SessionId
 
 
 type BackendMsg
