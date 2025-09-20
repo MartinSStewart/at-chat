@@ -263,7 +263,7 @@ view isMobile time local loggedIn model =
                     (PersonName.toString local.localUser.user.name)
                     model.name
                 , Ui.column
-                    []
+                    [ Ui.spacing 8 ]
                     [ MyUi.radioColumn
                         (Dom.id "userOptions_notificationMode")
                         SelectedNotificationMode

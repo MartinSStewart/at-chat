@@ -129,9 +129,12 @@ errorBox htmlId onPress error =
             htmlId
             (onPress error)
             [ Ui.width Ui.shrink
-            , Ui.paddingWith { left = 0, right = 4, top = 2, bottom = 2 }
+            , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+            , Ui.Font.bold
+            , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+            , Ui.spacing 4
             ]
-            [ Icons.copy, Ui.text "Copy" ]
+            [ Ui.html Icons.copy, Ui.text "Copy" ]
         ]
 
 
@@ -142,7 +145,7 @@ label htmlId attributes element =
 
 errorBackground : Ui.Attribute msg
 errorBackground =
-    Ui.background (Ui.rgb 255 240 240)
+    Ui.background (Ui.rgb 61 16 36)
 
 
 timeElapsedView : Time.Posix -> Time.Posix -> Element msg

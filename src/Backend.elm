@@ -166,8 +166,18 @@ init =
       , slackDms = OneToOne.empty
       , slackToken = Nothing
       , files = SeqDict.empty
-      , publicVapidKey = ""
-      , privateVapidKey = PrivateVapidKey ""
+      , publicVapidKey =
+            if Env.isProduction then
+                ""
+
+            else
+                "BJQi8slSWU9MNhpLBnkj40QgKnPA6ayBlI0ktidyrLtZz4YiwCJwfivC5RAXWp3MEzJ68B9E8FeUKmn3PKXJLa0"
+      , privateVapidKey =
+            if Env.isProduction then
+                PrivateVapidKey ""
+
+            else
+                PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
       }
     , Command.none
@@ -481,10 +491,17 @@ update msg model =
                                     (\session -> { session | pushSubscription = SubscriptionError error })
                                     model.sessions
                         }
-                        (Broadcast.toSession
-                            sessionId
-                            (Server_PushNotificationFailed error)
-                            model
+                        (if Env.isProduction && userId /= Broadcast.adminUserId then
+                            Broadcast.toSession
+                                sessionId
+                                (Server_PushNotificationFailed (Http.BadBody "Something went wrong when sending notifications"))
+                                model
+
+                         else
+                            Broadcast.toSession
+                                sessionId
+                                (Server_PushNotificationFailed error)
+                                model
                         )
 
         GotVapidKeys result ->
