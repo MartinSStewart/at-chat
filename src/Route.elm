@@ -9,7 +9,6 @@ module Route exposing
 
 import AppUrl
 import Dict
-import Effect.Lamdera as Lamdera exposing (SessionId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)

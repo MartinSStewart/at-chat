@@ -60,7 +60,6 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
-import Effect.Lamdera exposing (SessionId)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -72,7 +71,6 @@ import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
-import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
@@ -81,7 +79,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Unsafe
-import User exposing (BackendUser, EmailNotifications(..), EmailStatus, FrontendUser)
+import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)

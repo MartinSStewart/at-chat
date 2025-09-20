@@ -1,4 +1,4 @@
-module SessionIdHash exposing (..)
+module SessionIdHash exposing (SessionIdHash(..), fromSessionId, fromString, toString)
 
 import Effect.Lamdera
 import Sha256

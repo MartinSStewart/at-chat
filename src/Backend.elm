@@ -2363,7 +2363,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
 
                 Nothing ->
-                    ( model, Command.none )
+                    ( model2, Command.none )
 
 
 loadMessagesHelper :

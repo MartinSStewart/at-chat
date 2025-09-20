@@ -2,7 +2,6 @@ module UserOptions exposing (init, view)
 
 import Editable
 import Effect.Browser.Dom as Dom
-import Effect.Lamdera as Lamdera
 import Env
 import Icons
 import Id exposing (GuildOrDmIdNoThread, ThreadRoute)

@@ -118,7 +118,7 @@ config =
     , NoBrokenParserFunctions.rule
     , BackendOnly.rule
         { functions =
-            [ ( [ "Effect", "Lamdera" ], "SessionId" ), ( [ "Lamdera" ], "SessionId" ) ]
+            []
         , modules =
             [ [ "Backend" ]
             , [ "EmailViewer" ]

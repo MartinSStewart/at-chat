@@ -20,7 +20,6 @@ import Message exposing (Message)
 import Route exposing (ChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
-import Sha256
 import Url exposing (Url)
 import UserAgent exposing (UserAgent)
 

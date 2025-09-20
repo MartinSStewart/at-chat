@@ -14,7 +14,6 @@ import NonemptyDict exposing (NonemptyDict)
 import Touch exposing (Touch)
 import Ui exposing (Element)
 import Ui.Events
-import Ui.Input
 
 
 type MessageViewMsg

@@ -2,7 +2,6 @@ module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import Broadcast
 import Coord
-import Effect.Lamdera as Lamdera
 import Env
 import FileStatus
 import Http

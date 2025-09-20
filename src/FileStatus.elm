@@ -37,7 +37,6 @@ import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
 import Effect.Http as Http
-import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Task exposing (Task)
 import Env
 import FileName exposing (FileName)
