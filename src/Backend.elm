@@ -2540,10 +2540,10 @@ joinGuildByInvite :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-joinGuildByInvite inviteLinkId time sessionId clientId guildId model { userId } user =
+joinGuildByInvite inviteLinkId time sessionId clientId guildId model session user =
     case SeqDict.get guildId model.guilds of
         Just guild ->
-            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time userId guild ) of
+            case ( SeqDict.get inviteLinkId guild.invites, LocalState.addMember time session.userId guild ) of
                 ( Just _, Ok guild2 ) ->
                     let
                         modelWithoutUser : BackendModel
@@ -2556,7 +2556,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model { userId } 
                                 | guilds = SeqDict.insert guildId guild2 model.guilds
                                 , users =
                                     NonemptyDict.insert
-                                        userId
+                                        session.userId
                                         (LocalState.markAllChannelsAsViewed guildId guild2 user)
                                         model.users
                             }
@@ -2568,7 +2568,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model { userId } 
                             guildId
                             (Server_MemberJoined
                                 time
-                                userId
+                                session.userId
                                 guildId
                                 (User.backendToFrontendForUser user)
                                 |> ServerChange
@@ -2578,7 +2578,7 @@ joinGuildByInvite inviteLinkId time sessionId clientId guildId model { userId } 
                             ( NonemptyDict.get guild2.owner model2.users
                             , LocalState.guildToFrontendForUser
                                 (Just ( LocalState.announcementChannel guild2, NoThread ))
-                                userId
+                                session.userId
                                 guild2
                             )
                           of
@@ -2635,7 +2635,7 @@ twoFactorAuthenticationUpdateFromFrontend :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model { userId } user =
+twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session user =
     case toBackend of
         TwoFactorAuthentication.EnableTwoFactorAuthenticationRequest ->
             let
@@ -2649,7 +2649,7 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model { userId
                             ( { model2
                                 | twoFactorAuthenticationSetup =
                                     SeqDict.insert
-                                        userId
+                                        session.userId
                                         { startedAt = time, secret = secret }
                                         model2.twoFactorAuthenticationSetup
                               }
@@ -2673,18 +2673,18 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model { userId
                     ( model2, Command.none )
 
         TwoFactorAuthentication.ConfirmTwoFactorAuthenticationRequest code ->
-            case SeqDict.get userId model.twoFactorAuthenticationSetup of
+            case SeqDict.get session.userId model.twoFactorAuthenticationSetup of
                 Just data ->
                     if Duration.from data.startedAt time |> Quantity.lessThan Duration.hour then
                         if TwoFactorAuthentication.isValidCode time code data.secret then
                             ( { model
                                 | twoFactorAuthentication =
                                     SeqDict.insert
-                                        userId
+                                        session.userId
                                         { finishedAt = time, secret = data.secret }
                                         model.twoFactorAuthentication
                                 , twoFactorAuthenticationSetup =
-                                    SeqDict.remove userId model.twoFactorAuthenticationSetup
+                                    SeqDict.remove session.userId model.twoFactorAuthenticationSetup
                               }
                             , TwoFactorAuthentication.ConfirmTwoFactorAuthenticationResponse code True
                                 |> TwoFactorAuthenticationToFrontend
@@ -2862,11 +2862,11 @@ sendDirectMessage :
     -> UserSession
     -> BackendUser
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles { userId } user =
+sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyTo text attachedFiles session user =
     let
         dmChannelId : DmChannelId
         dmChannelId =
-            DmChannel.channelIdFromUserIds userId otherUserId
+            DmChannel.channelIdFromUserIds session.userId otherUserId
 
         dmChannel : DmChannel
         dmChannel =
@@ -2884,7 +2884,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                 | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
                 , users =
                     NonemptyDict.insert
-                        userId
+                        session.userId
                         { user
                             | lastViewedThreads =
                                 SeqDict.insert
@@ -2894,11 +2894,20 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         }
                         model.users
               }
-            , if userId == otherUserId then
+            , if session.userId == otherUserId then
                 Command.none
 
               else
-                Broadcast.broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                Broadcast.broadcastDm
+                    changeId
+                    time
+                    clientId
+                    session.userId
+                    otherUserId
+                    text
+                    threadRouteWithReplyTo
+                    attachedFiles
+                    model
             )
 
         NoThreadWithMaybeMessage repliedTo ->
@@ -2913,7 +2922,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         Nothing
                         (UserTextMessage
                             { createdAt = time
-                            , createdBy = userId
+                            , createdBy = session.userId
                             , content = text
                             , reactions = SeqDict.empty
                             , editedAt = Nothing
@@ -2927,14 +2936,14 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model.dmChannels
                 , users =
                     NonemptyDict.insert
-                        userId
+                        session.userId
                         { user
                             | lastViewed = SeqDict.insert (GuildOrDmId_Dm otherUserId) messageIndex user.lastViewed
                         }
                         model.users
               }
             , Command.batch
-                [ Broadcast.broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyTo attachedFiles model
+                [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
                 , case ( OneToOne.first dmChannelId model.discordDms, model.botToken ) of
                     ( Just discordChannelId, Just botToken ) ->
                         Discord.createMessage
@@ -2994,7 +3003,7 @@ sendGuildMessage :
     -> BackendUser
     -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles { userId } user guild =
+sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
@@ -3007,7 +3016,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 threadId
                                 (UserTextMessage
                                     { createdAt = time
-                                    , createdBy = userId
+                                    , createdBy = session.userId
                                     , content = text
                                     , reactions = SeqDict.empty
                                     , editedAt = Nothing
@@ -3022,7 +3031,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 Nothing
                                 (UserTextMessage
                                     { createdAt = time
-                                    , createdBy = userId
+                                    , createdBy = session.userId
                                     , content = text
                                     , reactions = SeqDict.empty
                                     , editedAt = Nothing
@@ -3085,7 +3094,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         model.guilds
                 , users =
                     NonemptyDict.insert
-                        userId
+                        session.userId
                         (case threadRouteWithMaybeReplyTo of
                             ViewThreadWithMaybeMessage threadMessageIndex _ ->
                                 { user
@@ -3118,14 +3127,14 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 , Broadcast.toGuildExcludingOne
                     clientId
                     guildId
-                    (Server_SendMessage userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
+                    (Server_SendMessage session.userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
                         |> ServerChange
                     )
                     model
                 , Broadcast.messageNotification
                     usersMentioned
                     time
-                    userId
+                    session.userId
                     guildId
                     channelId
                     threadRouteNoReply

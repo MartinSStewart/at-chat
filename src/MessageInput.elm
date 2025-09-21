@@ -480,7 +480,7 @@ pingDropdownView :
     -> (Int -> HtmlId)
     -> MentionUserDropdown
     -> Element msg
-pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownIndex, inputElement } =
+pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
     Ui.column
         [ Ui.background MyUi.background2
         , MyUi.blockClickPropagation msgConfig.pressedPingDropdownContainer
@@ -488,11 +488,11 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownInd
         , Ui.border 1
         , Ui.Font.color MyUi.font2
         , Ui.move
-            { x = round inputElement.x
-            , y = round (inputElement.y - 400 + 1)
+            { x = round dropdown.inputElement.x
+            , y = round (dropdown.inputElement.y - 400 + 1)
             , z = 0
             }
-        , Ui.width (Ui.px (round inputElement.width))
+        , Ui.width (Ui.px (round dropdown.inputElement.width))
         , Ui.height (Ui.px 400)
         , Ui.clip
         , Ui.roundedWith { topLeft = 8, topRight = 8, bottomLeft = 0, bottomRight = 0 }
@@ -509,7 +509,7 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId { dropdownInd
                         (msgConfig.pressedPingUser index)
                         [ Ui.paddingXY 8 4
                         , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
-                        , if dropdownIndex == index then
+                        , if dropdown.dropdownIndex == index then
                             Ui.background MyUi.background3
 
                           else

@@ -69,8 +69,8 @@ stringToJson json =
 handlePortToJs :
     { currentRequest : T.PortToJs, data : T.Data FrontendModel BackendModel }
     -> Maybe ( String, Json.Decode.Value )
-handlePortToJs { currentRequest } =
-    case currentRequest.portName of
+handlePortToJs requestAndData =
+    case requestAndData.currentRequest.portName of
         "get_window_size" ->
             Just
                 ( "got_window_size"
@@ -124,7 +124,7 @@ handlePortToJs { currentRequest } =
         _ ->
             let
                 _ =
-                    Debug.log "port request" currentRequest
+                    Debug.log "port request" requestAndData.currentRequest
             in
             Nothing
 
@@ -459,17 +459,17 @@ clickSpoiler user htmlId =
 
 
 handleHttpRequests : Dict String String -> Dict String Bytes -> { currentRequest : HttpRequest, data : T.Data FrontendModel BackendModel } -> HttpResponse
-handleHttpRequests overrides fileData { currentRequest } =
+handleHttpRequests overrides fileData requestAndData =
     let
         key : String
         key =
-            currentRequest.method ++ "_" ++ currentRequest.url
+            requestAndData.currentRequest.method ++ "_" ++ requestAndData.currentRequest.url
 
         getData : String -> HttpResponse
         getData path =
             case Dict.get path fileData of
                 Just data ->
-                    BytesHttpResponse { url = currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty } data
+                    BytesHttpResponse { url = requestAndData.currentRequest.url, statusCode = 200, statusText = "OK", headers = Dict.empty } data
 
                 Nothing ->
                     UnhandledHttpRequest

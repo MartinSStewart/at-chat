@@ -14,6 +14,7 @@ when inside the directory containing this file.
 import BackendOnly
 import Derive
 import Docs.ReviewAtDocs
+import ExposeAllRecordFields
 import NoBrokenParserFunctions
 import NoConfusingPrefixOperator
 import NoDebug.TodoOrToString
@@ -51,7 +52,8 @@ import Simplify
 
 config : List Rule
 config =
-    [ OpaqueTypes.rule
+    [ ExposeAllRecordFields.rule |> defaultIgnore
+    , OpaqueTypes.rule
     , RunUnsafeAtStartup.rule
     , NoStaleReferences.rule
         |> defaultIgnore
