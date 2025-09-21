@@ -10,13 +10,11 @@ use axum::{
     routing::post,
 };
 
-use gufo_exif;
 use image::metadata::Orientation;
 use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
-use vapid;
 use web_push::SubscriptionInfo;
 mod content_types;
 
@@ -37,27 +35,33 @@ async fn main() {
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .fallback(fallback);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    match tokio::net::TcpListener::bind("0.0.0.0:3000").await {
+        Ok(listener) => {
+            let _ = axum::serve(listener, app).await;
+        }
+        Err(error) => {
+            println!("Server didn't start:{error}");
+        }
+    };
 }
 
 async fn options_endpoint() -> Response<String> {
     response_with_headers(StatusCode::OK, String::from("OK"))
 }
 
-fn filepath(hash: String) -> String {
-    String::from("./var/lib/atchat/") + &hash
+fn filepath(hash: &str) -> String {
+    format!("./var/lib/atchat/{hash}")
 }
 
-fn thumbnail_filepath(hash: String) -> String {
-    String::from("./var/lib/atchat/") + &hash + "_thumbnail"
+fn thumbnail_filepath(hash: &str) -> String {
+    format!("./var/lib/atchat/{hash}_thumbnail")
 }
 
 async fn vapid_endpoint(_request: Request) -> Response<String> {
     match vapid::Key::generate() {
         Ok(key) => response_with_headers(
             StatusCode::OK,
-            key.to_public_raw() + "," + &key.to_private_raw(),
+            format!("{:?},{:?}", key.to_public_raw(), &key.to_private_raw()),
         ),
         Err(_) => response_with_headers(
             StatusCode::BAD_REQUEST,
@@ -90,7 +94,7 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
                     Ok(client) => match builder.build() {
                         Ok(builder2) => {
                             match web_push::WebPushClient::send(&client, builder2).await {
-                                Ok(()) => response_with_headers(StatusCode::OK, String::from("")),
+                                Ok(()) => response_with_headers(StatusCode::OK, ""),
                                 Err(error) => response_with_headers(
                                     StatusCode::BAD_REQUEST,
                                     match error {
@@ -101,10 +105,10 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
                                             String::from("Error 6")
                                         }
                                         web_push::WebPushError::BadRequest(error_info) => {
-                                            String::from("Bad request. Error: ")
-                                                + &error_info.error
-                                                + " Message: "
-                                                + &error_info.message
+                                            format!(
+                                                "Bad request. Error: {:?} Message: {:?}",
+                                                &error_info.error, &error_info.message
+                                            )
                                         }
                                         web_push::WebPushError::ServerError {
                                             retry_after: _,
@@ -150,9 +154,9 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
                                         web_push::WebPushError::ResponseTooLarge => {
                                             String::from("Error 22")
                                         }
-                                        web_push::WebPushError::Other(other) => String::from(
-                                            String::from("Error 23: ") + &other.message,
-                                        ),
+                                        web_push::WebPushError::Other(other) => {
+                                            format!("Error 23: {:?}", &other.message)
+                                        }
                                     },
                                 ),
                             }
@@ -176,7 +180,7 @@ async fn push_notification_endpoint(Json(body): Json<PushNotification>) -> Respo
 async fn upload_endpoint(request: Request) -> Response<String> {
     let session_id: Option<String> = match request.headers().get("sid") {
         Some(header_value) => match header_value.to_str() {
-            Ok(s) => Some(s.to_string()),
+            Ok(s) => Some(s.to_owned()),
             Err(_) => None,
         },
         None => None,
@@ -207,17 +211,7 @@ async fn is_file_upload_allowed(
             "https://at-chat.app/_r/is-file-upload-allowed"
         })
         .header("Content-Type", "text/plain")
-        .body(
-            hash.clone()
-                + ","
-                + &(size.to_string())
-                + ","
-                + &session_id
-                + ","
-                + &width.to_string()
-                + ","
-                + &height.to_string(),
-        )
+        .body(format!("{hash},{size},{session_id},{width},{height}"))
         .send()
         .await
     {
@@ -308,15 +302,9 @@ fn image_metadata(
 
                                 let image_size: (u32, u32) = match orientation {
                                     Some(orientation2) => match orientation2 {
-                                        gufo_common::orientation::Orientation::Id => (width, height),
-                                        gufo_common::orientation::Orientation::Rotation90 => (height, width),
-                                        gufo_common::orientation::Orientation::Rotation180 => (width, height),
-                                        gufo_common::orientation::Orientation::Rotation270 => (height, width),
-                                        gufo_common::orientation::Orientation::Mirrored => (width, height),
-                                        gufo_common::orientation::Orientation::MirroredRotation90 => (height, width),
-                                        gufo_common::orientation::Orientation::MirroredRotation180 => (width, height),
-                                        gufo_common::orientation::Orientation::MirroredRotation270 => (height, width),
-                                    },
+                                        gufo_common::orientation::Orientation::Rotation90 | gufo_common::orientation::Orientation::Rotation270 | gufo_common::orientation::Orientation::MirroredRotation90 | gufo_common::orientation::Orientation::MirroredRotation270 => (height, width),
+                                        gufo_common::orientation::Orientation::Id | gufo_common::orientation::Orientation::Rotation180 | gufo_common::orientation::Orientation::Mirrored | gufo_common::orientation::Orientation::MirroredRotation180 => (width, height),
+                                        },
                                     None => (width, height),
                                 };
 
@@ -351,28 +339,14 @@ fn image_metadata(
                 Err(_) => default_image_metadata(width, height),
             }
         }
-        image::ImageFormat::Png => default_image_metadata(width, height),
-        image::ImageFormat::Gif => default_image_metadata(width, height),
-        image::ImageFormat::WebP => default_image_metadata(width, height),
-        image::ImageFormat::Pnm => default_image_metadata(width, height),
-        image::ImageFormat::Tiff => default_image_metadata(width, height),
-        image::ImageFormat::Tga => default_image_metadata(width, height),
-        image::ImageFormat::Dds => default_image_metadata(width, height),
-        image::ImageFormat::Bmp => default_image_metadata(width, height),
-        image::ImageFormat::Ico => default_image_metadata(width, height),
-        image::ImageFormat::Hdr => default_image_metadata(width, height),
-        image::ImageFormat::OpenExr => default_image_metadata(width, height),
-        image::ImageFormat::Farbfeld => default_image_metadata(width, height),
-        image::ImageFormat::Avif => default_image_metadata(width, height),
-        image::ImageFormat::Qoi => default_image_metadata(width, height),
         _ => default_image_metadata(width, height),
     }
 }
 
 async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
-    let hash: String = hash_bytes(&bytes);
+    let hash = hash_bytes(&bytes);
 
-    let size: usize = bytes.len();
+    let size = bytes.len();
 
     let reader = ImageReader::new(std::io::Cursor::new(&bytes));
 
@@ -383,7 +357,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
         Ok((Some(format), Ok(image))) => {
             let (width, height) = image.dimensions();
 
-            let metadata: ImageMetadata = image_metadata(width, height, format, bytes.to_vec());
+            let metadata = image_metadata(width, height, format, bytes.to_vec());
 
             let orientation: Orientation = match metadata.orientation {
                 Some(orientation2) => {
@@ -396,7 +370,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
 
             match is_file_upload_allowed(hash.clone(), size, session_id2, image_size).await {
                 Ok(()) => {
-                    let path: String = filepath(hash.clone());
+                    let path = filepath(&hash);
                     let response: String = serde_json::to_string(&UploadResponse {
                         image_metadata: Some(metadata),
                         hash: hash.clone(),
@@ -420,7 +394,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
                                     resized_image.apply_orientation(orientation);
 
                                     let _ = resized_image.save_with_format(
-                                        thumbnail_filepath(hash),
+                                        thumbnail_filepath(&hash),
                                         image::ImageFormat::WebP,
                                     );
                                 }
@@ -443,7 +417,7 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
         }
         _ => match is_file_upload_allowed(hash.clone(), size, session_id2, (0, 0)).await {
             Ok(()) => {
-                let path: String = filepath(hash.clone());
+                let path = filepath(&hash);
                 let response: String = serde_json::to_string(&UploadResponse {
                     image_metadata: None,
                     hash: hash.clone(),
@@ -471,28 +445,31 @@ async fn upload_helper(session_id2: String, bytes: Bytes) -> Response<String> {
     }
 }
 
-fn response_with_headers(status_code: StatusCode, body: String) -> Response<String> {
+fn response_with_headers(status_code: StatusCode, body: impl Into<String>) -> Response<String> {
     Response::builder()
         .status(status_code)
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Headers", "*")
         .header("Content-Type", "text/plain")
-        .body(body)
+        .body(body.into())
         .unwrap()
 }
 
-fn json_response_with_headers(status_code: StatusCode, body: String) -> Response<String> {
+fn json_response_with_headers(
+    status_code: StatusCode,
+    body: impl Into<String>,
+) -> Response<String> {
     Response::builder()
         .status(status_code)
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Headers", "*")
         .header("Content-Type", "application/json")
-        .body(body)
+        .body(body.into())
         .unwrap()
 }
 
 fn hash_bytes(bytes: &Bytes) -> String {
-    base64_encode(Sha224::digest(&bytes).to_vec())
+    base64_encode(&Sha224::digest(bytes))
 }
 
 async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response<Body> {
@@ -501,7 +478,7 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
 
     if is_valid_hash {
-        match fs::read(thumbnail_filepath(hash)) {
+        match fs::read(thumbnail_filepath(&hash)) {
             Result::Ok(data) => Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "image/webp")
@@ -516,7 +493,7 @@ async fn get_file_thumbnail_endpoint(Path(hash): Path<String>) -> http::Response
     } else {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from(hash + " is an invalid filename"))
+            .body(Body::from(format!("{hash} is an invalid filename")))
             .unwrap()
     }
 }
@@ -529,7 +506,7 @@ async fn get_file_endpoint(
         .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_');
 
     if is_valid_hash {
-        match fs::read(filepath(hash)) {
+        match fs::read(filepath(&hash)) {
             Result::Ok(data) => {
                 let content_type = match content_type_index.parse::<usize>() {
                     Ok(index) => content_types::CONTENT_TYPES.get(index),
@@ -539,7 +516,7 @@ async fn get_file_endpoint(
                 match content_type {
                     Some(content_type2) => Response::builder()
                         .status(StatusCode::OK)
-                        .header("Content-Type", content_type2.to_string())
+                        .header("Content-Type", *content_type2)
                         .header("Content-Disposition", "inline")
                         .body(Body::from(data))
                         .unwrap(),
@@ -557,7 +534,7 @@ async fn get_file_endpoint(
     } else {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from(hash + " is an invalid filename"))
+            .body(Body::from(format!("{hash} is an invalid filename")))
             .unwrap()
     }
 }
@@ -567,10 +544,10 @@ async fn fallback(uri: Uri) -> (StatusCode, String) {
 }
 
 /// Generated with Claude 4 Sonnet. Intentionally doesn't include padding = characters. Is url and filename safe.
-fn base64_encode(data: Vec<u8>) -> String {
+fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-    let mut result: String = String::new();
+    let mut result = String::new();
     let mut i: usize = 0;
 
     while i + 2 < data.len() {
@@ -614,9 +591,9 @@ fn base64_encode(data: Vec<u8>) -> String {
 
 /// Declarative notification that can be used to populate the payload of a web push.
 ///
-/// See https://webkit.org/blog/16535/meet-declarative-web-push
+/// See <https://webkit.org/blog/16535/meet-declarative-web-push>
 #[derive(Debug, Serialize)]
-pub struct Notification<D: Serialize> {
+pub struct Notification<D> {
     pub title: String,
     pub navigate: String,
 
@@ -680,14 +657,14 @@ impl<D: Serialize> Notification<D> {
         body: Option<String>,
         icon: Option<String>,
     ) -> Self {
-        Notification {
+        Self {
             title,
             navigate,
             lang: None,
             dir: None,
             tag: None,
-            body: body,
-            icon: icon,
+            body,
+            icon,
             image: None,
             badge: None,
             vibrate: None,
@@ -706,7 +683,7 @@ impl<D: Serialize> Notification<D> {
 }
 
 #[derive(Debug, Serialize)]
-struct DeclarativePushPayload<'a, D: Serialize> {
+struct DeclarativePushPayload<'a, D> {
     web_push: u16,
     pub notification: &'a Notification<D>,
 }
