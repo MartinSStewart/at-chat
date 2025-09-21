@@ -2310,6 +2310,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     "Push notifications enabled"
                                     "https://at-chat.app/at-logo-no-background.png"
                                     HomePageRoute
+                                    "test data"
                                     pushSubscription
                                     model2
                                 ]

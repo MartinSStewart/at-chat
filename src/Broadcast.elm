@@ -292,7 +292,7 @@ notification time userToNotify sender text navigateTo model =
                             sessionId
                             session.userId
                             time
-                            (PersonName.toString sender.name)
+                            (PersonName.toString (Debug.log "sender" sender).name)
                             text
                             (case sender.icon of
                                 Just icon ->
@@ -302,6 +302,7 @@ notification time userToNotify sender text navigateTo model =
                                     Env.domain ++ "/at-logo-no-background.png"
                             )
                             navigateTo
+                            "test data"
                             pushSubscription
                             model
                             :: cmds
@@ -344,6 +345,7 @@ type alias PushNotification =
     , body : String
     , icon : String
     , navigate : String
+    , data : String
     }
 
 
@@ -358,6 +360,7 @@ pushNotificationCodec =
         |> Codec.field "body" .body Codec.string
         |> Codec.field "icon" .icon Codec.string
         |> Codec.field "navigate" .navigate Codec.string
+        |> Codec.field "data" .data Codec.string
         |> Codec.buildObject
 
 
@@ -366,8 +369,8 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> Route -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
-pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
+pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> Route -> String -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification sessionId userId time title body icon _ data pushSubscription model =
     Http.request
         { method = "POST"
         , headers = []
@@ -382,7 +385,8 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
                 , title = title
                 , body = body
                 , icon = icon
-                , navigate = Env.domain ++ Route.encode navigateTo
+                , navigate = Env.domain
+                , data = data
                 }
                 |> Http.jsonBody
         , expect =
