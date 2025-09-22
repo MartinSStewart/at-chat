@@ -590,7 +590,7 @@ type ServerChange
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
 
 
 type LocalChange

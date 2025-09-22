@@ -100,7 +100,10 @@ init sessionId userId currentlyViewing userAgent =
     }
 
 
-setCurrentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserSession -> UserSession
+setCurrentlyViewing :
+    Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
+    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 

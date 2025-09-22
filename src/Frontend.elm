@@ -4835,16 +4835,28 @@ changeUpdate localMsg local =
                 Server_LoggedOut sessionId ->
                     { local | otherSessions = SeqDict.remove sessionId local.otherSessions }
 
-                Server_CurrentlyViewing currentlyViewing ->
+                Server_CurrentlyViewing sessionIdHash currentlyViewing ->
                     let
                         localUser : LocalUser
                         localUser =
                             local.localUser
                     in
-                    { local
-                        | localUser =
-                            { localUser | session = UserSession.setCurrentlyViewing currentlyViewing localUser.session }
-                    }
+                    if sessionIdHash == localUser.session.sessionIdHash then
+                        { local
+                            | localUser =
+                                { localUser
+                                    | session = UserSession.setCurrentlyViewing currentlyViewing localUser.session
+                                }
+                        }
+
+                    else
+                        { local
+                            | otherSessions =
+                                SeqDict.updateIfExists
+                                    sessionIdHash
+                                    (UserSession.setCurrentlyViewing currentlyViewing)
+                                    local.otherSessions
+                        }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
