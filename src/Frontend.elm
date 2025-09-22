@@ -2182,6 +2182,7 @@ updateLoaded msg model =
                     , Command.batch
                         [ setFocus model Pages.Guild.channelTextInputId
                         , Ports.setFavicon "favicon.ico"
+                        , Ports.closeNotifications
                         ]
                     )
 
