@@ -117,6 +117,7 @@ subscriptions model =
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.windowHasFocus WindowHasFocusChanged
         , Ports.userAgentSub GotUserAgent
+        , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , case model of
             Loading _ ->
                 Subscription.none
@@ -1117,6 +1118,9 @@ isPressMsg msg =
             False
 
         WindowHasFocusChanged _ ->
+            False
+
+        GotServiceWorkerMessage _ ->
             False
 
 
@@ -3280,6 +3284,14 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
+
+        GotServiceWorkerMessage url ->
+            case Url.fromString url of
+                Just url2 ->
+                    routePush model (Route.decode url2)
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

@@ -426,6 +426,7 @@ type FrontendMsg
     | PressedMemberListBack
     | GotUserAgent UserAgent
     | WindowHasFocusChanged Bool
+    | GotServiceWorkerMessage String
 
 
 type ScrollPosition

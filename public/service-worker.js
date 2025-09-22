@@ -8,6 +8,7 @@ self.addEventListener('push', function(event) {
             data.title,
             { body: data.body
             , icon: data.icon
+            , data: data.data
             });
     }
     catch(error)
@@ -16,6 +17,28 @@ self.addEventListener('push', function(event) {
     }
 });
 
+self.addEventListener('notificationclick', function(event) {
+    // Access the data that was stored with the notification
+    const notificationData = event.notification.data;
+
+    // Use the data as needed
+    console.log('Notification data:', notificationData);
+
+    // Close the notification
+    event.notification.close();
+
+    // Example: Open a URL based on the data
+    clients.matchAll({ type: "window", includeUncontrolled: true })
+        .then((windowClients) => {
+            if (windowClients.length > 0) {
+                windowClients[0].postMessage(notificationData);
+            }
+            else {
+                //clients.openWindow(notificationData);
+            }
+        });
+
+});
 
 // Original code found here https://developer.chrome.com/docs/workbox/caching-strategies-overview/#cache_first_falling_back_to_network
 // Establish a cache name

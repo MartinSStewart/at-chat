@@ -48,7 +48,6 @@ import PersonName
 import Postmark
 import Quantity
 import RichText exposing (RichText)
-import Route exposing (Route(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -2309,7 +2308,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     "Success!"
                                     "Push notifications enabled"
                                     "https://at-chat.app/at-logo-no-background.png"
-                                    HomePageRoute
+                                    Nothing
                                     pushSubscription
                                     model2
                                 ]

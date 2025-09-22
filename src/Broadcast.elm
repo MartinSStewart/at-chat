@@ -250,14 +250,14 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                     cmds
 
                 else
-                    case NonemptyDict.get userId2 model.users of
+                    case NonemptyDict.get sender model.users of
                         Just user2 ->
                             notification
                                 time
                                 userId2
                                 user2
                                 plainText
-                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends))
+                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends) |> Just)
                                 model
                                 :: cmds
 
@@ -279,7 +279,7 @@ notification :
     -> Id UserId
     -> BackendUser
     -> String
-    -> Route
+    -> Maybe Route
     -> BackendModel
     -> Command restriction toMsg BackendMsg
 notification time userToNotify sender text navigateTo model =
@@ -344,6 +344,7 @@ type alias PushNotification =
     , body : String
     , icon : String
     , navigate : String
+    , data : Maybe String
     }
 
 
@@ -358,6 +359,7 @@ pushNotificationCodec =
         |> Codec.field "body" .body Codec.string
         |> Codec.field "icon" .icon Codec.string
         |> Codec.field "navigate" .navigate Codec.string
+        |> Codec.field "data" .data (Codec.nullable Codec.string)
         |> Codec.buildObject
 
 
@@ -366,7 +368,17 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> Route -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
+pushNotification :
+    SessionId
+    -> Id UserId
+    -> Time.Posix
+    -> String
+    -> String
+    -> String
+    -> Maybe Route
+    -> SubscribeData
+    -> BackendModel
+    -> Command restriction toFrontend BackendMsg
 pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
     Http.request
         { method = "POST"
@@ -382,7 +394,14 @@ pushNotification sessionId userId time title body icon navigateTo pushSubscripti
                 , title = title
                 , body = body
                 , icon = icon
-                , navigate = Env.domain ++ Route.encode navigateTo
+                , navigate = Env.domain
+                , data =
+                    case navigateTo of
+                        Just navigateTo2 ->
+                            Env.domain ++ Route.encode navigateTo2 |> Just
+
+                        Nothing ->
+                            Nothing
                 }
                 |> Http.jsonBody
         , expect =
@@ -482,6 +501,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                                 ViewThreadWithMaybeMessage threadId _ ->
                                     ViewThreadWithFriends threadId Nothing HideMembersTab
                             )
+                            |> Just
                         )
                         model
 
