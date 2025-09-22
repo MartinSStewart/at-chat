@@ -231,21 +231,42 @@ update msg model =
             )
 
         UserDisconnected sessionId clientId ->
-            ( { model
-                | connections =
-                    SeqDict.update
-                        sessionId
-                        (Maybe.andThen
-                            (\value ->
-                                NonemptyDict.toSeqDict value
-                                    |> SeqDict.remove clientId
-                                    |> NonemptyDict.fromSeqDict
-                            )
-                        )
-                        model.connections
-              }
-            , Command.none
-            )
+            let
+                model2 : BackendModel
+                model2 =
+                    { model
+                        | connections =
+                            SeqDict.update
+                                sessionId
+                                (Maybe.andThen
+                                    (\value ->
+                                        NonemptyDict.toSeqDict value
+                                            |> SeqDict.remove clientId
+                                            |> NonemptyDict.fromSeqDict
+                                    )
+                                )
+                                model.connections
+                    }
+            in
+            case SeqDict.get sessionId model2.sessions of
+                Just session ->
+                    ( { model2
+                        | sessions =
+                            SeqDict.insert
+                                sessionId
+                                (UserSession.setCurrentlyViewing Nothing session)
+                                model2.sessions
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        session.userId
+                        (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                        model2
+                    )
+
+                Nothing ->
+                    ( model2, Command.none )
 
         BackendGotTime sessionId clientId toBackend time ->
             updateFromFrontendWithTime time sessionId clientId toBackend model
@@ -1985,7 +2006,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 Nothing
                                 (Just sessionId)
                                 session.userId
-                                (Server_CurrentlyViewing viewingChannel |> ServerChange)
+                                (Server_CurrentlyViewing session.sessionIdHash viewingChannel |> ServerChange)
                                 model2
                     in
                     case viewing of

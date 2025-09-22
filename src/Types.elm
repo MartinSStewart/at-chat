@@ -135,6 +135,7 @@ type alias LoadedFrontend =
     , aiChatModel : AiChat.FrontendModel
     , scrollbarWidth : Int
     , userAgent : UserAgent
+    , pageHasFocus : Bool
     }
 
 
@@ -425,7 +426,7 @@ type FrontendMsg
     | PressedCloseImageInfo
     | PressedMemberListBack
     | GotUserAgent UserAgent
-    | WindowHasFocusChanged Bool
+    | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
 
 
@@ -590,7 +591,7 @@ type ServerChange
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
 
 
 type LocalChange

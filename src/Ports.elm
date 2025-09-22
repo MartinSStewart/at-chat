@@ -7,6 +7,7 @@ port module Ports exposing
     , checkNotificationPermissionResponse
     , checkPwaStatus
     , checkPwaStatusResponse
+    , closeNotifications
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
@@ -14,6 +15,7 @@ port module Ports exposing
     , getUserAgent
     , hapticFeedback
     , loadSounds
+    , pageHasFocus
     , playSound
     , registerPushSubscription
     , registerPushSubscriptionToJs
@@ -25,7 +27,6 @@ port module Ports exposing
     , showNotification
     , textInputSelectAll
     , userAgentSub
-    , windowHasFocus
     )
 
 import Codec exposing (Codec)
@@ -155,6 +156,14 @@ port window_has_focus_from_js : (Json.Decode.Value -> msg) -> Sub msg
 port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
+port close_notifications_to_js : Json.Encode.Value -> Cmd msg
+
+
+closeNotifications : Command FrontendOnly toMsg msg
+closeNotifications =
+    Command.sendToJs "close_notifications_to_js" close_notifications_to_js Json.Encode.null
+
+
 serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg
 serviceWorkerMessage msg =
     Subscription.fromJs
@@ -167,8 +176,8 @@ serviceWorkerMessage msg =
         )
 
 
-windowHasFocus : (Bool -> msg) -> Subscription FrontendOnly msg
-windowHasFocus msg =
+pageHasFocus : (Bool -> msg) -> Subscription FrontendOnly msg
+pageHasFocus msg =
     Subscription.fromJs
         "window_has_focus_from_js"
         window_has_focus_from_js
