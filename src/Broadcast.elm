@@ -250,7 +250,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                     cmds
 
                 else
-                    case NonemptyDict.get userId2 model.users of
+                    case NonemptyDict.get sender model.users of
                         Just user2 ->
                             notification
                                 time
@@ -292,7 +292,7 @@ notification time userToNotify sender text navigateTo model =
                             sessionId
                             session.userId
                             time
-                            (PersonName.toString (Debug.log "sender" sender).name)
+                            (PersonName.toString sender.name)
                             text
                             (case sender.icon of
                                 Just icon ->
