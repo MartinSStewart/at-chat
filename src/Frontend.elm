@@ -1120,7 +1120,7 @@ isPressMsg msg =
         WindowHasFocusChanged _ ->
             False
 
-        GotServiceWorkerMessage string ->
+        GotServiceWorkerMessage _ ->
             False
 
 
