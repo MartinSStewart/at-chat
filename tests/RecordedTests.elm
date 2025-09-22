@@ -525,6 +525,38 @@ scrollToMiddle user =
         )
 
 
+hasExactText :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+hasExactText user texts =
+    user.checkView 100 (Test.Html.Query.has (List.map Test.Html.Selector.exactText texts))
+
+
+hasText :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+hasText user texts =
+    user.checkView 100 (Test.Html.Query.has (List.map Test.Html.Selector.text texts))
+
+
+hasNotExactText :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+hasNotExactText user texts =
+    user.checkView 100 (Test.Html.Query.hasNot (List.map Test.Html.Selector.exactText texts))
+
+
+hasNotText :
+    T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+    -> List String
+    -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+hasNotText user texts =
+    user.checkView 100 (Test.Html.Query.hasNot (List.map Test.Html.Selector.text texts))
+
+
 noMissingMessages : DelayInMs -> T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
 noMissingMessages delayInMs user =
     user.checkView
@@ -647,11 +679,7 @@ tests fileData =
             (\adminA ->
                 [ handleLogin firefoxDesktop adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
-                , adminA.checkView 100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText "Desktop • Firefox (current device)"
-                        ]
-                    )
+                , hasExactText adminA [ "Desktop • Firefox (current device)" ]
                 , T.connectFrontend
                     100
                     sessionId1
@@ -659,12 +687,7 @@ tests fileData =
                     windowSize
                     (\adminB ->
                         [ handleLogin safariIphone adminEmail adminB
-                        , adminA.checkView 100
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Mobile • Safari"
-                                , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
-                                ]
-                            )
+                        , hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox (current device)" ]
                         , adminB.click 100 (Dom.id "guild_showUserOptions")
                         , T.connectFrontend
                             100
@@ -673,35 +696,24 @@ tests fileData =
                             windowSize
                             (\adminC ->
                                 [ handleLogin chromeDesktop adminEmail adminC
-                                , adminA.checkView 100
-                                    (Test.Html.Query.has
-                                        [ Test.Html.Selector.exactText "Mobile • Safari"
-                                        , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
-                                        , Test.Html.Selector.exactText "Desktop • Chrome"
-                                        ]
-                                    )
+                                , hasExactText
+                                    adminA
+                                    [ "Mobile • Safari"
+                                    , "Desktop • Firefox (current device)"
+                                    , "Desktop • Chrome"
+                                    ]
                                 , adminC.click 100 (Dom.id "guild_showUserOptions")
-                                , adminC.checkView 100
-                                    (Test.Html.Query.has
-                                        [ Test.Html.Selector.exactText "Mobile • Safari"
-                                        , Test.Html.Selector.exactText "Desktop • Firefox"
-                                        , Test.Html.Selector.exactText "Desktop • Chrome (current device)"
-                                        ]
-                                    )
+                                , hasExactText
+                                    adminC
+                                    [ "Mobile • Safari"
+                                    , "Desktop • Firefox"
+                                    , "Desktop • Chrome (current device)"
+                                    ]
                                 ]
                             )
                         , adminB.click 100 (Dom.id "options_logout")
-                        , adminA.checkView 100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "Mobile • Safari"
-                                ]
-                            )
-                        , adminA.checkView 0
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Desktop • Chrome"
-                                , Test.Html.Selector.exactText "Desktop • Firefox (current device)"
-                                ]
-                            )
+                        , hasNotExactText adminA [ "Mobile • Safari" ]
+                        , hasExactText adminA [ "Desktop • Chrome", "Desktop • Firefox (current device)" ]
                         ]
                     )
                 ]
@@ -757,6 +769,33 @@ tests fileData =
             )
         ]
     , T.start
+        "Remove direct mention when viewed on another session"
+        startTime
+        normalConfig
+        [ connectTwoUsersAndJoinNewGuild
+            (\admin user ->
+                [ user.click 100 (Dom.id "guildIcon_showFriends")
+                , writeMessage admin "@Stevie Steve"
+                , writeMessage admin "@Stevie Steve"
+                , writeMessage admin "@Stevie Steve"
+                , hasExactText user [ "3" ]
+                , T.connectFrontend
+                    100
+                    sessionId1
+                    (Route.encode Route.HomePageRoute)
+                    windowSize
+                    (\userReload ->
+                        [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
+                        , userReload.click 100 (Dom.id "guild_openGuild_1")
+                        , hasExactText user [ "3" ]
+                        , userReload.click 100 (Dom.id "guildIcon_showFriends")
+                        , hasNotExactText user [ "3" ]
+                        ]
+                    )
+                ]
+            )
+        ]
+    , T.start
         "Check notification icons appear"
         startTime
         normalConfig
@@ -769,12 +808,12 @@ tests fileData =
                 , writeMessage admin "First message"
                 , writeMessage admin "Next message"
                 , writeMessage admin "Third message"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+                , hasExactText user [ "3" ]
                 , user.click 100 (Dom.id "guild_openGuild_1")
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "3" ])
+                , hasExactText user [ "3" ]
                 , writeMessage admin "@Stevie Steve Hello!"
                 , writeMessage admin "@Stevie Steve Hello again!"
-                , user.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
+                , hasExactText user [ "2" ]
                 , T.connectFrontend
                     100
                     sessionId1
@@ -782,7 +821,7 @@ tests fileData =
                     windowSize
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
-                        , userReload.checkView 100 (Test.Html.Query.has [ Test.Html.Selector.exactText "2" ])
+                        , hasExactText userReload [ "2" ]
                         ]
                     )
                 ]
@@ -831,20 +870,8 @@ tests fileData =
                         , userReload.checkView
                             100
                             (Test.Html.Query.has [ Test.Html.Selector.exactText "Another message" ])
-                        , userReload.checkView
-                            100
-                            (Test.Html.Query.hasNot
-                                [ Test.Html.Selector.exactText "This is the start of #general"
-                                , Test.Html.Selector.exactText "Message 31"
-                                ]
-                            )
-                        , userReload.checkView
-                            0
-                            (Test.Html.Query.has
-                                [ Test.Html.Selector.exactText "Message 32"
-                                , Test.Html.Selector.exactText "Message 61"
-                                ]
-                            )
+                        , hasNotExactText userReload [ "This is the start of #general", "Message 31" ]
+                        , hasExactText userReload [ "Message 32", "Message 61" ]
                         , noMissingMessages 100 userReload
                         , scrollToTop userReload
                         , userReload.checkView
