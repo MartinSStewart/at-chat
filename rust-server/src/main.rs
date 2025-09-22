@@ -99,8 +99,6 @@ async fn push_notification_endpoint(
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2")),
     };
 
-    println!("{:#?}", str::from_utf8(&content));
-
     let sig_builder = match key.build() {
         Ok(sig_builder2) => sig_builder2,
         Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3")),
