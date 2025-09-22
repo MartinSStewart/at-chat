@@ -12,6 +12,7 @@ async function loadAudio(url, context, sounds) {
 exports.init = async function init(app)
 {
     // Register a Service Worker.
+    let activeNotifications = [];
 
     const serviceWorkerJs = '/service-worker.js';
 
@@ -28,6 +29,20 @@ exports.init = async function init(app)
             });
         });
 
+    });
+
+    app.ports.close_notifications_to_js.subscribe(() => {
+        // Original code found here https://stackoverflow.com/a/64686549
+        navigator.serviceWorker.ready.then(reg => {
+          reg.getNotifications().then(notifications => {
+            for (let i = 0; i < notifications.length; i += 1) {
+              notifications[i].close();
+            }
+          });
+        });
+
+        activeNotifications.forEach((notification) => { try { notification.close(); } catch(error) {} });
+        activeNotifications = [];
     });
 
     app.ports.register_push_subscription_to_js.subscribe((publicKey) => {
@@ -145,6 +160,7 @@ exports.init = async function init(app)
     app.ports.show_notification.subscribe((a) => {
         if ("Notification" in window) {
             const notification = new Notification(a.title, { body: a.body });
+            activeNotifications.push(notification);
         }
     });
 

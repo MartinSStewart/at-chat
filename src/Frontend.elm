@@ -54,7 +54,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
-import SeqSet
+import SeqSet exposing (SeqSet)
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -115,7 +115,7 @@ subscriptions model =
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
         , Ports.scrollbarWidthSub GotScrollbarWidth
-        , Ports.windowHasFocus WindowHasFocusChanged
+        , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
         , case model of
@@ -287,6 +287,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , aiChatModel = aiChatModel
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
+            , pageHasFocus = True
             }
 
         ( model2, cmdA ) =
@@ -1117,7 +1118,7 @@ isPressMsg msg =
         GotUserAgent _ ->
             False
 
-        WindowHasFocusChanged _ ->
+        PageHasFocusChanged _ ->
             False
 
         GotServiceWorkerMessage _ ->
@@ -3269,7 +3270,7 @@ updateLoaded msg model =
         PressedMemberListBack ->
             updateLoggedIn (\loggedIn -> ( startClosingChannelSidebar loggedIn, Command.none )) model
 
-        WindowHasFocusChanged hasFocus ->
+        PageHasFocusChanged hasFocus ->
             updateLoggedIn
                 (\loggedIn ->
                     handleLocalChange
@@ -3281,9 +3282,14 @@ updateLoaded msg model =
                             Local_CurrentlyViewing StopViewingChannel |> Just
                         )
                         loggedIn
-                        Command.none
+                        (if hasFocus then
+                            Ports.closeNotifications
+
+                         else
+                            Command.none
+                        )
                 )
-                model
+                { model | pageHasFocus = hasFocus }
 
         GotServiceWorkerMessage url ->
             case Url.fromString url of
@@ -4480,6 +4486,20 @@ changeUpdate localMsg local =
                                         user : BackendUser
                                         user =
                                             localUser.user
+
+                                        isNotViewing : Bool
+                                        isNotViewing =
+                                            isViewing
+                                                guildOrDmId
+                                                (case threadRouteWithRepliedTo of
+                                                    ViewThreadWithMaybeMessage threadId _ ->
+                                                        ViewThread threadId
+
+                                                    NoThreadWithMaybeMessage _ ->
+                                                        NoThread
+                                                )
+                                                local
+                                                |> not
                                     in
                                     { local
                                         | guilds =
@@ -4535,22 +4555,13 @@ changeUpdate localMsg local =
                                                         }
 
                                                     else if
-                                                        SeqSet.member
-                                                            localUser.session.userId
-                                                            (LocalState.usersMentionedOrRepliedToFrontend
-                                                                guildOrDmId
-                                                                threadRouteWithRepliedTo
-                                                                text
-                                                                channel
-                                                                (SeqDict.singleton
-                                                                    localUser.session.userId
-                                                                    (local.localUser.session.currentlyViewing
-                                                                        :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
-                                                                        |> List.filterMap identity
-                                                                        |> SeqSet.fromList
-                                                                    )
-                                                                )
-                                                            )
+                                                        isNotViewing
+                                                            && (LocalState.usersMentionedOrRepliedToFrontend
+                                                                    threadRouteWithRepliedTo
+                                                                    text
+                                                                    channel
+                                                                    |> SeqSet.member localUser.session.userId
+                                                               )
                                                     then
                                                         User.addDirectMention
                                                             guildId
@@ -5503,6 +5514,18 @@ scrollToBottomOfChannel =
     Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
 
 
+isViewing : GuildOrDmIdNoThread -> ThreadRoute -> LocalState -> Bool
+isViewing guildOrDmId threadRoute local =
+    let
+        a =
+            ( guildOrDmId, threadRoute ) |> Just
+    in
+    (local.localUser.session.currentlyViewing == a)
+        || List.any
+            (\otherSession -> otherSession.currentlyViewing == a)
+            (SeqDict.values local.otherSessions)
+
+
 playNotificationSound :
     Id UserId
     -> GuildOrDmIdNoThread
@@ -5518,24 +5541,21 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
             Command.none
 
         NotifyWhenRunning ->
-            if
-                SeqSet.member
-                    local.localUser.session.userId
-                    (LocalState.usersMentionedOrRepliedToFrontend
-                        guildOrDmId
-                        threadRouteWithRepliedTo
-                        content
-                        channel
-                        (SeqDict.singleton
-                            local.localUser.session.userId
-                            (local.localUser.session.currentlyViewing
-                                :: List.map .currentlyViewing (SeqDict.values local.otherSessions)
-                                |> List.filterMap identity
-                                |> SeqSet.fromList
-                            )
-                        )
-                    )
-            then
+            let
+                alwaysNotify : Bool
+                alwaysNotify =
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId _ ->
+                            SeqSet.member guildId local.localUser.user.notifyOnAllMessages
+
+                        GuildOrDmId_Dm id ->
+                            False
+
+                isMentionedOrRepliedTo =
+                    LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
+                        |> SeqSet.member local.localUser.session.userId
+            in
+            if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
                 Command.batch
                     [ Ports.playSound "pop"
                     , Ports.setFavicon "/favicon-red.ico"

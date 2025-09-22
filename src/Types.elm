@@ -135,6 +135,7 @@ type alias LoadedFrontend =
     , aiChatModel : AiChat.FrontendModel
     , scrollbarWidth : Int
     , userAgent : UserAgent
+    , pageHasFocus : Bool
     }
 
 
@@ -425,7 +426,7 @@ type FrontendMsg
     | PressedCloseImageInfo
     | PressedMemberListBack
     | GotUserAgent UserAgent
-    | WindowHasFocusChanged Bool
+    | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
 
 
