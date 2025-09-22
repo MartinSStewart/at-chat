@@ -54,7 +54,7 @@ import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
+import SeqSet
 import String.Nonempty
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
@@ -5548,7 +5548,7 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                         GuildOrDmId_Guild guildId _ ->
                             SeqSet.member guildId local.localUser.user.notifyOnAllMessages
 
-                        GuildOrDmId_Dm id ->
+                        GuildOrDmId_Dm _ ->
                             False
 
                 isMentionedOrRepliedTo =
