@@ -20,6 +20,7 @@ port module Ports exposing
     , registerServiceWorker
     , requestNotificationPermission
     , scrollbarWidthSub
+    , serviceWorkerMessage
     , setFavicon
     , showNotification
     , textInputSelectAll
@@ -149,6 +150,21 @@ port register_push_subscription_to_js : Json.Encode.Value -> Cmd msg
 
 
 port window_has_focus_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port service_worker_message_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+serviceWorkerMessage : (String -> msg) -> Subscription FrontendOnly msg
+serviceWorkerMessage msg =
+    Subscription.fromJs
+        "service_worker_message_from_js"
+        service_worker_message_from_js
+        (\json ->
+            Json.Decode.decodeValue Json.Decode.string json
+                |> Result.withDefault ""
+                |> msg
+        )
 
 
 windowHasFocus : (Bool -> msg) -> Subscription FrontendOnly msg

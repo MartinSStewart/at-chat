@@ -31,11 +31,10 @@ self.addEventListener('notificationclick', function(event) {
     clients.matchAll({ type: "window", includeUncontrolled: true })
         .then((windowClients) => {
             if (windowClients.length > 0) {
-                windowClients[0].focus();
                 windowClients[0].postMessage(notificationData);
             }
             else {
-                clients.openWindow(notificationData);
+                //clients.openWindow(notificationData);
             }
         });
 

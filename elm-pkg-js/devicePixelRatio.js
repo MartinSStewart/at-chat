@@ -23,7 +23,8 @@ exports.init = async function init(app)
                 navigator.serviceWorker.register(serviceWorkerJs);
             }
             navigator.serviceWorker.addEventListener("message", (event) => {
-              console.log(`Message received: ${event.data}`);
+                console.log(event);
+                app.ports.service_worker_message_from_js.send(event.data);
             });
         });
 

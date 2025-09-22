@@ -257,7 +257,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 userId2
                                 user2
                                 plainText
-                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends))
+                                (GuildRoute guildId (ChannelRoute channelId threadRouteWithFriends) |> Just)
                                 model
                                 :: cmds
 
@@ -279,7 +279,7 @@ notification :
     -> Id UserId
     -> BackendUser
     -> String
-    -> Route
+    -> Maybe Route
     -> BackendModel
     -> Command restriction toMsg BackendMsg
 notification time userToNotify sender text navigateTo model =
@@ -302,7 +302,6 @@ notification time userToNotify sender text navigateTo model =
                                     Env.domain ++ "/at-logo-no-background.png"
                             )
                             navigateTo
-                            "test data"
                             pushSubscription
                             model
                             :: cmds
@@ -345,7 +344,7 @@ type alias PushNotification =
     , body : String
     , icon : String
     , navigate : String
-    , data : String
+    , data : Maybe String
     }
 
 
@@ -360,7 +359,7 @@ pushNotificationCodec =
         |> Codec.field "body" .body Codec.string
         |> Codec.field "icon" .icon Codec.string
         |> Codec.field "navigate" .navigate Codec.string
-        |> Codec.field "data" .data Codec.string
+        |> Codec.field "data" .data (Codec.nullable Codec.string)
         |> Codec.buildObject
 
 
@@ -369,8 +368,18 @@ privateKeyCodec =
     Codec.map PrivateVapidKey (\(PrivateVapidKey a) -> a) Codec.string
 
 
-pushNotification : SessionId -> Id UserId -> Time.Posix -> String -> String -> String -> Route -> String -> SubscribeData -> BackendModel -> Command restriction toFrontend BackendMsg
-pushNotification sessionId userId time title body icon _ data pushSubscription model =
+pushNotification :
+    SessionId
+    -> Id UserId
+    -> Time.Posix
+    -> String
+    -> String
+    -> String
+    -> Maybe Route
+    -> SubscribeData
+    -> BackendModel
+    -> Command restriction toFrontend BackendMsg
+pushNotification sessionId userId time title body icon navigateTo pushSubscription model =
     Http.request
         { method = "POST"
         , headers = []
@@ -386,7 +395,13 @@ pushNotification sessionId userId time title body icon _ data pushSubscription m
                 , body = body
                 , icon = icon
                 , navigate = Env.domain
-                , data = data
+                , data =
+                    case navigateTo of
+                        Just navigateTo2 ->
+                            Env.domain ++ Route.encode navigateTo2 |> Just
+
+                        Nothing ->
+                            Nothing
                 }
                 |> Http.jsonBody
         , expect =
@@ -486,6 +501,7 @@ broadcastDm changeId time clientId userId otherUserId text threadRouteWithReplyT
                                 ViewThreadWithMaybeMessage threadId _ ->
                                     ViewThreadWithFriends threadId Nothing HideMembersTab
                             )
+                            |> Just
                         )
                         model
 

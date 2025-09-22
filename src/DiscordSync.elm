@@ -804,7 +804,7 @@ handleDiscordCreateMessage message model =
                                     Broadcast.adminUserId
                                     user
                                     (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
-                                    (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
+                                    (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
                                     model
 
                             Nothing ->

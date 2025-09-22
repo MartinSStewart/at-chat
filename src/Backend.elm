@@ -2309,8 +2309,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     "Success!"
                                     "Push notifications enabled"
                                     "https://at-chat.app/at-logo-no-background.png"
-                                    HomePageRoute
-                                    "test data"
+                                    Nothing
                                     pushSubscription
                                     model2
                                 ]
