@@ -668,6 +668,7 @@ impl<D: Serialize> Notification<D> {
 struct DeclarativePushPayload<'a, D> {
     web_push: u16,
     pub notification: &'a Notification<D>,
+    pub mutable: bool,
 }
 
 impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
@@ -675,6 +676,7 @@ impl<'a, D: Serialize> DeclarativePushPayload<'a, D> {
         DeclarativePushPayload {
             web_push: 8030,
             notification,
+            mutable: true,
         }
     }
 }
