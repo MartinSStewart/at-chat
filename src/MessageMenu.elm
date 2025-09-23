@@ -1,11 +1,12 @@
 module MessageMenu exposing
     ( close
+    , desktopMenuHeight
     , editMessageTextInputConfig
     , editMessageTextInputId
-    , menuHeight
     , messageMenuSpeed
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
+    , showEdit
     , view
     , width
     )
@@ -56,17 +57,23 @@ close model loggedIn =
                         { extraOptions
                             | mobileMode =
                                 case extraOptions.mobileMode of
-                                    MessageMenuClosing offset ->
-                                        MessageMenuClosing offset
+                                    MessageMenuClosing offset maybeEdit ->
+                                        MessageMenuClosing offset maybeEdit
 
                                     MessageMenuOpening { offset } ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing
+                                            offset
+                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
 
                                     MessageMenuDragging { offset } ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing
+                                            offset
+                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
 
                                     MessageMenuFixed offset ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing
+                                            offset
+                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
                         }
                             |> MessageMenu
 
@@ -120,12 +127,12 @@ messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
 
 
-menuHeight :
+desktopMenuHeight :
     { a | guildOrDmId : GuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
-menuHeight extraOptions local model =
+desktopMenuHeight extraOptions local model =
     let
         itemCount =
             menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model

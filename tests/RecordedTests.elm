@@ -787,6 +787,9 @@ tests fileData =
                         ]
                     )
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
+                , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
+                , admin.click 1000 (Dom.id "messageMenu_editMobile_sendMessage")
                 ]
             )
         ]
