@@ -75,8 +75,8 @@ handlePortToJs requestAndData =
             Just
                 ( "got_window_size"
                 , Json.Encode.object
-                    [ ( "width", Json.Encode.float windowSize.width )
-                    , ( "height", Json.Encode.float windowSize.height )
+                    [ ( "width", Json.Encode.float desktopWindow.width )
+                    , ( "height", Json.Encode.float desktopWindow.height )
                     ]
                 )
 
@@ -129,9 +129,14 @@ handlePortToJs requestAndData =
             Nothing
 
 
-windowSize : { width : number, height : number }
-windowSize =
+desktopWindow : { width : number, height : number }
+desktopWindow =
     { width = 1000, height = 600 }
+
+
+mobileWindow : { width : number, height : number }
+mobileWindow =
+    { width = 400, height = 800 }
 
 
 parseLoginCode : Parser.Parser Int
@@ -370,7 +375,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
         100
         sessionId0
         "/"
-        windowSize
+        desktopWindow
         (\admin ->
             [ handleLogin firefoxDesktop adminEmail admin
             , admin.click 100 (Dom.id "guild_createGuild")
@@ -398,7 +403,7 @@ connectTwoUsersAndJoinNewGuild continueFunc =
                                 100
                                 sessionId1
                                 (dropPrefix Env.domain text)
-                                windowSize
+                                desktopWindow
                                 (\user ->
                                     [ user.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                                     , handleLoginFromLoginPage userEmail user
@@ -425,6 +430,14 @@ writeMessage user text =
     T.group
         [ user.input 100 (Dom.id "channel_textinput") text
         , user.keyDown 100 (Dom.id "channel_textinput") "Enter" []
+        ]
+
+
+writeMessageMobile : T.FrontendActions ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel -> String -> T.Action ToBackend FrontendMsg FrontendModel ToFrontend BackendMsg BackendModel
+writeMessageMobile user text =
+    T.group
+        [ user.input 100 (Dom.id "channel_textinput") text
+        , user.click 100 (Dom.id "messageMenu_channelInput_sendMessage")
         ]
 
 
@@ -498,7 +511,7 @@ scrollToTop user =
               , Json.Encode.object
                     [ ( "scrollTop", Json.Encode.float 10 )
                     , ( "scrollHeight", Json.Encode.float 1000 )
-                    , ( "clientHeight", Json.Encode.float (windowSize.height - 40) )
+                    , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
                     ]
               )
             ]
@@ -518,7 +531,7 @@ scrollToMiddle user =
               , Json.Encode.object
                     [ ( "scrollTop", Json.Encode.float 1000 )
                     , ( "scrollHeight", Json.Encode.float 2000 )
-                    , ( "clientHeight", Json.Encode.float (windowSize.height - 40) )
+                    , ( "clientHeight", Json.Encode.float (desktopWindow.height - 40) )
                     ]
               )
             ]
@@ -675,7 +688,7 @@ tests fileData =
             100
             sessionId0
             "/"
-            windowSize
+            desktopWindow
             (\adminA ->
                 [ handleLogin firefoxDesktop adminEmail adminA
                 , adminA.click 100 (Dom.id "guild_showUserOptions")
@@ -684,7 +697,7 @@ tests fileData =
                     100
                     sessionId1
                     "/"
-                    windowSize
+                    desktopWindow
                     (\adminB ->
                         [ handleLogin safariIphone adminEmail adminB
                         , hasExactText adminA [ "Mobile • Safari", "Desktop • Firefox (current device)" ]
@@ -693,7 +706,7 @@ tests fileData =
                             100
                             sessionId2
                             "/"
-                            windowSize
+                            desktopWindow
                             (\adminC ->
                                 [ handleLogin chromeDesktop adminEmail adminC
                                 , hasExactText
@@ -752,6 +765,35 @@ tests fileData =
             )
         ]
     , T.start
+        "Mobile edit message"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId2
+            "/"
+            mobileWindow
+            (\admin ->
+                [ handleLogin safariIphone adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , writeMessageMobile admin "Test"
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_0")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
+                , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
+                , admin.click 1000 (Dom.id "messageMenu_editMobile_sendMessage")
+                ]
+            )
+        ]
+    , T.start
         "Change notification level"
         startTime
         normalConfig
@@ -783,7 +825,7 @@ tests fileData =
                     100
                     sessionId1
                     (Route.encode Route.HomePageRoute)
-                    windowSize
+                    desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
@@ -818,7 +860,7 @@ tests fileData =
                     100
                     sessionId1
                     (Route.encode Route.HomePageRoute)
-                    windowSize
+                    desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                         , hasExactText userReload [ "2" ]
@@ -840,7 +882,7 @@ tests fileData =
                     100
                     sessionId1
                     (Route.encode Route.HomePageRoute)
-                    windowSize
+                    desktopWindow
                     (\_ ->
                         [ user.snapshotView 100 { name = "Guild icon new message notification on reload" } ]
                     )
@@ -862,7 +904,7 @@ tests fileData =
                     100
                     sessionId1
                     (Route.encode Route.HomePageRoute)
-                    windowSize
+                    desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                         , userReload.click 100 (Dom.id "guild_openGuild_1")
@@ -974,7 +1016,7 @@ tests fileData =
                     100
                     sessionId1
                     (Route.encode Route.HomePageRoute)
-                    windowSize
+                    desktopWindow
                     (\userReload ->
                         [ userReload.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                         , userReload.checkView
@@ -1002,7 +1044,7 @@ tests fileData =
             100
             sessionId0
             "/"
-            windowSize
+            desktopWindow
             (\user ->
                 [ handleLogin firefoxDesktop adminEmail user
                 , user.click 100 (Dom.id "guild_showUserOptions")
@@ -1053,7 +1095,7 @@ tests fileData =
             100
             sessionId0
             "/"
-            windowSize
+            desktopWindow
             (\user ->
                 [ handleLogin firefoxDesktop adminEmail user
                 , user.snapshotView 100 { name = "2FA login step" }
@@ -1104,7 +1146,7 @@ tests fileData =
             100
             sessionId0
             "/"
-            windowSize
+            desktopWindow
             (\user ->
                 let
                     openLoginAndSubmitEmail delay =
@@ -1145,17 +1187,13 @@ tests fileData =
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
-                , [ user.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Too many login attempts have been made." ])
+                , [ hasNotText user [ "Too many login attempts have been made." ]
                   , openLoginAndSubmitEmail 100
                   ]
                     |> T.group
                     |> List.repeat 6
                     |> T.group
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Too many login attempts have been made." ])
+                , hasText user [ "Too many login attempts have been made." ]
                 , user.snapshotView 100 { name = "Too many login attempts" }
                 , -- Should be able to log in again after some time has passed
                   openLoginAndSubmitEmail (5 * 60 * 1000)
@@ -1169,12 +1207,7 @@ tests fileData =
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
-                , user.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                        ]
-                    )
+                , hasExactText user [ PersonName.toString Backend.adminUser.name ]
                 ]
             )
         , T.checkState
@@ -1199,7 +1232,7 @@ tests fileData =
             100
             sessionId0
             "/"
-            windowSize
+            desktopWindow
             (\client ->
                 [ client.portEvent 10 "user_agent_from_js" (Json.Encode.string firefoxDesktop)
                 , client.snapshotView 100 { name = "homepage" }

@@ -180,7 +180,7 @@ subscriptions model =
 
                                     MessageMenu messageMenuExtraOptions ->
                                         case messageMenuExtraOptions.mobileMode of
-                                            MessageMenuClosing _ ->
+                                            MessageMenuClosing _ _ ->
                                                 Effect.Browser.Events.onAnimationFrameDelta MessageMenuAnimated
 
                                             MessageMenuOpening _ ->
@@ -1971,13 +1971,6 @@ updateLoaded msg model =
                                             Nothing
 
                                         else
-                                            --Local_SendEditMessage
-                                            --    model.time
-                                            --    guildOrDmId
-                                            --    edit.messageIndex
-                                            --    richText
-                                            --    (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                            --    |> Just
                                             Local_SendEditMessage
                                                 model.time
                                                 guildOrDmId
@@ -1995,10 +1988,7 @@ updateLoaded msg model =
                                     _ ->
                                         Nothing
                                 )
-                                { loggedIn
-                                    | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
-                                    , messageHover = NoMessageHover
-                                }
+                                (MessageMenu.close model loggedIn)
                                 (setFocus model Pages.Guild.channelTextInputId)
 
                         Nothing ->
@@ -2626,7 +2616,7 @@ updateLoaded msg model =
                                             }
                                                 |> MessageMenu
 
-                                        MessageMenuClosing offset ->
+                                        MessageMenuClosing offset maybeEdit ->
                                             let
                                                 offsetNext : Quantity Float CssPixels
                                                 offsetNext =
@@ -2637,7 +2627,7 @@ updateLoaded msg model =
                                                 NoMessageHover
 
                                             else
-                                                { messageMenu | mobileMode = MessageMenuClosing offsetNext }
+                                                { messageMenu | mobileMode = MessageMenuClosing offsetNext maybeEdit }
                                                     |> MessageMenu
 
                                         MessageMenuDragging _ ->
@@ -3131,7 +3121,7 @@ updateLoaded msg model =
 
                                 menuHeight : Int
                                 menuHeight =
-                                    MessageMenu.menuHeight
+                                    MessageMenu.desktopMenuHeight
                                         { guildOrDmId = guildOrDmId
                                         , threadRoute = threadRoute
                                         , position = clickedAt
@@ -3802,8 +3792,8 @@ handleTouchEnd time model =
                             loggedIn
             in
             ( case loggedIn2.messageHover of
-                MessageMenu messageMenu ->
-                    case messageMenu.mobileMode of
+                MessageMenu extraOptions ->
+                    case extraOptions.mobileMode of
                         MessageMenuDragging dragging ->
                             let
                                 delta : Duration
@@ -3823,7 +3813,7 @@ handleTouchEnd time model =
                                 menuHeight : Quantity Float CssPixels
                                 menuHeight =
                                     MessageMenu.mobileMenuMaxHeight
-                                        messageMenu
+                                        extraOptions
                                         (Local.model loggedIn2.localState)
                                         loggedIn2
                                         model
@@ -3835,13 +3825,15 @@ handleTouchEnd time model =
                             { loggedIn2
                                 | messageHover =
                                     MessageMenu
-                                        { messageMenu
+                                        { extraOptions
                                             | mobileMode =
                                                 if
                                                     (dragging.offset |> Quantity.lessThan halfwayPoint)
                                                         || (menuDelta |> Quantity.lessThan speedThreshold)
                                                 then
-                                                    MessageMenuClosing dragging.offset
+                                                    MessageMenuClosing
+                                                        dragging.offset
+                                                        (MessageMenu.showEdit extraOptions loggedIn2)
 
                                                 else
                                                     MessageMenuFixed

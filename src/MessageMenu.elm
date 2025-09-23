@@ -1,11 +1,12 @@
 module MessageMenu exposing
     ( close
+    , desktopMenuHeight
     , editMessageTextInputConfig
     , editMessageTextInputId
-    , menuHeight
     , messageMenuSpeed
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
+    , showEdit
     , view
     , width
     )
@@ -56,17 +57,17 @@ close model loggedIn =
                         { extraOptions
                             | mobileMode =
                                 case extraOptions.mobileMode of
-                                    MessageMenuClosing offset ->
-                                        MessageMenuClosing offset
+                                    MessageMenuClosing offset maybeEdit ->
+                                        MessageMenuClosing offset maybeEdit
 
                                     MessageMenuOpening { offset } ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
 
                                     MessageMenuDragging { offset } ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
 
                                     MessageMenuFixed offset ->
-                                        MessageMenuClosing offset
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
                         }
                             |> MessageMenu
 
@@ -85,7 +86,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
+    (case showEditViewed extraOptions loggedIn of
         Just edit ->
             toFloat (List.length (String.lines edit.text)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
@@ -120,12 +121,12 @@ messageMenuSpeed =
     Quantity.rate (CssPixels.cssPixels 800) Duration.second
 
 
-menuHeight :
+desktopMenuHeight :
     { a | guildOrDmId : GuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
-menuHeight extraOptions local model =
+desktopMenuHeight extraOptions local model =
     let
         itemCount =
             menuItems False extraOptions.guildOrDmId extraOptions.threadRoute False extraOptions.position local model
@@ -149,11 +150,15 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> Maybe EditMessage
-showEdit guildOrDmId threadRoute loggedIn =
-    case SeqDict.get ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute ) loggedIn.editMessage of
+showEdit : MessageMenuExtraOptions -> LoggedIn2 -> Maybe EditMessage
+showEdit extraOptions loggedIn =
+    case
+        SeqDict.get
+            ( extraOptions.guildOrDmId, Id.threadRouteWithoutMessage extraOptions.threadRoute )
+            loggedIn.editMessage
+    of
         Just edit ->
-            case threadRoute of
+            case extraOptions.threadRoute of
                 ViewThreadWithMessage _ messageId ->
                     if edit.messageIndex == Id.changeType messageId then
                         Just edit
@@ -172,87 +177,110 @@ showEdit guildOrDmId threadRoute loggedIn =
             Nothing
 
 
+showEditViewed : MessageMenuExtraOptions -> LoggedIn2 -> Maybe EditMessage
+showEditViewed extraOptions loggedIn =
+    case extraOptions.mobileMode of
+        MessageMenuClosing _ maybeEditing ->
+            maybeEditing
+
+        MessageMenuOpening _ ->
+            showEdit extraOptions loggedIn
+
+        MessageMenuDragging _ ->
+            showEdit extraOptions loggedIn
+
+        MessageMenuFixed _ ->
+            showEdit extraOptions loggedIn
+
+
+viewMobile : Float -> MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+viewMobile offset extraOptions loggedIn local model =
+    let
+        height : Int
+        height =
+            1000
+    in
+    Ui.column
+        [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
+        , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
+        , Ui.background (Ui.rgb 0 0 0)
+        , MyUi.htmlStyle
+            "padding"
+            (String.fromInt topPadding
+                ++ "px 8px calc("
+                ++ MyUi.insetBottom
+                ++ " * 0.5 + "
+                ++ String.fromInt bottomPadding
+                ++ "px) 8px"
+            )
+        , MyUi.blockClickPropagation MessageMenu_PressedContainer
+        , Ui.height (Ui.px height)
+        ]
+        (MyUi.elButton
+            (Dom.id "messageMenu_close")
+            MessageMenu_PressedClose
+            [ Ui.height (Ui.px mobileCloseButton) ]
+            (Ui.el
+                [ Ui.background (Ui.rgb 40 50 60)
+                , Ui.rounded 99
+                , Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 4)
+                , Ui.centerX
+                , Ui.centerY
+                ]
+                Ui.none
+            )
+            :: (case showEditViewed extraOptions loggedIn of
+                    Just edit ->
+                        [ MessageInput.view
+                            (Dom.id "messageMenu_editMobile")
+                            True
+                            True
+                            (editMessageTextInputConfig
+                                extraOptions.guildOrDmId
+                                (Id.threadRouteWithoutMessage extraOptions.threadRoute)
+                            )
+                            editMessageTextInputId
+                            ""
+                            edit.text
+                            edit.attachedFiles
+                            loggedIn.pingUser
+                            local
+                        ]
+
+                    Nothing ->
+                        List.intersperse
+                            (Ui.el
+                                [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                , Ui.borderColor MyUi.border2
+                                ]
+                                Ui.none
+                            )
+                            (menuItems
+                                True
+                                extraOptions.guildOrDmId
+                                extraOptions.threadRoute
+                                extraOptions.isThreadStarter
+                                extraOptions.position
+                                local
+                                model
+                            )
+               )
+        )
+
+
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     if MyUi.isMobile model then
+        let
+            offset =
+                Types.messageMenuMobileOffset extraOptions.mobileMode
+                    |> CssPixels.inCssPixels
+        in
         Ui.el
             [ Ui.height Ui.fill
-            , Ui.background (Ui.rgba 0 0 0 0.3)
-            , Ui.column
-                [ Ui.move
-                    { x = 0
-                    , y =
-                        Types.messageMenuMobileOffset extraOptions.mobileMode
-                            |> CssPixels.inCssPixels
-                            |> negate
-                            |> round
-                    , z = 0
-                    }
-                , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
-                , Ui.background (Ui.rgb 0 0 0)
-                , MyUi.htmlStyle
-                    "padding"
-                    (String.fromInt topPadding
-                        ++ "px 8px calc("
-                        ++ MyUi.insetBottom
-                        ++ " * 0.5 + "
-                        ++ String.fromInt bottomPadding
-                        ++ "px) 8px"
-                    )
-                , MyUi.blockClickPropagation MessageMenu_PressedContainer
-                ]
-                (MyUi.elButton
-                    (Dom.id "messageMenu_close")
-                    MessageMenu_PressedClose
-                    [ Ui.height (Ui.px mobileCloseButton) ]
-                    (Ui.el
-                        [ Ui.background (Ui.rgb 40 50 60)
-                        , Ui.rounded 99
-                        , Ui.width (Ui.px 40)
-                        , Ui.height (Ui.px 4)
-                        , Ui.centerX
-                        , Ui.centerY
-                        ]
-                        Ui.none
-                    )
-                    :: (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
-                            Just edit ->
-                                [ MessageInput.view
-                                    (Dom.id "messageMenu_editMobile")
-                                    True
-                                    True
-                                    (editMessageTextInputConfig
-                                        extraOptions.guildOrDmId
-                                        (Id.threadRouteWithoutMessage extraOptions.threadRoute)
-                                    )
-                                    editMessageTextInputId
-                                    ""
-                                    edit.text
-                                    edit.attachedFiles
-                                    loggedIn.pingUser
-                                    local
-                                ]
-
-                            Nothing ->
-                                List.intersperse
-                                    (Ui.el
-                                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        , Ui.borderColor MyUi.border2
-                                        ]
-                                        Ui.none
-                                    )
-                                    (menuItems
-                                        True
-                                        extraOptions.guildOrDmId
-                                        extraOptions.threadRoute
-                                        extraOptions.isThreadStarter
-                                        extraOptions.position
-                                        local
-                                        model
-                                    )
-                       )
-                )
-                |> Ui.below
+            , Ui.background (Ui.rgba 0 0 0 (0.3 * clamp 0 1 ((offset - 30) / 30)))
+            , viewMobile offset extraOptions loggedIn local model |> Ui.below
             ]
             Ui.none
 

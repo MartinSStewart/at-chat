@@ -15,7 +15,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
 import FileStatus exposing (FileId)
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Html.Events
 import Icons
@@ -64,67 +64,6 @@ type alias MsgConfig msg =
     , target : MentionUserTarget
     , onPasteFiles : Nonempty File -> msg
     }
-
-
-viewBasic : (String -> msg) -> String -> String -> Html msg
-viewBasic typedMessage placeholderText text =
-    Html.div
-        [ Html.Attributes.style "display" "flex"
-        , Html.Attributes.style "position" "relative"
-        , Html.Attributes.style "min-height" "min-content"
-        , Html.Attributes.style "width" "100%"
-        ]
-        [ Html.textarea
-            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.style "font-size" "inherit"
-            , Html.Attributes.style "font-family" "inherit"
-            , Html.Attributes.style "line-height" "inherit"
-            , Html.Attributes.style "width" "calc(100% - 18px)"
-            , Html.Attributes.style "height" "calc(100% - 2px)"
-            , Html.Attributes.style "background-color" "transparent"
-            , Html.Attributes.style "border" "0"
-            , Html.Attributes.style "resize" "none"
-            , Html.Attributes.style "overflow" "hidden"
-            , Html.Attributes.style "caret-color" "white"
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "outline" "none"
-            , Html.Events.onInput typedMessage
-            , Html.Attributes.value text
-            ]
-            []
-        , Html.div
-            [ Html.Attributes.style "pointer-events" "none"
-            , Html.Attributes.style "padding" "0 9px 0 9px"
-            , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
-            , Html.Attributes.style "white-space" "pre-wrap"
-            , Html.Attributes.style "overflow-wrap" "anywhere"
-            , Html.Attributes.style "color"
-                (if text == "" then
-                    "rgb(180,180,180)"
-
-                 else
-                    "rgb(255,255,255)"
-                )
-            ]
-            (case String.Nonempty.fromString text of
-                Just nonempty ->
-                    let
-                        users =
-                            SeqDict.empty
-                    in
-                    RichText.textInputView users SeqDict.empty (RichText.fromNonemptyString users nonempty)
-                        ++ [ Html.text "\n" ]
-
-                Nothing ->
-                    [ if placeholderText == "" then
-                        Html.text " "
-
-                      else
-                        Html.text placeholderText
-                    ]
-            )
-        ]
 
 
 view :
