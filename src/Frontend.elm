@@ -3792,8 +3792,8 @@ handleTouchEnd time model =
                             loggedIn
             in
             ( case loggedIn2.messageHover of
-                MessageMenu messageMenu ->
-                    case messageMenu.mobileMode of
+                MessageMenu extraOptions ->
+                    case extraOptions.mobileMode of
                         MessageMenuDragging dragging ->
                             let
                                 delta : Duration
@@ -3813,7 +3813,7 @@ handleTouchEnd time model =
                                 menuHeight : Quantity Float CssPixels
                                 menuHeight =
                                     MessageMenu.mobileMenuMaxHeight
-                                        messageMenu
+                                        extraOptions
                                         (Local.model loggedIn2.localState)
                                         loggedIn2
                                         model
@@ -3825,7 +3825,7 @@ handleTouchEnd time model =
                             { loggedIn2
                                 | messageHover =
                                     MessageMenu
-                                        { messageMenu
+                                        { extraOptions
                                             | mobileMode =
                                                 if
                                                     (dragging.offset |> Quantity.lessThan halfwayPoint)
@@ -3833,11 +3833,7 @@ handleTouchEnd time model =
                                                 then
                                                     MessageMenuClosing
                                                         dragging.offset
-                                                        (MessageMenu.showEdit
-                                                            messageMenu.guildOrDmId
-                                                            messageMenu.threadRoute
-                                                            loggedIn2
-                                                        )
+                                                        (MessageMenu.showEdit extraOptions loggedIn2)
 
                                                 else
                                                     MessageMenuFixed

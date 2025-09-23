@@ -61,19 +61,13 @@ close model loggedIn =
                                         MessageMenuClosing offset maybeEdit
 
                                     MessageMenuOpening { offset } ->
-                                        MessageMenuClosing
-                                            offset
-                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
 
                                     MessageMenuDragging { offset } ->
-                                        MessageMenuClosing
-                                            offset
-                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
 
                                     MessageMenuFixed offset ->
-                                        MessageMenuClosing
-                                            offset
-                                            (showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn)
+                                        MessageMenuClosing offset (showEdit extraOptions loggedIn)
                         }
                             |> MessageMenu
 
@@ -92,7 +86,7 @@ close model loggedIn =
 
 mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
 mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
+    (case showEditViewed extraOptions loggedIn of
         Just edit ->
             toFloat (List.length (String.lines edit.text)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
 
@@ -156,11 +150,15 @@ mobileCloseButton =
     12
 
 
-showEdit : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> Maybe EditMessage
-showEdit guildOrDmId threadRoute loggedIn =
-    case SeqDict.get ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute ) loggedIn.editMessage of
+showEdit : MessageMenuExtraOptions -> LoggedIn2 -> Maybe EditMessage
+showEdit extraOptions loggedIn =
+    case
+        SeqDict.get
+            ( extraOptions.guildOrDmId, Id.threadRouteWithoutMessage extraOptions.threadRoute )
+            loggedIn.editMessage
+    of
         Just edit ->
-            case threadRoute of
+            case extraOptions.threadRoute of
                 ViewThreadWithMessage _ messageId ->
                     if edit.messageIndex == Id.changeType messageId then
                         Just edit
@@ -179,24 +177,31 @@ showEdit guildOrDmId threadRoute loggedIn =
             Nothing
 
 
-viewMobile : MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
-viewMobile extraOptions loggedIn local model =
+showEditViewed : MessageMenuExtraOptions -> LoggedIn2 -> Maybe EditMessage
+showEditViewed extraOptions loggedIn =
+    case extraOptions.mobileMode of
+        MessageMenuClosing _ maybeEditing ->
+            maybeEditing
+
+        MessageMenuOpening record ->
+            showEdit extraOptions loggedIn
+
+        MessageMenuDragging record ->
+            showEdit extraOptions loggedIn
+
+        MessageMenuFixed quantity ->
+            showEdit extraOptions loggedIn
+
+
+viewMobile : Float -> MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+viewMobile offset extraOptions loggedIn local model =
     let
         height : Int
         height =
             1000
     in
     Ui.column
-        [ Ui.move
-            { x = 0
-            , y =
-                Types.messageMenuMobileOffset extraOptions.mobileMode
-                    |> CssPixels.inCssPixels
-                    |> negate
-                    |> round
-                    |> (+) height
-            , z = 0
-            }
+        [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
         , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
         , Ui.background (Ui.rgb 0 0 0)
         , MyUi.htmlStyle
@@ -225,7 +230,7 @@ viewMobile extraOptions loggedIn local model =
                 ]
                 Ui.none
             )
-            :: (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
+            :: (case showEditViewed extraOptions loggedIn of
                     Just edit ->
                         [ MessageInput.view
                             (Dom.id "messageMenu_editMobile")
@@ -267,10 +272,15 @@ viewMobile extraOptions loggedIn local model =
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     if MyUi.isMobile model then
+        let
+            offset =
+                Types.messageMenuMobileOffset extraOptions.mobileMode
+                    |> CssPixels.inCssPixels
+        in
         Ui.el
             [ Ui.height Ui.fill
-            , Ui.background (Ui.rgba 0 0 0 0.3)
-            , viewMobile extraOptions loggedIn local model |> Ui.below
+            , Ui.background (Ui.rgba 0 0 0 (0.3 * clamp 0 1 ((offset - 30) / 30)))
+            , viewMobile offset extraOptions loggedIn local model |> Ui.below
             ]
             Ui.none
 
