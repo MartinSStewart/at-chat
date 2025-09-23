@@ -9,17 +9,22 @@ import Effect.Http as Http exposing (Response(..))
 import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task
+import Effect.Task as Task exposing (Task)
 import Env
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Json.Decode
+import Json.Decode exposing (Decoder)
+import Json.Decode.Extra
 import Json.Encode
+import List.Extra
+import List.Nonempty exposing (Nonempty)
 import MyUi
+import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import Serialize exposing (Codec)
+import String.Nonempty
 import Svg
 import Svg.Attributes
 import Ui exposing (Element)
@@ -122,19 +127,25 @@ type Msg
     | GotLocalStorage String
     | EditedResponse ResponseId String
     | NoOp
-    | GotAiModels (Result Http.Error (List String))
+    | GotAiModels (Result Http.Error (List AiModel))
 
 
 type ToBackend
-    = AiMessageRequest String ResponseId String
+    = AiMessageRequest String ResponseId (List Message)
+    | AiMessageRequestSimple String ResponseId String
+
+
+type Message
+    = TextMessage String
+    | ImageUrlMessage String
 
 
 type BackendMsg
-    = GotAiMessage ClientId ResponseId (Result Http.Error String)
+    = GotAiMessage ClientId ResponseId (Result Http.Error AiResponse)
 
 
 type ToFrontend
-    = AiMessageResponse ResponseId (Result Http.Error String)
+    = AiMessageResponse ResponseId (Result Http.Error AiResponse)
 
 
 
@@ -227,16 +238,26 @@ getModels =
 
 type AiModelsStatus
     = LoadingAiModels
-    | LoadedAiModels (List String)
+    | LoadedAiModels (List AiModel)
     | LoadingFailed Http.Error
 
 
-decodeModels : Json.Decode.Decoder (List String)
+type alias AiModel =
+    { id : String
+    , inputs : List String
+    }
+
+
+decodeModels : Json.Decode.Decoder (List AiModel)
 decodeModels =
     Json.Decode.field
         "data"
         (Json.Decode.list
-            (Json.Decode.field "id" Json.Decode.string)
+            (Json.Decode.map2
+                AiModel
+                (Json.Decode.field "id" Json.Decode.string)
+                (Json.Decode.at [ "architecture", "input_modalities" ] (Json.Decode.list Json.Decode.string))
+            )
         )
 
 
@@ -383,6 +404,64 @@ sendIcon =
     Svg.svg [ Svg.Attributes.fill "none", Svg.Attributes.viewBox "0 0 24 24", Svg.Attributes.strokeWidth "1.5", Svg.Attributes.stroke "currentColor" ] [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" ] [] ]
 
 
+chatToMessage : String -> List Message
+chatToMessage text =
+    case String.Nonempty.fromString text of
+        Just text2 ->
+            RichText.fromNonemptyString SeqDict.empty text2
+                |> richTextToMessage
+
+        Nothing ->
+            []
+
+
+richTextToMessage : Nonempty RichText -> List Message
+richTextToMessage nonempty =
+    List.foldl
+        (\a ( currentText, list ) ->
+            case a of
+                RichText.NormalText char rest ->
+                    ( currentText ++ String.fromChar char ++ rest, list )
+
+                RichText.UserMention id ->
+                    ( currentText, list )
+
+                RichText.Bold nonempty2 ->
+                    ( currentText, list )
+
+                RichText.Italic nonempty2 ->
+                    ( currentText, list )
+
+                RichText.Underline nonempty2 ->
+                    ( currentText, list )
+
+                RichText.Strikethrough nonempty2 ->
+                    ( currentText, list )
+
+                RichText.Spoiler nonempty2 ->
+                    ( currentText, list )
+
+                RichText.Hyperlink protocol url ->
+                    ( ""
+                    , ImageUrlMessage (RichText.hyperlinkToString protocol url)
+                        :: TextMessage currentText
+                        :: list
+                    )
+
+                RichText.InlineCode char string ->
+                    ( currentText, list )
+
+                RichText.CodeBlock language string ->
+                    ( currentText, list )
+
+                RichText.AttachedFile id ->
+                    ( currentText, list )
+        )
+        ( "", [] )
+        (List.Nonempty.toList nonempty)
+        |> (\( currentText, list ) -> TextMessage currentText :: list |> List.reverse)
+
+
 update : Msg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )
 update msg model =
     case msg of
@@ -391,7 +470,7 @@ update msg model =
 
         PressedSend ->
             if SeqDict.size model.pendingResponses < 3 then
-                case model.selectedModel of
+                case getAiModel model of
                     Just aiModel ->
                         let
                             newChatHistory : String
@@ -420,7 +499,13 @@ update msg model =
                             , responseCounter = model.responseCounter + 1
                           }
                         , Command.batch
-                            [ Lamdera.sendToBackend (AiMessageRequest aiModel responseId newChatHistory)
+                            [ (if List.member "image" aiModel.inputs then
+                                AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+
+                               else
+                                AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                              )
+                                |> Lamdera.sendToBackend
                             , scrollToBottom
                             ]
                         )
@@ -451,13 +536,19 @@ update msg model =
             saveToLocalStorage { model | pendingResponses = SeqDict.remove responseId model.pendingResponses }
 
         PressedRetry responseId ->
-            case model.selectedModel of
+            case getAiModel model of
                 Just aiModel ->
                     ( { model
                         | pendingResponses = SeqDict.insert responseId Pending model.pendingResponses
                       }
                     , Command.batch
-                        [ Lamdera.sendToBackend (AiMessageRequest aiModel responseId model.chatHistory)
+                        [ (if List.member "image" aiModel.inputs then
+                            AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+
+                           else
+                            AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                          )
+                            |> Lamdera.sendToBackend
                         , scrollToTop (responseContainerId responseId)
                         ]
                     )
@@ -539,9 +630,12 @@ update msg model =
             ( case result of
                 Ok ok ->
                     { model
-                        | aiModels = LoadedAiModels (List.sort ok)
+                        | aiModels = LoadedAiModels (List.sortBy .id ok)
                         , selectedModel =
-                            if List.member "anthropic/claude-sonnet-4" ok && model.selectedModel == Nothing then
+                            if
+                                List.any (\a -> a.id == "anthropic/claude-sonnet-4") ok
+                                    && (model.selectedModel == Nothing)
+                            then
                                 Just "anthropic/claude-sonnet-4"
 
                             else
@@ -554,6 +648,16 @@ update msg model =
                     }
             , Command.none
             )
+
+
+getAiModel : FrontendModel -> Maybe AiModel
+getAiModel model =
+    case ( model.selectedModel, model.aiModels ) of
+        ( Just selected, LoadedAiModels aiModels ) ->
+            List.Extra.find (\aiModel -> aiModel.id == selected) aiModels
+
+        _ ->
+            Nothing
 
 
 prefixWrapper : String -> String
@@ -590,7 +694,7 @@ updateFromBackend msg model =
                                     Ok aiMessage ->
                                         let
                                             aiMessage2 =
-                                                case String.split (prefixWrapper model.botPrefix) aiMessage of
+                                                case String.split (prefixWrapper model.botPrefix) aiMessage.content of
                                                     aiMessage3 :: _ ->
                                                         case String.split (prefixWrapper model.userPrefix) aiMessage3 of
                                                             aiMessage4 :: _ ->
@@ -600,7 +704,7 @@ updateFromBackend msg model =
                                                                 aiMessage3
 
                                                     [] ->
-                                                        aiMessage
+                                                        aiMessage.content
                                         in
                                         String.replace "\\\"" "\"" aiMessage2 |> GotResponse
 
@@ -1002,6 +1106,7 @@ optionsView model =
                     , Ui.borderColor MyUi.inputBorder
                     , Ui.rounded 4
                     , Ui.background MyUi.inputBackground
+                    , textWrap
                     ]
                     { onChange = TypedUserPrefix
                     , text = model.userPrefix
@@ -1018,6 +1123,7 @@ optionsView model =
                     , Ui.borderColor MyUi.inputBorder
                     , Ui.rounded 4
                     , Ui.background MyUi.inputBackground
+                    , textWrap
                     ]
                     { onChange = TypedBotPrefix
                     , text = model.botPrefix
@@ -1027,6 +1133,10 @@ optionsView model =
                 ]
             ]
         ]
+
+
+textWrap =
+    Html.Attributes.style "overflow-wrap" "anywhere" |> Ui.htmlAttribute
 
 
 containerShadow : Ui.Attribute msg
@@ -1117,10 +1227,26 @@ aiModelDropdown status selected =
                 (List.map
                     (\aiModel ->
                         Html.option
-                            [ Html.Attributes.value aiModel
-                            , Html.Attributes.selected (Just aiModel == selected)
+                            [ Html.Attributes.value aiModel.id
+                            , Html.Attributes.selected (Just aiModel.id == selected)
                             ]
-                            [ Html.text aiModel ]
+                            [ Html.text (aiModel.id ++ " ")
+                            , if List.member "image" aiModel.inputs then
+                                Html.text "🖼️"
+
+                              else
+                                Html.text ""
+                            , if List.member "file" aiModel.inputs then
+                                Html.text "🗎"
+
+                              else
+                                Html.text ""
+                            , if List.member "audio" aiModel.inputs then
+                                Html.text "🔈"
+
+                              else
+                                Html.text ""
+                            ]
                     )
                     aiModels
                 )
@@ -1160,54 +1286,112 @@ backendUpdate msg =
             Lamdera.sendToFrontend clientId (AiMessageResponse responseId result)
 
 
+encodeMessage message =
+    case message of
+        TextMessage text ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "text" )
+                , ( "text", Json.Encode.string text )
+                ]
+
+        ImageUrlMessage url ->
+            Json.Encode.object
+                [ ( "type", Json.Encode.string "image_url" )
+                , ( "image_url", Json.Encode.object [ ( "url", Json.Encode.string url ) ] )
+                ]
+
+
+type alias AiResponse =
+    { images : List String
+    , content : String
+    }
+
+
+decodeAiMessage : Decoder AiResponse
+decodeAiMessage =
+    Json.Decode.oneOf
+        [ Json.Decode.field "message"
+            (Json.Decode.map2
+                AiResponse
+                (Json.Decode.Extra.optionalField "images" (Json.Decode.list decodeImage) |> Json.Decode.map (Maybe.withDefault []))
+                (Json.Decode.field "content" Json.Decode.string)
+            )
+        , Json.Decode.field "text" Json.Decode.string |> Json.Decode.map (AiResponse [])
+        ]
+
+
+decodeImage : Decoder String
+decodeImage =
+    Json.Decode.at [ "image_url", "url" ] Json.Decode.string
+
+
 updateFromFrontend : ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
 updateFromFrontend clientId msg =
     case msg of
-        AiMessageRequest aiModel responseId text ->
-            Http.task
-                { method = "POST"
-                , headers = [ Http.header "Authorization" ("Bearer " ++ Env.openRouterKey) ]
-                , url = "https://openrouter.ai/api/v1/completions"
-                , body =
-                    Json.Encode.object
-                        [ ( "model", Json.Encode.string aiModel )
-                        , ( "prompt", Json.Encode.string text )
-                        ]
-                        |> Http.jsonBody
-                , resolver =
-                    Http.stringResolver
-                        (\result ->
-                            case result of
-                                BadUrl_ url ->
-                                    Err (Http.BadUrl url)
-
-                                Timeout_ ->
-                                    Err Http.Timeout
-
-                                NetworkError_ ->
-                                    Err Http.NetworkError
-
-                                BadStatus_ _ body ->
-                                    Http.BadBody body |> Err
-
-                                GoodStatus_ _ body ->
-                                    case
-                                        Json.Decode.decodeString
-                                            (Json.Decode.field
-                                                "choices"
-                                                (Json.Decode.index
-                                                    0
-                                                    (Json.Decode.field "text" Json.Decode.string)
-                                                )
-                                            )
-                                            body
-                                    of
-                                        Ok ok ->
-                                            Ok ok
-
-                                        Err error ->
-                                            Json.Decode.errorToString error |> Http.BadBody |> Err
-                        )
-                , timeout = Nothing
-                }
+        AiMessageRequest aiModel responseId messages ->
+            openRouterRequest
+                aiModel
+                ( "messages"
+                , Json.Encode.list
+                    (\messages2 ->
+                        Json.Encode.object
+                            [ ( "role", Json.Encode.string "user" )
+                            , ( "content", Json.Encode.list encodeMessage messages2 )
+                            ]
+                    )
+                    [ messages ]
+                )
                 |> Task.attempt (GotAiMessage clientId responseId)
+
+        AiMessageRequestSimple aiModel responseId text ->
+            openRouterRequest aiModel ( "prompt", Json.Encode.string text ) |> Task.attempt (GotAiMessage clientId responseId)
+
+
+openRouterRequest : String -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
+openRouterRequest aiModel message =
+    Http.task
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ Env.openRouterKey) ]
+        , url = "https://openrouter.ai/api/v1/chat/completions"
+        , body =
+            Json.Encode.object
+                [ ( "model", Json.Encode.string aiModel )
+                , message
+                ]
+                |> Http.jsonBody
+        , resolver =
+            Http.stringResolver
+                (\result ->
+                    case result of
+                        BadUrl_ url ->
+                            Err (Http.BadUrl url)
+
+                        Timeout_ ->
+                            Err Http.Timeout
+
+                        NetworkError_ ->
+                            Err Http.NetworkError
+
+                        BadStatus_ _ body ->
+                            Http.BadBody body |> Err
+
+                        GoodStatus_ _ body ->
+                            case
+                                Json.Decode.decodeString
+                                    (Json.Decode.field
+                                        "choices"
+                                        (Json.Decode.index
+                                            0
+                                            decodeAiMessage
+                                        )
+                                    )
+                                    body
+                            of
+                                Ok ok ->
+                                    Ok ok
+
+                                Err error ->
+                                    Json.Decode.errorToString error |> Http.BadBody |> Err
+                )
+        , timeout = Nothing
+        }

@@ -8,6 +8,7 @@ module RichText exposing
     , fromDiscord
     , fromNonemptyString
     , fromSlack
+    , hyperlinkToString
     , mentionsUser
     , preview
     , removeAttachedFile

@@ -833,6 +833,7 @@ textHelper textInput attrs textOptions =
                  , Two.class classes.focusedWithin
                  , Two.class classes.inputMultilineWrapper
                  , Two.style "white-space" "pre-wrap"
+                 , Two.style "overflow-wrap" "anywhere"
 
                  -- Place the actual input element as a transparent foreground elment
                  , Ui.inFront inputElement
