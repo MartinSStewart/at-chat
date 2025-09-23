@@ -183,13 +183,13 @@ showEditViewed extraOptions loggedIn =
         MessageMenuClosing _ maybeEditing ->
             maybeEditing
 
-        MessageMenuOpening record ->
+        MessageMenuOpening _ ->
             showEdit extraOptions loggedIn
 
-        MessageMenuDragging record ->
+        MessageMenuDragging _ ->
             showEdit extraOptions loggedIn
 
-        MessageMenuFixed quantity ->
+        MessageMenuFixed _ ->
             showEdit extraOptions loggedIn
 
 

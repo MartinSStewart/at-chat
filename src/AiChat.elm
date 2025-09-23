@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModelsStatus(..), BackendMsg(..), FrontendModel, LocalStorage, Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModel, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message, Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -248,7 +248,7 @@ type alias AiModel =
     }
 
 
-decodeModels : Json.Decode.Decoder (List AiModel)
+decodeModels : Decoder (List AiModel)
 decodeModels =
     Json.Decode.field
         "data"
@@ -424,7 +424,7 @@ richTextToMessage previousText previousList nonempty =
                 RichText.NormalText char rest ->
                     ( currentText ++ String.fromChar char ++ rest, list )
 
-                RichText.UserMention id ->
+                RichText.UserMention _ ->
                     ( currentText, list )
 
                 RichText.Bold nonempty2 ->
@@ -460,7 +460,7 @@ richTextToMessage previousText previousList nonempty =
                 RichText.CodeBlock _ string ->
                     ( currentText ++ "```" ++ string ++ "```", list )
 
-                RichText.AttachedFile id ->
+                RichText.AttachedFile _ ->
                     ( currentText, list )
         )
         ( previousText, previousList )
@@ -1111,7 +1111,6 @@ optionsView model =
                     , Ui.borderColor MyUi.inputBorder
                     , Ui.rounded 4
                     , Ui.background MyUi.inputBackground
-                    , textWrap
                     ]
                     { onChange = TypedUserPrefix
                     , text = model.userPrefix
@@ -1128,7 +1127,6 @@ optionsView model =
                     , Ui.borderColor MyUi.inputBorder
                     , Ui.rounded 4
                     , Ui.background MyUi.inputBackground
-                    , textWrap
                     ]
                     { onChange = TypedBotPrefix
                     , text = model.botPrefix
@@ -1138,10 +1136,6 @@ optionsView model =
                 ]
             ]
         ]
-
-
-textWrap =
-    Html.Attributes.style "overflow-wrap" "anywhere" |> Ui.htmlAttribute
 
 
 containerShadow : Ui.Attribute msg
@@ -1291,6 +1285,7 @@ backendUpdate msg =
             Lamdera.sendToFrontend clientId (AiMessageResponse responseId result)
 
 
+encodeMessage : Message -> Json.Encode.Value
 encodeMessage message =
     case message of
         TextMessage text ->
