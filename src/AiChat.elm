@@ -409,14 +409,15 @@ chatToMessage text =
     case String.Nonempty.fromString text of
         Just text2 ->
             RichText.fromNonemptyString SeqDict.empty text2
-                |> richTextToMessage
+                |> richTextToMessage "" []
+                |> (\( currentText, list ) -> TextMessage currentText :: list |> List.reverse)
 
         Nothing ->
             []
 
 
-richTextToMessage : Nonempty RichText -> List Message
-richTextToMessage nonempty =
+richTextToMessage : String -> List Message -> Nonempty RichText -> ( String, List Message )
+richTextToMessage previousText previousList nonempty =
     List.foldl
         (\a ( currentText, list ) ->
             case a of
@@ -427,19 +428,24 @@ richTextToMessage nonempty =
                     ( currentText, list )
 
                 RichText.Bold nonempty2 ->
-                    ( currentText, list )
+                    richTextToMessage (currentText ++ "*") list nonempty2
+                        |> Tuple.mapFirst (\b -> b ++ "*")
 
                 RichText.Italic nonempty2 ->
-                    ( currentText, list )
+                    richTextToMessage (currentText ++ "_") list nonempty2
+                        |> Tuple.mapFirst (\b -> b ++ "_")
 
                 RichText.Underline nonempty2 ->
-                    ( currentText, list )
+                    richTextToMessage (currentText ++ "__") list nonempty2
+                        |> Tuple.mapFirst (\b -> b ++ "__")
 
                 RichText.Strikethrough nonempty2 ->
-                    ( currentText, list )
+                    richTextToMessage (currentText ++ "~~") list nonempty2
+                        |> Tuple.mapFirst (\b -> b ++ "~~")
 
                 RichText.Spoiler nonempty2 ->
-                    ( currentText, list )
+                    richTextToMessage (currentText ++ "||") list nonempty2
+                        |> Tuple.mapFirst (\b -> b ++ "||")
 
                 RichText.Hyperlink protocol url ->
                     ( ""
@@ -448,18 +454,17 @@ richTextToMessage nonempty =
                         :: list
                     )
 
-                RichText.InlineCode char string ->
-                    ( currentText, list )
+                RichText.InlineCode char rest ->
+                    ( currentText ++ "`" ++ String.fromChar char ++ rest ++ "`", list )
 
-                RichText.CodeBlock language string ->
-                    ( currentText, list )
+                RichText.CodeBlock _ string ->
+                    ( currentText ++ "```" ++ string ++ "```", list )
 
                 RichText.AttachedFile id ->
                     ( currentText, list )
         )
-        ( "", [] )
+        ( previousText, previousList )
         (List.Nonempty.toList nonempty)
-        |> (\( currentText, list ) -> TextMessage currentText :: list |> List.reverse)
 
 
 update : Msg -> FrontendModel -> ( FrontendModel, Command FrontendOnly ToBackend Msg )

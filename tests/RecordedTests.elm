@@ -1187,17 +1187,13 @@ tests fileData =
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
                 , user.checkView 100 (Test.Html.Query.has tooManyIncorrectAttempts)
-                , [ user.checkView
-                        100
-                        (Test.Html.Query.hasNot [ Test.Html.Selector.text "Too many login attempts have been made." ])
+                , [ hasNotText user [ "Too many login attempts have been made." ]
                   , openLoginAndSubmitEmail 100
                   ]
                     |> T.group
                     |> List.repeat 6
                     |> T.group
-                , user.checkView
-                    100
-                    (Test.Html.Query.has [ Test.Html.Selector.text "Too many login attempts have been made." ])
+                , hasText user [ "Too many login attempts have been made." ]
                 , user.snapshotView 100 { name = "Too many login attempts" }
                 , -- Should be able to log in again after some time has passed
                   openLoginAndSubmitEmail (5 * 60 * 1000)
@@ -1211,12 +1207,7 @@ tests fileData =
                             _ ->
                                 [ T.checkState 100 (\_ -> Err "Didn't find login email") ]
                     )
-                , user.checkView
-                    100
-                    (Test.Html.Query.has
-                        [ Test.Html.Selector.exactText (PersonName.toString Backend.adminUser.name)
-                        ]
-                    )
+                , hasExactText user [ PersonName.toString Backend.adminUser.name ]
                 ]
             )
         , T.checkState
