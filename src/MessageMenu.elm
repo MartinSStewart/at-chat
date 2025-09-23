@@ -172,87 +172,98 @@ showEdit guildOrDmId threadRoute loggedIn =
             Nothing
 
 
+viewMobile : MessageMenuExtraOptions -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+viewMobile extraOptions loggedIn local model =
+    let
+        height : Int
+        height =
+            1000
+    in
+    Ui.column
+        [ Ui.move
+            { x = 0
+            , y =
+                Types.messageMenuMobileOffset extraOptions.mobileMode
+                    |> CssPixels.inCssPixels
+                    |> negate
+                    |> round
+                    |> (+) height
+            , z = 0
+            }
+        , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
+        , Ui.background (Ui.rgb 0 0 0)
+        , MyUi.htmlStyle
+            "padding"
+            (String.fromInt topPadding
+                ++ "px 8px calc("
+                ++ MyUi.insetBottom
+                ++ " * 0.5 + "
+                ++ String.fromInt bottomPadding
+                ++ "px) 8px"
+            )
+        , MyUi.blockClickPropagation MessageMenu_PressedContainer
+        , Ui.height (Ui.px height)
+        ]
+        (MyUi.elButton
+            (Dom.id "messageMenu_close")
+            MessageMenu_PressedClose
+            [ Ui.height (Ui.px mobileCloseButton) ]
+            (Ui.el
+                [ Ui.background (Ui.rgb 40 50 60)
+                , Ui.rounded 99
+                , Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 4)
+                , Ui.centerX
+                , Ui.centerY
+                ]
+                Ui.none
+            )
+            :: (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
+                    Just edit ->
+                        [ MessageInput.view
+                            (Dom.id "messageMenu_editMobile")
+                            True
+                            True
+                            (editMessageTextInputConfig
+                                extraOptions.guildOrDmId
+                                (Id.threadRouteWithoutMessage extraOptions.threadRoute)
+                            )
+                            editMessageTextInputId
+                            ""
+                            edit.text
+                            edit.attachedFiles
+                            loggedIn.pingUser
+                            local
+                        ]
+
+                    Nothing ->
+                        List.intersperse
+                            (Ui.el
+                                [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                , Ui.borderColor MyUi.border2
+                                ]
+                                Ui.none
+                            )
+                            (menuItems
+                                True
+                                extraOptions.guildOrDmId
+                                extraOptions.threadRoute
+                                extraOptions.isThreadStarter
+                                extraOptions.position
+                                local
+                                model
+                            )
+               )
+        )
+
+
 view : LoadedFrontend -> MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> Element FrontendMsg
 view model extraOptions local loggedIn =
     if MyUi.isMobile model then
         Ui.el
             [ Ui.height Ui.fill
             , Ui.background (Ui.rgba 0 0 0 0.3)
-            , Ui.column
-                [ Ui.move
-                    { x = 0
-                    , y =
-                        Types.messageMenuMobileOffset extraOptions.mobileMode
-                            |> CssPixels.inCssPixels
-                            |> negate
-                            |> round
-                    , z = 0
-                    }
-                , Ui.roundedWith { topLeft = 16, topRight = 16, bottomRight = 0, bottomLeft = 0 }
-                , Ui.background (Ui.rgb 0 0 0)
-                , MyUi.htmlStyle
-                    "padding"
-                    (String.fromInt topPadding
-                        ++ "px 8px calc("
-                        ++ MyUi.insetBottom
-                        ++ " * 0.5 + "
-                        ++ String.fromInt bottomPadding
-                        ++ "px) 8px"
-                    )
-                , MyUi.blockClickPropagation MessageMenu_PressedContainer
-                ]
-                (MyUi.elButton
-                    (Dom.id "messageMenu_close")
-                    MessageMenu_PressedClose
-                    [ Ui.height (Ui.px mobileCloseButton) ]
-                    (Ui.el
-                        [ Ui.background (Ui.rgb 40 50 60)
-                        , Ui.rounded 99
-                        , Ui.width (Ui.px 40)
-                        , Ui.height (Ui.px 4)
-                        , Ui.centerX
-                        , Ui.centerY
-                        ]
-                        Ui.none
-                    )
-                    :: (case showEdit extraOptions.guildOrDmId extraOptions.threadRoute loggedIn of
-                            Just edit ->
-                                [ MessageInput.view
-                                    (Dom.id "messageMenu_editMobile")
-                                    True
-                                    True
-                                    (editMessageTextInputConfig
-                                        extraOptions.guildOrDmId
-                                        (Id.threadRouteWithoutMessage extraOptions.threadRoute)
-                                    )
-                                    editMessageTextInputId
-                                    ""
-                                    edit.text
-                                    edit.attachedFiles
-                                    loggedIn.pingUser
-                                    local
-                                ]
-
-                            Nothing ->
-                                List.intersperse
-                                    (Ui.el
-                                        [ Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                                        , Ui.borderColor MyUi.border2
-                                        ]
-                                        Ui.none
-                                    )
-                                    (menuItems
-                                        True
-                                        extraOptions.guildOrDmId
-                                        extraOptions.threadRoute
-                                        extraOptions.isThreadStarter
-                                        extraOptions.position
-                                        local
-                                        model
-                                    )
-                       )
-                )
-                |> Ui.below
+            , viewMobile extraOptions loggedIn local model |> Ui.below
             ]
             Ui.none
 
