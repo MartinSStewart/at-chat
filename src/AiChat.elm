@@ -500,10 +500,10 @@ update msg model =
                           }
                         , Command.batch
                             [ (if List.member "image" aiModel.inputs then
-                                AiMessageRequest aiModel.id responseId (chatToMessage model.chatHistory)
+                                AiMessageRequest aiModel.id responseId (chatToMessage newChatHistory)
 
                                else
-                                AiMessageRequestSimple aiModel.id responseId model.chatHistory
+                                AiMessageRequestSimple aiModel.id responseId newChatHistory
                               )
                                 |> Lamdera.sendToBackend
                             , scrollToBottom
