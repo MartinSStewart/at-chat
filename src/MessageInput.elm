@@ -7,7 +7,6 @@ module MessageInput exposing
     , pingDropdownView
     , pressedArrowInDropdown
     , pressedPingUser
-    , textarea
     , view
     )
 
