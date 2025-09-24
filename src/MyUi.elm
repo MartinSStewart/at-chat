@@ -788,7 +788,7 @@ html, body {
 }
 body {
   overflow: hidden;
-  height:100dvh !important;
+  height:100vh !important;
 }
 """
             )
