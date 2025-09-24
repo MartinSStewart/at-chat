@@ -136,6 +136,8 @@ exports.init = async function init(app)
 
     });
 
+    window.visualViewport.addEventListener("resize", () => { app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height); } );
+
     app.ports.request_notification_permission.subscribe((a) => {
         if ("Notification" in window) {
             Notification.requestPermission().then((permission) => {

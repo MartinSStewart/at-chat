@@ -118,6 +118,7 @@ subscriptions model =
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
         , Ports.serviceWorkerMessage GotServiceWorkerMessage
+        , Ports.visualViewportResized VisualViewportResized
         , case model of
             Loading _ ->
                 Subscription.none
@@ -1126,6 +1127,9 @@ isPressMsg msg =
             False
 
         GotServiceWorkerMessage _ ->
+            False
+
+        VisualViewportResized _ _ ->
             False
 
 
@@ -3304,6 +3308,9 @@ updateLoaded msg model =
 
                 Nothing ->
                     ( model, Command.none )
+
+        VisualViewportResized width height ->
+            ( { model | windowSize = Coord.xy (floor width) (floor height) }, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5762,6 +5769,19 @@ layout model attributes child =
             :: Ui.id "elm-ui-root-id"
             :: Ui.height Ui.fill
             :: Ui.behindContent (Ui.html MyUi.css)
+            :: Ui.behindContent
+                (Ui.html
+                    (Html.node
+                        "style"
+                        []
+                        [ Html.text
+                            ("body { height: "
+                                ++ String.fromInt (Coord.yRaw model.windowSize)
+                                ++ "px !important; }"
+                            )
+                        ]
+                    )
+                )
             :: Ui.Font.size 16
             :: Ui.Font.color MyUi.font1
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)

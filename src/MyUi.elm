@@ -788,7 +788,6 @@ html, body {
 }
 body {
   overflow: hidden;
-  height:100vh !important;
 }
 """
             )

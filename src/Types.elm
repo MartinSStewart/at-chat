@@ -431,6 +431,7 @@ type FrontendMsg
     | GotUserAgent UserAgent
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
+    | VisualViewportResized Float Float
 
 
 type ScrollPosition
