@@ -1,4 +1,4 @@
-port module AiChat exposing (AiModel, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message, Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
+port module AiChat exposing (AiModel, AiModelsStatus(..), AiResponse, BackendMsg(..), FrontendModel, LocalStorage, Message(..), Msg(..), PendingResponse(..), ResponseId(..), SendMessageWith(..), ToBackend(..), ToFrontend(..), backendUpdate, getModels, init, isPressMsg, subscriptions, update, updateFromBackend, updateFromFrontend, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -134,6 +134,8 @@ type ToBackend
     | AiMessageRequestSimple String ResponseId String
 
 
+{-| OpaqueVariants
+-}
 type Message
     = TextMessage String
     | ImageUrlMessage String

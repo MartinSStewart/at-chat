@@ -1,6 +1,11 @@
-module OneOrGreater exposing (OneOrGreater, fromInt, increment, one, plus, toInt)
+module OneOrGreater exposing (OneOrGreater(..), fromInt, increment, one, plus, toInt)
+
+{-| A integer that's guaranteed to be 1 or a value greater than 1
+-}
 
 
+{-| OpaqueVariants
+-}
 type OneOrGreater
     = OneOrGreater Int
 
