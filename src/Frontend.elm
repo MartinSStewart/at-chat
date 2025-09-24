@@ -1924,7 +1924,6 @@ updateLoaded msg model =
                                                         MessageMenu.mobileMenuMaxHeight
                                                             extraOptions
                                                             (Local.model loggedIn2.localState)
-                                                            loggedIn2
                                                             model
                                                             |> MessageMenuFixed
                                                 }
@@ -2216,7 +2215,6 @@ updateLoaded msg model =
                                                     (MessageMenu.mobileMenuMaxHeight
                                                         messageMenu
                                                         (Local.model loggedIn.localState)
-                                                        loggedIn
                                                         model
                                                     )
                                                     (Quantity.plus
@@ -3472,14 +3470,8 @@ pressedEditMessage guildOrDmId threadRoute model =
                                 MessageMenu extraOptions ->
                                     { extraOptions
                                         | mobileMode =
-                                            { offset =
-                                                Types.messageMenuMobileOffset extraOptions.mobileMode
-                                            , targetOffset =
-                                                MessageMenu.mobileMenuMaxHeight
-                                                    extraOptions
-                                                    local
-                                                    loggedIn2
-                                                    model
+                                            { offset = Types.messageMenuMobileOffset extraOptions.mobileMode
+                                            , targetOffset = MessageMenu.mobileMenuMaxHeight extraOptions local model
                                             }
                                                 |> MessageMenuOpening
                                     }
@@ -3535,21 +3527,25 @@ touchStart :
 touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
     case model.drag of
         NoDrag ->
-            ( { model | drag = DragStart time touches, dragPrevious = model.drag }
-            , case NonemptyDict.toList touches of
-                [ _ ] ->
-                    case maybeGuildOrDmIdAndMessageIndex of
-                        Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
-                            Process.sleep (Duration.seconds 0.5)
-                                |> Task.perform
-                                    (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
+            if NonemptyDict.any (\_ touch -> touch.target == MessageMenu.editMessageTextInputId) touches then
+                ( model, Command.none )
 
-                        Nothing ->
-                            Command.none
+            else
+                ( { model | drag = DragStart time touches, dragPrevious = model.drag }
+                , case NonemptyDict.toList touches of
+                    [ _ ] ->
+                        case maybeGuildOrDmIdAndMessageIndex of
+                            Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
+                                Process.sleep (Duration.seconds 0.5)
+                                    |> Task.perform
+                                        (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
 
-                _ ->
-                    Command.none
-            )
+                            Nothing ->
+                                Command.none
+
+                    _ ->
+                        Command.none
+                )
 
         DragStart _ _ ->
             ( model, Command.none )
@@ -3815,7 +3811,6 @@ handleTouchEnd time model =
                                     MessageMenu.mobileMenuMaxHeight
                                         extraOptions
                                         (Local.model loggedIn2.localState)
-                                        loggedIn2
                                         model
 
                                 halfwayPoint : Quantity Float CssPixels

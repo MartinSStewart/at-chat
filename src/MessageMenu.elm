@@ -84,21 +84,17 @@ close model loggedIn =
             }
 
 
-mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoggedIn2 -> LoadedFrontend -> Quantity Float CssPixels
-mobileMenuMaxHeight extraOptions local loggedIn model =
-    (case showEditViewed extraOptions loggedIn of
-        Just edit ->
-            toFloat (List.length (String.lines edit.text)) * 22.4 + 16 + 2 + mobileCloseButton + topPadding + bottomPadding
-
-        Nothing ->
-            let
-                itemCount : Float
-                itemCount =
-                    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False Coord.origin local model |> List.length |> toFloat
-            in
-            itemCount * buttonHeight True + itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
-    )
+mobileMenuMaxHeight : MessageMenuExtraOptions -> LocalState -> LoadedFrontend -> Quantity Float CssPixels
+mobileMenuMaxHeight extraOptions local model =
+    menuItems True extraOptions.guildOrDmId extraOptions.threadRoute False Coord.origin local model
+        |> List.length
+        |> mobileMenuMaxHeightHelper
         |> CssPixels.cssPixels
+
+
+mobileMenuMaxHeightHelper : Int -> Float
+mobileMenuMaxHeightHelper itemCount =
+    toFloat itemCount * buttonHeight True + toFloat itemCount - 1 + mobileCloseButton + topPadding + bottomPadding
 
 
 mobileMenuOpeningOffset :
@@ -199,6 +195,17 @@ viewMobile offset extraOptions loggedIn local model =
         height : Int
         height =
             1000
+
+        menuItems2 : List (Element FrontendMsg)
+        menuItems2 =
+            menuItems
+                True
+                extraOptions.guildOrDmId
+                extraOptions.threadRoute
+                extraOptions.isThreadStarter
+                extraOptions.position
+                local
+                model
     in
     Ui.column
         [ Ui.move { x = 0, y = negate offset |> round |> (+) height, z = 0 }
@@ -232,8 +239,9 @@ viewMobile offset extraOptions loggedIn local model =
             )
             :: (case showEditViewed extraOptions loggedIn of
                     Just edit ->
-                        [ MessageInput.view
+                        [ MessageInput.editView
                             (Dom.id "messageMenu_editMobile")
+                            (mobileMenuMaxHeightHelper (List.length menuItems2) |> round |> (+) -32)
                             True
                             True
                             (editMessageTextInputConfig
@@ -256,15 +264,7 @@ viewMobile offset extraOptions loggedIn local model =
                                 ]
                                 Ui.none
                             )
-                            (menuItems
-                                True
-                                extraOptions.guildOrDmId
-                                extraOptions.threadRoute
-                                extraOptions.isThreadStarter
-                                extraOptions.position
-                                local
-                                model
-                            )
+                            menuItems2
                )
         )
 

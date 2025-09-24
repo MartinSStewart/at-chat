@@ -2,10 +2,12 @@ module MessageInput exposing
     ( MentionUserDropdown
     , MentionUserTarget(..)
     , MsgConfig
+    , editView
     , multilineUpdate
     , pingDropdownView
     , pressedArrowInDropdown
     , pressedPingUser
+    , textarea
     , view
     )
 
@@ -15,7 +17,7 @@ import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.Task as Task
 import FileStatus exposing (FileId)
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
@@ -66,29 +68,14 @@ type alias MsgConfig msg =
     }
 
 
-view :
-    HtmlId
-    -> Bool
-    -> Bool
-    -> MsgConfig msg
-    -> HtmlId
-    -> String
-    -> String
-    -> SeqDict (Id FileId) a
-    -> Maybe MentionUserDropdown
-    -> LocalState
-    -> Element msg
-view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
-    let
-        htmlIdPrefix : String
-        htmlIdPrefix =
-            Dom.idToString htmlId
-    in
+textarea : Bool -> MsgConfig msg -> HtmlId -> String -> String -> SeqDict (Id FileId) a -> Maybe MentionUserDropdown -> LocalState -> Html msg
+textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
     Html.div
         [ Html.Attributes.style "display" "flex"
         , Html.Attributes.style "position" "relative"
         , Html.Attributes.style "min-height" "min-content"
         , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "height" "100%"
         ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"
@@ -201,6 +188,109 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     ]
             )
         ]
+
+
+editView :
+    HtmlId
+    -> Int
+    -> Bool
+    -> Bool
+    -> MsgConfig msg
+    -> HtmlId
+    -> String
+    -> String
+    -> SeqDict (Id FileId) a
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> Element msg
+editView htmlId height roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+    let
+        htmlIdPrefix : String
+        htmlIdPrefix =
+            Dom.idToString htmlId
+    in
+    textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local
+        |> Ui.html
+        |> Ui.el
+            [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
+            , Ui.scrollable
+            , Ui.border 1
+            , Ui.borderColor MyUi.border1
+            , if roundTopCorners then
+                Ui.rounded 8
+
+              else
+                Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
+            , Ui.height (Ui.px height)
+            , Ui.heightMax height
+            , Ui.heightMin 0
+            , MyUi.htmlStyle "scrollbar-color" "black"
+            , Ui.background MyUi.background2
+            ]
+        |> Ui.el
+            [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
+            , Ui.inFront
+                (MyUi.elButton
+                    (Dom.id (htmlIdPrefix ++ "_uploadFile"))
+                    msgConfig.pressedUploadFile
+                    [ Ui.alignLeft
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 6 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.move { x = 2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
+                    , Html.Events.preventDefaultOn
+                        "touchend"
+                        (Json.Decode.succeed ( msgConfig.pressedUploadFile, True ))
+                        |> Ui.htmlAttribute
+                    ]
+                    (Ui.html Icons.attachment)
+                )
+            , Ui.inFront
+                (MyUi.elButton
+                    (Dom.id (htmlIdPrefix ++ "_sendMessage"))
+                    msgConfig.pressedSendMessage
+                    [ Ui.alignRight
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 4 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.move { x = -2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
+                    , Html.Events.preventDefaultOn
+                        "touchend"
+                        (Json.Decode.succeed ( msgConfig.pressedSendMessage, True ))
+                        |> Ui.htmlAttribute
+                    ]
+                    (Ui.html Icons.sendMessage)
+                )
+            ]
+
+
+view :
+    HtmlId
+    -> Bool
+    -> Bool
+    -> MsgConfig msg
+    -> HtmlId
+    -> String
+    -> String
+    -> SeqDict (Id FileId) a
+    -> Maybe MentionUserDropdown
+    -> LocalState
+    -> Element msg
+view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
+    let
+        htmlIdPrefix : String
+        htmlIdPrefix =
+            Dom.idToString htmlId
+    in
+    textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local
         |> Ui.html
         |> Ui.el
             [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
