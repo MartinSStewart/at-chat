@@ -124,6 +124,7 @@ type alias InitAdminData =
     , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
+    , openRouterKey : Maybe String
     }
 
 
@@ -142,6 +143,7 @@ type AdminChange
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
+    | SetOpenRouterKey (Maybe String)
 
 
 type alias EditedBackendUser =
@@ -250,6 +252,9 @@ updateAdmin changedBy change adminData local =
 
         SetSlackClientSecret clientSecret ->
             { local | adminData = IsAdmin { adminData | slackClientSecret = clientSecret } }
+
+        SetOpenRouterKey openRouterKey ->
+            { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
 
 
 update :

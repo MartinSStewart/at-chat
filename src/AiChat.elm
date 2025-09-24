@@ -10,7 +10,6 @@ import Effect.Lamdera as Lamdera exposing (ClientId)
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task exposing (Task)
-import Env
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -1325,33 +1324,47 @@ decodeImage =
     Json.Decode.at [ "image_url", "url" ] Json.Decode.string
 
 
-updateFromFrontend : ClientId -> ToBackend -> Command BackendOnly ToFrontend BackendMsg
-updateFromFrontend clientId msg =
-    case msg of
-        AiMessageRequest aiModel responseId messages ->
-            openRouterRequest
-                aiModel
-                ( "messages"
-                , Json.Encode.list
-                    (\messages2 ->
-                        Json.Encode.object
-                            [ ( "role", Json.Encode.string "user" )
-                            , ( "content", Json.Encode.list encodeMessage messages2 )
-                            ]
-                    )
-                    [ messages ]
+updateFromFrontend : ClientId -> ToBackend -> Maybe String -> Command BackendOnly ToFrontend BackendMsg
+updateFromFrontend clientId msg maybeOpenRouterKey =
+    case maybeOpenRouterKey of
+        Just openRouterKey ->
+            case msg of
+                AiMessageRequest aiModel responseId messages ->
+                    openRouterRequest
+                        openRouterKey
+                        aiModel
+                        ( "messages"
+                        , Json.Encode.list
+                            (\messages2 ->
+                                Json.Encode.object
+                                    [ ( "role", Json.Encode.string "user" )
+                                    , ( "content", Json.Encode.list encodeMessage messages2 )
+                                    ]
+                            )
+                            [ messages ]
+                        )
+                        |> Task.attempt (GotAiMessage clientId responseId)
+
+                AiMessageRequestSimple aiModel responseId text ->
+                    openRouterRequest openRouterKey aiModel ( "prompt", Json.Encode.string text ) |> Task.attempt (GotAiMessage clientId responseId)
+
+        Nothing ->
+            Lamdera.sendToFrontend
+                clientId
+                (case msg of
+                    AiMessageRequest _ id _ ->
+                        AiMessageResponse id (Err (Http.BadBody "OpenRouter API key not configured"))
+
+                    AiMessageRequestSimple _ id _ ->
+                        AiMessageResponse id (Err (Http.BadBody "OpenRouter API key not configured"))
                 )
-                |> Task.attempt (GotAiMessage clientId responseId)
-
-        AiMessageRequestSimple aiModel responseId text ->
-            openRouterRequest aiModel ( "prompt", Json.Encode.string text ) |> Task.attempt (GotAiMessage clientId responseId)
 
 
-openRouterRequest : String -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
-openRouterRequest aiModel message =
+openRouterRequest : String -> String -> ( String, Json.Encode.Value ) -> Task restriction Http.Error AiResponse
+openRouterRequest openRouterKey aiModel message =
     Http.task
         { method = "POST"
-        , headers = [ Http.header "Authorization" ("Bearer " ++ Env.openRouterKey) ]
+        , headers = [ Http.header "Authorization" ("Bearer " ++ openRouterKey) ]
         , url = "https://openrouter.ai/api/v1/chat/completions"
         , body =
             Json.Encode.object

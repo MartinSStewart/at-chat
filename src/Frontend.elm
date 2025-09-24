@@ -432,6 +432,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , botToken = adminData.botToken
                     , privateVapidKey = adminData.privateVapidKey
                     , slackClientSecret = adminData.slackClientSecret
+                    , openRouterKey = adminData.openRouterKey
                     }
 
             IsNotAdminLoginData ->
@@ -1092,6 +1093,9 @@ isPressMsg msg =
             Editable.isPressMsg editableMsg
 
         SlackClientSecretEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
+
+        OpenRouterKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
         PressedGuildNotificationLevel _ _ ->
@@ -3223,6 +3227,19 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (Just (Local_Admin (Pages.Admin.SetSlackClientSecret value)))
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        OpenRouterKeyEditableMsg editableMsg ->
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | openRouterKey = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetOpenRouterKey value)))
                         loggedIn
                         Command.none
                 )
@@ -5603,6 +5620,9 @@ pendingChangesText localChange =
 
                 Pages.Admin.SetSlackClientSecret _ ->
                     "Set slack client secret"
+
+                Pages.Admin.SetOpenRouterKey _ ->
+                    "Set OpenRouter key"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"

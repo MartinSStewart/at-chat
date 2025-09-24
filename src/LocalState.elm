@@ -277,6 +277,7 @@ type alias AdminData =
     , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
+    , openRouterKey : Maybe String
     }
 
 

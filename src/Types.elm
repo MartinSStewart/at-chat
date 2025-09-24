@@ -181,6 +181,7 @@ type alias UserOptionsModel =
     , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
+    , openRouterKey : Editable.Model
     }
 
 
@@ -281,6 +282,7 @@ type alias BackendModel =
     , privateVapidKey : PrivateVapidKey
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
+    , openRouterKey : Maybe String
     }
 
 
@@ -406,6 +408,7 @@ type FrontendMsg
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
+    | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)

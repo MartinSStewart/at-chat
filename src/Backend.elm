@@ -179,6 +179,7 @@ init =
             else
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
+      , openRouterKey = Nothing
       }
     , Command.none
     )
@@ -193,6 +194,7 @@ adminData model lastLogPageViewed =
     , botToken = model.botToken
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
+    , openRouterKey = model.openRouterKey
     }
 
 
@@ -2347,7 +2349,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             , Command.map
                 AiChatToFrontend
                 AiChatBackendMsg
-                (AiChat.updateFromFrontend clientId aiChatToBackend)
+                (AiChat.updateFromFrontend clientId aiChatToBackend model2.openRouterKey)
             )
 
         JoinGuildByInviteRequest guildId inviteLinkId ->
@@ -2866,6 +2868,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetSlackClientSecret clientSecret ->
             ( { model | slackClientSecret = clientSecret }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.SetOpenRouterKey openRouterKey ->
+            ( { model | openRouterKey = openRouterKey }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

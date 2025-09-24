@@ -29,6 +29,7 @@ init =
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
+    , openRouterKey = Editable.init
     }
 
 
@@ -245,6 +246,30 @@ view isMobile time local loggedIn model =
                             PrivateVapidKeyEditableMsg
                             (adminData2.privateVapidKey |> (\(PrivateVapidKey a) -> a))
                             model.privateVapidKey
+                        , Editable.view
+                            (Dom.id "userOptions_openRouterKey")
+                            True
+                            "OpenRouter API key"
+                            (\text ->
+                                let
+                                    text2 =
+                                        String.trim text
+                                in
+                                if text2 == "" then
+                                    Ok Nothing
+
+                                else
+                                    Just text2 |> Ok
+                            )
+                            OpenRouterKeyEditableMsg
+                            (case adminData2.openRouterKey of
+                                Just key ->
+                                    key
+
+                                Nothing ->
+                                    ""
+                            )
+                            model.openRouterKey
                         ]
 
                 IsNotAdmin ->

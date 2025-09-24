@@ -45,11 +45,6 @@ adminEmail =
     "a@a.se"
 
 
-openRouterKey : String
-openRouterKey =
-    ""
-
-
 slackClientId : String
 slackClientId =
     "9460466681300.9470334175105"
