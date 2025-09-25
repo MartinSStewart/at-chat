@@ -5784,6 +5784,14 @@ layout model attributes child =
                         ]
                     )
                 )
+            :: Ui.behindContent
+                (Ui.html
+                    (Html.node
+                        "style"
+                        []
+                        [ Html.text "body { height: 100vh !important; }" ]
+                    )
+                )
             :: Ui.Font.size 16
             :: Ui.Font.color MyUi.font1
             :: Ui.htmlAttribute (Html.Events.onClick PressedBody)
