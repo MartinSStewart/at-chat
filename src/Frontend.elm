@@ -3310,9 +3310,13 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         VisualViewportResized height ->
-            ( { model | windowSize = Coord.xy (Coord.xRaw model.windowSize) (floor height) }
-            , Command.none
-            )
+            ( model, Command.none )
+
+
+
+--( { model | windowSize = Coord.xy (Coord.xRaw model.windowSize) (floor height) }
+--, Command.none
+--)
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
