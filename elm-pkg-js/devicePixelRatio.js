@@ -17,16 +17,31 @@ exports.init = async function init(app)
     const serviceWorkerJs = '/service-worker.js';
 
     app.ports.register_service_worker_to_js.subscribe(() => {
-        navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
-            if (registration) {
-            }
-            else {
-                navigator.serviceWorker.register(serviceWorkerJs);
-            }
-            navigator.serviceWorker.addEventListener("message", (event) => {
-                console.log(event);
-                app.ports.service_worker_message_from_js.send(event.data);
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistration(serviceWorkerJs).then((registration) => {
+                if (registration) {
+                }
+                else {
+                    navigator.serviceWorker.register(serviceWorkerJs);
+                }
+                navigator.serviceWorker.addEventListener("message", (event) => {
+                    console.log(event);
+                    app.ports.service_worker_message_from_js.send(event.data);
+                });
             });
+        }
+    });
+
+    app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {
+        var a = document.getElementById(htmlId);
+        console.log(a);
+        console.log(a.value);
+
+        requestAnimationFrame(() =>
+        {
+            if (a) {
+                a.value = a.value + " ";
+            }
         });
 
     });
@@ -139,9 +154,7 @@ exports.init = async function init(app)
     window.visualViewport.addEventListener(
         "resize",
         () => {
-            console.log(window.visualViewport);
             app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
-
         });
 
     app.ports.request_notification_permission.subscribe((a) => {

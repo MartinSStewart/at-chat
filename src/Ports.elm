@@ -11,6 +11,7 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
+    , fixCursorPosition
     , getScrollbarWidth
     , getUserAgent
     , hapticFeedback
@@ -93,6 +94,14 @@ port user_agent_from_js : (Json.Encode.Value -> msg) -> Sub msg
 
 
 port register_service_worker_to_js : Json.Encode.Value -> Cmd msg
+
+
+port fix_cursor_position_to_js : Json.Encode.Value -> Cmd msg
+
+
+fixCursorPosition : HtmlId -> Command FrontendOnly toMsg msg
+fixCursorPosition htmlId =
+    Command.sendToJs "fix_cursor_position_to_js" fix_cursor_position_to_js (Json.Encode.string (Dom.idToString htmlId))
 
 
 registerServiceWorker : Command FrontendOnly toMsg msg

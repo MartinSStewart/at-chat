@@ -74,7 +74,8 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
         , Html.Attributes.style "position" "relative"
         , Html.Attributes.style "min-height" "min-content"
         , Html.Attributes.style "width" "100%"
-        , Html.Attributes.style "height" "100%"
+        , Html.Attributes.style "height" "fit-content"
+        , Html.Attributes.style "min-height" "100%"
         ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"
@@ -161,6 +162,8 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
             , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
             , Html.Attributes.style "white-space" "pre-wrap"
             , Html.Attributes.style "overflow-wrap" "anywhere"
+            , Html.Attributes.style "height" "fit-content"
+            , Html.Attributes.style "min-height" "100%"
             , Html.Attributes.style "color"
                 (if text == "" then
                     "rgb(180,180,180)"
@@ -341,9 +344,14 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                     , Ui.move { x = -2, y = 0, z = 0 }
                     , Ui.contentCenterY
                     , Ui.centerY
-                    , Html.Events.preventDefaultOn
-                        "touchend"
-                        (Json.Decode.succeed ( msgConfig.pressedSendMessage, True ))
+                    , Html.Events.custom
+                        "touchstart"
+                        (Json.Decode.succeed
+                            { message = msgConfig.pressedSendMessage
+                            , stopPropagation = True
+                            , preventDefault = True
+                            }
+                        )
                         |> Ui.htmlAttribute
                     ]
                     (Ui.html Icons.sendMessage)

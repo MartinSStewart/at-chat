@@ -2196,7 +2196,7 @@ peopleAreTypingView allUsers channel local model =
                     ++ MyUi.insetBottom
                     ++ " * 0.5) "
                     ++ (if model.virtualKeyboardOpen then
-                            "calc(" ++ MyUi.insetBottom ++ " * 0.5)"
+                            "0"
 
                         else
                             MyUi.insetBottom

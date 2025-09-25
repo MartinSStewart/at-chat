@@ -1722,7 +1722,13 @@ updateLoaded msg model =
                 model
 
         TextInputGotFocus htmlId ->
-            ( { model | textInputFocus = Just htmlId }, Command.none )
+            ( { model | textInputFocus = Just htmlId }
+            , if model.userAgent.device == UserAgent.Desktop || model.textInputFocus == Just htmlId then
+                Command.none
+
+              else
+                Ports.fixCursorPosition htmlId
+            )
 
         TextInputLostFocus htmlId ->
             updateLoggedIn
@@ -3557,24 +3563,36 @@ touchStart :
 touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
     case model.drag of
         NoDrag ->
-            if NonemptyDict.any (\_ touch -> touch.target == MessageMenu.editMessageTextInputId) touches then
+            if
+                NonemptyDict.any
+                    (\_ touch -> touch.target == MessageMenu.editMessageTextInputId || touch.target == Pages.Guild.channelTextInputId)
+                    touches
+            then
                 ( model, Command.none )
 
             else
                 ( { model | drag = DragStart time touches, dragPrevious = model.drag }
-                , case NonemptyDict.toList touches of
-                    [ _ ] ->
-                        case maybeGuildOrDmIdAndMessageIndex of
-                            Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
-                                Process.sleep (Duration.seconds 0.5)
-                                    |> Task.perform
-                                        (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
+                , Command.batch
+                    [ case NonemptyDict.toList touches of
+                        [ _ ] ->
+                            case maybeGuildOrDmIdAndMessageIndex of
+                                Just ( guildOrMessageId, messageIndex, isThreadStarter ) ->
+                                    Process.sleep (Duration.seconds 0.5)
+                                        |> Task.perform
+                                            (\() -> CheckMessageAltPress time guildOrMessageId messageIndex isThreadStarter)
 
-                            Nothing ->
-                                Command.none
+                                Nothing ->
+                                    Command.none
 
-                    _ ->
-                        Command.none
+                        _ ->
+                            Command.none
+                    , case model.textInputFocus of
+                        Just textInputId ->
+                            Dom.blur textInputId |> Task.attempt (\_ -> RemoveFocus)
+
+                        Nothing ->
+                            Command.none
+                    ]
                 )
 
         DragStart _ _ ->
@@ -3847,24 +3865,22 @@ handleTouchEnd time model =
                                 halfwayPoint =
                                     menuHeight |> Quantity.divideBy 2
                             in
-                            { loggedIn2
-                                | messageHover =
-                                    MessageMenu
-                                        { extraOptions
-                                            | mobileMode =
-                                                if
-                                                    (dragging.offset |> Quantity.lessThan halfwayPoint)
-                                                        || (menuDelta |> Quantity.lessThan speedThreshold)
-                                                then
-                                                    MessageMenuClosing
-                                                        dragging.offset
-                                                        (MessageMenu.showEdit extraOptions loggedIn2)
+                            if
+                                (dragging.offset |> Quantity.lessThan halfwayPoint)
+                                    || (menuDelta |> Quantity.lessThan speedThreshold)
+                            then
+                                MessageMenu.close model loggedIn2
 
-                                                else
+                            else
+                                { loggedIn2
+                                    | messageHover =
+                                        MessageMenu
+                                            { extraOptions
+                                                | mobileMode =
                                                     MessageMenuFixed
                                                         (Quantity.min menuHeight dragging.offset)
-                                        }
-                            }
+                                            }
+                                }
 
                         _ ->
                             loggedIn2
