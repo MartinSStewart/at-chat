@@ -136,7 +136,13 @@ exports.init = async function init(app)
 
     });
 
-    window.visualViewport.addEventListener("resize", () => { app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height); } );
+    window.visualViewport.addEventListener(
+        "resize",
+        () => {
+            console.log(window.visualViewport);
+            app.ports.visual_viewport_resized_from_js.send(window.visualViewport.height);
+
+        });
 
     app.ports.request_notification_permission.subscribe((a) => {
         if ("Notification" in window) {

@@ -163,21 +163,12 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
 
 
-visualViewportResized : (Float -> Float -> msg) -> Subscription FrontendOnly msg
+visualViewportResized : (Float -> msg) -> Subscription FrontendOnly msg
 visualViewportResized msg =
     Subscription.fromJs
         "visual_viewport_resized_from_js"
         visual_viewport_resized_from_js
-        (\json ->
-            Json.Decode.decodeValue
-                (Json.Decode.map2
-                    msg
-                    (Json.Decode.field "x" Json.Decode.float)
-                    (Json.Decode.field "y" Json.Decode.float)
-                )
-                json
-                |> Result.withDefault (msg 0 0)
-        )
+        (\json -> Json.Decode.decodeValue Json.Decode.float json |> Result.withDefault 0 |> msg)
 
 
 closeNotifications : Command FrontendOnly toMsg msg

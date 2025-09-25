@@ -1129,7 +1129,7 @@ isPressMsg msg =
         GotServiceWorkerMessage _ ->
             False
 
-        VisualViewportResized _ _ ->
+        VisualViewportResized _ ->
             False
 
 
@@ -3309,8 +3309,10 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized width height ->
-            ( { model | windowSize = Coord.xy (floor width) (floor height) }, Command.none )
+        VisualViewportResized height ->
+            ( { model | windowSize = Coord.xy (Coord.xRaw model.windowSize) (floor height) }
+            , Command.none
+            )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
