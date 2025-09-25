@@ -794,6 +794,37 @@ tests fileData =
             )
         ]
     , T.start
+        "Desktop edit message"
+        startTime
+        normalConfig
+        [ T.connectFrontend
+            100
+            sessionId2
+            "/"
+            desktopWindow
+            (\admin ->
+                [ handleLogin safariIphone adminEmail admin
+                , admin.click 100 (Dom.id "guild_openGuild_0")
+                , writeMessageMobile admin "Test"
+                , admin.custom
+                    100
+                    (Dom.id "guild_message_0")
+                    "contextmenu"
+                    (Json.Encode.object
+                        [ ( "clientX", Json.Encode.float 50 )
+                        , ( "clientY", Json.Encode.float 150 )
+                        ]
+                    )
+                , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
+                , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
+                , hasText admin [ "to cancel edit" ]
+                , admin.keyDown 100 (Dom.id "editMessageTextInput") "Enter" []
+                , hasNotText admin [ "to cancel edit" ]
+                ]
+            )
+        ]
+    , T.start
         "Change notification level"
         startTime
         normalConfig
