@@ -815,7 +815,9 @@ tests fileData =
                         , ( "clientY", Json.Encode.float 150 )
                         ]
                     )
+                , hasExactText admin [ "Edit message" ]
                 , admin.click 2000 (Dom.id "messageMenu_editMessage")
+                , hasNotExactText admin [ "Edit message" ]
                 , admin.input 1000 (Dom.id "editMessageTextInput") "Test Edited"
                 , admin.input 200 (Dom.id "editMessageTextInput") "Test Edited\nLinebreak"
                 , hasText admin [ "to cancel edit" ]

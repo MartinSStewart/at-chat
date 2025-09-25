@@ -2001,7 +2001,14 @@ updateLoaded msg model =
                                     _ ->
                                         Nothing
                                 )
-                                (MessageMenu.close model loggedIn)
+                                (if MyUi.isMobile model then
+                                    MessageMenu.close model loggedIn
+
+                                 else
+                                    { loggedIn
+                                        | editMessage = SeqDict.remove ( guildOrDmId, threadRoute ) loggedIn.editMessage
+                                    }
+                                )
                                 (setFocus model Pages.Guild.channelTextInputId)
 
                         Nothing ->
@@ -3496,22 +3503,26 @@ pressedEditMessage guildOrDmId threadRoute model =
                     in
                     { loggedIn2
                         | messageHover =
-                            case loggedIn2.messageHover of
-                                NoMessageHover ->
-                                    loggedIn2.messageHover
+                            if MyUi.isMobile model then
+                                case loggedIn2.messageHover of
+                                    NoMessageHover ->
+                                        loggedIn2.messageHover
 
-                                MessageHover _ _ ->
-                                    loggedIn2.messageHover
+                                    MessageHover _ _ ->
+                                        loggedIn2.messageHover
 
-                                MessageMenu extraOptions ->
-                                    { extraOptions
-                                        | mobileMode =
-                                            { offset = Types.messageMenuMobileOffset extraOptions.mobileMode
-                                            , targetOffset = MessageMenu.mobileMenuMaxHeight extraOptions local model
-                                            }
-                                                |> MessageMenuOpening
-                                    }
-                                        |> MessageMenu
+                                    MessageMenu extraOptions ->
+                                        { extraOptions
+                                            | mobileMode =
+                                                { offset = Types.messageMenuMobileOffset extraOptions.mobileMode
+                                                , targetOffset = MessageMenu.mobileMenuMaxHeight extraOptions local model
+                                                }
+                                                    |> MessageMenuOpening
+                                        }
+                                            |> MessageMenu
+
+                            else
+                                NoMessageHover
                     }
 
                 Nothing ->
