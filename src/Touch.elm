@@ -12,7 +12,7 @@ import Vector2d exposing (Vector2d)
 
 type alias Touch =
     { client : Point2d CssPixels ScreenCoordinate
-    , target : HtmlId
+    , target : Maybe HtmlId
     }
 
 
@@ -41,12 +41,31 @@ touchDecoder : Decoder ( Int, Touch )
 touchDecoder =
     Json.Decode.map4
         (\identifier clientX clientY target ->
-            ( identifier, { client = Point2d.xy clientX clientY, target = Dom.id target } )
+            ( identifier, { client = Point2d.xy clientX clientY, target = target } )
         )
         (Json.Decode.field "identifier" Json.Decode.int)
         (Json.Decode.field "clientX" quantityDecoder)
         (Json.Decode.field "clientY" quantityDecoder)
-        (Json.Decode.at [ "target", "id" ] Json.Decode.string)
+        (Json.Decode.field "target" (idDecoder 10))
+
+
+idDecoder : Int -> Decoder (Maybe HtmlId)
+idDecoder depth =
+    if depth > 0 then
+        Json.Decode.field "id" Json.Decode.string
+            |> Json.Decode.andThen
+                (\id ->
+                    if id == "" then
+                        Json.Decode.field
+                            "parentElement"
+                            (Json.Decode.nullable (idDecoder (depth - 1)) |> Json.Decode.map (Maybe.andThen identity))
+
+                    else
+                        Json.Decode.succeed (Just (Dom.id id))
+                )
+
+    else
+        Json.Decode.succeed Nothing
 
 
 quantityDecoder : Decoder (Quantity Float unit)

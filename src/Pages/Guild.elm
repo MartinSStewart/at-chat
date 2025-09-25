@@ -3385,7 +3385,10 @@ messageContainer isThreadStarter timezone allUsers highlight messageIndex canEdi
                     MessageView_TouchStart
                         time
                         isThreadStarter
-                        (NonemptyDict.map (\_ touch -> { touch | target = channelMessageHtmlId messageIndex }) touches)
+                        (NonemptyDict.map
+                            (\_ touch -> { touch | target = channelMessageHtmlId messageIndex |> Just })
+                            touches
+                        )
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"
@@ -3497,7 +3500,10 @@ threadMessageContainer highlight messageIndex canEdit currentUserId reactions is
                     MessageView_TouchStart
                         time
                         False
-                        (NonemptyDict.map (\_ touch -> { touch | target = threadMessageHtmlId messageIndex }) touches)
+                        (NonemptyDict.map
+                            (\_ touch -> { touch | target = threadMessageHtmlId messageIndex |> Just })
+                            touches
+                        )
                 )
             )
          , Ui.Events.preventDefaultOn "contextmenu"

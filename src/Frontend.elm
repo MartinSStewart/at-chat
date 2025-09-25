@@ -3563,11 +3563,7 @@ touchStart :
 touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
     case model.drag of
         NoDrag ->
-            if
-                NonemptyDict.any
-                    (\_ touch -> touch.target == MessageMenu.editMessageTextInputId || touch.target == Pages.Guild.channelTextInputId)
-                    touches
-            then
+            if isTouchingTextInput touches then
                 ( model, Command.none )
 
             else
@@ -3966,8 +3962,8 @@ isTouchingTextInput : NonemptyDict Int Touch -> Bool
 isTouchingTextInput touches =
     NonemptyDict.any
         (\_ touch ->
-            (touch.target == MessageMenu.editMessageTextInputId)
-                || (touch.target == Pages.Guild.channelTextInputId)
+            (touch.target == Just MessageMenu.editMessageTextInputId)
+                || (touch.target == Just Pages.Guild.channelTextInputId)
         )
         touches
 
