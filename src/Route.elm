@@ -24,6 +24,7 @@ type Route
     | DmRoute (Id UserId) ThreadRouteWithFriends
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
+    | TextEditorRoute
 
 
 type ChannelRoute
@@ -165,6 +166,9 @@ decode url =
                 _ ->
                     SlackOAuthRedirect (Err ())
 
+        [ "text-editor" ] ->
+            TextEditorRoute
+
         _ ->
             HomePageRoute
 
@@ -251,6 +255,9 @@ encode route =
                     ( [ "slack-oauth" ]
                     , []
                     )
+
+                TextEditorRoute ->
+                    ( [ "text-editor" ], [] )
     in
     Url.Builder.absolute path query
 

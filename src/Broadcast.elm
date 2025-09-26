@@ -9,6 +9,7 @@ module Broadcast exposing
     , pushNotification
     , pushNotificationCodec
     , toDmChannel
+    , toEveryone
     , toEveryoneWhoCanSeeUser
     , toGuild
     , toGuildExcludingOne
@@ -101,6 +102,37 @@ toSession sessionId msg model =
 
         Nothing ->
             Command.none
+
+
+toEveryone : ClientId -> ServerChange -> BackendModel -> Command BackendOnly ToFrontend msg
+toEveryone clientToSkip serverChange model =
+    let
+        toFrontend : ToFrontend
+        toFrontend =
+            ChangeBroadcast (ServerChange serverChange)
+    in
+    SeqDict.filterMap
+        (\sessionId otherUserSession ->
+            case SeqDict.get sessionId model.connections of
+                Just clientIds ->
+                    List.filterMap
+                        (\( otherClientId, _ ) ->
+                            if clientToSkip == otherClientId then
+                                Nothing
+
+                            else
+                                Lamdera.sendToFrontend otherClientId toFrontend |> Just
+                        )
+                        (NonemptyDict.toList clientIds)
+                        |> Command.batch
+                        |> Just
+
+                Nothing ->
+                    Nothing
+        )
+        model.sessions
+        |> SeqDict.values
+        |> Command.batch
 
 
 toUser : Maybe ClientId -> Maybe SessionId -> Id UserId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg

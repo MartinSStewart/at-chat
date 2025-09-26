@@ -83,6 +83,7 @@ import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
+import TextEditor
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
@@ -172,6 +173,7 @@ type alias LoggedIn2 =
     , showFileToUploadInfo : Maybe FileDataWithImage
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
+    , textEditor : TextEditor.Model
     }
 
 
@@ -283,6 +285,7 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , textEditor : TextEditor.LocalState
     }
 
 
@@ -432,6 +435,7 @@ type FrontendMsg
     | PageHasFocusChanged Bool
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
+    | TextEditorMsg TextEditor.Msg
 
 
 type ScrollPosition
@@ -552,6 +556,7 @@ type alias LoginData =
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
+    , textEditor : TextEditor.LocalState
     }
 
 
@@ -596,6 +601,7 @@ type ServerChange
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | Server_TextEditor TextEditor.ServerChange
 
 
 type LocalChange
@@ -621,3 +627,4 @@ type LocalChange
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
+    | Local_TextEditor TextEditor.LocalChange

@@ -56,6 +56,7 @@ import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRo
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
+import TextEditor
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -382,6 +383,7 @@ loadedInitHelper time timezone userAgent loginData loading =
             , showFileToUploadInfo = Nothing
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
+            , textEditor = TextEditor.init
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -450,6 +452,7 @@ loginDataToLocalState userAgent timezone loginData =
         }
     , otherSessions = loginData.otherSessions
     , publicVapidKey = loginData.publicVapidKey
+    , textEditor = loginData.textEditor
     }
 
 
@@ -744,6 +747,9 @@ routeRequest previousRoute newRoute model =
                     viewCmd
             )
 
+        TextEditorRoute ->
+            ( model2, Command.none )
+
 
 openChannelCmds :
     ThreadRouteWithFriends
@@ -799,6 +805,9 @@ routeRequiresLogin route =
             True
 
         SlackOAuthRedirect _ ->
+            False
+
+        TextEditorRoute ->
             False
 
 
@@ -1131,6 +1140,9 @@ isPressMsg msg =
 
         VisualViewportResized _ ->
             False
+
+        TextEditorMsg textEditorMsg ->
+            TextEditor.isPress textEditorMsg
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3325,6 +3337,28 @@ updateLoaded msg model =
         VisualViewportResized height ->
             ( model, Command.none )
 
+        TextEditorMsg textEditorMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        ( textEditor, localChange ) =
+                            TextEditor.update
+                                local.localUser.session.userId
+                                textEditorMsg
+                                loggedIn.textEditor
+                                local.textEditor
+                    in
+                    handleLocalChange
+                        model.time
+                        (Maybe.map Local_TextEditor localChange)
+                        { loggedIn | textEditor = textEditor }
+                        Command.none
+                )
+                model
+
 
 
 --( { model | windowSize = Coord.xy (Coord.xRaw model.windowSize) (floor height) }
@@ -4512,6 +4546,12 @@ changeUpdate localMsg local =
                             { localUser | session = { session | pushSubscription = Subscribed pushSubscription } }
                     }
 
+                Local_TextEditor localChange2 ->
+                    { local
+                        | textEditor =
+                            TextEditor.localChangeUpdate local.localUser.session.userId localChange2 local.textEditor
+                    }
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -4909,6 +4949,9 @@ changeUpdate localMsg local =
                                     (UserSession.setCurrentlyViewing currentlyViewing)
                                     local.otherSessions
                         }
+
+                Server_TextEditor serverChange2 ->
+                    { local | textEditor = TextEditor.changeUpdate serverChange2 local.textEditor }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
@@ -5725,6 +5768,9 @@ pendingChangesText localChange =
         Local_RegisterPushSubscription _ ->
             "Register push subscription"
 
+        Local_TextEditor _ ->
+            "Text editor change"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -6067,6 +6113,15 @@ view model =
 
                                 Err () ->
                                     Ui.text "Something went wrong when linking Slack to at-chat..."
+                            )
+
+                    TextEditorRoute ->
+                        requiresLogin
+                            (\_ local ->
+                                TextEditor.view
+                                    (MyUi.isMobile loaded)
+                                    local.textEditor
+                                    |> Ui.map TextEditorMsg
                             )
         ]
     }
