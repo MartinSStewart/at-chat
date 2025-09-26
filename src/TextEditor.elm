@@ -14,6 +14,8 @@ module TextEditor exposing
     , view
     )
 
+import Color exposing (Color)
+import Color.Interpolate exposing (Space(..))
 import Effect.Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes
@@ -151,25 +153,16 @@ changeUpdate change local =
 backspaceText : Id UserId -> Int -> LocalState -> LocalState
 backspaceText userId backspaceCount local =
     case SeqDict.get userId local.cursorPosition of
-        Just range ->
+        Just removalRange ->
             { local
-                | text = String.Extra.replaceSlice "" (range.start - backspaceCount) range.end local.text
+                | text = String.Extra.replaceSlice "" (removalRange.start - backspaceCount) removalRange.end local.text
                 , cursorPosition =
                     SeqDict.map
                         (\_ range2 ->
-                            { start =
-                                if range.start <= range2.start then
-                                    range2.start - backspaceCount
-
-                                else
-                                    range2.start
-                            , end =
-                                if range.start <= range2.end then
-                                    range2.end - backspaceCount
-
-                                else
-                                    range2.end
-                            }
+                            insertTextHelper
+                                0
+                                { start = removalRange.start - backspaceCount, end = removalRange.end }
+                                range2
                         )
                         local.cursorPosition
             }
@@ -178,39 +171,43 @@ backspaceText userId backspaceCount local =
             local
 
 
-removeTextHelper removeRange range =
-    case Debug.log "a" ( removeRange.start <= range.start, removeRange.end <= range.end ) of
-        ( True, False ) ->
-            Nothing
+insertTextHelper : Int -> Range -> Range -> Range
+insertTextHelper insertCount removeRange range =
+    let
+        size : Int
+        size =
+            RichText.rangeSize removeRange
 
-        ( False, True ) ->
-            { start = range.start
-            , end = range.end - RichText.rangeSize removeRange
-            }
-                |> Just
-
-        ( True, True ) ->
-            if removeRange.end <= range.start |> Debug.log "b" then
-                { start = range.start - RichText.rangeSize removeRange
-                , end = range.end - RichText.rangeSize removeRange
-                }
-                    |> Just
+        moveStartBy : Int
+        moveStartBy =
+            if removeRange.start < range.start then
+                insertCount
 
             else
-                { start = range.start - (range.start - removeRange.start)
-                , end = range.end - RichText.rangeSize removeRange
-                }
-                    |> Just
+                0
 
-        ( False, False ) ->
-            if removeRange.start >= range.end |> Debug.log "c" then
-                Just range
+        moveEndBy : Int
+        moveEndBy =
+            if removeRange.start < range.end then
+                insertCount
 
             else
-                { start = range.start
-                , end = range.end - (range.end - removeRange.end)
-                }
-                    |> Just
+                0
+    in
+    if removeRange.end <= range.start then
+        { start = range.start - size + insertCount
+        , end = range.end - size + insertCount
+        }
+
+    else if removeRange.end <= range.end then
+        { start = range.start - max 0 (range.start - removeRange.start) + moveStartBy
+        , end = range.end - size + moveEndBy
+        }
+
+    else
+        { start = range.start - max 0 (range.start - removeRange.start) + moveStartBy
+        , end = range.end - max 0 (range.end - removeRange.start) + moveEndBy
+        }
 
 
 insertText : Id UserId -> String -> LocalState -> LocalState
@@ -218,51 +215,15 @@ insertText userId text local =
     case SeqDict.get userId local.cursorPosition of
         Just insertionRange ->
             let
-                rangeSize2 =
-                    RichText.rangeSize insertionRange
-
-                moveBy : Int
-                moveBy =
-                    String.length text - rangeSize2
+                insertCount : Int
+                insertCount =
+                    String.length text
             in
             { local
                 | text = String.Extra.replaceSlice text insertionRange.start insertionRange.end local.text
                 , cursorPosition =
-                    SeqDict.filterMap
-                        (\_ range ->
-                            case Debug.log "a" ( insertionRange.start <= range.start, insertionRange.end <= range.end ) of
-                                ( True, False ) ->
-                                    Nothing
-
-                                ( False, True ) ->
-                                    { start = range.start
-                                    , end = range.end - moveBy
-                                    }
-                                        |> Just
-
-                                ( True, True ) ->
-                                    if insertionRange.end <= range.start |> Debug.log "b" then
-                                        { start = range.start - moveBy
-                                        , end = range.end - moveBy
-                                        }
-                                            |> Just
-
-                                    else
-                                        { start = range.start - (range.start - insertionRange.start) + String.length text
-                                        , end = range.end - moveBy
-                                        }
-                                            |> Just
-
-                                ( False, False ) ->
-                                    if insertionRange.start >= range.end |> Debug.log "c" then
-                                        Just range
-
-                                    else
-                                        { start = range.start
-                                        , end = range.end - (range.end - insertionRange.end)
-                                        }
-                                            |> Just
-                        )
+                    SeqDict.map
+                        (\_ range -> insertTextHelper insertCount insertionRange range)
                         local.cursorPosition
             }
 
@@ -391,71 +352,7 @@ textarea local isMobileKeyboard placeholderText text =
             ]
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    let
-                        highlightedText =
-                            case SeqDict.toList local.cursorPosition |> List.sortBy (\( _, range ) -> range.start) of
-                                ( _, first ) :: rest ->
-                                    SeqDict.toList local.cursorPosition
-                                        |> List.concatMap
-                                            (\( userId, range ) ->
-                                                [ ( userId, range.start, True ), ( userId, range.end, False ) ]
-                                            )
-                                        |> List.sortBy (\( _, pos, _ ) -> pos)
-                                        |> List.foldl
-                                            (\( userId, pos, isStart ) state ->
-                                                { activeSelections =
-                                                    if isStart then
-                                                        userId :: state.activeSelections
-
-                                                    else
-                                                        List.Extra.remove userId state.activeSelections
-                                                , html =
-                                                    state.html
-                                                        ++ [ case state.activeSelections of
-                                                                head :: _ ->
-                                                                    Html.span
-                                                                        [ Html.Attributes.style
-                                                                            "background-color"
-                                                                            (case modBy 5 (Id.toInt head) of
-                                                                                0 ->
-                                                                                    "red"
-
-                                                                                1 ->
-                                                                                    "green"
-
-                                                                                2 ->
-                                                                                    "purple"
-
-                                                                                3 ->
-                                                                                    "lime"
-
-                                                                                4 ->
-                                                                                    "orange"
-
-                                                                                _ ->
-                                                                                    "pink"
-                                                                            )
-                                                                        ]
-                                                                        [ Html.text (String.slice state.lastPos pos text) ]
-
-                                                                [] ->
-                                                                    Html.text (String.slice state.lastPos pos text)
-                                                           ]
-                                                , lastPos = pos
-                                                }
-                                            )
-                                            { html = [ Html.text (String.slice 0 first.start text) ]
-                                            , activeSelections = []
-                                            , lastPos = first.start
-                                            }
-                                        |> (\state ->
-                                                state.html ++ [ Html.text (String.slice state.lastPos (String.length text) text) ]
-                                           )
-
-                                [] ->
-                                    [ Html.text text ]
-                    in
-                    highlightedText ++ [ Html.text "\n" ]
+                    highlightText text local ++ [ Html.text "\n" ]
 
                 Nothing ->
                     [ if placeholderText == "" then
@@ -466,3 +363,143 @@ textarea local isMobileKeyboard placeholderText text =
                     ]
             )
         ]
+
+
+type RangeType
+    = PointRange
+    | StartRange
+    | EndRange
+
+
+userIdColor : Id UserId -> Color.Color
+userIdColor userId =
+    case modBy 6 (Id.toInt userId) of
+        0 ->
+            Color.rgb255 230 0 0
+
+        1 ->
+            Color.rgb255 0 200 0
+
+        2 ->
+            Color.rgb255 200 200 0
+
+        3 ->
+            Color.rgb255 0 210 210
+
+        4 ->
+            Color.rgb255 210 0 210
+
+        _ ->
+            Color.rgb255 210 150 150
+
+
+mixColors : Color -> List Color -> Color
+mixColors first rest =
+    let
+        count =
+            1 + List.length rest |> toFloat
+    in
+    List.map Color.toRgba (first :: rest)
+        |> List.foldl
+            (\a b ->
+                { r = a.red / count + b.r
+                , g = a.green / count + b.g
+                , b = a.blue / count + b.b
+                }
+            )
+            { r = 0, g = 0, b = 0 }
+        |> (\a -> Color.rgb a.r a.g a.b)
+
+
+highlightText : String -> LocalState -> List (Html msg)
+highlightText text local =
+    let
+        list =
+            SeqDict.toList local.cursorPosition
+    in
+    case List.sortBy (\( _, range ) -> range.start) list of
+        ( _, first ) :: _ ->
+            list
+                |> List.concatMap
+                    (\( userId, range ) ->
+                        if range.start == range.end then
+                            [ ( userId, range.start, PointRange ) ]
+
+                        else
+                            [ ( userId, range.start, StartRange ), ( userId, range.end, EndRange ) ]
+                    )
+                |> List.sortBy (\( _, pos, _ ) -> pos)
+                |> List.foldl
+                    (\( userId, pos, isStart ) state ->
+                        case isStart of
+                            PointRange ->
+                                { activeSelections = state.activeSelections
+                                , html =
+                                    state.html
+                                        ++ [ case state.activeSelections of
+                                                head :: rest ->
+                                                    Html.span
+                                                        [ mixColors (userIdColor head) (List.map userIdColor rest)
+                                                            |> MyUi.colorToStyle
+                                                            |> Html.Attributes.style "background-color"
+                                                        ]
+                                                        [ Html.text (String.slice state.lastPos pos text) ]
+
+                                                [] ->
+                                                    Html.text (String.slice state.lastPos pos text)
+                                           , Html.span
+                                                [ Html.Attributes.style "position" "relative" ]
+                                                [ Html.div
+                                                    [ Html.Attributes.style "position" "absolute"
+                                                    , Html.Attributes.style "width" "4px"
+                                                    , Html.Attributes.style "height" "18px"
+                                                    , userIdColor userId
+                                                        |> MyUi.colorToStyle
+                                                        |> Html.Attributes.style "background-color"
+                                                    , Html.Attributes.style "top" "0"
+                                                    , Html.Attributes.style "left" "-2px"
+                                                    ]
+                                                    []
+                                                ]
+                                           ]
+                                , lastPos = pos
+                                }
+
+                            _ ->
+                                { activeSelections =
+                                    case isStart of
+                                        StartRange ->
+                                            userId :: state.activeSelections
+
+                                        EndRange ->
+                                            List.Extra.remove userId state.activeSelections
+
+                                        PointRange ->
+                                            state.activeSelections
+                                , html =
+                                    state.html
+                                        ++ [ case state.activeSelections of
+                                                head :: rest ->
+                                                    Html.span
+                                                        [ mixColors (userIdColor head) (List.map userIdColor rest)
+                                                            |> MyUi.colorToStyle
+                                                            |> Html.Attributes.style "background-color"
+                                                        ]
+                                                        [ Html.text (String.slice state.lastPos pos text) ]
+
+                                                [] ->
+                                                    Html.text (String.slice state.lastPos pos text)
+                                           ]
+                                , lastPos = pos
+                                }
+                    )
+                    { html = [ Html.text (String.slice 0 first.start text) ]
+                    , activeSelections = []
+                    , lastPos = first.start
+                    }
+                |> (\state ->
+                        state.html ++ [ Html.text (String.slice state.lastPos (String.length text) text) ]
+                   )
+
+        [] ->
+            [ Html.text text ]
