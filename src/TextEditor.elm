@@ -20,9 +20,11 @@ import Html.Attributes
 import Html.Events
 import Id exposing (Id, UserId)
 import Json.Decode
+import List.Extra
 import MyUi
 import RichText exposing (Range)
 import SeqDict exposing (SeqDict)
+import SeqSet
 import String.Extra
 import String.Nonempty
 import Ui exposing (Element)
@@ -65,7 +67,7 @@ init =
 
 initLocalState : LocalState
 initLocalState =
-    { text = "", cursorPosition = SeqDict.empty }
+    { text = "0123456789", cursorPosition = SeqDict.empty }
 
 
 update : Id UserId -> Msg -> Model -> LocalState -> ( Model, Maybe LocalChange )
@@ -75,15 +77,9 @@ update currentUserId msg model local =
             case SeqDict.get currentUserId local.cursorPosition of
                 Just range ->
                     let
-                        _ =
-                            Debug.log "range" range
-
-                        _ =
-                            Debug.log "input text" text
-
                         lengthDiff : Int
                         lengthDiff =
-                            String.length text - String.length (Debug.log "old" local.text) |> Debug.log "lengthDiff"
+                            String.length text - String.length local.text
                     in
                     ( model
                     , if RichText.rangeSize range == 0 && lengthDiff < 0 then
@@ -91,7 +87,6 @@ update currentUserId msg model local =
 
                       else
                         String.slice range.start (range.start + lengthDiff + RichText.rangeSize range) text
-                            |> Debug.log "new text"
                             |> Local_TypedText
                             |> Just
                     )
@@ -100,7 +95,22 @@ update currentUserId msg model local =
                     ( model, Nothing )
 
         MovedCursor range ->
-            ( model, Local_MovedCursor range |> Just )
+            if range.start == range.end && range.start == String.length local.text then
+                ( model, Nothing )
+
+            else
+                case SeqDict.get currentUserId local.cursorPosition of
+                    Just previousRange ->
+                        ( model
+                        , if range == previousRange then
+                            Nothing
+
+                          else
+                            Local_MovedCursor range |> Just
+                        )
+
+                    Nothing ->
+                        ( model, Local_MovedCursor range |> Just )
 
         PressedReset ->
             ( model, Local_Reset |> Just )
@@ -168,36 +178,90 @@ backspaceText userId backspaceCount local =
             local
 
 
+removeTextHelper removeRange range =
+    case Debug.log "a" ( removeRange.start <= range.start, removeRange.end <= range.end ) of
+        ( True, False ) ->
+            Nothing
+
+        ( False, True ) ->
+            { start = range.start
+            , end = range.end - RichText.rangeSize removeRange
+            }
+                |> Just
+
+        ( True, True ) ->
+            if removeRange.end <= range.start |> Debug.log "b" then
+                { start = range.start - RichText.rangeSize removeRange
+                , end = range.end - RichText.rangeSize removeRange
+                }
+                    |> Just
+
+            else
+                { start = range.start - (range.start - removeRange.start)
+                , end = range.end - RichText.rangeSize removeRange
+                }
+                    |> Just
+
+        ( False, False ) ->
+            if removeRange.start >= range.end |> Debug.log "c" then
+                Just range
+
+            else
+                { start = range.start
+                , end = range.end - (range.end - removeRange.end)
+                }
+                    |> Just
+
+
 insertText : Id UserId -> String -> LocalState -> LocalState
 insertText userId text local =
     case SeqDict.get userId local.cursorPosition of
-        Just range ->
+        Just insertionRange ->
             let
                 rangeSize2 =
-                    RichText.rangeSize range
+                    RichText.rangeSize insertionRange
 
                 moveBy : Int
                 moveBy =
                     String.length text - rangeSize2
             in
             { local
-                | text = String.Extra.replaceSlice text range.start range.end local.text
+                | text = String.Extra.replaceSlice text insertionRange.start insertionRange.end local.text
                 , cursorPosition =
-                    SeqDict.map
-                        (\_ range2 ->
-                            { start =
-                                if range.start <= range2.start then
-                                    range2.start + moveBy
+                    SeqDict.filterMap
+                        (\_ range ->
+                            case Debug.log "a" ( insertionRange.start <= range.start, insertionRange.end <= range.end ) of
+                                ( True, False ) ->
+                                    Nothing
 
-                                else
-                                    range2.start
-                            , end =
-                                if range.start <= range2.end then
-                                    range2.end + moveBy
+                                ( False, True ) ->
+                                    { start = range.start
+                                    , end = range.end - moveBy
+                                    }
+                                        |> Just
 
-                                else
-                                    range2.end
-                            }
+                                ( True, True ) ->
+                                    if insertionRange.end <= range.start |> Debug.log "b" then
+                                        { start = range.start - moveBy
+                                        , end = range.end - moveBy
+                                        }
+                                            |> Just
+
+                                    else
+                                        { start = range.start - (range.start - insertionRange.start) + String.length text
+                                        , end = range.end - moveBy
+                                        }
+                                            |> Just
+
+                                ( False, False ) ->
+                                    if insertionRange.start >= range.end |> Debug.log "c" then
+                                        Just range
+
+                                    else
+                                        { start = range.start
+                                        , end = range.end - (range.end - insertionRange.end)
+                                        }
+                                            |> Just
                         )
                         local.cursorPosition
             }
@@ -328,15 +392,70 @@ textarea local isMobileKeyboard placeholderText text =
             (case String.Nonempty.fromString text of
                 Just nonempty ->
                     let
-                        users =
-                            SeqDict.empty
+                        highlightedText =
+                            case SeqDict.toList local.cursorPosition |> List.sortBy (\( _, range ) -> range.start) of
+                                ( _, first ) :: rest ->
+                                    SeqDict.toList local.cursorPosition
+                                        |> List.concatMap
+                                            (\( userId, range ) ->
+                                                [ ( userId, range.start, True ), ( userId, range.end, False ) ]
+                                            )
+                                        |> List.sortBy (\( _, pos, _ ) -> pos)
+                                        |> List.foldl
+                                            (\( userId, pos, isStart ) state ->
+                                                { activeSelections =
+                                                    if isStart then
+                                                        userId :: state.activeSelections
+
+                                                    else
+                                                        List.Extra.remove userId state.activeSelections
+                                                , html =
+                                                    state.html
+                                                        ++ [ case state.activeSelections of
+                                                                head :: _ ->
+                                                                    Html.span
+                                                                        [ Html.Attributes.style
+                                                                            "background-color"
+                                                                            (case modBy 5 (Id.toInt head) of
+                                                                                0 ->
+                                                                                    "red"
+
+                                                                                1 ->
+                                                                                    "green"
+
+                                                                                2 ->
+                                                                                    "purple"
+
+                                                                                3 ->
+                                                                                    "lime"
+
+                                                                                4 ->
+                                                                                    "orange"
+
+                                                                                _ ->
+                                                                                    "pink"
+                                                                            )
+                                                                        ]
+                                                                        [ Html.text (String.slice state.lastPos pos text) ]
+
+                                                                [] ->
+                                                                    Html.text (String.slice state.lastPos pos text)
+                                                           ]
+                                                , lastPos = pos
+                                                }
+                                            )
+                                            { html = [ Html.text (String.slice 0 first.start text) ]
+                                            , activeSelections = []
+                                            , lastPos = first.start
+                                            }
+                                        |> (\state ->
+                                                state.html ++ [ Html.text (String.slice state.lastPos (String.length text) text) ]
+                                           )
+
+                                [] ->
+                                    [ Html.text text ]
                     in
-                    RichText.textInputView
-                        local.cursorPosition
-                        users
-                        SeqDict.empty
-                        (RichText.fromNonemptyString users nonempty)
-                        ++ [ Html.text "\n" ]
+                    highlightedText ++ [ Html.text "\n" ]
 
                 Nothing ->
                     [ if placeholderText == "" then

@@ -185,7 +185,7 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                         users =
                             LocalState.allUsers local
                     in
-                    RichText.textInputView SeqDict.empty users attachedFiles (RichText.fromNonemptyString users nonempty)
+                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
                         ++ [ Html.text "\n" ]
 
                 Nothing ->

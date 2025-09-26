@@ -1060,11 +1060,10 @@ rangeSize range =
     range.end - range.start
 
 
-textInputView : SeqDict (Id UserId) Range -> SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
-textInputView textSelections users attachedFiles nonempty =
+textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
+textInputView users attachedFiles nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
-        textSelections
         users
         attachedFiles
         nonempty
@@ -1085,12 +1084,11 @@ type alias RichTextState =
 
 textInputViewHelper :
     RichTextState
-    -> SeqDict (Id UserId) Range
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> SeqDict (Id FileId) b
     -> Nonempty RichText
     -> List (Html msg)
-textInputViewHelper state textSelections allUsers attachedFiles nonempty =
+textInputViewHelper state allUsers attachedFiles nonempty =
     List.concatMap
         (\item ->
             case item of
@@ -1123,7 +1121,6 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     formatText "_"
                         :: textInputViewHelper
                             { state | italic = True }
-                            textSelections
                             allUsers
                             attachedFiles
                             nonempty2
@@ -1133,7 +1130,6 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     formatText "__"
                         :: textInputViewHelper
                             { state | underline = True }
-                            textSelections
                             allUsers
                             attachedFiles
                             nonempty2
@@ -1143,7 +1139,6 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     formatText "*"
                         :: textInputViewHelper
                             { state | bold = True }
-                            textSelections
                             allUsers
                             attachedFiles
                             nonempty2
@@ -1153,7 +1148,6 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     formatText "~~"
                         :: textInputViewHelper
                             { state | strikethrough = True }
-                            textSelections
                             allUsers
                             attachedFiles
                             nonempty2
@@ -1163,7 +1157,6 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     formatText "||"
                         :: textInputViewHelper
                             { state | spoiler = True }
-                            textSelections
                             allUsers
                             attachedFiles
                             nonempty2
