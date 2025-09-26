@@ -711,7 +711,7 @@ view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedF
         (Just containerWidth)
         (Just ( htmlIdPrefix, pressedSpoiler ))
         0
-        { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
+        { charCount = 0, spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
         attachedFiles
@@ -730,7 +730,7 @@ preview revealedSpoilers users attachedFiles nonempty =
         Nothing
         Nothing
         0
-        { spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
+        { charCount = 0, spoiler = False, underline = False, italic = False, bold = False, strikethrough = False }
         revealedSpoilers
         users
         attachedFiles
@@ -1060,10 +1060,26 @@ rangeSize range =
     range.end - range.start
 
 
+rangeIntersection : Range -> Range -> Maybe Range
+rangeIntersection a b =
+    let
+        cStart =
+            max a.start b.start
+
+        cEnd =
+            min a.end b.end
+    in
+    if cStart >= cEnd then
+        Nothing
+
+    else
+        Just { start = cStart, end = cEnd }
+
+
 textInputView : SeqDict (Id UserId) Range -> SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
 textInputView textSelections users attachedFiles nonempty =
     textInputViewHelper
-        { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
+        { charCount = 0, underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
         textSelections
         users
         attachedFiles
@@ -1080,7 +1096,7 @@ htmlAttrIf condition attribute =
 
 
 type alias RichTextState =
-    { italic : Bool, underline : Bool, bold : Bool, strikethrough : Bool, spoiler : Bool }
+    { charCount : Int, italic : Bool, underline : Bool, bold : Bool, strikethrough : Bool, spoiler : Bool }
 
 
 textInputViewHelper :
@@ -1109,6 +1125,15 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                     ]
 
                 NormalText char text ->
+                    let
+                        endChar =
+                            state.charCount + 1 + String.length text
+
+                        highlights : List Range
+                        highlights =
+                            SeqDict.values textSelections
+                                |> List.filterMap (rangeIntersection { start = state.charCount, end = endChar })
+                    in
                     [ Html.span
                         [ --htmlAttrIf state.italic (Html.Attributes.style "font-style" "oblique")
                           htmlAttrIf state.underline (Html.Attributes.style "text-decoration" "underline")
@@ -1122,7 +1147,7 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                 Italic nonempty2 ->
                     formatText "_"
                         :: textInputViewHelper
-                            { state | italic = True }
+                            { state | italic = True, charCount = state.charCount + 1 }
                             textSelections
                             allUsers
                             attachedFiles
@@ -1132,7 +1157,7 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                 Underline nonempty2 ->
                     formatText "__"
                         :: textInputViewHelper
-                            { state | underline = True }
+                            { state | underline = True, charCount = state.charCount + 2 }
                             textSelections
                             allUsers
                             attachedFiles
@@ -1142,7 +1167,7 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                 Bold nonempty2 ->
                     formatText "*"
                         :: textInputViewHelper
-                            { state | bold = True }
+                            { state | bold = True, charCount = state.charCount + 1 }
                             textSelections
                             allUsers
                             attachedFiles
@@ -1152,7 +1177,7 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                 Strikethrough nonempty2 ->
                     formatText "~~"
                         :: textInputViewHelper
-                            { state | strikethrough = True }
+                            { state | strikethrough = True, charCount = state.charCount + 2 }
                             textSelections
                             allUsers
                             attachedFiles
@@ -1162,7 +1187,7 @@ textInputViewHelper state textSelections allUsers attachedFiles nonempty =
                 Spoiler nonempty2 ->
                     formatText "||"
                         :: textInputViewHelper
-                            { state | spoiler = True }
+                            { state | spoiler = True, charCount = state.charCount + 2 }
                             textSelections
                             allUsers
                             attachedFiles
