@@ -71,19 +71,12 @@ type alias MsgConfig msg =
 textarea : Bool -> MsgConfig msg -> HtmlId -> String -> String -> SeqDict (Id FileId) a -> Maybe MentionUserDropdown -> LocalState -> Html msg
 textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text attachedFiles pingUser local =
     Html.div
-        ([ Html.Attributes.style "display" "flex"
-         , Html.Attributes.style "position" "relative"
-         , Html.Attributes.style "min-height" "min-content"
-         , Html.Attributes.style "width" "100%"
-         , Html.Attributes.style "height" "fit-content"
-         ]
-            ++ (if isMobileKeyboard then
-                    [ Html.Attributes.style "min-height" "100%" ]
-
-                else
-                    []
-               )
-        )
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "min-height" "min-content"
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "height" "fit-content"
+        ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"
             , Html.Attributes.style "position" "absolute"
