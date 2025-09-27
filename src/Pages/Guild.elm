@@ -1001,17 +1001,18 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.alignTop
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
-            , Ui.paddingXY 16 0
             ]
             [ channelHeader (MyUi.isMobile model) False (Ui.text "Invite member to guild")
-            , submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link"
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
             , if SeqDict.isEmpty guild.invites then
                 Ui.none
 
               else
-                Ui.el [ Ui.Font.bold ] (Ui.text "Existing invites")
+                Ui.el [ Ui.Font.bold, Ui.paddingXY 16 0 ] (Ui.text "Existing invites")
             , Ui.column
-                [ Ui.spacing 8 ]
+                [ Ui.spacing 8, Ui.paddingXY 16 0 ]
                 (SeqDict.toList guild.invites
                     |> List.sortBy (\( _, data ) -> -(Time.posixToMillis data.createdAt))
                     |> List.map
@@ -1032,19 +1033,22 @@ inviteLinkCreatorForm model local guildId guild =
                                 ]
                         )
                 )
-            , MyUi.radioColumn
-                (Dom.id "guild_notificationLevel")
-                (PressedGuildNotificationLevel guildId)
-                (if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
-                    Just NotifyOnEveryMessage
+            , Ui.el
+                [ Ui.paddingXY 16 0 ]
+                (MyUi.radioColumn
+                    (Dom.id "guild_notificationLevel")
+                    (PressedGuildNotificationLevel guildId)
+                    (if SeqSet.member guildId local.localUser.user.notifyOnAllMessages then
+                        Just NotifyOnEveryMessage
 
-                 else
-                    Just NotifyOnMention
+                     else
+                        Just NotifyOnMention
+                    )
+                    "Guild notifications"
+                    [ ( NotifyOnMention, "Only when mentioned" )
+                    , ( NotifyOnEveryMessage, "On every message" )
+                    ]
                 )
-                "Guild notifications"
-                [ ( NotifyOnMention, "Only when mentioned" )
-                , ( NotifyOnEveryMessage, "On every message" )
-                ]
             ]
         )
 
@@ -1938,6 +1942,19 @@ scrollToBottomDecoder guildOrDmId threadRoute currentScrollPosition =
             )
 
 
+showFilesButton : Element FrontendMsg
+showFilesButton =
+    MyUi.elButton
+        (Dom.id "guild_showFiles")
+        (PressedLink Route.TextEditorRoute)
+        [ Ui.alignRight
+        , Ui.width (Ui.px 32)
+        , Ui.paddingXY 4 0
+        , Ui.height Ui.fill
+        ]
+        (Ui.html Icons.document)
+
+
 conversationView :
     Id ChannelMessageId
     -> GuildOrDmIdNoThread
@@ -1991,6 +2008,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 , Ui.clipWithEllipsis
                                 ]
                                 (Ui.text "Private chat with yourself")
+                            , showFilesButton
                             ]
 
                          else
@@ -2002,13 +2020,17 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 ]
                                 (Ui.text "Private chat with ")
                             , Ui.text name
+                            , showFilesButton
                             ]
                         )
 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag), Ui.text name ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                        , Ui.text name
+                        , showFilesButton
+                        ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of
@@ -2256,6 +2278,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 , Ui.clipWithEllipsis
                                 ]
                                 (Ui.text "Private chat with yourself")
+                            , showFilesButton
                             ]
 
                          else
@@ -2267,13 +2290,17 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                                 ]
                                 (Ui.text "Private chat with ")
                             , Ui.text name
+                            , showFilesButton
                             ]
                         )
 
                 GuildOrDmId_Guild _ _ ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag), Ui.text name ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                        , Ui.text name
+                        , showFilesButton
+                        ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of

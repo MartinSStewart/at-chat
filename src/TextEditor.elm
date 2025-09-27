@@ -267,6 +267,7 @@ view : Bool -> Id UserId -> LocalState -> Element Msg
 view isMobile currentUserId local =
     Ui.el
         [ Ui.height Ui.fill
+        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
         , Ui.inFront
             (MyUi.elButton
                 (Dom.id "textEditor_reset")
@@ -277,6 +278,7 @@ view isMobile currentUserId local =
                 , Ui.background MyUi.buttonBackground
                 , Ui.border 1
                 , Ui.borderColor MyUi.buttonBorder
+                , MyUi.htmlStyle "transform" ("translateY(" ++ MyUi.insetTop ++ ")")
                 ]
                 (Ui.text "Reset")
             )
