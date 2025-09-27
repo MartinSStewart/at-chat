@@ -5468,6 +5468,14 @@ updateLoadedFromBackend msg model =
                     in
                     ( { loggedIn | localState = localState }
                     , case change of
+                        ServerChange (Server_TextEditor _) ->
+                            case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                Just range ->
+                                    Ports.setCursorPosition TextEditor.inputId range
+
+                                Nothing ->
+                                    Command.none
+
                         ServerChange (Server_YouJoinedGuildByInvite (Ok { guildId, guild })) ->
                             case model.route of
                                 GuildRoute inviteGuildId _ ->

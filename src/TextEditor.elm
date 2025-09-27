@@ -8,6 +8,7 @@ module TextEditor exposing
     , changeUpdate
     , init
     , initLocalState
+    , inputId
     , isPress
     , localChangeUpdate
     , update
@@ -16,7 +17,7 @@ module TextEditor exposing
 
 import Color exposing (Color)
 import Color.Interpolate exposing (Space(..))
-import Effect.Browser.Dom as Dom
+import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -257,6 +258,11 @@ backendChangeUpdate currentUserId change local =
             )
 
 
+inputId : HtmlId
+inputId =
+    Dom.id "textEditor_input"
+
+
 view : Bool -> Id UserId -> LocalState -> Element Msg
 view isMobile currentUserId local =
     Ui.el
@@ -332,6 +338,7 @@ textarea local isMobileKeyboard currentUserId placeholderText text =
             , Html.Events.onInput TypedText
             , Html.Attributes.value text
             , Html.Events.on "selectionchange" (Json.Decode.map MovedCursor selectionDecoder)
+            , Dom.idToAttribute inputId
             ]
             []
         , Html.div
