@@ -24,6 +24,7 @@ port module Ports exposing
     , requestNotificationPermission
     , scrollbarWidthSub
     , serviceWorkerMessage
+    , setCursorPosition
     , setFavicon
     , showNotification
     , textInputSelectAll
@@ -40,6 +41,7 @@ import Json.Decode
 import Json.Encode
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
+import RichText exposing (Range)
 import Url
 import UserAgent exposing (UserAgent)
 import UserSession exposing (SubscribeData)
@@ -170,6 +172,22 @@ port close_notifications_to_js : Json.Encode.Value -> Cmd msg
 
 
 port visual_viewport_resized_from_js : (Json.Decode.Value -> msg) -> Sub msg
+
+
+port set_cursor_position_to_js : Json.Encode.Value -> Cmd msg
+
+
+setCursorPosition : HtmlId -> Range -> Command FrontendOnly toMsg msg
+setCursorPosition htmlId range =
+    Command.sendToJs
+        "set_cursor_position_to_js"
+        set_cursor_position_to_js
+        (Json.Encode.object
+            [ ( "htmlId", Json.Encode.string (Dom.idToString htmlId) )
+            , ( "start", Json.Encode.int range.start )
+            , ( "end", Json.Encode.int range.end )
+            ]
+        )
 
 
 visualViewportResized : (Float -> msg) -> Subscription FrontendOnly msg

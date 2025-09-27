@@ -257,8 +257,8 @@ backendChangeUpdate currentUserId change local =
             )
 
 
-view : Bool -> LocalState -> Element Msg
-view isMobile local =
+view : Bool -> Id UserId -> LocalState -> Element Msg
+view isMobile currentUserId local =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.inFront
@@ -275,7 +275,7 @@ view isMobile local =
                 (Ui.text "Reset")
             )
         ]
-        (textarea local isMobile "Nothing written yet..." local.text |> Ui.html)
+        (textarea local isMobile currentUserId "Nothing written yet..." local.text |> Ui.html)
 
 
 isPress : Msg -> Bool
@@ -298,8 +298,8 @@ selectionDecoder =
         (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
 
 
-textarea : LocalState -> Bool -> String -> String -> Html Msg
-textarea local isMobileKeyboard placeholderText text =
+textarea : LocalState -> Bool -> Id UserId -> String -> String -> Html Msg
+textarea local isMobileKeyboard currentUserId placeholderText text =
     Html.div
         ([ Html.Attributes.style "display" "flex"
          , Html.Attributes.style "position" "relative"
@@ -352,7 +352,7 @@ textarea local isMobileKeyboard placeholderText text =
             ]
             (case String.Nonempty.fromString text of
                 Just nonempty ->
-                    highlightText text local ++ [ Html.text "\n" ]
+                    highlightText text currentUserId local ++ [ Html.text "\n" ]
 
                 Nothing ->
                     [ if placeholderText == "" then
@@ -411,11 +411,11 @@ mixColors first rest =
         |> (\a -> Color.rgb a.r a.g a.b)
 
 
-highlightText : String -> LocalState -> List (Html msg)
-highlightText text local =
+highlightText : String -> Id UserId -> LocalState -> List (Html msg)
+highlightText text currentUserId local =
     let
         list =
-            SeqDict.toList local.cursorPosition
+            SeqDict.toList (SeqDict.remove currentUserId local.cursorPosition)
     in
     case List.sortBy (\( _, range ) -> range.start) list of
         ( _, first ) :: _ ->

@@ -6120,6 +6120,7 @@ view model =
                             (\_ local ->
                                 TextEditor.view
                                     (MyUi.isMobile loaded)
+                                    local.localUser.session.userId
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
                             )
