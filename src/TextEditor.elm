@@ -402,22 +402,34 @@ userIdColor userId =
             Color.rgb255 210 150 150
 
 
-mixColors : Color -> List Color -> Color
+mixColors : Color -> List Color -> Html.Attribute msg
 mixColors first rest =
-    let
-        count =
-            1 + List.length rest |> toFloat
-    in
-    List.map Color.toRgba (first :: rest)
-        |> List.foldl
-            (\a b ->
-                { r = a.red / count + b.r
-                , g = a.green / count + b.g
-                , b = a.blue / count + b.b
-                }
-            )
-            { r = 0, g = 0, b = 0 }
-        |> (\a -> Color.rgb a.r a.g a.b)
+    Html.Attributes.style
+        "background"
+        ("repeating-linear-gradient(45deg"
+            ++ String.concat
+                (List.indexedMap
+                    (\index color ->
+                        let
+                            colorText =
+                                Color.toCssString color
+
+                            offset0 =
+                                " " ++ String.fromInt (index * 6) ++ "px,"
+
+                            offset1 =
+                                " " ++ String.fromInt ((index + 1) * 6) ++ "px"
+                        in
+                        if index == 0 then
+                            "," ++ colorText ++ "," ++ colorText ++ offset1
+
+                        else
+                            "," ++ colorText ++ offset0 ++ colorText ++ offset1
+                    )
+                    (first :: rest)
+                )
+            ++ ")"
+        )
 
 
 highlightText : String -> Id UserId -> LocalState -> List (Html msg)
@@ -449,8 +461,6 @@ highlightText text currentUserId local =
                                                 head :: rest ->
                                                     Html.span
                                                         [ mixColors (userIdColor head) (List.map userIdColor rest)
-                                                            |> MyUi.colorToStyle
-                                                            |> Html.Attributes.style "background-color"
                                                         ]
                                                         [ Html.text (String.slice state.lastPos pos text) ]
 
@@ -491,8 +501,6 @@ highlightText text currentUserId local =
                                                 head :: rest ->
                                                     Html.span
                                                         [ mixColors (userIdColor head) (List.map userIdColor rest)
-                                                            |> MyUi.colorToStyle
-                                                            |> Html.Attributes.style "background-color"
                                                         ]
                                                         [ Html.text (String.slice state.lastPos pos text) ]
 
