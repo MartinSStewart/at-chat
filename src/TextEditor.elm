@@ -16,7 +16,6 @@ module TextEditor exposing
     )
 
 import Color exposing (Color)
-import Color.Interpolate exposing (Space(..))
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Html.Attributes
@@ -27,7 +26,6 @@ import List.Extra
 import MyUi
 import RichText exposing (Range)
 import SeqDict exposing (SeqDict)
-import SeqSet
 import String.Extra
 import String.Nonempty
 import Ui exposing (Element)
@@ -37,6 +35,8 @@ type Msg
     = TypedText String
     | MovedCursor Range
     | PressedReset
+    | UndoChange
+    | RedoChange
 
 
 type LocalChange
@@ -98,25 +98,31 @@ update currentUserId msg model local =
                     ( model, Nothing )
 
         MovedCursor range ->
-            if range.start == range.end && range.start == String.length local.text then
-                ( model, Nothing )
+            --if range.start == range.end && range.start == String.length local.text then
+            --    ( model, Nothing )
+            --
+            --else
+            case SeqDict.get currentUserId local.cursorPosition of
+                Just previousRange ->
+                    ( model
+                    , if range == previousRange then
+                        Nothing
 
-            else
-                case SeqDict.get currentUserId local.cursorPosition of
-                    Just previousRange ->
-                        ( model
-                        , if range == previousRange then
-                            Nothing
+                      else
+                        Local_MovedCursor range |> Just
+                    )
 
-                          else
-                            Local_MovedCursor range |> Just
-                        )
-
-                    Nothing ->
-                        ( model, Local_MovedCursor range |> Just )
+                Nothing ->
+                    ( model, Local_MovedCursor range |> Just )
 
         PressedReset ->
             ( model, Local_Reset |> Just )
+
+        UndoChange ->
+            ( model, Nothing )
+
+        RedoChange ->
+            ( model, Nothing )
 
 
 localChangeUpdate : Id UserId -> LocalChange -> LocalState -> LocalState
@@ -283,7 +289,7 @@ view isMobile currentUserId local =
                 (Ui.text "Reset")
             )
         ]
-        (textarea local isMobile currentUserId "Nothing written yet..." local.text |> Ui.html)
+        (textarea local currentUserId "Nothing written yet..." local.text |> Ui.html)
 
 
 isPress : Msg -> Bool
@@ -298,6 +304,12 @@ isPress msg =
         PressedReset ->
             True
 
+        UndoChange ->
+            False
+
+        RedoChange ->
+            False
+
 
 selectionDecoder : Json.Decode.Decoder Range
 selectionDecoder =
@@ -306,22 +318,15 @@ selectionDecoder =
         (Json.Decode.at [ "target", "selectionEnd" ] Json.Decode.int)
 
 
-textarea : LocalState -> Bool -> Id UserId -> String -> String -> Html Msg
-textarea local isMobileKeyboard currentUserId placeholderText text =
+textarea : LocalState -> Id UserId -> String -> String -> Html Msg
+textarea local currentUserId placeholderText text =
     Html.div
-        ([ Html.Attributes.style "display" "flex"
-         , Html.Attributes.style "position" "relative"
-         , Html.Attributes.style "min-height" "min-content"
-         , Html.Attributes.style "width" "100%"
-         , Html.Attributes.style "height" "fit-content"
-         ]
-            ++ (if isMobileKeyboard then
-                    [ Html.Attributes.style "min-height" "100%" ]
-
-                else
-                    []
-               )
-        )
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "min-height" "min-content"
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "height" "fit-content"
+        ]
         [ Html.textarea
             [ Html.Attributes.style "color" "rgba(255,0,0,1)"
             , Html.Attributes.style "position" "absolute"
@@ -341,6 +346,25 @@ textarea local isMobileKeyboard currentUserId placeholderText text =
             , Html.Attributes.value text
             , Html.Events.on "selectionchange" (Json.Decode.map MovedCursor selectionDecoder)
             , Dom.idToAttribute inputId
+            , Html.Events.preventDefaultOn
+                "keydown"
+                (Json.Decode.map3
+                    (\a b c -> ( a, b, c ))
+                    (Json.Decode.field "key" Json.Decode.string)
+                    (Json.Decode.field "ctrlKey" Json.Decode.bool)
+                    (Json.Decode.field "metaKey" Json.Decode.bool)
+                    |> Json.Decode.andThen
+                        (\( key, ctrlHeld, metaHeld ) ->
+                            if (ctrlHeld || metaHeld) && key == "z" then
+                                Json.Decode.succeed ( UndoChange, True )
+
+                            else if (ctrlHeld || metaHeld) && key == "y" then
+                                Json.Decode.succeed ( RedoChange, True )
+
+                            else
+                                Json.Decode.fail ""
+                        )
+                )
             ]
             []
         , Html.div
