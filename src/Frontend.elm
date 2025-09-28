@@ -5376,11 +5376,23 @@ updateLoadedFromBackend msg model =
                         localState : Local LocalMsg LocalState
                         localState =
                             Local.updateFromBackend changeUpdate (Just changeId) change loggedIn.localState
+
+                        local : LocalState
+                        local =
+                            Local.model localState
                     in
                     ( { loggedIn | localState = localState }
                     , case localChange of
+                        Local_TextEditor TextEditor.Local_Undo ->
+                            case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                Just range ->
+                                    Ports.setCursorPosition TextEditor.inputId range
+
+                                Nothing ->
+                                    Command.none
+
                         Local_NewGuild _ _ (FilledInByBackend guildId) ->
-                            case SeqDict.get guildId (Local.model localState).guilds of
+                            case SeqDict.get guildId local.guilds of
                                 Just guild ->
                                     routeReplace
                                         model

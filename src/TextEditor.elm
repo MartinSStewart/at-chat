@@ -1,5 +1,5 @@
 module TextEditor exposing
-    ( LocalChange
+    ( LocalChange(..)
     , LocalState
     , Model
     , Msg
@@ -32,6 +32,7 @@ import SeqDict exposing (SeqDict)
 import String.Extra
 import String.Nonempty
 import Ui exposing (Element)
+import Ui.Font
 
 
 type Msg
@@ -60,7 +61,6 @@ type ServerChange
 
 type EditChange
     = Edit_TypedText Range String
-    | Edit_Backspace Int Int
 
 
 type alias Model =
@@ -109,9 +109,6 @@ getEditorState local =
                             Edit_TypedText range text ->
                                 insertText range text state
 
-                            Edit_Backspace position backspaceCount ->
-                                backspaceText position backspaceCount state
-
                 Nothing ->
                     state
             )
@@ -138,7 +135,9 @@ update currentUserId msg model local =
                     in
                     ( model
                     , if RichText.rangeSize range == 0 && lengthDiff < 0 then
-                        Edit_Backspace range.start -lengthDiff |> Local_EditChange |> Just
+                        Edit_TypedText { range | start = range.start + lengthDiff } ""
+                            |> Local_EditChange
+                            |> Just
 
                       else
                         String.slice range.start (range.start + lengthDiff + RichText.rangeSize range) text
@@ -237,20 +236,19 @@ undoChange userId local =
 
 redoChange : Id UserId -> LocalState -> LocalState
 redoChange userId local =
-    { local
-        | undoPoint =
-            SeqDict.update
-                userId
-                (\maybe ->
-                    case getNextRedoPoint userId (Maybe.withDefault -1 maybe + 1) local.history of
-                        Just maybe2 ->
-                            Just maybe2
+    let
+        oldRedoPoint =
+            SeqDict.get userId local.undoPoint |> Maybe.withDefault -1
+    in
+    case getNextRedoPoint userId (oldRedoPoint + 1) local.history of
+        Just ( redoPoint, edit ) ->
+            { local
+                | undoPoint = SeqDict.insert userId redoPoint local.undoPoint
+                , cursorPosition = addEditHelper edit local
+            }
 
-                        Nothing ->
-                            maybe
-                )
-                local.undoPoint
-    }
+        Nothing ->
+            local
 
 
 getNextUndoPoint : Id UserId -> Int -> Array ( Id UserId, EditChange ) -> Maybe Int
@@ -267,12 +265,12 @@ getNextUndoPoint userId index history =
             Nothing
 
 
-getNextRedoPoint : Id UserId -> Int -> Array ( Id UserId, EditChange ) -> Maybe Int
+getNextRedoPoint : Id UserId -> Int -> Array ( Id UserId, EditChange ) -> Maybe ( Int, EditChange )
 getNextRedoPoint userId index history =
     case Array.get index history of
-        Just ( changeBy, _ ) ->
+        Just ( changeBy, edit ) ->
             if changeBy == userId then
-                Just index
+                Just ( index, edit )
 
             else
                 getNextRedoPoint userId (index + 1) history
@@ -300,34 +298,21 @@ addEdit changeBy change local =
     { local
         | history = history
         , undoPoint = SeqDict.insert changeBy (Array.length history - 1) local.undoPoint
-        , cursorPosition =
-            case change of
-                Edit_Backspace position backspaceCount ->
-                    SeqDict.map
-                        (\_ range2 ->
-                            insertTextHelper
-                                0
-                                { start = position - backspaceCount, end = position }
-                                range2
-                        )
-                        local.cursorPosition
-
-                Edit_TypedText insertionRange string ->
-                    let
-                        insertCount =
-                            String.length string
-                    in
-                    SeqDict.map
-                        (\_ range -> insertTextHelper insertCount insertionRange range)
-                        local.cursorPosition
+        , cursorPosition = addEditHelper change local
     }
 
 
-backspaceText : Int -> Int -> EditorState -> EditorState
-backspaceText position backspaceCount local =
-    { local
-        | text = String.Extra.replaceSlice "" (position - backspaceCount) position local.text
-    }
+addEditHelper : EditChange -> LocalState -> SeqDict (Id UserId) Range
+addEditHelper change local =
+    case change of
+        Edit_TypedText insertionRange string ->
+            let
+                insertCount =
+                    String.length string
+            in
+            SeqDict.map
+                (\_ range -> insertTextHelper insertCount insertionRange range)
+                local.cursorPosition
 
 
 insertTextHelper : Int -> Range -> Range -> Range
@@ -438,7 +423,7 @@ view isMobile currentUserId local =
         , Ui.contentTop
         ]
         [ Ui.column
-            [ Ui.background MyUi.background1, Ui.width Ui.shrink, Ui.scrollable ]
+            [ Ui.background MyUi.background1, Ui.width (Ui.px 200), Ui.scrollable, Ui.Font.size 14 ]
             (Array.toList local.history
                 |> List.indexedMap
                     (\index ( changeBy, edit ) ->
@@ -455,12 +440,10 @@ view isMobile currentUserId local =
                                 Ui.borderColor color
                             , Ui.borderWith { left = 4, right = 0, top = 0, bottom = 0 }
                             , Ui.paddingWith { right = 4, left = 0, top = 0, bottom = 0 }
+                            , Ui.clipWithEllipsis
                             ]
                             (Ui.text
                                 (case edit of
-                                    Edit_Backspace _ count ->
-                                        " Backspace " ++ String.fromInt count
-
                                     Edit_TypedText range string ->
                                         "Typed \"" ++ string ++ "\""
                                 )
