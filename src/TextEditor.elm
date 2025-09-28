@@ -408,22 +408,22 @@ userIdColor : Id UserId -> Color.Color
 userIdColor userId =
     case modBy 6 (Id.toInt userId) of
         0 ->
-            Color.rgb255 230 0 0
+            Color.rgb255 158 0 0
 
         1 ->
-            Color.rgb255 0 200 0
+            Color.rgb255 0 127 0
 
         2 ->
-            Color.rgb255 200 200 0
+            Color.rgb255 115 115 0
 
         3 ->
-            Color.rgb255 0 210 210
+            Color.rgb255 0 121 121
 
         4 ->
-            Color.rgb255 210 0 210
+            Color.rgb255 118 0 118
 
         _ ->
-            Color.rgb255 210 150 150
+            Color.rgb255 147 105 105
 
 
 mixColors : Color -> List Color -> Html.Attribute msg
