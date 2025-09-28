@@ -282,7 +282,7 @@ getNextRedoPoint userId index history =
 
 
 addEdit : Id UserId -> EditChange -> LocalState -> LocalState
-addEdit changeBy change2 local =
+addEdit changeBy change local =
     let
         undoPoint : Int
         undoPoint =
@@ -295,11 +295,31 @@ addEdit changeBy change2 local =
                 (Array.slice (undoPoint + 1) (Array.length local.history) local.history
                     |> Array.filter (\( a, _ ) -> a /= changeBy)
                 )
-                |> Array.push ( changeBy, change2 )
+                |> Array.push ( changeBy, change )
     in
     { local
         | history = history
         , undoPoint = SeqDict.insert changeBy (Array.length history - 1) local.undoPoint
+        , cursorPosition =
+            case change of
+                Edit_Backspace position backspaceCount ->
+                    SeqDict.map
+                        (\_ range2 ->
+                            insertTextHelper
+                                0
+                                { start = position - backspaceCount, end = position }
+                                range2
+                        )
+                        local.cursorPosition
+
+                Edit_TypedText insertionRange string ->
+                    let
+                        insertCount =
+                            String.length string
+                    in
+                    SeqDict.map
+                        (\_ range -> insertTextHelper insertCount insertionRange range)
+                        local.cursorPosition
     }
 
 
@@ -307,16 +327,6 @@ backspaceText : Int -> Int -> EditorState -> EditorState
 backspaceText position backspaceCount local =
     { local
         | text = String.Extra.replaceSlice "" (position - backspaceCount) position local.text
-
-        --, cursorPosition =
-        --    SeqDict.map
-        --        (\_ range2 ->
-        --            insertTextHelper
-        --                0
-        --                { start = position - backspaceCount, end = position }
-        --                range2
-        --        )
-        --        local.cursorPosition
     }
 
 
@@ -368,11 +378,6 @@ insertText insertionRange text local =
     in
     { local
         | text = String.Extra.replaceSlice text insertionRange.start insertionRange.end local.text
-
-        --, cursorPosition =
-        --    SeqDict.map
-        --        (\_ range -> insertTextHelper insertCount insertionRange range)
-        --        local.cursorPosition
     }
 
 
@@ -433,7 +438,7 @@ view isMobile currentUserId local =
         , Ui.contentTop
         ]
         [ Ui.column
-            [ Ui.background MyUi.background1, Ui.width Ui.shrink ]
+            [ Ui.background MyUi.background1, Ui.width Ui.shrink, Ui.scrollable ]
             (Array.toList local.history
                 |> List.indexedMap
                     (\index ( changeBy, edit ) ->
@@ -449,6 +454,7 @@ view isMobile currentUserId local =
                               else
                                 Ui.borderColor color
                             , Ui.borderWith { left = 4, right = 0, top = 0, bottom = 0 }
+                            , Ui.paddingWith { right = 4, left = 0, top = 0, bottom = 0 }
                             ]
                             (Ui.text
                                 (case edit of
