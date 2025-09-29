@@ -54,6 +54,7 @@ import SeqSet exposing (SeqSet)
 import Slack exposing (Channel(..))
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
+import TextEditor
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
@@ -180,6 +181,7 @@ init =
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
+      , textEditor = TextEditor.initLocalState
       }
     , Command.none
     )
@@ -1017,6 +1019,7 @@ getLoginData sessionId session user requestMessagesFor model =
                 )
             |> SeqDict.fromList
     , publicVapidKey = model.publicVapidKey
+    , textEditor = model.textEditor
     }
 
 
@@ -2334,6 +2337,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     Nothing
                                     pushSubscription
                                     model2
+                                ]
+                            )
+                        )
+
+                Local_TextEditor localChange ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session user ->
+                            let
+                                ( textEditor, serverChange ) =
+                                    TextEditor.backendChangeUpdate session.userId localChange model.textEditor
+                            in
+                            ( { model | textEditor = textEditor }
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                , Broadcast.toEveryone clientId (Server_TextEditor serverChange) model
                                 ]
                             )
                         )

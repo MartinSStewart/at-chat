@@ -34,8 +34,6 @@ exports.init = async function init(app)
 
     app.ports.fix_cursor_position_to_js.subscribe((htmlId) => {
         var a = document.getElementById(htmlId);
-        console.log(a);
-        console.log(a.value);
 
         requestAnimationFrame(() =>
         {
@@ -110,6 +108,18 @@ exports.init = async function init(app)
     });
 
     app.ports.user_agent_to_js.subscribe(() => { app.ports.user_agent_from_js.send(window.navigator.userAgent); });
+
+    app.ports.set_cursor_position_to_js.subscribe((data) => {
+        requestAnimationFrame(() =>
+            {
+                const element = document.getElementById(data.htmlId);
+                if (element.setSelectionRange) {
+                    element.focus();
+                    element.setSelectionRange(data.start, data.end);
+                    //element.setSelectionRange(0, 5);
+                }
+            });
+    });
 
     let context = null;
     let sounds = {};

@@ -78,6 +78,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import TextEditor
 import Unsafe
 import User exposing (BackendUser, FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -93,6 +94,7 @@ type alias LocalState =
     , localUser : LocalUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
+    , textEditor : TextEditor.LocalState
     }
 
 

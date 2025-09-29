@@ -22,6 +22,6 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@anthropic-ai/claude-code": "^1.0.43"
+    "@anthropic-ai/claude-code": "^2.0.0"
   }
 }

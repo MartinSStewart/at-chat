@@ -1,5 +1,6 @@
 module RichText exposing
     ( Language(..)
+    , Range
     , RichText(..)
     , RichTextState
     , append
@@ -11,6 +12,7 @@ module RichText exposing
     , hyperlinkToString
     , mentionsUser
     , preview
+    , rangeSize
     , removeAttachedFile
     , textInputView
     , toDiscord
@@ -1049,6 +1051,15 @@ fileDownloadView fileData =
         ]
 
 
+type alias Range =
+    { start : Int, end : Int }
+
+
+rangeSize : Range -> Int
+rangeSize range =
+    range.end - range.start
+
+
 textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
 textInputView users attachedFiles nonempty =
     textInputViewHelper
@@ -1108,27 +1119,47 @@ textInputViewHelper state allUsers attachedFiles nonempty =
 
                 Italic nonempty2 ->
                     formatText "_"
-                        :: textInputViewHelper { state | italic = True } allUsers attachedFiles nonempty2
+                        :: textInputViewHelper
+                            { state | italic = True }
+                            allUsers
+                            attachedFiles
+                            nonempty2
                         ++ [ formatText "_" ]
 
                 Underline nonempty2 ->
                     formatText "__"
-                        :: textInputViewHelper { state | underline = True } allUsers attachedFiles nonempty2
+                        :: textInputViewHelper
+                            { state | underline = True }
+                            allUsers
+                            attachedFiles
+                            nonempty2
                         ++ [ formatText "__" ]
 
                 Bold nonempty2 ->
                     formatText "*"
-                        :: textInputViewHelper { state | bold = True } allUsers attachedFiles nonempty2
+                        :: textInputViewHelper
+                            { state | bold = True }
+                            allUsers
+                            attachedFiles
+                            nonempty2
                         ++ [ formatText "*" ]
 
                 Strikethrough nonempty2 ->
                     formatText "~~"
-                        :: textInputViewHelper { state | strikethrough = True } allUsers attachedFiles nonempty2
+                        :: textInputViewHelper
+                            { state | strikethrough = True }
+                            allUsers
+                            attachedFiles
+                            nonempty2
                         ++ [ formatText "~~" ]
 
                 Spoiler nonempty2 ->
                     formatText "||"
-                        :: textInputViewHelper { state | spoiler = True } allUsers attachedFiles nonempty2
+                        :: textInputViewHelper
+                            { state | spoiler = True }
+                            allUsers
+                            attachedFiles
+                            nonempty2
                         ++ [ formatText "||" ]
 
                 Hyperlink protocol rest ->

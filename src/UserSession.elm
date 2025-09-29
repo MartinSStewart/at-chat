@@ -165,3 +165,6 @@ routeToViewing route =
 
         SlackOAuthRedirect _ ->
             StopViewingChannel
+
+        TextEditorRoute ->
+            StopViewingChannel
