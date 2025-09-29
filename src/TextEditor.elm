@@ -97,25 +97,35 @@ initEditorState =
 getEditorState : LocalState -> EditorState
 getEditorState local =
     Array.foldl
-        (\( changeBy, change ) ( index, state ) ->
-            ( index + 1
-            , case SeqDict.get changeBy local.undoPoint of
-                Just undoPoint ->
-                    if undoPoint < index then
-                        state
+        (\( changeBy, change ) ( index, skipped, state ) ->
+            let
+                isSkipped : Bool
+                isSkipped =
+                    case SeqDict.get changeBy local.undoPoint of
+                        Just undoPoint ->
+                            undoPoint < index
 
-                    else
-                        case change of
-                            Edit_TypedText range text ->
-                                insertText range text state
+                        Nothing ->
+                            True
+            in
+            if isSkipped then
+                ( index + 1
+                , change :: skipped
+                , state
+                )
 
-                Nothing ->
-                    state
-            )
+            else
+                ( index + 1
+                , skipped
+                , case change of
+                    Edit_TypedText range text ->
+                        --insertText (List.foldl addEditAdjustRange range skipped) text state
+                        insertText range text state
+                )
         )
-        ( 0, initEditorState )
+        ( 0, [], initEditorState )
         local.history
-        |> Tuple.second
+        |> (\( _, _, a ) -> a)
 
 
 update : Id UserId -> Msg -> Model -> LocalState -> ( Model, Maybe LocalChange )
@@ -244,7 +254,7 @@ redoChange userId local =
         Just ( redoPoint, edit ) ->
             { local
                 | undoPoint = SeqDict.insert userId redoPoint local.undoPoint
-                , cursorPosition = addEditHelper edit local
+                , cursorPosition = SeqDict.map (\_ range -> addEditAdjustRange edit range) local.cursorPosition
             }
 
         Nothing ->
@@ -298,21 +308,19 @@ addEdit changeBy change local =
     { local
         | history = history
         , undoPoint = SeqDict.insert changeBy (Array.length history - 1) local.undoPoint
-        , cursorPosition = addEditHelper change local
+        , cursorPosition = SeqDict.map (\_ range -> addEditAdjustRange change range) local.cursorPosition
     }
 
 
-addEditHelper : EditChange -> LocalState -> SeqDict (Id UserId) Range
-addEditHelper change local =
+addEditAdjustRange : EditChange -> Range -> Range
+addEditAdjustRange change range =
     case change of
         Edit_TypedText insertionRange string ->
             let
                 insertCount =
                     String.length string
             in
-            SeqDict.map
-                (\_ range -> insertTextHelper insertCount insertionRange range)
-                local.cursorPosition
+            insertTextHelper insertCount insertionRange range
 
 
 insertTextHelper : Int -> Range -> Range -> Range
@@ -356,13 +364,8 @@ insertTextHelper insertCount removeRange range =
 
 insertText : Range -> String -> EditorState -> EditorState
 insertText insertionRange text local =
-    let
-        insertCount : Int
-        insertCount =
-            String.length text
-    in
     { local
-        | text = String.Extra.replaceSlice text insertionRange.start insertionRange.end local.text
+        | text = String.Extra.replaceSlice text (max 0 insertionRange.start) insertionRange.end local.text
     }
 
 
