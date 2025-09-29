@@ -50,8 +50,8 @@ self.addEventListener('fetch', (event) => {
 
     const domain = 'https://at-chat.app/';
 
-    if (url.startsWith(domain + 'frontend.')
-        || url.startsWith(domain + 'file/t/')
+    if (//url.startsWith(domain + 'frontend.') Disabled because it might be messing up deploys
+        url.startsWith(domain + 'file/t/')
         || url.startsWith(domain + 'file/0')
         || url.startsWith(domain + 'file/1')
         || url.startsWith(domain + 'file/2')
