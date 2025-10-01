@@ -1395,7 +1395,12 @@ updateLoaded msg model =
                                     , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
                                     , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
                                 }
-                                scrollToBottomOfChannel
+                                (if MyUi.isMobile model then
+                                    smoothScrollToBottomOfChannel
+
+                                 else
+                                    scrollToBottomOfChannel
+                                )
 
                         Nothing ->
                             ( loggedIn, Command.none )
@@ -5524,7 +5529,11 @@ updateLoadedFromBackend msg model =
                                                     model
                                                 , case loggedIn.channelScrollPosition of
                                                     ScrolledToBottom ->
-                                                        scrollToBottomOfChannel
+                                                        if MyUi.isMobile model then
+                                                            smoothScrollToBottomOfChannel
+
+                                                        else
+                                                            scrollToBottomOfChannel
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -5616,6 +5625,37 @@ logout model =
 scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
 scrollToBottomOfChannel =
     Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
+
+
+smoothScrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
+smoothScrollToBottomOfChannel =
+    Dom.getViewportOf Pages.Guild.conversationContainerId
+        |> Task.andThen
+            (\{ scene, viewport } ->
+                smoothScrollToBottomOfChannelHelper viewport.y (scene.height - viewport.height) 0
+            )
+        |> Task.attempt (\_ -> SetScrollToBottom)
+
+
+smoothScrollDuration =
+    20
+
+
+smoothScrollToBottomOfChannelHelper : Float -> Float -> Int -> Task FrontendOnly Dom.Error ()
+smoothScrollToBottomOfChannelHelper startY endY count =
+    if count <= smoothScrollDuration then
+        let
+            t =
+                toFloat count / smoothScrollDuration
+
+            y =
+                t * (endY - startY) + startY |> Debug.log "t"
+        in
+        Dom.setViewportOf Pages.Guild.conversationContainerId 0 y
+            |> Task.andThen (\() -> smoothScrollToBottomOfChannelHelper startY endY (count + 1))
+
+    else
+        Task.succeed ()
 
 
 isViewing : GuildOrDmIdNoThread -> ThreadRoute -> LocalState -> Bool
