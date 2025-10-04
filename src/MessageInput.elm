@@ -84,7 +84,7 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
             , Html.Attributes.style "font-family" "inherit"
             , Html.Attributes.style "line-height" "inherit"
             , Html.Attributes.style "width" "calc(100% - 18px)"
-            , Html.Attributes.style "height" "calc(100% - 2px)"
+            , Html.Attributes.style "height" "100%"
             , Dom.idToAttribute channelTextInputId
             , Html.Attributes.style "background-color" "transparent"
             , Html.Attributes.style "border" "0"
