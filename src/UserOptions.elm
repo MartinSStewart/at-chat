@@ -3,6 +3,8 @@ module UserOptions exposing (init, view)
 import Editable
 import Effect.Browser.Dom as Dom
 import Env
+import Html
+import Html.Attributes
 import Icons
 import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
 import List.Nonempty exposing (Nonempty(..))
@@ -15,9 +17,10 @@ import SessionIdHash
 import Slack
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -30,6 +33,10 @@ init =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , showLinkDiscordSetup = False
+    , linkDiscordEmailOrPhone = ""
+    , linkDiscordPassword = ""
+    , linkDiscordSubmit = LinkDiscordNotSubmitted
     }
 
 
@@ -355,6 +362,99 @@ view isMobile time local loggedIn model =
                         )
                     ]
                     (Ui.text "Link Slack account")
+                , if model.showLinkDiscordSetup then
+                    let
+                        emailOrPhoneNumberLabel =
+                            Ui.Input.label
+                                "userOptions_discordLinkEmailOrPhoneNumber"
+                                [ Ui.Font.size 14, Ui.Font.bold ]
+                                (Ui.text "Account email or phone number")
+
+                        passwordLabel =
+                            Ui.Input.label
+                                "userOptions_discordLinkPassword"
+                                [ Ui.Font.size 14, Ui.Font.bold ]
+                                (Ui.text "Account password")
+                    in
+                    Ui.column
+                        [ Ui.widthMax 400, Ui.spacing 16 ]
+                        [ Ui.column
+                            []
+                            [ emailOrPhoneNumberLabel.element
+                            , Ui.Input.text
+                                [ Ui.border 1
+                                , Ui.height (Ui.px 40)
+                                , Ui.borderColor MyUi.inputBorder
+                                , Ui.background MyUi.inputBackground
+                                , Ui.rounded 4
+                                , Ui.paddingXY 8 0
+                                ]
+                                { onChange = TypedLinkDiscordEmailOrPhone
+                                , text = model.linkDiscordEmailOrPhone
+                                , placeholder = Nothing
+                                , label = emailOrPhoneNumberLabel.id
+                                }
+                            ]
+                        , Ui.column
+                            []
+                            [ passwordLabel.element
+                            , Ui.Input.newPassword
+                                [ Ui.border 1
+                                , Ui.height (Ui.px 40)
+                                , Ui.borderColor MyUi.inputBorder
+                                , Ui.background MyUi.inputBackground
+                                , Ui.rounded 4
+                                , Ui.paddingXY 8 0
+                                ]
+                                { onChange = TypedLinkDiscordPassword
+                                , text = model.linkDiscordPassword
+                                , placeholder = Nothing
+                                , label = passwordLabel.id
+                                , show = True
+                                }
+                            ]
+                        , case model.linkDiscordSubmit of
+                            LinkDiscordNotSubmitted ->
+                                MyUi.elButton
+                                    (Dom.id "userOptions_submitLinkDiscord")
+                                    (PressedSubmitLinkDiscord
+                                        { emailOrPhoneNumber = model.linkDiscordEmailOrPhone
+                                        , password = model.linkDiscordPassword
+                                        }
+                                    )
+                                    [ Ui.borderColor MyUi.buttonBorder
+                                    , Ui.border 1
+                                    , Ui.background MyUi.buttonBackground
+                                    , Ui.Font.color MyUi.font1
+                                    , Ui.width Ui.shrink
+                                    , Ui.paddingXY 16 8
+                                    , Ui.rounded 4
+                                    ]
+                                    (Ui.text "Submit")
+
+                            LinkDiscordCaptchaRequired data ->
+                                Html.div [ Html.Attributes.class "h-captcha" ] [] |> Ui.html
+
+                            LinkDiscordSubmitting ->
+                                Ui.text "Submitting..."
+
+                            LinkDiscordSubmitted ->
+                                Ui.text "Linked!"
+                        ]
+
+                  else
+                    MyUi.elButton
+                        (Dom.id "userOptions_linkDiscord")
+                        PressedLinkDiscord
+                        [ Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        , Ui.background MyUi.buttonBackground
+                        , Ui.Font.color MyUi.font1
+                        , Ui.width Ui.shrink
+                        , Ui.paddingXY 16 8
+                        , Ui.rounded 4
+                        ]
+                        (Ui.text "Link Discord account")
                 ]
             , MyUi.container
                 isMobile

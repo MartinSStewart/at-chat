@@ -11,6 +11,8 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelAndMessageId
     , LastRequest(..)
+    , LinkDiscordForm
+    , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -42,7 +44,7 @@ import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord
+import Discord exposing (CaptchaChallengeData)
 import Discord.Id
 import DmChannel exposing (DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
@@ -65,6 +67,7 @@ import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
+import Maybe exposing (Maybe)
 import Message exposing (Message)
 import MessageInput exposing (MentionUserDropdown)
 import MessageView
@@ -184,7 +187,18 @@ type alias UserOptionsModel =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , showLinkDiscordSetup : Bool
+    , linkDiscordEmailOrPhone : String
+    , linkDiscordPassword : String
+    , linkDiscordSubmit : LinkDiscordSubmitStatus
     }
+
+
+type LinkDiscordSubmitStatus
+    = LinkDiscordNotSubmitted
+    | LinkDiscordSubmitting
+    | LinkDiscordCaptchaRequired CaptchaChallengeData
+    | LinkDiscordSubmitted
 
 
 type ChannelSidebarMode
@@ -436,6 +450,14 @@ type FrontendMsg
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
+    | PressedLinkDiscord
+    | TypedLinkDiscordEmailOrPhone String
+    | TypedLinkDiscordPassword String
+    | PressedSubmitLinkDiscord LinkDiscordForm
+
+
+type alias LinkDiscordForm =
+    { emailOrPhoneNumber : String, password : String }
 
 
 type ScrollPosition
@@ -474,6 +496,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
+    | LinkDiscordRequest LinkDiscordForm
 
 
 type BackendMsg
@@ -523,6 +546,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
+    | LoggedIntoDiscord ClientId (Result Discord.HttpErrorInternal Discord.LoginResponse)
 
 
 type LoginResult
@@ -544,6 +568,7 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
+    | LinkDiscordResponse (Result Discord.HttpErrorInternal Discord.LoginResponse)
 
 
 type alias LoginData =

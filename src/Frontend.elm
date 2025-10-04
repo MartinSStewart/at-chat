@@ -7,6 +7,7 @@ import Browser.Navigation
 import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord
 import DmChannel exposing (FrontendDmChannel, FrontendThread)
 import Duration exposing (Duration, Seconds)
 import Ease
@@ -59,7 +60,7 @@ import String.Nonempty
 import TextEditor
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -1143,6 +1144,18 @@ isPressMsg msg =
 
         TextEditorMsg textEditorMsg ->
             TextEditor.isPress textEditorMsg
+
+        PressedLinkDiscord ->
+            True
+
+        TypedLinkDiscordEmailOrPhone string ->
+            False
+
+        TypedLinkDiscordPassword string ->
+            False
+
+        PressedSubmitLinkDiscord _ ->
+            True
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3364,11 +3377,50 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedLinkDiscord ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | showLinkDiscordSetup = True })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
+        TypedLinkDiscordEmailOrPhone string ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | linkDiscordEmailOrPhone = string })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
 
---( { model | windowSize = Coord.xy (Coord.xRaw model.windowSize) (floor height) }
---, Command.none
---)
+        TypedLinkDiscordPassword string ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | linkDiscordPassword = string })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedSubmitLinkDiscord data ->
+            ( model, Lamdera.sendToBackend (LinkDiscordRequest data) )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5598,6 +5650,36 @@ updateLoadedFromBackend msg model =
 
                 Err () ->
                     logout model
+
+        LinkDiscordResponse result ->
+            case result of
+                Ok ok ->
+                    let
+                        _ =
+                            Debug.log "ok" ok
+                    in
+                    ( model, Command.none )
+
+                Err (Discord.CaptchaChallenge_Internal data) ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn
+                                | userOptions =
+                                    Maybe.map
+                                        (\userOptions -> { userOptions | linkDiscordSubmit = LinkDiscordCaptchaRequired data })
+                                        loggedIn.userOptions
+                              }
+                            , Command.none
+                            )
+                        )
+                        model
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "err" error
+                    in
+                    ( model, Command.none )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

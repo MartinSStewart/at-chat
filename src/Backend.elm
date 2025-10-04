@@ -581,6 +581,13 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
+        LoggedIntoDiscord clientId result ->
+            let
+                _ =
+                    Debug.log "result" result
+            in
+            ( model, Lamdera.sendToFrontend clientId (LinkDiscordResponse result) )
+
 
 addSlackServer :
     Time.Posix
@@ -2406,6 +2413,17 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Nothing ->
                     ( model2, Command.none )
+
+        LinkDiscordRequest linkDiscordForm ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    ( model2
+                    , Discord.login linkDiscordForm.emailOrPhoneNumber linkDiscordForm.password
+                        |> Task.attempt (LoggedIntoDiscord clientId)
+                    )
+                )
 
 
 loadMessagesHelper :

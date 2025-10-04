@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, ImageHash(..), ImageSize(..), Intents, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, noIntents, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, login, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, noIntents, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -76,6 +76,7 @@ These are functions that return a url pointing to a particular image.
 -}
 
 import Array exposing (Array)
+import Base64
 import Binary
 import Bitwise
 import Dict exposing (Dict)
@@ -3947,3 +3948,393 @@ handleGateway authToken intents response model =
 
         ( Nothing, Ok _ ) ->
             ( model, [] )
+
+
+
+-- Internal API
+
+
+type HttpErrorInternal
+    = NotModified304_Internal ErrorCode
+    | CaptchaChallenge_Internal CaptchaChallengeData
+    | Unauthorized401_Internal ErrorCode
+    | Forbidden403_Internal ErrorCode
+    | NotFound404_Internal ErrorCode
+    | TooManyRequests429_Internal RateLimit
+    | GatewayUnavailable502_Internal ErrorCode
+    | ServerError5xx_Internal { statusCode : Int, errorCode : ErrorCode }
+    | NetworkError_Internal
+    | Timeout_Internal
+    | UnexpectedError_Internal String
+
+
+discordApiUrlInternal : String
+discordApiUrlInternal =
+    "https://discord.com/api/v9"
+
+
+login : String -> String -> Task restriction HttpErrorInternal LoginResponse
+login loginEmail loginPassword =
+    Http.task
+        { method = "POST"
+        , headers =
+            [ Http.header "User-Agent" exampleUserAgent
+            , JE.encode 0 (encodeClientProperties exampleClientProperties)
+                |> Base64.fromString
+                |> Maybe.withDefault ""
+                |> Http.header "X-Super-Properties"
+            ]
+        , url =
+            Url.Builder.crossOrigin
+                discordApiUrlInternal
+                [ "auth", "login" ]
+                []
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        Http.BadUrl_ badUrl ->
+                            "Bad url " ++ badUrl |> UnexpectedError_Internal |> Err
+
+                        Http.Timeout_ ->
+                            Err Timeout_Internal
+
+                        Http.NetworkError_ ->
+                            Err NetworkError_Internal
+
+                        Http.BadStatus_ metadata body ->
+                            let
+                                decodeErrorCode_ : (ErrorCode -> HttpErrorInternal) -> HttpErrorInternal
+                                decodeErrorCode_ wrapper =
+                                    case JD.decodeString decodeErrorCode body of
+                                        Ok errorCode ->
+                                            wrapper errorCode
+
+                                        Err error ->
+                                            "Error decoding error code json: "
+                                                ++ JD.errorToString error
+                                                |> UnexpectedError_Internal
+                            in
+                            (case metadata.statusCode of
+                                304 ->
+                                    decodeErrorCode_ NotModified304_Internal
+
+                                400 ->
+                                    case JD.decodeString captchaChallengeDecoder body of
+                                        Ok ok ->
+                                            CaptchaChallenge_Internal ok
+
+                                        Err _ ->
+                                            "Unexpected status code "
+                                                ++ String.fromInt metadata.statusCode
+                                                ++ ". Body: "
+                                                ++ body
+                                                |> UnexpectedError_Internal
+
+                                401 ->
+                                    decodeErrorCode_ Unauthorized401_Internal
+
+                                403 ->
+                                    decodeErrorCode_ Forbidden403_Internal
+
+                                404 ->
+                                    decodeErrorCode_ NotFound404_Internal
+
+                                --405 ->
+                                --    MethodNotAllowed405 errorData
+                                429 ->
+                                    case JD.decodeString decodeRateLimit body of
+                                        Ok rateLimit ->
+                                            TooManyRequests429_Internal rateLimit
+
+                                        Err error ->
+                                            ("Error decoding rate limit json: " ++ JD.errorToString error)
+                                                |> UnexpectedError_Internal
+
+                                502 ->
+                                    decodeErrorCode_ GatewayUnavailable502_Internal
+
+                                statusCode ->
+                                    if statusCode >= 500 && statusCode < 600 then
+                                        decodeErrorCode_
+                                            (\errorCode -> ServerError5xx_Internal { statusCode = metadata.statusCode, errorCode = errorCode })
+
+                                    else
+                                        "Unexpected status code " ++ String.fromInt statusCode ++ ". Body: " ++ body |> UnexpectedError_Internal
+                            )
+                                |> Err
+
+                        Http.GoodStatus_ _ body ->
+                            case JD.decodeString loginResponseDecoder body of
+                                Ok data ->
+                                    Ok data
+
+                                Err error ->
+                                    "Error decoding good status json: " ++ JD.errorToString error |> UnexpectedError_Internal |> Err
+                )
+        , body =
+            JE.object
+                [ ( "login", JE.string loginEmail )
+                , ( "password", JE.string loginPassword )
+                ]
+                |> Http.jsonBody
+        , timeout = Nothing
+        }
+
+
+
+-- (UnexpectedError "Unexpected status code 400. Body: {\"captcha_key\":[\"captcha-required\"],\"captcha_sitekey\":\"b2b02ab5-7dae-4d6f-830e-7b55634c888b\",\"captcha_service\":\"hcaptcha\",\"captcha_session_id\":\"32c44919-a13f-4296-b971-efee5e09d59e\",\"captcha_rqdata\":\"ZPqbPsp0zKT6yJNqxPb5uIP+cokOEFwZX5TDSl7aIZ4l3dRtjEXlJ1Hb5LpUCq0dRFtWYO/bbDj4LT1zRwfbSUN0OjHJdxcQO9tXGnfo+KoOoDb/cq8fGDwrpXz7OVVLNmfTZdKd4iILKS/ogWp0d3TtZ9HN/noeSnmkMaLJED2Txb2fSnRX/aeSxy/MHb01\",\"captcha_rqtoken\":\"ImV2YXJIZjlhWGFtcitQbEhuZzRuTlY1N3F5Tk82a0Y3UDBJZXJyZXpYVDIraFA3Wnc2QjFEK1FZdEk1Wm1BYzdxek16dGc9PWk1L1JtdnJkMzIvNWl4Tkgi.aOFM-g.4PpdMdFBkVW6NMYma98ih59vNzI\"}\n")
+
+
+type alias CaptchaChallengeData =
+    { captcha_key : Array String
+    , captcha_service : String
+    , captcha_sitekey : String
+    , captcha_session_id : OptionalData String
+    , captcha_rqdata : OptionalData String
+    , captcha_rqtoken : OptionalData String
+    , should_serve_invisible : OptionalData Bool
+    }
+
+
+captchaChallengeDecoder : JD.Decoder CaptchaChallengeData
+captchaChallengeDecoder =
+    JD.succeed CaptchaChallengeData
+        |> JD.andMap (JD.field "captcha_key" (JD.array JD.string))
+        |> JD.andMap (JD.field "captcha_service" JD.string)
+        |> JD.andMap (JD.field "captcha_sitekey" JD.string)
+        |> JD.andMap (decodeOptionalData "captcha_session_id" JD.string)
+        |> JD.andMap (decodeOptionalData "captcha_rqdata" JD.string)
+        |> JD.andMap (decodeOptionalData "captcha_rqtoken" JD.string)
+        |> JD.andMap (decodeOptionalData "should_serve_invisible" JD.bool)
+
+
+type alias LoginResponse =
+    { userId : Id UserId
+    , token : OptionalData String
+    , userSettings : OptionalData LoginSettings
+    , requiredActions : OptionalData (Array String)
+    , ticket : OptionalData String
+    , mfa : OptionalData Bool
+    , totp : OptionalData Bool
+    , sms : OptionalData Bool
+    , backup : OptionalData Bool
+    , webauthn : OptionalData Bool
+    }
+
+
+loginResponseDecoder : JD.Decoder LoginResponse
+loginResponseDecoder =
+    JD.succeed LoginResponse
+        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (decodeOptionalData "token" JD.string)
+        |> JD.andMap (decodeOptionalData "user_settings" decodeUserSettings)
+        |> JD.andMap (decodeOptionalData "required_actions" (JD.array JD.string))
+        |> JD.andMap (decodeOptionalData "ticket" JD.string)
+        |> JD.andMap (decodeOptionalData "mfa" JD.bool)
+        |> JD.andMap (decodeOptionalData "totp" JD.bool)
+        |> JD.andMap (decodeOptionalData "sms" JD.bool)
+        |> JD.andMap (decodeOptionalData "backup" JD.bool)
+        |> JD.andMap (decodeOptionalData "webauthn" JD.bool)
+
+
+type alias LoginSettings =
+    { locale : String, theme : String }
+
+
+decodeUserSettings : JD.Decoder LoginSettings
+decodeUserSettings =
+    JD.succeed LoginSettings
+        |> JD.andMap (JD.field "locale" JD.string)
+        |> JD.andMap (JD.field "theme" JD.string)
+
+
+httpInternal : Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Http.Body -> Task r HttpError a
+httpInternal authentication requestType decoder path queryParameters body =
+    Http.task
+        { method = requestType
+        , headers =
+            [ Http.header "Authorization"
+                (case authentication of
+                    BotToken token ->
+                        "Bot " ++ token
+
+                    BearerToken token ->
+                        "Bearer " ++ token
+                )
+            , Http.header "User-Agent" exampleUserAgent
+            , JE.encode 0 (encodeClientProperties exampleClientProperties)
+                |> Base64.fromString
+                |> Maybe.withDefault ""
+                |> Http.header "X-Super-Properties"
+            ]
+        , url =
+            Url.Builder.crossOrigin
+                discordApiUrl
+                (List.map (Url.percentEncode >> String.replace "%40" "@") path)
+                queryParameters
+        , resolver = Http.stringResolver (resolver decoder)
+        , body = body
+        , timeout = Nothing
+        }
+
+
+exampleUserAgent : String
+exampleUserAgent =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.670 Chrome/134.0.6998.179 Electron/35.1.5 Safari/537.36"
+
+
+exampleClientProperties : ClientProperties
+exampleClientProperties =
+    { os = "Linux"
+    , osVersion = Just "5.15.153.1-microsoft-standard-WSL2"
+    , osSdkVersion = Nothing
+    , osArch = Just "x64"
+    , appArch = Just "x64"
+    , browser = "Discord Client"
+    , browserUserAgent = exampleUserAgent
+    , browserVersion = "35.1.5"
+    , clientBuildNumber = 397417
+    , nativeBuildNumber = Nothing
+    , clientVersion = Just "0.0.670"
+    , clientEventSource = Nothing
+    , clientAppState = Nothing
+    , clientLaunchId = Just "50c86b65-6069-425e-bfdb-d03bd3122ec6"
+    , clientHeartbeatSessionId = Just "8fa130ef-1285-4868-b43c-283f9994b360"
+    , releaseChannel = "canary"
+    , systemLocale = "en-US"
+    , device = Nothing
+    , deviceVendorId = Nothing
+    , designId = Nothing
+    , windowManager = Just "Hyprland,unknown"
+    , distro = Just "Ubuntu 24.04.4 LTS"
+    , referrer = Nothing
+    , referrerCurrent = Nothing
+    , referringDomain = Nothing
+    , referringDomainCurrent = Nothing
+    , searchEngine = Nothing
+    , searchEngineCurrent = Nothing
+    , mpKeyword = Nothing
+    , mpKeywordCurrent = Nothing
+    , utmCampaign = Nothing
+    , utmCampaignCurrent = Nothing
+    , utmContent = Nothing
+    , utmContentCurrent = Nothing
+    , utmMedium = Nothing
+    , utmMediumCurrent = Nothing
+    , utmSource = Nothing
+    , utmSourceCurrent = Nothing
+    , utmTerm = Nothing
+    , utmTermCurrent = Nothing
+    , hasClientMods = Just False
+    , isFastConnect = Nothing
+    , version = Nothing
+    }
+
+
+type alias ClientProperties =
+    { os : String
+    , osVersion : Maybe String
+    , osSdkVersion : Maybe String
+    , osArch : Maybe String
+    , appArch : Maybe String
+    , browser : String
+    , browserUserAgent : String
+    , browserVersion : String
+    , clientBuildNumber : Int
+    , nativeBuildNumber : Maybe Int
+    , clientVersion : Maybe String
+    , clientEventSource : Maybe String
+    , clientAppState : Maybe String
+    , clientLaunchId : Maybe String
+    , clientHeartbeatSessionId : Maybe String
+    , releaseChannel : String
+    , systemLocale : String
+    , device : Maybe String
+    , deviceVendorId : Maybe String
+    , designId : Maybe Int
+    , windowManager : Maybe String
+    , distro : Maybe String
+    , referrer : Maybe String
+    , referrerCurrent : Maybe String
+    , referringDomain : Maybe String
+    , referringDomainCurrent : Maybe String
+    , searchEngine : Maybe String
+    , searchEngineCurrent : Maybe String
+    , mpKeyword : Maybe String
+    , mpKeywordCurrent : Maybe String
+    , utmCampaign : Maybe String
+    , utmCampaignCurrent : Maybe String
+    , utmContent : Maybe String
+    , utmContentCurrent : Maybe String
+    , utmMedium : Maybe String
+    , utmMediumCurrent : Maybe String
+    , utmSource : Maybe String
+    , utmSourceCurrent : Maybe String
+    , utmTerm : Maybe String
+    , utmTermCurrent : Maybe String
+    , hasClientMods : Maybe Bool
+    , isFastConnect : Maybe Bool
+    , version : Maybe String
+    }
+
+
+encodeClientProperties : ClientProperties -> JE.Value
+encodeClientProperties props =
+    let
+        optionalFields =
+            [ optionalField "os_version" JE.string props.osVersion
+            , optionalField "os_sdk_version" JE.string props.osSdkVersion
+            , optionalField "os_arch" JE.string props.osArch
+            , optionalField "app_arch" JE.string props.appArch
+            , optionalField "native_build_number" JE.int props.nativeBuildNumber
+            , optionalField "client_version" JE.string props.clientVersion
+            , optionalField "client_event_source" JE.string props.clientEventSource
+            , optionalField "client_app_state" JE.string props.clientAppState
+            , optionalField "client_launch_id" JE.string props.clientLaunchId
+            , optionalField "client_heartbeat_session_id" JE.string props.clientHeartbeatSessionId
+            , optionalField "device" JE.string props.device
+            , optionalField "device_vendor_id" JE.string props.deviceVendorId
+            , optionalField "design_id" JE.int props.designId
+            , optionalField "window_manager" JE.string props.windowManager
+            , optionalField "distro" JE.string props.distro
+            , optionalField "referrer" JE.string props.referrer
+            , optionalField "referrer_current" JE.string props.referrerCurrent
+            , optionalField "referring_domain" JE.string props.referringDomain
+            , optionalField "referring_domain_current" JE.string props.referringDomainCurrent
+            , optionalField "search_engine" JE.string props.searchEngine
+            , optionalField "search_engine_current" JE.string props.searchEngineCurrent
+            , optionalField "mp_keyword" JE.string props.mpKeyword
+            , optionalField "mp_keyword_current" JE.string props.mpKeywordCurrent
+            , optionalField "utm_campaign" JE.string props.utmCampaign
+            , optionalField "utm_campaign_current" JE.string props.utmCampaignCurrent
+            , optionalField "utm_content" JE.string props.utmContent
+            , optionalField "utm_content_current" JE.string props.utmContentCurrent
+            , optionalField "utm_medium" JE.string props.utmMedium
+            , optionalField "utm_medium_current" JE.string props.utmMediumCurrent
+            , optionalField "utm_source" JE.string props.utmSource
+            , optionalField "utm_source_current" JE.string props.utmSourceCurrent
+            , optionalField "utm_term" JE.string props.utmTerm
+            , optionalField "utm_term_current" JE.string props.utmTermCurrent
+            , optionalField "has_client_mods" JE.bool props.hasClientMods
+            , optionalField "is_fast_connect" JE.bool props.isFastConnect
+            , optionalField "version" JE.string props.version
+            ]
+                |> List.filterMap identity
+
+        requiredFields =
+            [ ( "os", JE.string props.os )
+            , ( "browser", JE.string props.browser )
+            , ( "browser_user_agent", JE.string props.browserUserAgent )
+            , ( "browser_version", JE.string props.browserVersion )
+            , ( "client_build_number", JE.int props.clientBuildNumber )
+            , ( "release_channel", JE.string props.releaseChannel )
+            , ( "system_locale", JE.string props.systemLocale )
+            ]
+    in
+    JE.object (requiredFields ++ optionalFields)
+
+
+optionalField : String -> (a -> JE.Value) -> Maybe a -> Maybe ( String, JE.Value )
+optionalField name encoder maybeValue =
+    Maybe.map (\value -> ( name, encoder value )) maybeValue
