@@ -187,6 +187,7 @@ type alias UserOptionsModel =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , twoCaptchaKey : Editable.Model
     , showLinkDiscordSetup : Bool
     , linkDiscordEmailOrPhone : String
     , linkDiscordPassword : String
@@ -299,6 +300,7 @@ type alias BackendModel =
     , publicVapidKey : String
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , twoCaptchaKey : Maybe String
     , textEditor : TextEditor.LocalState
     }
 
@@ -426,6 +428,7 @@ type FrontendMsg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | TwoCaptchaKeyEditableMsg (Editable.Msg (Maybe String))
     | OneFrameAfterDragEnd
     | GotFileHashName GuildOrDmId (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile GuildOrDmId (Id FileId)

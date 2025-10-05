@@ -437,6 +437,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , privateVapidKey = adminData.privateVapidKey
                     , slackClientSecret = adminData.slackClientSecret
                     , openRouterKey = adminData.openRouterKey
+                    , twoCaptchaKey = adminData.twoCaptchaKey
                     }
 
             IsNotAdminLoginData ->
@@ -1156,6 +1157,9 @@ isPressMsg msg =
 
         PressedSubmitLinkDiscord _ ->
             True
+
+        TwoCaptchaKeyEditableMsg editableMsg ->
+            Editable.isPressMsg editableMsg
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3287,6 +3291,19 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (Just (Local_Admin (Pages.Admin.SetOpenRouterKey value)))
+                        loggedIn
+                        Command.none
+                )
+                model
+
+        TwoCaptchaKeyEditableMsg editableMsg ->
+            handleEditable
+                editableMsg
+                (\userOptions value -> { userOptions | twoCaptchaKey = value })
+                (\value loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Just (Local_Admin (Pages.Admin.SetTwoCaptchaKey value)))
                         loggedIn
                         Command.none
                 )
@@ -5844,6 +5861,9 @@ pendingChangesText localChange =
 
                 Pages.Admin.SetOpenRouterKey _ ->
                     "Set OpenRouter key"
+
+                Pages.Admin.SetTwoCaptchaKey maybeString ->
+                    "Set TwoCaptcha key"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
