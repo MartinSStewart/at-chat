@@ -181,7 +181,6 @@ init =
                 PrivateVapidKey "tmWabWMceLrqTcFCKWCX2Ifj-0L5vRjGz_ZwSyJUnLQ"
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
-      , twoCaptchaKey = Nothing
       , textEditor = TextEditor.initLocalState
       }
     , Command.none
@@ -198,7 +197,6 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
-    , twoCaptchaKey = model.twoCaptchaKey
     }
 
 
@@ -2913,11 +2911,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.SetOpenRouterKey openRouterKey ->
             ( { model | openRouterKey = openRouterKey }
-            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
-            )
-
-        Pages.Admin.SetTwoCaptchaKey twoCaptchaKey ->
-            ( { model | twoCaptchaKey = twoCaptchaKey }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 

@@ -33,7 +33,6 @@ init =
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
-    , twoCaptchaKey = Editable.init
     , showLinkDiscordSetup = False
     , linkDiscordEmailOrPhone = ""
     , linkDiscordPassword = ""
@@ -278,30 +277,6 @@ view isMobile time local loggedIn model =
                                     ""
                             )
                             model.openRouterKey
-                        , Editable.view
-                            (Dom.id "userOptions_2CaptchaKey")
-                            True
-                            "2Captcha API key"
-                            (\text ->
-                                let
-                                    text2 =
-                                        String.trim text
-                                in
-                                if text2 == "" then
-                                    Ok Nothing
-
-                                else
-                                    Just text2 |> Ok
-                            )
-                            TwoCaptchaKeyEditableMsg
-                            (case adminData2.twoCaptchaKey of
-                                Just key ->
-                                    key
-
-                                Nothing ->
-                                    ""
-                            )
-                            model.twoCaptchaKey
                         ]
 
                 IsNotAdmin ->

@@ -280,7 +280,6 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , twoCaptchaKey : Maybe String
     }
 
 

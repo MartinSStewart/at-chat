@@ -125,7 +125,6 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , twoCaptchaKey : Maybe String
     }
 
 
@@ -145,7 +144,6 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
-    | SetTwoCaptchaKey (Maybe String)
 
 
 type alias EditedBackendUser =
@@ -257,9 +255,6 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
-
-        SetTwoCaptchaKey twoCaptchaKey ->
-            { local | adminData = IsAdmin { adminData | twoCaptchaKey = twoCaptchaKey } }
 
 
 update :
