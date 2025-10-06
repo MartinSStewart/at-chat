@@ -1148,12 +1148,6 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
-        TypedLinkDiscordEmailOrPhone string ->
-            False
-
-        TypedLinkDiscordPassword string ->
-            False
-
         PressedSubmitLinkDiscord _ ->
             True
 
@@ -3384,34 +3378,6 @@ updateLoaded msg model =
                         | userOptions =
                             Maybe.map
                                 (\userOptions -> { userOptions | showLinkDiscordSetup = True })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        TypedLinkDiscordEmailOrPhone string ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | linkDiscordEmailOrPhone = string })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
-                )
-                model
-
-        TypedLinkDiscordPassword string ->
-            updateLoggedIn
-                (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | linkDiscordPassword = string })
                                 loggedIn.userOptions
                       }
                     , Command.none
@@ -6107,6 +6073,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 
@@ -6160,6 +6127,7 @@ view model =
                                                 loaded.time
                                                 local
                                                 loggedIn
+                                                loaded
                                                 userOptions
                                                 |> Ui.inFront
 

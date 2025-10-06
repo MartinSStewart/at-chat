@@ -1219,6 +1219,9 @@ http authentication requestType decoder path queryParameters body =
 
                     BearerToken token ->
                         "Bearer " ++ token
+
+                    UserToken record ->
+                        record.token
                 )
             , Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)"
             ]
@@ -1424,6 +1427,7 @@ httpErrorToString httpError =
 type Authentication
     = BotToken String
     | BearerToken String
+    | UserToken { token : String, userAgent : String, superPropertiesBase64 : String }
 
 
 type OptionalData a
@@ -3702,6 +3706,9 @@ encodeGatewayCommand gatewayCommand =
 
                                 BearerToken token ->
                                     token
+
+                                UserToken record ->
+                                    record.token
                             )
                                 |> JE.string
                           )
@@ -3736,6 +3743,9 @@ encodeGatewayCommand gatewayCommand =
 
                                 BearerToken token ->
                                     token
+
+                                UserToken record ->
+                                    record.token
                             )
                                 |> JE.string
                           )
@@ -4161,6 +4171,9 @@ httpInternal authentication requestType decoder path queryParameters body =
 
                     BearerToken token ->
                         "Bearer " ++ token
+
+                    UserToken record ->
+                        record.token
                 )
             , Http.header "User-Agent" exampleUserAgent
             , JE.encode 0 (encodeClientProperties exampleClientProperties)

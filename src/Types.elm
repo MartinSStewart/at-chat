@@ -11,7 +11,6 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelAndMessageId
     , LastRequest(..)
-    , LinkDiscordForm
     , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -188,8 +187,6 @@ type alias UserOptionsModel =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , showLinkDiscordSetup : Bool
-    , linkDiscordEmailOrPhone : String
-    , linkDiscordPassword : String
     , linkDiscordSubmit : LinkDiscordSubmitStatus
     }
 
@@ -451,13 +448,7 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
-    | TypedLinkDiscordEmailOrPhone String
-    | TypedLinkDiscordPassword String
-    | PressedSubmitLinkDiscord LinkDiscordForm
-
-
-type alias LinkDiscordForm =
-    { emailOrPhoneNumber : String, password : String }
+    | PressedSubmitLinkDiscord String
 
 
 type ScrollPosition
@@ -496,7 +487,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
-    | LinkDiscordRequest LinkDiscordForm
+    | LinkDiscordRequest String
 
 
 type BackendMsg

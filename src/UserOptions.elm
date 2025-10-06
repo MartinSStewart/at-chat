@@ -17,7 +17,7 @@ import SessionIdHash
 import Slack
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
@@ -34,8 +34,6 @@ init =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , showLinkDiscordSetup = False
-    , linkDiscordEmailOrPhone = ""
-    , linkDiscordPassword = ""
     , linkDiscordSubmit = LinkDiscordNotSubmitted
     }
 
@@ -133,8 +131,8 @@ viewConnectedDevice isCurrentSession session =
         ]
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn model =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -363,65 +361,46 @@ view isMobile time local loggedIn model =
                     ]
                     (Ui.text "Link Slack account")
                 , if model.showLinkDiscordSetup then
-                    let
-                        emailOrPhoneNumberLabel =
-                            Ui.Input.label
-                                "userOptions_discordLinkEmailOrPhoneNumber"
-                                [ Ui.Font.size 14, Ui.Font.bold ]
-                                (Ui.text "Account email or phone number")
-
-                        passwordLabel =
-                            Ui.Input.label
-                                "userOptions_discordLinkPassword"
-                                [ Ui.Font.size 14, Ui.Font.bold ]
-                                (Ui.text "Account password")
-                    in
                     Ui.column
-                        [ Ui.widthMax 400, Ui.spacing 16 ]
-                        [ Ui.column
-                            []
-                            [ emailOrPhoneNumberLabel.element
-                            , Ui.Input.text
-                                [ Ui.border 1
-                                , Ui.height (Ui.px 40)
-                                , Ui.borderColor MyUi.inputBorder
-                                , Ui.background MyUi.inputBackground
-                                , Ui.rounded 4
-                                , Ui.paddingXY 8 0
-                                ]
-                                { onChange = TypedLinkDiscordEmailOrPhone
-                                , text = model.linkDiscordEmailOrPhone
-                                , placeholder = Nothing
-                                , label = emailOrPhoneNumberLabel.id
-                                }
+                        [ Ui.spacing 16 ]
+                        [ Ui.row
+                            [ Ui.border 1
+                            , Ui.borderColor MyUi.border1
+                            , Ui.rounded 2
+                            , Ui.spacing 8
+                            , Ui.Font.color MyUi.font3
                             ]
-                        , Ui.column
-                            []
-                            [ passwordLabel.element
-                            , Ui.Input.newPassword
-                                [ Ui.border 1
-                                , Ui.height (Ui.px 40)
-                                , Ui.borderColor MyUi.inputBorder
-                                , Ui.background MyUi.inputBackground
-                                , Ui.rounded 4
-                                , Ui.paddingXY 8 0
+                            [ Ui.el
+                                [ Ui.clipWithEllipsis
+                                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
                                 ]
-                                { onChange = TypedLinkDiscordPassword
-                                , text = model.linkDiscordPassword
-                                , placeholder = Nothing
-                                , label = passwordLabel.id
-                                , show = True
-                                }
+                                (Ui.text bookmarklet)
+                            , MyUi.elButton
+                                (Dom.id "userOptions_copyBookmarklet")
+                                (PressedCopyText bookmarklet)
+                                [ Ui.width Ui.shrink
+                                , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+                                , Ui.borderColor MyUi.border1
+                                , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+                                , Ui.spacing 4
+                                ]
+                                (case loaded.lastCopied of
+                                    Just copied ->
+                                        if copied.copiedText == bookmarklet then
+                                            Ui.text "Copied!"
+
+                                        else
+                                            Ui.html Icons.copy
+
+                                    Nothing ->
+                                        Ui.html Icons.copy
+                                )
                             ]
                         , case model.linkDiscordSubmit of
                             LinkDiscordNotSubmitted ->
                                 MyUi.elButton
                                     (Dom.id "userOptions_submitLinkDiscord")
-                                    (PressedSubmitLinkDiscord
-                                        { emailOrPhoneNumber = model.linkDiscordEmailOrPhone
-                                        , password = model.linkDiscordPassword
-                                        }
-                                    )
+                                    (PressedSubmitLinkDiscord "")
                                     [ Ui.borderColor MyUi.buttonBorder
                                     , Ui.border 1
                                     , Ui.background MyUi.buttonBackground
@@ -474,3 +453,23 @@ view isMobile time local loggedIn model =
                 )
             ]
         )
+
+
+bookmarklet =
+    """javascript:(function()
+{
+    location.reload();
+    var i = document.createElement('iframe');
+    document.body.appendChild(i);
+    stop();
+    const data = JSON.stringify(
+        { token: i.contentWindow.localStorage.token
+        , userAgent: window.navigator.userAgent
+        , xSuperProperties: ""
+        });
+    navigator.clipboard.writeText(data);
+
+    alert("Data copied to clipboard. Go back to at-chat and paste it there.");
+})()"""
+        |> String.replace "\n" " "
+        |> String.replace "  " " "
