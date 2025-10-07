@@ -11,6 +11,7 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelAndMessageId
     , LastRequest(..)
+    , LinkDiscordData
     , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -34,6 +35,7 @@ module Types exposing
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
+    , linkDiscordDataCodec
     , messageMenuMobileOffset
     )
 
@@ -41,6 +43,7 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
+import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (CaptchaChallengeData)
@@ -192,9 +195,8 @@ type alias UserOptionsModel =
 
 
 type LinkDiscordSubmitStatus
-    = LinkDiscordNotSubmitted
+    = LinkDiscordNotSubmitted { attemptCount : Int }
     | LinkDiscordSubmitting
-    | LinkDiscordCaptchaRequired CaptchaChallengeData
     | LinkDiscordSubmitted
 
 
@@ -448,7 +450,23 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
-    | PressedSubmitLinkDiscord String
+    | TypedBookmarkletData String
+
+
+type alias LinkDiscordData =
+    { token : String
+    , xSuperProperties : String
+    , userAgent : String
+    }
+
+
+linkDiscordDataCodec : Codec LinkDiscordData
+linkDiscordDataCodec =
+    Codec.object LinkDiscordData
+        |> Codec.field "token" .token Codec.string
+        |> Codec.field "xSuperProperties" .xSuperProperties Codec.string
+        |> Codec.field "userAgent" .userAgent Codec.string
+        |> Codec.buildObject
 
 
 type ScrollPosition
@@ -487,7 +505,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
-    | LinkDiscordRequest String
+    | LinkDiscordRequest LinkDiscordData
 
 
 type BackendMsg
@@ -537,7 +555,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | LoggedIntoDiscord ClientId (Result Discord.HttpErrorInternal Discord.LoginResponse)
+    | LoggedIntoDiscord ClientId (Result Discord.HttpError Discord.User)
 
 
 type LoginResult
@@ -559,7 +577,7 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
-    | LinkDiscordResponse (Result Discord.HttpErrorInternal Discord.LoginResponse)
+    | LinkDiscordResponse (Result Discord.HttpError Discord.User)
 
 
 type alias LoginData =

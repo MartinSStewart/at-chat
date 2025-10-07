@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
+import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
@@ -1148,8 +1149,8 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
-        PressedSubmitLinkDiscord _ ->
-            True
+        TypedBookmarkletData string ->
+            False
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3385,8 +3386,38 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedSubmitLinkDiscord data ->
-            ( model, Lamdera.sendToBackend (LinkDiscordRequest data) )
+        TypedBookmarkletData text ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            case ( userOptions.linkDiscordSubmit, Codec.decodeString Types.linkDiscordDataCodec text ) of
+                                ( LinkDiscordNotSubmitted _, Ok ok ) ->
+                                    ( { loggedIn
+                                        | userOptions = Just { userOptions | linkDiscordSubmit = LinkDiscordSubmitting }
+                                      }
+                                    , Lamdera.sendToBackend (LinkDiscordRequest ok)
+                                    )
+
+                                ( LinkDiscordNotSubmitted { attemptCount }, Err _ ) ->
+                                    ( { loggedIn
+                                        | userOptions =
+                                            { userOptions
+                                                | linkDiscordSubmit =
+                                                    LinkDiscordNotSubmitted { attemptCount = attemptCount + 1 }
+                                            }
+                                                |> Just
+                                      }
+                                    , Command.none
+                                    )
+
+                                _ ->
+                                    ( loggedIn, Command.none )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5625,20 +5656,6 @@ updateLoadedFromBackend msg model =
                             Debug.log "ok" ok
                     in
                     ( model, Command.none )
-
-                Err (Discord.CaptchaChallenge_Internal data) ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn
-                                | userOptions =
-                                    Maybe.map
-                                        (\userOptions -> { userOptions | linkDiscordSubmit = LinkDiscordCaptchaRequired data })
-                                        loggedIn.userOptions
-                              }
-                            , Command.none
-                            )
-                        )
-                        model
 
                 Err error ->
                     let

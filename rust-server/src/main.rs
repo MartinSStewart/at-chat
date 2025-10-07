@@ -10,6 +10,7 @@ use axum::{
     routing::post,
 };
 
+use http::HeaderMap;
 use image::metadata::Orientation;
 use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,7 @@ async fn main() {
             "/file/push-notification",
             post(push_notification_endpoint).options(options_endpoint),
         )
+        .route("/file/custom-request", get(custom_request_endpoint))
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
@@ -67,6 +69,50 @@ async fn vapid_endpoint(_request: Request) -> Response<String> {
             StatusCode::BAD_REQUEST,
             String::from("Failed to generate keys"),
         ),
+    }
+}
+
+fn vec_to_headermap(
+    headers: Vec<Header>,
+) -> Result<HeaderMap<http::HeaderValue>, Box<dyn std::error::Error>> {
+    let mut header_map = HeaderMap::new();
+
+    for header in headers {
+        let header_name = http::HeaderName::from_str(&header.key)?;
+        let header_value = http::HeaderValue::from_str(&header.value)?;
+
+        header_map.insert(header_name, header_value);
+    }
+
+    Ok(header_map)
+}
+
+async fn custom_request_endpoint(
+    Json(CustomRequest { url, headers }): Json<CustomRequest>,
+) -> Response<String> {
+    let headers2 = match vec_to_headermap(headers) {
+        Ok(ok) => ok,
+        Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
+    };
+
+    match reqwest::Client::new()
+        .get(url)
+        .headers(headers2)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status: StatusCode = response.status();
+            let response_text = match response.text().await {
+                Ok(text) => text,
+                Err(_) => {
+                    return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2"));
+                }
+            };
+
+            return response_with_headers(status, response_text);
+        }
+        Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3")),
     }
 }
 
@@ -692,4 +738,16 @@ pub struct PushNotification {
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomRequest {
+    pub url: String,
+    pub headers: Vec<Header>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Header {
+    key: String,
+    value: String,
 }

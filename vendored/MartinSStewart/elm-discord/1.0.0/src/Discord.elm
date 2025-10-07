@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, login, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, noIntents, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, applicationAssetUrl, applicationIconUrl, createChannelInvite, createDmChannel, createGuildCategoryChannel, createGuildEmoji, createGuildTextChannel, createGuildVoiceChannel, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteChannelPermission, deleteGuild, deleteGuildEmoji, deleteInvite, deletePinnedChannelMessage, editMessage, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getGuild, getGuildChannels, getGuildEmojis, getGuildMember, getGuildPreview, getInvite, getPinnedMessages, getUser, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, listActiveThreads, listGuildEmojis, listGuildMembers, login, modifyCurrentUser, modifyGuild, modifyGuildEmoji, noGuildModifications, noIntents, startThreadFromMessage, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, update, userAvatarUrl, userToken, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -1177,6 +1177,11 @@ bearerToken =
     BearerToken
 
 
+userToken : { token : String, userAgent : String, xSuperProperties : String } -> Authentication
+userToken =
+    UserToken
+
+
 rawHash : ImageHash hashType -> String
 rawHash (ImageHash hash) =
     hash
@@ -1212,7 +1217,7 @@ http authentication requestType decoder path queryParameters body =
     Http.task
         { method = requestType
         , headers =
-            [ Http.header "Authorization"
+            Http.header "Authorization"
                 (case authentication of
                     BotToken token ->
                         "Bot " ++ token
@@ -1223,8 +1228,17 @@ http authentication requestType decoder path queryParameters body =
                     UserToken record ->
                         record.token
                 )
-            , Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)"
-            ]
+                :: (case authentication of
+                        UserToken data ->
+                            [ Http.header "User-Agent" data.userAgent
+                            , Http.header "X-Super-Properties" data.xSuperProperties
+                            , Http.header "X-Discord-Timezone" "Europe/Stockholm"
+                            , Http.header "X-Discord-Locale" "en-US"
+                            ]
+
+                        _ ->
+                            [ Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
+                   )
         , url =
             Url.Builder.crossOrigin
                 discordApiUrl
@@ -1427,7 +1441,7 @@ httpErrorToString httpError =
 type Authentication
     = BotToken String
     | BearerToken String
-    | UserToken { token : String, userAgent : String, superPropertiesBase64 : String }
+    | UserToken { token : String, userAgent : String, xSuperProperties : String }
 
 
 type OptionalData a

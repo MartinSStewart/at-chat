@@ -2414,15 +2414,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Nothing ->
                     ( model2, Command.none )
 
-        LinkDiscordRequest userToken ->
+        LinkDiscordRequest data ->
             asUser
                 model2
                 sessionId
                 (\session user ->
                     ( model2
-                    , Command.none
-                      --, Discord.getUser userToken
-                      --    |> Task.attempt (LoggedIntoDiscord clientId)
+                    , Discord.getCurrentUser (Discord.userToken data)
+                        |> Task.attempt (LoggedIntoDiscord clientId)
                     )
                 )
 

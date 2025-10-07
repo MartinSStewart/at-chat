@@ -34,7 +34,7 @@ init =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , showLinkDiscordSetup = False
-    , linkDiscordSubmit = LinkDiscordNotSubmitted
+    , linkDiscordSubmit = LinkDiscordNotSubmitted { attemptCount = 0 }
     }
 
 
@@ -362,7 +362,7 @@ view isMobile time local loggedIn loaded model =
                     (Ui.text "Link Slack account")
                 , if model.showLinkDiscordSetup then
                     Ui.column
-                        [ Ui.spacing 16 ]
+                        [ Ui.spacing 16, Ui.widthMax 400 ]
                         [ Ui.row
                             [ Ui.border 1
                             , Ui.borderColor MyUi.border1
@@ -396,29 +396,36 @@ view isMobile time local loggedIn loaded model =
                                         Ui.html Icons.copy
                                 )
                             ]
-                        , case model.linkDiscordSubmit of
-                            LinkDiscordNotSubmitted ->
-                                MyUi.elButton
-                                    (Dom.id "userOptions_submitLinkDiscord")
-                                    (PressedSubmitLinkDiscord "")
-                                    [ Ui.borderColor MyUi.buttonBorder
-                                    , Ui.border 1
-                                    , Ui.background MyUi.buttonBackground
-                                    , Ui.Font.color MyUi.font1
-                                    , Ui.width Ui.shrink
+                        , Ui.Input.multiline
+                            [ Ui.inFront
+                                (Ui.el
+                                    [ Ui.centerX
+                                    , Ui.centerY
+                                    , Ui.Font.center
+                                    , MyUi.noPointerEvents
                                     , Ui.paddingXY 16 8
-                                    , Ui.rounded 4
                                     ]
-                                    (Ui.text "Submit")
+                                    (case model.linkDiscordSubmit of
+                                        LinkDiscordNotSubmitted { attemptCount } ->
+                                            Ui.text "After running the bookmarklet, paste the contents of your clipboard here."
 
-                            LinkDiscordCaptchaRequired data ->
-                                Ui.text "Solving captcha..."
+                                        LinkDiscordSubmitting ->
+                                            Ui.text "Submitting..."
 
-                            LinkDiscordSubmitting ->
-                                Ui.text "Submitting..."
-
-                            LinkDiscordSubmitted ->
-                                Ui.text "Linked!"
+                                        LinkDiscordSubmitted ->
+                                            Ui.text "Linked!"
+                                    )
+                                )
+                            , Ui.height (Ui.px 150)
+                            , Ui.background MyUi.inputBackground
+                            , Ui.borderColor MyUi.inputBorder
+                            ]
+                            { onChange = TypedBookmarkletData
+                            , text = ""
+                            , placeholder = Nothing
+                            , label = Ui.Input.labelHidden "userOptions_pasteBookmarkletData"
+                            , spellcheck = False
+                            }
                         ]
 
                   else
@@ -455,6 +462,7 @@ view isMobile time local loggedIn loaded model =
         )
 
 
+bookmarklet : String
 bookmarklet =
     """javascript:(function()
 {
@@ -465,11 +473,13 @@ bookmarklet =
     const data = JSON.stringify(
         { token: i.contentWindow.localStorage.token
         , userAgent: window.navigator.userAgent
-        , xSuperProperties: ""
+        , xSuperProperties: "eyJvcyI6IkxpbnV4IiwiYnJvd3NlciI6IkZpcmVmb3giLCJkZXZpY2UiOiIiLCJzeXN0ZW1fbG9jYWxlIjoiZW4tVVMiLCJoYXNfY2xpZW50X21vZHMiOmZhbHNlLCJicm93c2VyX3VzZXJfYWdlbnQiOiJNb3ppbGxhLzUuMCAoWDExOyBVYnVudHU7IExpbnV4IHg4Nl82NDsgcnY6MTQzLjApIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTQzLjAiLCJicm93c2VyX3ZlcnNpb24iOiIxNDMuMCIsIm9zX3ZlcnNpb24iOiIiLCJyZWZlcnJlciI6Imh0dHBzOi8vd3d3Lmdvb2dsZS5jb20vIiwicmVmZXJyaW5nX2RvbWFpbiI6Ind3dy5nb29nbGUuY29tIiwic2VhcmNoX2VuZ2luZSI6Imdvb2dsZSIsInJlZmVycmVyX2N1cnJlbnQiOiIiLCJyZWZlcnJpbmdfZG9tYWluX2N1cnJlbnQiOiIiLCJyZWxlYXNlX2NoYW5uZWwiOiJzdGFibGUiLCJjbGllbnRfYnVpbGRfbnVtYmVyIjo0NTMyNDgsImNsaWVudF9ldmVudF9zb3VyY2UiOm51bGwsImNsaWVudF9sYXVuY2hfaWQiOiI4NzBkNjM4MC0wZDViLTQwNjYtYmI3Zi0zNThkYjRiYmI2NzgiLCJsYXVuY2hfc2lnbmF0dXJlIjoiOGY1MTYzNjItNTBlMS00NmNmLThiMjQtMmNiZDI4M2IwMjQ3IiwiY2xpZW50X2hlYXJ0YmVhdF9zZXNzaW9uX2lkIjoiNGYwNzU4YmItNjNjZS00Njk2LWFiNDUtYTA0NmNlZGIzNTk5IiwiY2xpZW50X2FwcF9zdGF0ZSI6InVuZm9jdXNlZCJ9"
         });
     navigator.clipboard.writeText(data);
 
     alert("Data copied to clipboard. Go back to at-chat and paste it there.");
 })()"""
         |> String.replace "\n" " "
+        |> String.replace "  " " "
+        |> String.replace "  " " "
         |> String.replace "  " " "
