@@ -78,7 +78,7 @@ fn vec_to_headermap(
     let mut header_map = HeaderMap::new();
 
     for header in headers {
-        let header_name = http::HeaderName::from_str(&header.key)?;
+        let header_name = http::HeaderName::from_lowercase(header.key.as_bytes())?;
         let header_value = http::HeaderValue::from_str(&header.value)?;
 
         header_map.insert(header_name, header_value);
@@ -102,7 +102,7 @@ async fn custom_request_endpoint(
         .await
     {
         Ok(response) => {
-            let status: StatusCode = response.status();
+            let status = response.status();
             let response_text = match response.text().await {
                 Ok(text) => text,
                 Err(_) => {
@@ -110,9 +110,9 @@ async fn custom_request_endpoint(
                 }
             };
 
-            return response_with_headers(status, response_text);
+            response_with_headers(status, response_text)
         }
-        Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3")),
+        Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3")),
     }
 }
 

@@ -1234,6 +1234,7 @@ http authentication requestType decoder path queryParameters body =
                             , Http.header "X-Super-Properties" data.xSuperProperties
                             , Http.header "X-Discord-Timezone" "Europe/Stockholm"
                             , Http.header "X-Discord-Locale" "en-US"
+                            , Http.header "Host" "discord.com"
                             ]
 
                         _ ->

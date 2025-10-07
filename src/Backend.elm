@@ -32,6 +32,7 @@ import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -59,6 +60,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
+import Url
 import User exposing (BackendUser, EmailStatus(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -2420,7 +2422,49 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\session user ->
                     ( model2
-                    , Discord.getCurrentUser (Discord.userToken data)
+                    , Http.task
+                        { method = "GET"
+                        , headers =
+                            Http.header "Authorization"
+                                (case authentication of
+                                    BotToken token ->
+                                        "Bot " ++ token
+
+                                    BearerToken token ->
+                                        "Bearer " ++ token
+
+                                    UserToken record ->
+                                        record.token
+                                )
+                                :: (case authentication of
+                                        UserToken data ->
+                                            [ Http.header "User-Agent" data.userAgent
+                                            , Http.header "X-Super-Properties" data.xSuperProperties
+                                            , Http.header "X-Discord-Timezone" "Europe/Stockholm"
+                                            , Http.header "X-Discord-Locale" "en-US"
+                                            ]
+
+                                        _ ->
+                                            [ Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
+                                   )
+                        , url =
+                            FileStatus.domain ++ "/custom-request"
+                        , resolver = Http.stringResolver (Discord.resolver Discord.decodeUser)
+                        , body =
+                            [ ( "url"
+                              , Url.Builder.crossOrigin
+                                    discordApiUrl
+                                    (List.map (Url.percentEncode >> String.replace "%40" "@") path)
+                                    queryParameters
+                                    |> Json.Encode.string
+                              )
+                            ]
+                                |> Json.Encode.object
+                                |> Http.jsonBody
+                        , timeout = Nothing
+                        }
+                        Discord.getCurrentUser
+                        (Discord.userToken data)
                         |> Task.attempt (LoggedIntoDiscord clientId)
                     )
                 )
