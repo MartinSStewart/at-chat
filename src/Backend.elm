@@ -2422,52 +2422,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 sessionId
                 (\session user ->
                     ( model2
-                    , Http.task
-                        { method = "GET"
-                        , headers =
-                            Http.header "Authorization"
-                                (case authentication of
-                                    BotToken token ->
-                                        "Bot " ++ token
-
-                                    BearerToken token ->
-                                        "Bearer " ++ token
-
-                                    UserToken record ->
-                                        record.token
-                                )
-                                :: (case authentication of
-                                        UserToken data ->
-                                            [ Http.header "User-Agent" data.userAgent
-                                            , Http.header "X-Super-Properties" data.xSuperProperties
-                                            , Http.header "X-Discord-Timezone" "Europe/Stockholm"
-                                            , Http.header "X-Discord-Locale" "en-US"
-                                            ]
-
-                                        _ ->
-                                            [ Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
-                                   )
-                        , url =
-                            FileStatus.domain ++ "/custom-request"
-                        , resolver = Http.stringResolver (Discord.resolver Discord.decodeUser)
-                        , body =
-                            [ ( "url"
-                              , Url.Builder.crossOrigin
-                                    discordApiUrl
-                                    (List.map (Url.percentEncode >> String.replace "%40" "@") path)
-                                    queryParameters
-                                    |> Json.Encode.string
-                              )
-                            ]
-                                |> Json.Encode.object
-                                |> Http.jsonBody
-                        , timeout = Nothing
-                        }
-                        Discord.getCurrentUser
-                        (Discord.userToken data)
+                    , Discord.getCurrentUserPayload (Discord.userToken data)
+                        |> rustHttpRequest
                         |> Task.attempt (LoggedIntoDiscord clientId)
                     )
                 )
+
+
+rustHttpRequest request =
+    Http.task
+        { method = request.method
+        , headers = []
+        , url = FileStatus.domain ++ "/custom-request"
+        , body =
+            Json.Encode.object
+                []
+                |> Http.jsonBody
+        , resolver = Discord.resolver
+        , timeout = Nothing
+        }
 
 
 loadMessagesHelper :
