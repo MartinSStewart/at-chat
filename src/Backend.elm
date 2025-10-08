@@ -21,7 +21,7 @@ import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task
+import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Email.Html
@@ -2429,6 +2429,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
 
+rustHttpRequest : Discord.HttpRequest value -> Task restriction Discord.HttpError value
 rustHttpRequest request =
     Http.task
         { method = request.method
@@ -2438,7 +2439,25 @@ rustHttpRequest request =
             Json.Encode.object
                 []
                 |> Http.jsonBody
-        , resolver = Discord.resolver
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        Http.BadUrl_ badUrl ->
+                            "Bad url " ++ badUrl |> Discord.UnexpectedError |> Err
+
+                        Http.Timeout_ ->
+                            Err Discord.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Discord.NetworkError
+
+                        Http.BadStatus_ metadata body ->
+                            Discord.handleBadStatus metadata body
+
+                        Http.GoodStatus_ _ body ->
+                            Discord.handleGoodStatus request.decoder body
+                )
         , timeout = Nothing
         }
 

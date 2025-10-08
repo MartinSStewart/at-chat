@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, login, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, login, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -1569,75 +1569,85 @@ resolver decoder response =
             Err NetworkError
 
         Http.BadStatus_ metadata body ->
-            let
-                decodeErrorCode_ wrapper =
-                    case JD.decodeString decodeErrorCode body of
-                        Ok errorCode ->
-                            wrapper errorCode
-
-                        Err error ->
-                            "Error decoding error code json: "
-                                ++ JD.errorToString error
-                                |> UnexpectedError
-            in
-            (case metadata.statusCode of
-                304 ->
-                    decodeErrorCode_ NotModified304
-
-                --400 ->
-                --    BadRequest400 errorData
-                401 ->
-                    decodeErrorCode_ Unauthorized401
-
-                403 ->
-                    decodeErrorCode_ Forbidden403
-
-                404 ->
-                    decodeErrorCode_ NotFound404
-
-                --405 ->
-                --    MethodNotAllowed405 errorData
-                429 ->
-                    case JD.decodeString decodeRateLimit body of
-                        Ok rateLimit ->
-                            TooManyRequests429 rateLimit
-
-                        Err error ->
-                            ("Error decoding rate limit json: " ++ JD.errorToString error)
-                                |> UnexpectedError
-
-                502 ->
-                    decodeErrorCode_ GatewayUnavailable502
-
-                statusCode ->
-                    if statusCode >= 500 && statusCode < 600 then
-                        decodeErrorCode_
-                            (\errorCode -> ServerError5xx { statusCode = metadata.statusCode, errorCode = errorCode })
-
-                    else
-                        "Unexpected status code " ++ String.fromInt statusCode ++ ". Body: " ++ body |> UnexpectedError
-            )
-                |> Err
+            handleBadStatus metadata body
 
         Http.GoodStatus_ _ body ->
-            let
-                fixedBody =
-                    {- Sometimes the discord response will be empty.
-                       This will cause our json decoder to fail even if it's just Json.Decode.succeed.
-                       For this reason we replace empty responses with a valid json empty string.
-                    -}
-                    if body == "" then
-                        "\"\""
+            handleGoodStatus decoder body
 
-                    else
-                        body
-            in
-            case JD.decodeString decoder fixedBody of
-                Ok data ->
-                    Ok data
+
+handleGoodStatus : JD.Decoder value -> String -> Result HttpError value
+handleGoodStatus decoder body =
+    let
+        fixedBody =
+            {- Sometimes the discord response will be empty.
+               This will cause our json decoder to fail even if it's just Json.Decode.succeed.
+               For this reason we replace empty responses with a valid json empty string.
+            -}
+            if body == "" then
+                "\"\""
+
+            else
+                body
+    in
+    case JD.decodeString decoder fixedBody of
+        Ok data ->
+            Ok data
+
+        Err error ->
+            "Error decoding good status json: " ++ JD.errorToString error |> UnexpectedError |> Err
+
+
+handleBadStatus : Http.Metadata -> String -> Result HttpError value
+handleBadStatus metadata body =
+    let
+        decodeErrorCode_ wrapper =
+            case JD.decodeString decodeErrorCode body of
+                Ok errorCode ->
+                    wrapper errorCode
 
                 Err error ->
-                    "Error decoding good status json: " ++ JD.errorToString error |> UnexpectedError |> Err
+                    "Error decoding error code json: "
+                        ++ JD.errorToString error
+                        |> UnexpectedError
+    in
+    (case metadata.statusCode of
+        304 ->
+            decodeErrorCode_ NotModified304
+
+        --400 ->
+        --    BadRequest400 errorData
+        401 ->
+            decodeErrorCode_ Unauthorized401
+
+        403 ->
+            decodeErrorCode_ Forbidden403
+
+        404 ->
+            decodeErrorCode_ NotFound404
+
+        --405 ->
+        --    MethodNotAllowed405 errorData
+        429 ->
+            case JD.decodeString decodeRateLimit body of
+                Ok rateLimit ->
+                    TooManyRequests429 rateLimit
+
+                Err error ->
+                    ("Error decoding rate limit json: " ++ JD.errorToString error)
+                        |> UnexpectedError
+
+        502 ->
+            decodeErrorCode_ GatewayUnavailable502
+
+        statusCode ->
+            if statusCode >= 500 && statusCode < 600 then
+                decodeErrorCode_
+                    (\errorCode -> ServerError5xx { statusCode = metadata.statusCode, errorCode = errorCode })
+
+            else
+                "Unexpected status code " ++ String.fromInt statusCode ++ ". Body: " ++ body |> UnexpectedError
+    )
+        |> Err
 
 
 rawDataUri : DataUri -> String
