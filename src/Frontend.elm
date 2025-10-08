@@ -67,7 +67,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser, NotificationLevel(..))
+import User exposing (BackendUser, FrontendCurrentUser, NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -3391,7 +3391,7 @@ updateLoaded msg model =
                 (\loggedIn ->
                     case loggedIn.userOptions of
                         Just userOptions ->
-                            case ( userOptions.linkDiscordSubmit, Codec.decodeString Types.linkDiscordDataCodec text ) of
+                            case ( userOptions.linkDiscordSubmit, Codec.decodeString User.linkDiscordDataCodec text ) of
                                 ( LinkDiscordNotSubmitted _, Ok ok ) ->
                                     ( { loggedIn
                                         | userOptions = Just { userOptions | linkDiscordSubmit = LinkDiscordSubmitting }
@@ -4618,7 +4618,7 @@ changeUpdate localMsg local =
                                         localUser =
                                             local.localUser
 
-                                        user : BackendUser
+                                        user : FrontendCurrentUser
                                         user =
                                             localUser.user
 
@@ -4724,7 +4724,7 @@ changeUpdate localMsg local =
                                 localUser =
                                     local.localUser
 
-                                user : BackendUser
+                                user : FrontendCurrentUser
                                 user =
                                     localUser.user
 
@@ -5006,6 +5006,19 @@ changeUpdate localMsg local =
 
                 Server_TextEditor serverChange2 ->
                     { local | textEditor = TextEditor.changeUpdate serverChange2 local.textEditor }
+
+                Server_LinkDiscordUser userId name ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user = User.addLinkedDiscordUser userId { name = name } localUser.user
+                            }
+                    }
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState

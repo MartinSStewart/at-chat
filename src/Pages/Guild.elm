@@ -66,7 +66,7 @@ import Ui.Input
 import Ui.Keyed
 import Ui.Lazy
 import Ui.Prose
-import User exposing (BackendUser, FrontendUser, NotificationLevel(..))
+import User exposing (FrontendCurrentUser, FrontendUser, NotificationLevel(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -115,7 +115,7 @@ newMessageCount maybeLastViewed channel =
 
 channelNewMessageCount :
     GuildOrDmIdNoThread
-    -> BackendUser
+    -> FrontendCurrentUser
     ->
         { b
             | messages : Array (MessageState ChannelMessageId)
@@ -134,7 +134,7 @@ channelNewMessageCount guildOrDmId currentUser channel =
         channel.threads
 
 
-guildNewMessageCount : BackendUser -> Id GuildId -> FrontendGuild -> Int
+guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> Int
 guildNewMessageCount currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel count ->
@@ -144,7 +144,7 @@ guildNewMessageCount currentUser guildId guild =
         guild.channels
 
 
-guildHasNotifications : BackendUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
+guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
 guildHasNotifications currentUser guildId guild =
     if SeqSet.member guildId currentUser.notifyOnAllMessages then
         case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
@@ -170,7 +170,7 @@ guildHasNotifications currentUser guildId guild =
                         NoNotification
 
 
-dmHasNotifications : BackendUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
+dmHasNotifications : FrontendCurrentUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
     channelNewMessageCount (GuildOrDmId_Dm otherUserId) currentUser dmChannel |> OneOrGreater.fromInt
 

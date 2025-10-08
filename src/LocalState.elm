@@ -80,7 +80,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Slack
 import TextEditor
 import Unsafe
-import User exposing (BackendUser, FrontendUser)
+import User exposing (BackendUser, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
@@ -100,7 +100,7 @@ type alias LocalState =
 
 type alias LocalUser =
     { session : UserSession
-    , user : BackendUser
+    , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
@@ -1314,8 +1314,8 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 markAllChannelsAsViewed :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
-    -> BackendUser
-    -> BackendUser
+    -> { d | lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId) }
 markAllChannelsAsViewed guildId guild user =
     { user
         | lastViewed =

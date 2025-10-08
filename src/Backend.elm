@@ -583,12 +583,43 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        LoggedIntoDiscord clientId result ->
+        LoggedIntoDiscord clientId userId linkData result ->
             let
                 _ =
                     Debug.log "result" result
             in
-            ( model, Lamdera.sendToFrontend clientId (LinkDiscordResponse result) )
+            case result of
+                Ok discordUser ->
+                    ( { model
+                        | users =
+                            NonemptyDict.updateIfExists
+                                userId
+                                (\user ->
+                                    { user
+                                        | linkedDiscordUsers =
+                                            SeqDict.insert
+                                                discordUser.id
+                                                { auth = linkData, name = discordUser.username }
+                                                user.linkedDiscordUsers
+                                    }
+                                )
+                                model.users
+                      }
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
+                        , Broadcast.toUser
+                            (Just clientId)
+                            Nothing
+                            userId
+                            (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
+                            model
+                        ]
+                    )
+
+                Err _ ->
+                    ( model
+                    , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
+                    )
 
 
 addSlackServer :
@@ -1002,7 +1033,7 @@ getLoginData sessionId session user requestMessagesFor model =
             )
             SeqDict.empty
             model.dmChannels
-    , user = user
+    , user = User.backendToFrontendCurrent user
     , otherUsers =
         NonemptyDict.toList model.users
             |> List.filterMap
@@ -2427,7 +2458,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> rustHttpRequest
-                        |> Task.attempt (LoggedIntoDiscord clientId)
+                        |> Task.attempt (LoggedIntoDiscord clientId session.userId data)
                     )
                 )
 
@@ -2435,12 +2466,39 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 rustHttpRequest : Discord.HttpRequest value -> Task restriction Discord.HttpError value
 rustHttpRequest request =
     Http.task
-        { method = request.method
+        { method = "POST"
         , headers = []
-        , url = FileStatus.domain ++ "/custom-request"
+        , url = FileStatus.domain ++ "/file/custom-request"
         , body =
             Json.Encode.object
-                []
+                [ ( "method", Json.Encode.string request.method )
+                , ( "url", Json.Encode.string request.url )
+                , ( "headers"
+                  , Json.Encode.list
+                        (\( key, value ) ->
+                            Json.Encode.object
+                                [ ( "key", Json.Encode.string key )
+                                , ( "value", Json.Encode.string value )
+                                ]
+                        )
+                        ((if request.method == "GET" then
+                            []
+
+                          else
+                            [ ( "Content-Type", "application/json" ) ]
+                         )
+                            ++ request.headers
+                        )
+                  )
+                , ( "body"
+                  , case request.body of
+                        Just body ->
+                            Json.Encode.encode 0 body |> Json.Encode.string
+
+                        Nothing ->
+                            Json.Encode.null
+                  )
+                ]
                 |> Http.jsonBody
         , resolver =
             Http.stringResolver

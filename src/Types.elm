@@ -11,7 +11,6 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelAndMessageId
     , LastRequest(..)
-    , LinkDiscordData
     , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -35,7 +34,6 @@ module Types exposing
     , ToFrontend(..)
     , UserOptionsModel
     , WaitingForLoginTokenData
-    , linkDiscordDataCodec
     , messageMenuMobileOffset
     )
 
@@ -93,7 +91,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LinkDiscordData, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
@@ -453,22 +451,6 @@ type FrontendMsg
     | TypedBookmarkletData String
 
 
-type alias LinkDiscordData =
-    { token : String
-    , xSuperProperties : String
-    , userAgent : String
-    }
-
-
-linkDiscordDataCodec : Codec LinkDiscordData
-linkDiscordDataCodec =
-    Codec.object LinkDiscordData
-        |> Codec.field "token" .token Codec.string
-        |> Codec.field "xSuperProperties" .xSuperProperties Codec.string
-        |> Codec.field "userAgent" .userAgent Codec.string
-        |> Codec.buildObject
-
-
 type ScrollPosition
     = ScrolledToBottom
     | ScrolledToTop
@@ -555,7 +537,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | LoggedIntoDiscord ClientId (Result Discord.HttpError Discord.User)
+    | LoggedIntoDiscord ClientId (Id UserId) LinkDiscordData (Result Discord.HttpError Discord.User)
 
 
 type LoginResult
@@ -586,7 +568,7 @@ type alias LoginData =
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , user : BackendUser
+    , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
@@ -636,6 +618,7 @@ type ServerChange
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
+    | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) String
 
 
 type LocalChange

@@ -3,12 +3,17 @@ module User exposing
     , BackendUser
     , EmailNotifications(..)
     , EmailStatus(..)
+    , FrontendCurrentUser
     , FrontendUser
+    , LinkDiscordData
     , NotificationLevel(..)
     , addDirectMention
+    , addLinkedDiscordUser
     , backendToFrontend
+    , backendToFrontendCurrent
     , backendToFrontendForUser
     , init
+    , linkDiscordDataCodec
     , profileImage
     , profileImageSize
     , sectionToString
@@ -19,6 +24,8 @@ module User exposing
     , toString
     )
 
+import Codec exposing (Codec)
+import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
@@ -51,7 +58,46 @@ type alias BackendUser =
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { auth : LinkDiscordData, name : String }
     }
+
+
+type alias FrontendCurrentUser =
+    { name : PersonName
+    , isAdmin : Bool
+    , email : EmailStatus
+    , recentLoginEmails : List Time.Posix
+    , lastLogPageViewed : Int
+    , expandedSections : SeqSet AdminUiSection
+    , createdAt : Time.Posix
+    , emailNotifications : EmailNotifications
+    , lastEmailNotification : Time.Posix
+    , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
+    , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
+    , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+    , icon : Maybe FileHash
+    , notifyOnAllMessages : SeqSet (Id GuildId)
+    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    , lastPushNotification : Maybe Time.Posix
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { name : String }
+    }
+
+
+type alias LinkDiscordData =
+    { token : String
+    , xSuperProperties : String
+    , userAgent : String
+    }
+
+
+linkDiscordDataCodec : Codec LinkDiscordData
+linkDiscordDataCodec =
+    Codec.object LinkDiscordData
+        |> Codec.field "token" .token Codec.string
+        |> Codec.field "xSuperProperties" .xSuperProperties Codec.string
+        |> Codec.field "userAgent" .userAgent Codec.string
+        |> Codec.buildObject
 
 
 type NotificationLevel
@@ -78,10 +124,25 @@ init createdAt name email userIsAdmin =
     , notifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , lastPushNotification = Nothing
+    , linkedDiscordUsers = SeqDict.empty
     }
 
 
-addDirectMention : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
+addLinkedDiscordUser :
+    Discord.Id.Id Discord.Id.UserId
+    -> data
+    -> { a | linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) data }
+    -> { a | linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) data }
+addLinkedDiscordUser discordUserId data user =
+    { user | linkedDiscordUsers = SeqDict.insert discordUserId data user.linkedDiscordUsers }
+
+
+addDirectMention :
+    Id GuildId
+    -> Id ChannelId
+    -> ThreadRoute
+    -> { a | directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater) }
 addDirectMention guildId channelId threadRoute user =
     { user
         | directMentions =
@@ -110,7 +171,11 @@ addDirectMention guildId channelId threadRoute user =
     }
 
 
-setGuildNotificationLevel : Id GuildId -> NotificationLevel -> BackendUser -> BackendUser
+setGuildNotificationLevel :
+    Id GuildId
+    -> NotificationLevel
+    -> { a | notifyOnAllMessages : SeqSet (Id GuildId) }
+    -> { a | notifyOnAllMessages : SeqSet (Id GuildId) }
 setGuildNotificationLevel guildId notificationLevel user =
     { user
         | notifyOnAllMessages =
@@ -123,7 +188,20 @@ setGuildNotificationLevel guildId notificationLevel user =
     }
 
 
-setLastChannelViewed : Id GuildId -> Id ChannelId -> ThreadRoute -> BackendUser -> BackendUser
+setLastChannelViewed :
+    Id GuildId
+    -> Id ChannelId
+    -> ThreadRoute
+    ->
+        { a
+            | lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+            , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+        }
+    ->
+        { a
+            | lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+            , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+        }
 setLastChannelViewed guildId channelId threadRoute user =
     { user
         | lastChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastChannelViewed
@@ -144,7 +222,11 @@ setLastChannelViewed guildId channelId threadRoute user =
     }
 
 
-setLastDmViewed : Id UserId -> ThreadRoute -> BackendUser -> BackendUser
+setLastDmViewed :
+    Id UserId
+    -> ThreadRoute
+    -> { a | lastDmViewed : Maybe ( Id UserId, ThreadRoute ) }
+    -> { a | lastDmViewed : Maybe ( Id UserId, ThreadRoute ) }
 setLastDmViewed otherUserId threadRoute user =
     { user | lastDmViewed = Just ( otherUserId, threadRoute ) }
 
@@ -189,9 +271,32 @@ type alias FrontendUser =
     }
 
 
+backendToFrontendCurrent : BackendUser -> FrontendCurrentUser
+backendToFrontendCurrent user =
+    { name = user.name
+    , isAdmin = user.isAdmin
+    , email = user.email
+    , recentLoginEmails = user.recentLoginEmails
+    , lastLogPageViewed = user.lastLogPageViewed
+    , expandedSections = user.expandedSections
+    , createdAt = user.createdAt
+    , emailNotifications = user.emailNotifications
+    , lastEmailNotification = user.lastEmailNotification
+    , lastViewed = user.lastViewed
+    , lastViewedThreads = user.lastViewedThreads
+    , lastDmViewed = user.lastDmViewed
+    , lastChannelViewed = user.lastChannelViewed
+    , icon = user.icon
+    , notifyOnAllMessages = user.notifyOnAllMessages
+    , directMentions = user.directMentions
+    , lastPushNotification = user.lastPushNotification
+    , linkedDiscordUsers = SeqDict.map (\_ data -> { name = data.name }) user.linkedDiscordUsers
+    }
+
+
 {-| Convert a BackendUser to a FrontendUser without any permission checks
 -}
-backendToFrontend : BackendUser -> FrontendUser
+backendToFrontend : FrontendCurrentUser -> FrontendUser
 backendToFrontend user =
     { name = user.name
     , isAdmin = user.isAdmin
@@ -202,7 +307,9 @@ backendToFrontend user =
 
 {-| Convert a BackendUser to a FrontendUser while only including data the current user has permission to see
 -}
-backendToFrontendForUser : BackendUser -> FrontendUser
+backendToFrontendForUser :
+    { a | name : PersonName, isAdmin : Bool, createdAt : Time.Posix, icon : Maybe FileHash }
+    -> FrontendUser
 backendToFrontendForUser user =
     { name = user.name
     , isAdmin = user.isAdmin

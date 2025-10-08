@@ -16,6 +16,7 @@ use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
+use std::str::FromStr;
 use web_push::SubscriptionInfo;
 mod content_types;
 
@@ -30,7 +31,7 @@ async fn main() {
             "/file/push-notification",
             post(push_notification_endpoint).options(options_endpoint),
         )
-        .route("/file/custom-request", get(custom_request_endpoint))
+        .route("/file/custom-request", post(custom_request_endpoint))
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))
@@ -78,7 +79,7 @@ fn vec_to_headermap(
     let mut header_map = HeaderMap::new();
 
     for header in headers {
-        let header_name = http::HeaderName::from_lowercase(header.key.as_bytes())?;
+        let header_name = http::HeaderName::from_str(&header.key)?;
         let header_value = http::HeaderValue::from_str(&header.value)?;
 
         header_map.insert(header_name, header_value);
@@ -88,31 +89,40 @@ fn vec_to_headermap(
 }
 
 async fn custom_request_endpoint(
-    Json(CustomRequest { url, headers }): Json<CustomRequest>,
+    Json(CustomRequest {
+        method: String,
+        url,
+        headers,
+        body,
+    }): Json<CustomRequest>,
 ) -> Response<String> {
     let headers2 = match vec_to_headermap(headers) {
         Ok(ok) => ok,
-        Err(_) => return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 1")),
+        Err(error) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, format!("Error 1: {error:?}"));
+        }
     };
 
-    match reqwest::Client::new()
-        .get(url)
-        .headers(headers2)
-        .send()
-        .await
-    {
+    let request = reqwest::Client::new().get(url).headers(headers2);
+
+    match request.send().await {
         Ok(response) => {
             let status = response.status();
             let response_text = match response.text().await {
                 Ok(text) => text,
-                Err(_) => {
-                    return response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 2"));
+                Err(error) => {
+                    return response_with_headers(
+                        StatusCode::BAD_REQUEST,
+                        format!("Error 2: {error:?}"),
+                    );
                 }
             };
 
             response_with_headers(status, response_text)
         }
-        Err(_) => response_with_headers(StatusCode::BAD_REQUEST, String::from("Error 3")),
+        Err(error) => {
+            response_with_headers(StatusCode::BAD_REQUEST, format!("Error 3:  {error:?}"))
+        }
     }
 }
 
@@ -742,8 +752,10 @@ pub struct PushNotification {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CustomRequest {
+    pub method: String,
     pub url: String,
     pub headers: Vec<Header>,
+    pub body: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

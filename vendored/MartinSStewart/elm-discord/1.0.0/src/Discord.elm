@@ -145,7 +145,7 @@ httpTask : HttpRequest a -> Task HttpError a
 httpTask httpRequest =
     Http.task
         { method = httpRequest.method
-        , headers = httpRequest.headers
+        , headers = List.map (\( key, value ) -> Http.header key value) httpRequest.headers
         , url = httpRequest.url
         , body =
             case httpRequest.body of
@@ -1449,7 +1449,7 @@ teamIconUrl { size, imageType } teamId teamIconHash =
 
 discordApiUrl : String
 discordApiUrl =
-    "https://discord.com/api/v10"
+    "https://discord.com/api/v9"
 
 
 discordCdnUrl : String
@@ -1510,7 +1510,7 @@ httpGet authentication decoder path queryParameters =
 
 type alias HttpRequest a =
     { method : String
-    , headers : List Http.Header
+    , headers : List ( String, String )
     , url : String
     , body : Maybe JE.Value
     , decoder : JD.Decoder a
@@ -1518,11 +1518,16 @@ type alias HttpRequest a =
     }
 
 
+header : String -> String -> ( String, String )
+header key value =
+    ( key, value )
+
+
 http : Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Maybe JE.Value -> HttpRequest a
 http authentication requestType decoder path queryParameters body =
     { method = requestType
     , headers =
-        Http.header "Authorization"
+        header "Authorization"
             (case authentication of
                 BotToken token ->
                     "Bot " ++ token
@@ -1535,15 +1540,15 @@ http authentication requestType decoder path queryParameters body =
             )
             :: (case authentication of
                     UserToken data ->
-                        [ Http.header "User-Agent" data.userAgent
-                        , Http.header "X-Super-Properties" data.xSuperProperties
-                        , Http.header "X-Discord-Timezone" "Europe/Stockholm"
-                        , Http.header "X-Discord-Locale" "en-US"
-                        , Http.header "Host" "discord.com"
+                        [ header "User-Agent" data.userAgent
+                        , header "X-Super-Properties" data.xSuperProperties
+                        , header "X-Discord-Timezone" "Europe/Stockholm"
+                        , header "X-Discord-Locale" "en-US"
+                        , header "Host" "discord.com"
                         ]
 
                     _ ->
-                        [ Http.header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
+                        [ header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
                )
     , url =
         Url.Builder.crossOrigin
@@ -4292,25 +4297,17 @@ handleGateway authToken intents response model =
 
 
 -- Internal API
-
-
-discordApiUrlInternal : String
-discordApiUrlInternal =
-    "https://discord.com/api/v9"
-
-
-
 --
 --login : String -> String -> Task HttpErrorInternal LoginResponse
 --login loginEmail loginPassword =
 --    Http.task
 --        { method = "POST"
 --        , headers =
---            [ Http.header "User-Agent" exampleUserAgent
+--            [ header "User-Agent" exampleUserAgent
 --            , JE.encode 0 (encodeClientProperties exampleClientProperties)
 --                |> Base64.fromString
 --                |> Maybe.withDefault ""
---                |> Http.header "X-Super-Properties"
+--                |> header "X-Super-Properties"
 --            ]
 --        , url =
 --            Url.Builder.crossOrigin
