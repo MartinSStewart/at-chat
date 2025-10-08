@@ -31,7 +31,10 @@ async fn main() {
             "/file/push-notification",
             post(push_notification_endpoint).options(options_endpoint),
         )
-        .route("/file/custom-request", post(custom_request_endpoint))
+        .route(
+            "/file/custom-request",
+            post(custom_request_endpoint).options(options_endpoint),
+        )
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
         .route("/file/t/{filename}", get(get_file_thumbnail_endpoint))

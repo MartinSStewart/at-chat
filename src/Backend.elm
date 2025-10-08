@@ -583,11 +583,7 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        LoggedIntoDiscord clientId userId linkData result ->
-            let
-                _ =
-                    Debug.log "result" result
-            in
+        GotLinkedDiscordUser clientId userId linkData result ->
             case result of
                 Ok discordUser ->
                     ( { model
@@ -613,6 +609,9 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
                             model
+                        , Discord.getRelationshipsPayload linkData
+                            |> rustHttpRequest
+                            |> Task.attempt (GotLinkedDiscordUserData userId discordUser.id)
                         ]
                     )
 
@@ -620,6 +619,13 @@ update msg model =
                     ( model
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                     )
+
+        GotLinkedDiscordUserData userId discordUserId result ->
+            let
+                _ =
+                    Debug.log "result" result
+            in
+            ( model, Command.none )
 
 
 addSlackServer :
@@ -2458,7 +2464,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> rustHttpRequest
-                        |> Task.attempt (LoggedIntoDiscord clientId session.userId data)
+                        |> Task.attempt (GotLinkedDiscordUser clientId session.userId data)
                     )
                 )
 

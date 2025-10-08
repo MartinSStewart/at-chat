@@ -537,7 +537,8 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | LoggedIntoDiscord ClientId (Id UserId) LinkDiscordData (Result Discord.HttpError Discord.User)
+    | GotLinkedDiscordUser ClientId (Id UserId) LinkDiscordData (Result Discord.HttpError Discord.User)
+    | GotLinkedDiscordUserData (Id UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError (List Discord.Relationship))
 
 
 type LoginResult
