@@ -1745,12 +1745,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     )
                                                                 of
                                                                     ( Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                                        Discord.editMessage
+                                                                        Discord.editMessagePayload
                                                                             (DiscordSync.botTokenToAuth botToken)
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
                                                                             , content = toDiscordContent model2 attachedFiles2 newContent
                                                                             }
+                                                                            |> DiscordSync.http
                                                                             |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                                                     _ ->
@@ -1920,11 +1921,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
                                                   of
                                                     ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                        Discord.deleteMessage
+                                                        Discord.deleteMessagePayload
                                                             (DiscordSync.botTokenToAuth botToken)
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             }
+                                                            |> DiscordSync.http
                                                             |> Task.attempt (\_ -> DeletedDiscordMessage)
 
                                                     _ ->
@@ -1977,11 +1979,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
                                                           of
                                                             ( Just discordChannelId, Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                                Discord.deleteMessage
+                                                                Discord.deleteMessagePayload
                                                                     (DiscordSync.botTokenToAuth botToken)
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
                                                                     }
+                                                                    |> DiscordSync.http
                                                                     |> Task.attempt (\_ -> DeletedDiscordMessage)
 
                                                             _ ->
@@ -2570,12 +2573,13 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                     ( Just (DiscordChannelId discordChannelId), Just thread ) ->
                                         case OneToOne.first messageIndex thread.linkedMessageIds of
                                             Just (DiscordMessageId discordMessageId) ->
-                                                Discord.editMessage
+                                                Discord.editMessagePayload
                                                     (DiscordSync.botTokenToAuth botToken)
                                                     { channelId = discordChannelId
                                                     , messageId = discordMessageId
                                                     , content = toDiscordContent model2 attachedFiles2 newContent
                                                     }
+                                                    |> DiscordSync.http
                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                             Just (SlackMessageId _) ->
@@ -2594,12 +2598,13 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                     )
                                 of
                                     ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId) ) ->
-                                        Discord.editMessage
+                                        Discord.editMessagePayload
                                             (DiscordSync.botTokenToAuth botToken)
                                             { channelId = discordChannelId
                                             , messageId = discordMessageId
                                             , content = toDiscordContent model2 attachedFiles2 newContent
                                             }
+                                            |> DiscordSync.http
                                             |> Task.attempt (\_ -> EditedDiscordMessage)
 
                                     _ ->
@@ -2892,8 +2897,8 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     Just botToken ->
                         Task.map2
                             Tuple.pair
-                            (Discord.getCurrentUser (DiscordSync.botTokenToAuth botToken))
-                            (Discord.getCurrentUserGuilds (DiscordSync.botTokenToAuth botToken))
+                            (Discord.getCurrentUserPayload (DiscordSync.botTokenToAuth botToken) |> DiscordSync.http)
+                            (Discord.getCurrentUserGuildsPayload (DiscordSync.botTokenToAuth botToken) |> DiscordSync.http)
                             |> Task.attempt (GotCurrentUserGuilds time botToken)
 
                     Nothing ->
@@ -3047,7 +3052,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                 [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
                 , case ( OneToOne.first dmChannelId model.discordDms, model.botToken ) of
                     ( Just discordChannelId, Just botToken ) ->
-                        Discord.createMessage
+                        Discord.createMessagePayload
                             (DiscordSync.botTokenToAuth botToken)
                             { channelId = discordChannelId
                             , content = toDiscordContent model attachedFiles text
@@ -3064,6 +3069,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                                     Nothing ->
                                         Nothing
                             }
+                            |> DiscordSync.http
                             |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
 
                     _ ->
@@ -3257,7 +3263,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                             )
                         of
                             ( Nothing, Just (DiscordMessageId discordMessageId), Just (DiscordChannelId discordChannelId) ) ->
-                                Discord.startThreadFromMessage
+                                Discord.startThreadFromMessagePayload
                                     (DiscordSync.botTokenToAuth botToken)
                                     { name = "New thread"
                                     , channelId = discordChannelId
@@ -3265,14 +3271,16 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                     , autoArchiveDuration = Missing
                                     , rateLimitPerUser = Missing
                                     }
+                                    |> DiscordSync.http
                                     |> Task.andThen
                                         (\discordThread ->
-                                            Discord.createMessage
+                                            Discord.createMessagePayload
                                                 (DiscordSync.botTokenToAuth botToken)
                                                 { channelId = discordThread.id
                                                 , content = toDiscordContent model attachedFiles text
                                                 , replyTo = Nothing
                                                 }
+                                                |> DiscordSync.http
                                         )
                                     |> Task.attempt
                                         (SentGuildMessageToDiscord
@@ -3284,7 +3292,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         )
 
                             ( Just (DiscordChannelId discordThreadId), _, _ ) ->
-                                Discord.createMessage
+                                Discord.createMessagePayload
                                     (DiscordSync.botTokenToAuth botToken)
                                     { channelId = discordThreadId
                                     , content = toDiscordContent model attachedFiles text
@@ -3301,6 +3309,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             Nothing ->
                                                 Nothing
                                     }
+                                    |> DiscordSync.http
                                     |> Task.attempt
                                         (DmChannel.latestThreadMessageId thread
                                             |> ViewThreadWithMessage threadMessageIndex
@@ -3313,7 +3322,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     ( Just botToken, NoThreadWithMaybeMessage maybeRepliedTo ) ->
                         case OneToOne.first channelId guild.linkedChannelIds of
                             Just (DiscordChannelId discordChannelId) ->
-                                Discord.createMessage
+                                Discord.createMessagePayload
                                     (DiscordSync.botTokenToAuth botToken)
                                     { channelId = discordChannelId
                                     , content = toDiscordContent model attachedFiles text
@@ -3330,6 +3339,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             Nothing ->
                                                 Nothing
                                     }
+                                    |> DiscordSync.http
                                     |> Task.attempt
                                         (SentGuildMessageToDiscord
                                             guildId

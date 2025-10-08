@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpErrorInternal(..), HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, login, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -83,8 +83,7 @@ import Dict exposing (Dict)
 import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, RoleId, TeamId, UserId, WebhookId)
 import Discord.Markdown exposing (Markdown)
 import Duration exposing (Duration, Seconds)
-import Effect.Http as Http
-import Effect.Task as Task exposing (Task)
+import Http
 import Iso8601
 import Json.Decode as JD
 import Json.Decode.Extra as JD
@@ -93,6 +92,7 @@ import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
 import Set exposing (Set)
 import String.Nonempty exposing (NonemptyString)
+import Task exposing (Task)
 import Time exposing (Posix(..))
 import Url exposing (Url)
 import Url.Builder exposing (QueryParameter)
@@ -104,7 +104,7 @@ import Url.Builder exposing (QueryParameter)
 
 {-| Get a channel by ID.
 -}
-getChannel : Authentication -> Id ChannelId -> Task r HttpError Channel
+getChannel : Authentication -> Id ChannelId -> Task HttpError Channel
 getChannel authentication channelId =
     getChannelPayload authentication channelId |> httpTask
 
@@ -131,7 +131,7 @@ In contrast, when used with a private message, it is possible to undo the action
 For Public servers, the set Rules or Guidelines channel and the Moderators-only (Public Server Updates) channel cannot be deleted.
 
 -}
-deleteChannel : Authentication -> Id ChannelId -> Task r HttpError Channel
+deleteChannel : Authentication -> Id ChannelId -> Task HttpError Channel
 deleteChannel authentication channelId =
     deleteChannelPayload authentication channelId |> httpTask
 
@@ -141,7 +141,7 @@ deleteChannelPayload authentication channelId =
     httpDelete authentication decodeChannel [ "channels", Discord.Id.toString channelId ] [] (JE.string "")
 
 
-httpTask : HttpRequest a -> Task r HttpError a
+httpTask : HttpRequest a -> Task HttpError a
 httpTask httpRequest =
     Http.task
         { method = httpRequest.method
@@ -169,7 +169,7 @@ If the current user is missing the `READ_MESSAGE_HISTORY` permission in the chan
     Or should we get the most recent messages?
 
 -}
-getMessages : Authentication -> { channelId : Id ChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> Task r HttpError (List Message)
+getMessages : Authentication -> { channelId : Id ChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> Task HttpError (List Message)
 getMessages authentication data =
     getMessagesPayload authentication data |> httpTask
 
@@ -200,7 +200,7 @@ getMessagesPayload authentication { channelId, limit, relativeTo } =
 {-| Returns a specific message in the channel.
 If operating on a guild channel, this endpoint requires the `READ_MESSAGE_HISTORY` permission to be present on the current user.
 -}
-getMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError Message
+getMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError Message
 getMessage authentication data =
     getMessagePayload authentication data |> httpTask
 
@@ -228,7 +228,7 @@ See message formatting for more information on how to properly format messages.
 The maximum request size when sending a message is 8MB.
 
 -}
-createMessage : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> Task r HttpError Message
+createMessage : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> Task HttpError Message
 createMessage authentication data =
     createMessagePayload authentication data |> httpTask
 
@@ -258,7 +258,7 @@ createMessagePayload authentication { channelId, content, replyTo } =
 
 {-| Same as `createMessage` but instead of taking a String, it takes a list of Markdown values.
 -}
-createMarkdownMessage : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> Task r HttpError Message
+createMarkdownMessage : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> Task HttpError Message
 createMarkdownMessage authentication data =
     createMarkdownMessagePayload authentication data |> httpTask
 
@@ -274,7 +274,7 @@ createMarkdownMessagePayload authentication { channelId, content, replyTo } =
 This endpoint requires the `READ_MESSAGE_HISTORY` permission to be present on the current user.
 Additionally, if nobody else has reacted to the message using this emoji, this endpoint requires the `ADD_REACTIONS` permission to be present on the current user.
 -}
-createReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
+createReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
 createReaction authentication data =
     createReactionPayload authentication data |> httpTask
 
@@ -298,7 +298,7 @@ createReactionPayload authentication { channelId, messageId, emoji } =
 
 {-| Delete a reaction the current user has made for the message.
 -}
-deleteOwnReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
+deleteOwnReaction : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
 deleteOwnReaction authentication data =
     deleteOwnReactionPayload authentication data |> httpTask
 
@@ -326,7 +326,7 @@ This endpoint requires the `MANAGE_MESSAGES` permission to be present on the cur
 deleteUserReaction :
     Authentication
     -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji, userId : Id UserId }
-    -> Task r HttpError ()
+    -> Task HttpError ()
 deleteUserReaction authentication data =
     deleteUserReactionPayload authentication data |> httpTask
 
@@ -353,7 +353,7 @@ deleteUserReactionPayload authentication { channelId, messageId, emoji, userId }
 
 {-| Get a list of users that reacted with this emoji.
 -}
-getReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task r HttpError ()
+getReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji } -> Task HttpError ()
 getReactions authentication data =
     getReactionsPayload authentication data |> httpTask
 
@@ -376,7 +376,7 @@ getReactionsPayload authentication { channelId, messageId, emoji } =
 {-| Deletes all reactions on a message.
 This endpoint requires the `MANAGE_MESSAGES` permission to be present on the current user.
 -}
-deleteAllReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
+deleteAllReactions : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
 deleteAllReactions authentication data =
     deleteAllReactionsPayload authentication data |> httpTask
 
@@ -397,7 +397,7 @@ This endpoint requires the `MANAGE_MESSAGES` permission to be present on the cur
 deleteAllReactionsForEmoji :
     Authentication
     -> { channelId : Id ChannelId, messageId : Id MessageId, emoji : Emoji }
-    -> Task r HttpError ()
+    -> Task HttpError ()
 deleteAllReactionsForEmoji authentication data =
     deleteAllReactionsForEmojiPayload authentication data |> httpTask
 
@@ -424,7 +424,7 @@ deleteAllReactionsForEmojiPayload authentication { channelId, messageId, emoji }
 {-| Edit a previously sent message. The fields content can only be edited by the original message author.
 The content field can have a maximum of 2000 characters.
 -}
-editMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, content : String } -> Task r HttpError ()
+editMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId, content : String } -> Task HttpError ()
 editMessage authentication data =
     editMessagePayload authentication data |> httpTask
 
@@ -442,7 +442,7 @@ editMessagePayload authentication { channelId, messageId, content } =
 {-| Delete a message.
 If operating on a guild channel and trying to delete a message that was not sent by the current user, this endpoint requires the `MANAGE_MESSAGES` permission.
 -}
-deleteMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
+deleteMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
 deleteMessage authentication data =
     deleteMessagePayload authentication data |> httpTask
 
@@ -472,7 +472,7 @@ bulkDeleteMessage :
         , secondMessage : Id MessageId
         , restOfMessages : List (Id MessageId)
         }
-    -> Task r HttpError ()
+    -> Task HttpError ()
 bulkDeleteMessage authentication data =
     bulkDeleteMessagePayload authentication data |> httpTask
 
@@ -502,7 +502,7 @@ bulkDeleteMessagePayload authentication { channelId, firstMessage, secondMessage
 {-| Returns a list of invites for the channel.
 Only usable for guild channels. Requires the `MANAGE_CHANNELS` permission.
 -}
-getChannelInvites : Authentication -> Id ChannelId -> Task r HttpError (List InviteWithMetadata)
+getChannelInvites : Authentication -> Id ChannelId -> Task HttpError (List InviteWithMetadata)
 getChannelInvites authentication channelId =
     getChannelInvitesPayload authentication channelId |> httpTask
 
@@ -535,7 +535,7 @@ createChannelInvite :
     Authentication
     -> Id ChannelId
     -> ChannelInviteConfig
-    -> Task r HttpError Invite
+    -> Task HttpError Invite
 createChannelInvite authentication channelId data =
     createChannelInvitePayload authentication channelId data |> httpTask
 
@@ -588,7 +588,7 @@ Requires the `MANAGE_ROLES` permission. For more information about permissions, 
 deleteChannelPermission :
     Authentication
     -> { channelId : Id ChannelId, overwriteId : Id OverwriteId }
-    -> Task r HttpError (List InviteWithMetadata)
+    -> Task HttpError (List InviteWithMetadata)
 deleteChannelPermission authentication data =
     deleteChannelPermissionPayload authentication data |> httpTask
 
@@ -610,7 +610,7 @@ deleteChannelPermissionPayload authentication { channelId, overwriteId } =
 Generally bots should not implement this route.
 However, if a bot is responding to a command and expects the computation to take a few seconds, this endpoint may be called to let the user know that the bot is processing their message.
 -}
-triggerTypingIndicator : Authentication -> Id ChannelId -> Task r HttpError ()
+triggerTypingIndicator : Authentication -> Id ChannelId -> Task HttpError ()
 triggerTypingIndicator authentication channelId =
     triggerTypingIndicatorPayload authentication channelId |> httpTask
 
@@ -627,7 +627,7 @@ triggerTypingIndicatorPayload authentication channelId =
 
 {-| Returns all pinned messages in the channel.
 -}
-getPinnedMessages : Authentication -> Id ChannelId -> Task r HttpError (List Message)
+getPinnedMessages : Authentication -> Id ChannelId -> Task HttpError (List Message)
 getPinnedMessages authentication channelId =
     getPinnedMessagesPayload authentication channelId |> httpTask
 
@@ -646,7 +646,7 @@ getPinnedMessagesPayload authentication channelId =
 The max pinned messages is 50.
 
 -}
-addPinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
+addPinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
 addPinnedChannelMessage authentication data =
     addPinnedChannelMessagePayload authentication data |> httpTask
 
@@ -663,7 +663,7 @@ addPinnedChannelMessagePayload authentication { channelId, messageId } =
 
 {-| Delete a pinned message in a channel. Requires the `MANAGE_MESSAGES` permission.
 -}
-deletePinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task r HttpError ()
+deletePinnedChannelMessage : Authentication -> { channelId : Id ChannelId, messageId : Id MessageId } -> Task HttpError ()
 deletePinnedChannelMessage authentication data =
     deletePinnedChannelMessagePayload authentication data |> httpTask
 
@@ -687,7 +687,7 @@ deletePinnedChannelMessagePayload authentication { channelId, messageId } =
 
 {-| Returns a list of emojis for the given guild.
 -}
-listGuildEmojis : Authentication -> Id GuildId -> Task r HttpError (List EmojiData)
+listGuildEmojis : Authentication -> Id GuildId -> Task HttpError (List EmojiData)
 listGuildEmojis authentication guildId =
     listGuildEmojisPayload authentication guildId |> httpTask
 
@@ -703,7 +703,7 @@ listGuildEmojisPayload authentication guildId =
 
 {-| Returns an emoji for the given guild and emoji IDs.
 -}
-getGuildEmojis : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task r HttpError EmojiData
+getGuildEmojis : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task HttpError EmojiData
 getGuildEmojis authentication data =
     getGuildEmojisPayload authentication data |> httpTask
 
@@ -729,7 +729,7 @@ Emojis and animated emojis have a maximum file size of 256kb.
 createGuildEmoji :
     Authentication
     -> { guildId : Id GuildId, emojiName : String, image : DataUri, roles : Roles }
-    -> Task r HttpError EmojiData
+    -> Task HttpError EmojiData
 createGuildEmoji authentication data =
     createGuildEmojiPayload authentication data |> httpTask
 
@@ -762,7 +762,7 @@ modifyGuildEmoji :
         , emojiName : Modify String
         , roles : Modify Roles
         }
-    -> Task r HttpError EmojiData
+    -> Task HttpError EmojiData
 modifyGuildEmoji authentication data =
     modifyGuildEmojiPayload authentication data |> httpTask
 
@@ -803,7 +803,7 @@ modifyGuildEmojiPayload authentication { guildId, emojiId, emojiName, roles } =
 
 {-| Delete the given emoji. Requires the `MANAGE_EMOJIS` permission.
 -}
-deleteGuildEmoji : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task r HttpError ()
+deleteGuildEmoji : Authentication -> { guildId : Id GuildId, emojiId : Id Emoji } -> Task HttpError ()
 deleteGuildEmoji authentication data =
     deleteGuildEmojiPayload authentication data |> httpTask
 
@@ -824,7 +824,7 @@ deleteGuildEmojiPayload authentication { guildId, emojiId } =
 
 {-| Returns the guild for the given id.
 -}
-getGuild : Authentication -> Id GuildId -> Task r HttpError Guild
+getGuild : Authentication -> Id GuildId -> Task HttpError Guild
 getGuild authentication guildId =
     getGuildPayload authentication guildId |> httpTask
 
@@ -843,7 +843,7 @@ getGuildPayload authentication guildId =
 This endpoint is only for Public guilds
 
 -}
-getGuildPreview : Authentication -> Id GuildId -> Task r HttpError GuildPreview
+getGuildPreview : Authentication -> Id GuildId -> Task HttpError GuildPreview
 getGuildPreview authentication guildId =
     getGuildPreviewPayload authentication guildId |> httpTask
 
@@ -893,7 +893,7 @@ If you only plan on changing one or two things then I recommend this approach:
             { noChange | name = Replace "New Guild Name" }
 
 -}
-modifyGuild : Authentication -> Id GuildId -> GuildModifications -> Task r HttpError Guild
+modifyGuild : Authentication -> Id GuildId -> GuildModifications -> Task HttpError Guild
 modifyGuild authentication guildId modifications =
     modifyGuildPayload authentication guildId modifications |> httpTask
 
@@ -927,7 +927,7 @@ modifyGuildPayload authentication guildId modifications =
 
 {-| Delete a guild permanently. User must be owner.
 -}
-deleteGuild : Authentication -> Id GuildId -> Task r HttpError ()
+deleteGuild : Authentication -> Id GuildId -> Task HttpError ()
 deleteGuild authentication guildId =
     deleteGuildPayload authentication guildId |> httpTask
 
@@ -939,7 +939,7 @@ deleteGuildPayload authentication guildId =
 
 {-| Returns a list of guild channels.
 -}
-getGuildChannels : Authentication -> Id GuildId -> Task r HttpError (List Channel2)
+getGuildChannels : Authentication -> Id GuildId -> Task HttpError (List Channel2)
 getGuildChannels authentication guildId =
     getGuildChannelsPayload authentication guildId |> httpTask
 
@@ -951,7 +951,7 @@ getGuildChannelsPayload authentication guildId =
 
 {-| Create a new text channel for the guild. Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildTextChannel : Authentication -> CreateGuildTextChannel -> Task r HttpError Channel
+createGuildTextChannel : Authentication -> CreateGuildTextChannel -> Task HttpError Channel
 createGuildTextChannel authentication config =
     createGuildTextChannelPayload authentication config |> httpTask
 
@@ -977,7 +977,7 @@ createGuildTextChannelPayload authentication config =
 
 {-| Create a new voice channel for the guild. Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildVoiceChannel : Authentication -> CreateGuildVoiceChannel -> Task r HttpError Channel
+createGuildVoiceChannel : Authentication -> CreateGuildVoiceChannel -> Task HttpError Channel
 createGuildVoiceChannel authentication config =
     createGuildVoiceChannelPayload authentication config |> httpTask
 
@@ -1005,7 +1005,7 @@ createGuildVoiceChannelPayload authentication config =
 {-| Create a new category for the guild that you can place other channels in.
 Requires the `MANAGE_CHANNELS` permission.
 -}
-createGuildCategoryChannel : Authentication -> CreateGuildCategoryChannel -> Task r HttpError Channel
+createGuildCategoryChannel : Authentication -> CreateGuildCategoryChannel -> Task HttpError Channel
 createGuildCategoryChannel authentication config =
     createGuildCategoryChannelPayload authentication config |> httpTask
 
@@ -1031,7 +1031,7 @@ createGuildCategoryChannelPayload authentication config =
 
 {-| Returns a guild member for the specified user.
 -}
-getGuildMember : Authentication -> Id GuildId -> Id UserId -> Task r HttpError GuildMember
+getGuildMember : Authentication -> Id GuildId -> Id UserId -> Task HttpError GuildMember
 getGuildMember authentication guildId userId =
     getGuildMemberPayload authentication guildId userId |> httpTask
 
@@ -1056,7 +1056,7 @@ getGuildMemberPayload authentication guildId userId =
 listGuildMembers :
     Authentication
     -> { guildId : Id GuildId, limit : Int, after : OptionalData (Id UserId) }
-    -> Task r HttpError (List GuildMember)
+    -> Task HttpError (List GuildMember)
 listGuildMembers authentication data =
     listGuildMembersPayload authentication data |> httpTask
 
@@ -1090,7 +1090,7 @@ type AutoArchiveDuration
 
 {-| <https://discord.com/developers/docs/resources/guild#list-active-guild-threads>
 -}
-listActiveThreads : Authentication -> Id GuildId -> Task r HttpError ActiveThreads
+listActiveThreads : Authentication -> Id GuildId -> Task HttpError ActiveThreads
 listActiveThreads authentication guildId =
     listActiveThreadsPayload authentication guildId |> httpTask
 
@@ -1115,7 +1115,7 @@ startThreadFromMessage :
         , autoArchiveDuration : OptionalData AutoArchiveDuration
         , rateLimitPerUser : OptionalData (Quantity Int Seconds)
         }
-    -> Task r HttpError Channel
+    -> Task HttpError Channel
 startThreadFromMessage authentication data =
     startThreadFromMessagePayload authentication data |> httpTask
 
@@ -1191,7 +1191,7 @@ type alias ThreadMember =
 
 {-| Returns an invite for the given code.
 -}
-getInvite : Authentication -> InviteCode -> Task r HttpError Invite
+getInvite : Authentication -> InviteCode -> Task HttpError Invite
 getInvite authentication inviteCode =
     getInvitePayload authentication inviteCode |> httpTask
 
@@ -1208,7 +1208,7 @@ getInvitePayload authentication (InviteCode inviteCode) =
 {-| Delete an invite.
 Requires the `MANAGE_CHANNELS` permission on the channel this invite belongs to, or `MANAGE_GUILD` to remove any invite across the guild.
 -}
-deleteInvite : Authentication -> InviteCode -> Task r HttpError Invite
+deleteInvite : Authentication -> InviteCode -> Task HttpError Invite
 deleteInvite authentication inviteCode =
     deleteInvitePayload authentication inviteCode |> httpTask
 
@@ -1230,7 +1230,7 @@ deleteInvitePayload authentication (InviteCode inviteCode) =
 {-| Returns the user object of the requester's account.
 For OAuth2, this requires the identify scope, which will return the object without an email, and optionally the email scope, which returns the object with an email.
 -}
-getCurrentUser : Authentication -> Task r HttpError User
+getCurrentUser : Authentication -> Task HttpError User
 getCurrentUser authentication =
     getCurrentUserPayload authentication |> httpTask
 
@@ -1246,7 +1246,7 @@ getCurrentUserPayload authentication =
 
 {-| Returns a user object for a given user ID.
 -}
-getUser : Authentication -> Id UserId -> Task r HttpError User
+getUser : Authentication -> Id UserId -> Task HttpError User
 getUser authentication userId =
     getUserPayload authentication userId |> httpTask
 
@@ -1256,7 +1256,7 @@ getUserPayload authentication userId =
     httpGet authentication decodeUser [ "users", Discord.Id.toString userId ] []
 
 
-createDmChannel : Authentication -> Id UserId -> Task r HttpError Channel
+createDmChannel : Authentication -> Id UserId -> Task HttpError Channel
 createDmChannel authentication userId =
     createDmChannelPayload authentication userId |> httpTask
 
@@ -1279,7 +1279,7 @@ createDmChannelPayload authentication userId =
 modifyCurrentUser :
     Authentication
     -> { username : Modify String, avatar : Modify (Maybe DataUri) }
-    -> Task r HttpError User
+    -> Task HttpError User
 modifyCurrentUser authentication modifications =
     modifyCurrentUserPayload authentication modifications |> httpTask
 
@@ -1303,7 +1303,7 @@ modifyCurrentUserPayload authentication modifications =
 
 {-| Returns a list of partial guilds the current user is a member of. Requires the guilds OAuth2 scope.
 -}
-getCurrentUserGuilds : Authentication -> Task r HttpError (List PartialGuild)
+getCurrentUserGuilds : Authentication -> Task HttpError (List PartialGuild)
 getCurrentUserGuilds authentication =
     getCurrentUserGuildsPayload authentication |> httpTask
 
@@ -1319,7 +1319,7 @@ getCurrentUserGuildsPayload authentication =
 
 {-| Leave a guild.
 -}
-leaveGuild : Authentication -> Id GuildId -> Task r HttpError ()
+leaveGuild : Authentication -> Id GuildId -> Task HttpError ()
 leaveGuild authentication guildId =
     leaveGuildPayload authentication guildId |> httpTask
 
@@ -1514,7 +1514,7 @@ type alias HttpRequest a =
     , url : String
     , body : Maybe JE.Value
     , decoder : JD.Decoder a
-    , timeout : Maybe Duration
+    , timeout : Maybe Float
     }
 
 
@@ -4294,136 +4294,120 @@ handleGateway authToken intents response model =
 -- Internal API
 
 
-type HttpErrorInternal
-    = NotModified304_Internal ErrorCode
-    | CaptchaChallenge_Internal CaptchaChallengeData
-    | Unauthorized401_Internal ErrorCode
-    | Forbidden403_Internal ErrorCode
-    | NotFound404_Internal ErrorCode
-    | TooManyRequests429_Internal RateLimit
-    | GatewayUnavailable502_Internal ErrorCode
-    | ServerError5xx_Internal { statusCode : Int, errorCode : ErrorCode }
-    | NetworkError_Internal
-    | Timeout_Internal
-    | UnexpectedError_Internal String
-
-
 discordApiUrlInternal : String
 discordApiUrlInternal =
     "https://discord.com/api/v9"
 
 
-login : String -> String -> Task restriction HttpErrorInternal LoginResponse
-login loginEmail loginPassword =
-    Http.task
-        { method = "POST"
-        , headers =
-            [ Http.header "User-Agent" exampleUserAgent
-            , JE.encode 0 (encodeClientProperties exampleClientProperties)
-                |> Base64.fromString
-                |> Maybe.withDefault ""
-                |> Http.header "X-Super-Properties"
-            ]
-        , url =
-            Url.Builder.crossOrigin
-                discordApiUrlInternal
-                [ "auth", "login" ]
-                []
-        , resolver =
-            Http.stringResolver
-                (\response ->
-                    case response of
-                        Http.BadUrl_ badUrl ->
-                            "Bad url " ++ badUrl |> UnexpectedError_Internal |> Err
 
-                        Http.Timeout_ ->
-                            Err Timeout_Internal
-
-                        Http.NetworkError_ ->
-                            Err NetworkError_Internal
-
-                        Http.BadStatus_ metadata body ->
-                            let
-                                decodeErrorCode_ : (ErrorCode -> HttpErrorInternal) -> HttpErrorInternal
-                                decodeErrorCode_ wrapper =
-                                    case JD.decodeString decodeErrorCode body of
-                                        Ok errorCode ->
-                                            wrapper errorCode
-
-                                        Err error ->
-                                            "Error decoding error code json: "
-                                                ++ JD.errorToString error
-                                                |> UnexpectedError_Internal
-                            in
-                            (case metadata.statusCode of
-                                304 ->
-                                    decodeErrorCode_ NotModified304_Internal
-
-                                400 ->
-                                    case JD.decodeString captchaChallengeDecoder body of
-                                        Ok ok ->
-                                            CaptchaChallenge_Internal ok
-
-                                        Err _ ->
-                                            "Unexpected status code "
-                                                ++ String.fromInt metadata.statusCode
-                                                ++ ". Body: "
-                                                ++ body
-                                                |> UnexpectedError_Internal
-
-                                401 ->
-                                    decodeErrorCode_ Unauthorized401_Internal
-
-                                403 ->
-                                    decodeErrorCode_ Forbidden403_Internal
-
-                                404 ->
-                                    decodeErrorCode_ NotFound404_Internal
-
-                                --405 ->
-                                --    MethodNotAllowed405 errorData
-                                429 ->
-                                    case JD.decodeString decodeRateLimit body of
-                                        Ok rateLimit ->
-                                            TooManyRequests429_Internal rateLimit
-
-                                        Err error ->
-                                            ("Error decoding rate limit json: " ++ JD.errorToString error)
-                                                |> UnexpectedError_Internal
-
-                                502 ->
-                                    decodeErrorCode_ GatewayUnavailable502_Internal
-
-                                statusCode ->
-                                    if statusCode >= 500 && statusCode < 600 then
-                                        decodeErrorCode_
-                                            (\errorCode -> ServerError5xx_Internal { statusCode = metadata.statusCode, errorCode = errorCode })
-
-                                    else
-                                        "Unexpected status code " ++ String.fromInt statusCode ++ ". Body: " ++ body |> UnexpectedError_Internal
-                            )
-                                |> Err
-
-                        Http.GoodStatus_ _ body ->
-                            case JD.decodeString loginResponseDecoder body of
-                                Ok data ->
-                                    Ok data
-
-                                Err error ->
-                                    "Error decoding good status json: " ++ JD.errorToString error |> UnexpectedError_Internal |> Err
-                )
-        , body =
-            JE.object
-                [ ( "login", JE.string loginEmail )
-                , ( "password", JE.string loginPassword )
-                ]
-                |> Http.jsonBody
-        , timeout = Nothing
-        }
-
-
-
--- (UnexpectedError "Unexpected status code 400. Body: {\"captcha_key\":[\"captcha-required\"],\"captcha_sitekey\":\"b2b02ab5-7dae-4d6f-830e-7b55634c888b\",\"captcha_service\":\"hcaptcha\",\"captcha_session_id\":\"32c44919-a13f-4296-b971-efee5e09d59e\",\"captcha_rqdata\":\"ZPqbPsp0zKT6yJNqxPb5uIP+cokOEFwZX5TDSl7aIZ4l3dRtjEXlJ1Hb5LpUCq0dRFtWYO/bbDj4LT1zRwfbSUN0OjHJdxcQO9tXGnfo+KoOoDb/cq8fGDwrpXz7OVVLNmfTZdKd4iILKS/ogWp0d3TtZ9HN/noeSnmkMaLJED2Txb2fSnRX/aeSxy/MHb01\",\"captcha_rqtoken\":\"ImV2YXJIZjlhWGFtcitQbEhuZzRuTlY1N3F5Tk82a0Y3UDBJZXJyZXpYVDIraFA3Wnc2QjFEK1FZdEk1Wm1BYzdxek16dGc9PWk1L1JtdnJkMzIvNWl4Tkgi.aOFM-g.4PpdMdFBkVW6NMYma98ih59vNzI\"}\n")
+--
+--login : String -> String -> Task HttpErrorInternal LoginResponse
+--login loginEmail loginPassword =
+--    Http.task
+--        { method = "POST"
+--        , headers =
+--            [ Http.header "User-Agent" exampleUserAgent
+--            , JE.encode 0 (encodeClientProperties exampleClientProperties)
+--                |> Base64.fromString
+--                |> Maybe.withDefault ""
+--                |> Http.header "X-Super-Properties"
+--            ]
+--        , url =
+--            Url.Builder.crossOrigin
+--                discordApiUrlInternal
+--                [ "auth", "login" ]
+--                []
+--        , resolver =
+--            Http.stringResolver
+--                (\response ->
+--                    case response of
+--                        Http.BadUrl_ badUrl ->
+--                            "Bad url " ++ badUrl |> UnexpectedError_Internal |> Err
+--
+--                        Http.Timeout_ ->
+--                            Err Timeout_Internal
+--
+--                        Http.NetworkError_ ->
+--                            Err NetworkError_Internal
+--
+--                        Http.BadStatus_ metadata body ->
+--                            let
+--                                decodeErrorCode_ : (ErrorCode -> HttpErrorInternal) -> HttpErrorInternal
+--                                decodeErrorCode_ wrapper =
+--                                    case JD.decodeString decodeErrorCode body of
+--                                        Ok errorCode ->
+--                                            wrapper errorCode
+--
+--                                        Err error ->
+--                                            "Error decoding error code json: "
+--                                                ++ JD.errorToString error
+--                                                |> UnexpectedError_Internal
+--                            in
+--                            (case metadata.statusCode of
+--                                304 ->
+--                                    decodeErrorCode_ NotModified304_Internal
+--
+--                                400 ->
+--                                    case JD.decodeString captchaChallengeDecoder body of
+--                                        Ok ok ->
+--                                            CaptchaChallenge_Internal ok
+--
+--                                        Err _ ->
+--                                            "Unexpected status code "
+--                                                ++ String.fromInt metadata.statusCode
+--                                                ++ ". Body: "
+--                                                ++ body
+--                                                |> UnexpectedError_Internal
+--
+--                                401 ->
+--                                    decodeErrorCode_ Unauthorized401_Internal
+--
+--                                403 ->
+--                                    decodeErrorCode_ Forbidden403_Internal
+--
+--                                404 ->
+--                                    decodeErrorCode_ NotFound404_Internal
+--
+--                                --405 ->
+--                                --    MethodNotAllowed405 errorData
+--                                429 ->
+--                                    case JD.decodeString decodeRateLimit body of
+--                                        Ok rateLimit ->
+--                                            TooManyRequests429_Internal rateLimit
+--
+--                                        Err error ->
+--                                            ("Error decoding rate limit json: " ++ JD.errorToString error)
+--                                                |> UnexpectedError_Internal
+--
+--                                502 ->
+--                                    decodeErrorCode_ GatewayUnavailable502_Internal
+--
+--                                statusCode ->
+--                                    if statusCode >= 500 && statusCode < 600 then
+--                                        decodeErrorCode_
+--                                            (\errorCode -> ServerError5xx_Internal { statusCode = metadata.statusCode, errorCode = errorCode })
+--
+--                                    else
+--                                        "Unexpected status code " ++ String.fromInt statusCode ++ ". Body: " ++ body |> UnexpectedError_Internal
+--                            )
+--                                |> Err
+--
+--                        Http.GoodStatus_ _ body ->
+--                            case JD.decodeString loginResponseDecoder body of
+--                                Ok data ->
+--                                    Ok data
+--
+--                                Err error ->
+--                                    "Error decoding good status json: " ++ JD.errorToString error |> UnexpectedError_Internal |> Err
+--                )
+--        , body =
+--            JE.object
+--                [ ( "login", JE.string loginEmail )
+--                , ( "password", JE.string loginPassword )
+--                ]
+--                |> Http.jsonBody
+--        , timeout = Nothing
+--        }
 
 
 type alias CaptchaChallengeData =

@@ -5,6 +5,7 @@ module DiscordSync exposing
     , botTokenToAuth
     , discordWebsocketMsg
     , gotCurrentUserGuilds
+    , http
     , loadImage
     )
 
@@ -26,6 +27,7 @@ import Env
 import FileStatus
 import GuildName
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBotToken(..))
@@ -1188,25 +1190,28 @@ gotCurrentUserGuilds time botToken result model =
                               }
                             )
                         )
-                        (Discord.getGuild botToken2 partialGuild.id)
-                        (Discord.listGuildMembers
+                        (Discord.getGuildPayload botToken2 partialGuild.id |> http)
+                        (Discord.listGuildMembersPayload
                             botToken2
                             { guildId = partialGuild.id
                             , limit = 1000
                             , after = Discord.Missing
                             }
+                            |> http
                         )
-                        (Discord.getGuildChannels botToken2 partialGuild.id
+                        (Discord.getGuildChannelsPayload botToken2 partialGuild.id
+                            |> http
                             |> Task.andThen
                                 (\channels ->
                                     List.map
                                         (\channel ->
-                                            Discord.getMessages
+                                            Discord.getMessagesPayload
                                                 botToken2
                                                 { channelId = channel.id
                                                 , limit = 100
                                                 , relativeTo = Discord.MostRecent
                                                 }
+                                                |> http
                                                 |> Task.onError (\_ -> Task.succeed [])
                                                 |> Task.map (Tuple.pair channel)
                                         )
@@ -1228,17 +1233,19 @@ gotCurrentUserGuilds time botToken result model =
                             Nothing ->
                                 Task.succeed Nothing
                         )
-                        (Discord.listActiveThreads botToken2 partialGuild.id
+                        (Discord.listActiveThreadsPayload botToken2 partialGuild.id
+                            |> http
                             |> Task.andThen
                                 (\activeThreads ->
                                     List.map
                                         (\thread ->
-                                            Discord.getMessages
+                                            Discord.getMessagesPayload
                                                 botToken2
                                                 { channelId = thread.id
                                                 , limit = 100
                                                 , relativeTo = Discord.MostRecent
                                                 }
+                                                |> http
                                                 |> Task.onError (\_ -> Task.succeed [])
                                                 |> Task.map (Tuple.pair thread)
                                         )
@@ -1299,3 +1306,36 @@ loadImage url =
                     Nothing ->
                         Task.succeed Nothing
             )
+
+
+http : Discord.HttpRequest value -> Task restriction Discord.HttpError value
+http request =
+    Http.task
+        { method = request.method
+        , headers = []
+        , url = FileStatus.domain ++ "/custom-request"
+        , body =
+            Json.Encode.object
+                []
+                |> Http.jsonBody
+        , resolver =
+            Http.stringResolver
+                (\response ->
+                    case response of
+                        Http.BadUrl_ badUrl ->
+                            "Bad url " ++ badUrl |> Discord.UnexpectedError |> Err
+
+                        Http.Timeout_ ->
+                            Err Discord.Timeout
+
+                        Http.NetworkError_ ->
+                            Err Discord.NetworkError
+
+                        Http.BadStatus_ metadata body ->
+                            Discord.handleBadStatus metadata body
+
+                        Http.GoodStatus_ _ body ->
+                            Discord.handleGoodStatus request.decoder body
+                )
+        , timeout = Nothing
+        }
