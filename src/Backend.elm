@@ -608,7 +608,7 @@ update msg model =
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                         , Broadcast.toUser
-                            (Just clientId)
+                            Nothing
                             Nothing
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)

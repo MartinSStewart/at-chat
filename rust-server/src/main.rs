@@ -90,7 +90,7 @@ fn vec_to_headermap(
 
 async fn custom_request_endpoint(
     Json(CustomRequest {
-        method: String,
+        method,
         url,
         headers,
         body,
@@ -103,9 +103,31 @@ async fn custom_request_endpoint(
         }
     };
 
-    let request = reqwest::Client::new().get(url).headers(headers2);
+    let client = reqwest::Client::new();
 
-    match request.send().await {
+    let request = match method.as_str() {
+        "GET" => client.get(url),
+        "POST" => client.post(url),
+        "PUT" => client.put(url),
+        "PATCH" => client.patch(url),
+        "DELETE" => client.delete(url),
+        "HEAD" => client.head(url),
+        _ => {
+            return response_with_headers(
+                StatusCode::BAD_REQUEST,
+                format!("Invalid method: {method}"),
+            );
+        }
+    };
+
+    let request2 = request.headers(headers2);
+
+    let request3 = match body {
+        Some(body2) => request2.body(body2),
+        None => request2,
+    };
+
+    match request3.send().await {
         Ok(response) => {
             let status = response.status();
             let response_text = match response.text().await {
