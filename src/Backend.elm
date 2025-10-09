@@ -583,7 +583,7 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotLinkedDiscordUser clientId userId linkData result ->
+        GotLinkedDiscordUser time clientId userId auth result ->
             case result of
                 Ok discordUser ->
                     ( { model
@@ -595,7 +595,7 @@ update msg model =
                                         | linkedDiscordUsers =
                                             SeqDict.insert
                                                 discordUser.id
-                                                { auth = linkData, name = discordUser.username }
+                                                { auth = auth, name = discordUser.username }
                                                 user.linkedDiscordUsers
                                     }
                                 )
@@ -609,9 +609,11 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
                             model
-                        , Discord.getRelationshipsPayload linkData
-                            |> rustHttpRequest
-                            |> Task.attempt (GotLinkedDiscordUserData userId discordUser.id)
+                        , Task.map2
+                            Tuple.pair
+                            (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> rustHttpRequest)
+                            (Discord.getRelationshipsPayload auth |> rustHttpRequest)
+                            |> Task.attempt (GotLinkedDiscordUserData time userId auth discordUser.id)
                         ]
                     )
 
@@ -620,12 +622,64 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                     )
 
-        GotLinkedDiscordUserData userId discordUserId result ->
+        GotLinkedDiscordUserData time userId auth discordUserId result ->
             let
                 _ =
                     Debug.log "result" result
             in
-            ( model, Command.none )
+            DiscordSync.gotCurrentUserGuildsForUser
+                time
+                userId
+                discordUserId
+                auth
+                result
+                model
+
+        GotLinkedDiscordGuilds time discordUserId result ->
+            case result of
+                Ok data ->
+                    let
+                        users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
+                        users =
+                            List.concatMap
+                                (\( _, { members } ) ->
+                                    List.map (\member -> ( member.user.id, member )) members
+                                )
+                                data
+                                |> SeqDict.fromList
+                    in
+                    ( DiscordSync.addDiscordUsers time (SeqDict.remove discordUserId users) model
+                        |> DiscordSync.addDiscordGuilds time (SeqDict.fromList data)
+                    , List.map
+                        (\guildMember ->
+                            Task.map
+                                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
+                                (case guildMember.user.avatar of
+                                    Just avatar ->
+                                        DiscordSync.loadImage
+                                            (Discord.userAvatarUrl
+                                                { size = Discord.DefaultImageSize
+                                                , imageType = Discord.Choice1 Discord.Png
+                                                }
+                                                guildMember.user.id
+                                                avatar
+                                            )
+
+                                    Nothing ->
+                                        Task.succeed Nothing
+                                )
+                        )
+                        (SeqDict.values users)
+                        |> Task.sequence
+                        |> Task.attempt GotDiscordUserAvatars
+                    )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "GotDiscordGuilds" error
+                    in
+                    ( model, Command.none )
 
 
 addSlackServer :
@@ -2464,7 +2518,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> rustHttpRequest
-                        |> Task.attempt (GotLinkedDiscordUser clientId session.userId data)
+                        |> Task.attempt (GotLinkedDiscordUser time clientId session.userId data)
                     )
                 )
 

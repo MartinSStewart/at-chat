@@ -91,7 +91,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, LinkDiscordData, NotificationLevel)
+import User exposing (BackendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
@@ -487,7 +487,7 @@ type ToBackend
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
-    | LinkDiscordRequest LinkDiscordData
+    | LinkDiscordRequest Discord.UserAuth
 
 
 type BackendMsg
@@ -537,8 +537,24 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotLinkedDiscordUser ClientId (Id UserId) LinkDiscordData (Result Discord.HttpError Discord.User)
-    | GotLinkedDiscordUserData (Id UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError (List Discord.Relationship))
+    | GotLinkedDiscordUser Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
+    | GotLinkedDiscordUserData Time.Posix (Id UserId) Discord.UserAuth (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError ( List Discord.PartialGuild, List Discord.Relationship ))
+    | GotLinkedDiscordGuilds
+        Time.Posix
+        (Discord.Id.Id Discord.Id.UserId)
+        (Result
+            Discord.HttpError
+            (List
+                ( Discord.Id.Id Discord.Id.GuildId
+                , { guild : Discord.Guild
+                  , members : List Discord.GuildMember
+                  , channels : List ( Discord.Channel2, List Discord.Message )
+                  , icon : Maybe FileStatus.UploadResponse
+                  , threads : List ( Discord.Channel, List Discord.Message )
+                  }
+                )
+            )
+        )
 
 
 type LoginResult

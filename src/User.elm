@@ -5,7 +5,6 @@ module User exposing
     , EmailStatus(..)
     , FrontendCurrentUser
     , FrontendUser
-    , LinkDiscordData
     , NotificationLevel(..)
     , addDirectMention
     , addLinkedDiscordUser
@@ -25,6 +24,7 @@ module User exposing
     )
 
 import Codec exposing (Codec)
+import Discord
 import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
@@ -58,7 +58,7 @@ type alias BackendUser =
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { auth : LinkDiscordData, name : String }
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { auth : Discord.UserAuth, name : String }
     }
 
 
@@ -84,16 +84,9 @@ type alias FrontendCurrentUser =
     }
 
 
-type alias LinkDiscordData =
-    { token : String
-    , xSuperProperties : String
-    , userAgent : String
-    }
-
-
-linkDiscordDataCodec : Codec LinkDiscordData
+linkDiscordDataCodec : Codec Discord.UserAuth
 linkDiscordDataCodec =
-    Codec.object LinkDiscordData
+    Codec.object Discord.UserAuth
         |> Codec.field "token" .token Codec.string
         |> Codec.field "xSuperProperties" .xSuperProperties Codec.string
         |> Codec.field "userAgent" .userAgent Codec.string
