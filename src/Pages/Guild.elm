@@ -78,7 +78,7 @@ channelOrThreadHasNotifications :
     -> Id ChannelId
     -> ThreadRoute
     -> Maybe (Id messageId)
-    -> { a | messages : Array (MessageState messageId) }
+    -> { a | messages : Array (MessageState messageId userId) }
     -> ChannelNotificationType
 channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelId threadRoute maybeLastViewed channel =
     if notifyOnAllMessages then
@@ -103,7 +103,7 @@ channelOrThreadHasNotifications maybeDirectMentions notifyOnAllMessages channelI
                         NoNotification
 
 
-newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId) } -> Int
+newMessageCount : Maybe (Id messageId) -> { b | messages : Array (MessageState messageId userId) } -> Int
 newMessageCount maybeLastViewed channel =
     case maybeLastViewed of
         Just lastViewed ->
@@ -118,7 +118,7 @@ channelNewMessageCount :
     -> FrontendCurrentUser
     ->
         { b
-            | messages : Array (MessageState ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId userId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
         }
     -> Int
@@ -897,7 +897,7 @@ pageMissingMobile text =
         (Ui.text text)
 
 
-threadPreviewText : Id ChannelMessageId -> { a | messages : Array (MessageState ChannelMessageId) } -> LocalUser -> String
+threadPreviewText : Id ChannelMessageId -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) } -> LocalUser -> String
 threadPreviewText threadMessageIndex channel localUser =
     case DmChannel.getArray threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
@@ -1178,7 +1178,7 @@ conversationViewHelper :
     -> Maybe (Id ChannelMessageId)
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -1285,7 +1285,7 @@ conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId cha
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId )
+                        maybeRepliedTo : Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
                         maybeRepliedTo =
                             case message of
                                 UserTextMessage data ->
@@ -1588,7 +1588,7 @@ threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeU
                             else
                                 NoHighlight
 
-                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId )
+                        maybeRepliedTo : Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
                         maybeRepliedTo =
                             case message of
                                 UserTextMessage data ->
@@ -1965,7 +1965,7 @@ conversationView :
     -> String
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId)
+            | messages : Array (MessageState ChannelMessageId (Id UserId))
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -2456,7 +2456,7 @@ threadStarterMessage :
     Bool
     -> GuildOrDmIdNoThread
     -> Id ChannelMessageId
-    -> { a | messages : Array (MessageState ChannelMessageId) }
+    -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) }
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
@@ -2630,8 +2630,8 @@ messageEditingView :
     Bool
     -> GuildOrDmId
     -> ThreadRouteWithMessage
-    -> Message ChannelMessageId
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId )
+    -> Message ChannelMessageId (Id UserId)
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe FrontendThread
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
@@ -2755,8 +2755,8 @@ threadMessageEditingView :
     -> GuildOrDmId
     -> Id ChannelMessageId
     -> Id ThreadMessageId
-    -> Message ThreadMessageId
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId )
+    -> Message ThreadMessageId (Id UserId)
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
@@ -2870,7 +2870,7 @@ messageViewNotThreadStarter :
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
-    -> Message ChannelMessageId
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageViewNotThreadStarter data revealedSpoilers localUser messageIndex message =
     let
@@ -2901,7 +2901,7 @@ messageViewThreadStarter :
     -> LocalUser
     -> Int
     -> FrontendThread
-    -> Message ChannelMessageId
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageViewThreadStarter data revealedSpoilers localUser messageIndex thread message =
     let
@@ -2931,7 +2931,7 @@ threadMessageViewLazy :
     -> SeqDict (Id ThreadMessageId) (NonemptySet Int)
     -> LocalUser
     -> Int
-    -> Message ThreadMessageId
+    -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageViewLazy data revealedSpoilers localUser messageIndex message =
     let
@@ -2975,10 +2975,10 @@ messageView :
     -> IsHovered
     -> Bool
     -> LocalUser
-    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId )
+    -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
     -> Maybe FrontendThread
     -> Id ChannelMessageId
-    -> Message ChannelMessageId
+    -> Message ChannelMessageId (Id UserId)
     -> Element MessageViewMsg
 messageView isMobile containerWidth isThreadStarter revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo maybeThreadStarter messageIndex message =
     let
@@ -3065,9 +3065,9 @@ threadMessageView :
     -> IsHovered
     -> Bool
     -> LocalUser
-    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId )
+    -> Maybe ( Id ThreadMessageId, Message ThreadMessageId (Id UserId) )
     -> Id ThreadMessageId
-    -> Message ThreadMessageId
+    -> Message ThreadMessageId (Id UserId)
     -> Element MessageViewMsg
 threadMessageView isMobile containerWidth revealedSpoilers highlight isHovered isBeingEdited localUser maybeRepliedTo messageIndex message =
     let
@@ -3138,12 +3138,12 @@ userTextMessageContent :
     -> Int
     -> Bool
     -> Bool
-    -> Maybe ( Id messageId, Message messageId )
+    -> Maybe ( Id messageId, Message messageId (Id UserId) )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Time.Zone
     -> Id messageId
-    -> UserTextMessageData messageId
+    -> UserTextMessageData messageId (Id UserId)
     -> Element MessageViewMsg
 userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybeRepliedTo revealedSpoilers allUsers timezone messageIndex message2 =
     Ui.row
@@ -3275,7 +3275,7 @@ messageTimestamp createdAt timezone =
 
 replyToHeaderAboveMessage :
     Bool
-    -> Maybe ( Id messageId, Message messageId )
+    -> Maybe ( Id messageId, Message messageId (Id UserId) )
     -> SeqDict (Id messageId) (NonemptySet Int)
     -> SeqDict (Id UserId) FrontendUser
     -> Element MessageViewMsg
@@ -3313,7 +3313,11 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
             Ui.none
 
 
-userTextMessagePreview : SeqDict (Id UserId) FrontendUser -> SeqSet Int -> UserTextMessageData messageId -> Element MessageViewMsg
+userTextMessagePreview :
+    SeqDict (Id UserId) FrontendUser
+    -> SeqSet Int
+    -> UserTextMessageData messageId (Id UserId)
+    -> Element MessageViewMsg
 userTextMessagePreview allUsers revealedSpoilers message =
     Html.div
         [ Html.Attributes.style "white-space" "nowrap"

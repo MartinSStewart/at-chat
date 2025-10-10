@@ -907,13 +907,13 @@ addSlackMessages :
     -> BackendModel
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
     ->
         { d
-            | messages : Array (Message ChannelMessageId)
+            | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
             , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
@@ -941,7 +941,7 @@ addSlackMessages _ messages model channel =
                                 (UserTextMessage
                                     { createdAt = message.createdAt
                                     , createdBy = userId
-                                    , content = RichText.fromSlack model.slackUsers data
+                                    , content = Debug.todo "" --RichText.fromSlack model.slackUsers data
                                     , reactions = SeqDict.empty
                                     , editedAt = Nothing
                                     , repliedTo = Nothing --maybeReplyTo
@@ -1794,7 +1794,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                             (Debug.todo "")
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
-                                                                            , content = toDiscordContent model2 attachedFiles2 newContent
+                                                                            , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
                                                                             }
                                                                             |> DiscordSync.http
                                                                             |> Task.attempt (\_ -> EditedDiscordMessage)
@@ -2538,8 +2538,8 @@ rustHttpRequest request =
 
 
 loadMessagesHelper :
-    { a | messages : Array (Message messageId) }
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
+    { a | messages : Array (Message messageId userId) }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
 loadMessagesHelper channel =
     let
         messageCount : Int
@@ -2563,8 +2563,8 @@ loadMessagesHelper channel =
 
 handleMessagesRequest :
     Id messageId
-    -> { b | messages : Array (Message messageId) }
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
+    -> { b | messages : Array (Message messageId userId) }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
 handleMessagesRequest oldestVisibleMessage channel =
     let
         oldestVisibleMessage2 =
@@ -2584,7 +2584,7 @@ sendEditMessage :
     ClientId
     -> ChangeId
     -> Time.Posix
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> Id GuildId
     -> Id ChannelId
@@ -2649,7 +2649,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                                     (Debug.todo "")
                                                     { channelId = discordChannelId
                                                     , messageId = discordMessageId
-                                                    , content = toDiscordContent model2 attachedFiles2 newContent
+                                                    , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
                                                     }
                                                     |> DiscordSync.http
                                                     |> Task.attempt (\_ -> EditedDiscordMessage)
@@ -2674,7 +2674,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                             (Debug.todo "")
                                             { channelId = discordChannelId
                                             , messageId = discordMessageId
-                                            , content = toDiscordContent model2 attachedFiles2 newContent
+                                            , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
                                             }
                                             |> DiscordSync.http
                                             |> Task.attempt (\_ -> EditedDiscordMessage)
@@ -2698,9 +2698,13 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
             )
 
 
-toDiscordContent : BackendModel -> SeqDict (Id FileId) FileData -> Nonempty RichText -> String
+toDiscordContent :
+    BackendModel
+    -> SeqDict (Id FileId) FileData
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> String
 toDiscordContent model attachedFiles content =
-    Discord.Markdown.toString (RichText.toDiscord model.linkedDiscordUsers attachedFiles content)
+    Discord.Markdown.toString (RichText.toDiscord attachedFiles content)
 
 
 joinGuildByInvite :
@@ -3007,7 +3011,7 @@ sendDirectMessage :
     -> ChangeId
     -> Id UserId
     -> ThreadRouteWithMaybeMessage
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
@@ -3099,7 +3103,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         Discord.createMessagePayload
                             (Debug.todo "")
                             { channelId = discordChannelId
-                            , content = toDiscordContent model attachedFiles text
+                            , content = Debug.todo "" --toDiscordContent model attachedFiles text
                             , replyTo =
                                 case repliedTo of
                                     Just index ->
@@ -3148,7 +3152,7 @@ sendGuildMessage :
     -> Id GuildId
     -> Id ChannelId
     -> ThreadRouteWithMaybeMessage
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
@@ -3321,7 +3325,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                             Discord.createMessagePayload
                                                 (Debug.todo "")
                                                 { channelId = discordThread.id
-                                                , content = toDiscordContent model attachedFiles text
+                                                , content = Debug.todo "" --toDiscordContent model attachedFiles text
                                                 , replyTo = Nothing
                                                 }
                                                 |> DiscordSync.http
@@ -3339,7 +3343,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 Discord.createMessagePayload
                                     (Debug.todo "")
                                     { channelId = discordThreadId
-                                    , content = toDiscordContent model attachedFiles text
+                                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
                                     , replyTo =
                                         case maybeRepliedTo of
                                             Just index ->
@@ -3369,7 +3373,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 Discord.createMessagePayload
                                     (Debug.todo "")
                                     { channelId = discordChannelId
-                                    , content = toDiscordContent model attachedFiles text
+                                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
                                     , replyTo =
                                         case maybeRepliedTo of
                                             Just index ->

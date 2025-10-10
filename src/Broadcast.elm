@@ -228,7 +228,7 @@ messageNotification :
     -> Id GuildId
     -> Id ChannelId
     -> ThreadRoute
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> List (Id UserId)
     -> BackendModel
     -> Command restriction toMsg BackendMsg
@@ -488,7 +488,7 @@ broadcastDm :
     -> ClientId
     -> Id UserId
     -> Id UserId
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> ThreadRouteWithMaybeMessage
     -> SeqDict (Id FileId) FileData
     -> BackendModel

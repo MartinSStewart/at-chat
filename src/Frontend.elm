@@ -1995,7 +1995,7 @@ updateLoaded msg model =
                                  of
                                     ( Just nonempty, Just ( message, _ ) ) ->
                                         let
-                                            richText : Nonempty RichText
+                                            richText : Nonempty (RichText (Id UserId))
                                             richText =
                                                 RichText.fromNonemptyString
                                                     (LocalState.allUsers local)
@@ -2098,7 +2098,7 @@ updateLoaded msg model =
                         local =
                             Local.model loggedIn.localState
 
-                        maybeMessages : Maybe (Array MessageStateNoReply)
+                        maybeMessages : Maybe (Array (MessageStateNoReply (Id UserId)))
                         maybeMessages =
                             guildOrDmIdToMessages guildOrDmId local
                     in
@@ -2109,7 +2109,7 @@ updateLoaded msg model =
                                 messageCount =
                                     Array.length messages
 
-                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply )
+                                mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Id UserId) )
                                 mostRecentMessage =
                                     (if messageCount < 5 then
                                         Array.toList messages
@@ -5103,7 +5103,7 @@ editMessage :
     Time.Posix
     -> Id UserId
     -> GuildOrDmIdNoThread
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> ThreadRouteWithMessage
     -> LocalState
@@ -5174,9 +5174,9 @@ deleteMessage userId guildOrDmId threadRoute local =
 
 loadOlderMessages :
     Id messageId
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
-    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
+    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -5196,9 +5196,9 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 
 loadMessages :
-    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId))
-    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId), visibleMessages : VisibleMessages messageId }
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
+    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -5732,7 +5732,7 @@ playNotificationSound :
     -> ThreadRouteWithMaybeMessage
     -> FrontendChannel
     -> LocalState
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> LoadedFrontend
     -> Command FrontendOnly toMsg msg
 playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
@@ -6247,10 +6247,12 @@ guildOrDmIdToMessage :
     GuildOrDmIdNoThread
     -> ThreadRouteWithMessage
     -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply, ThreadRouteWithMaybeMessage )
+    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
 guildOrDmIdToMessage guildOrDmId threadRoute local =
     let
-        helper : { a | messages : Array (MessageState ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread } -> Maybe ( UserTextMessageDataNoReply, ThreadRouteWithMaybeMessage )
+        helper :
+            { a | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
         helper channel =
             case threadRoute of
                 ViewThreadWithMessage threadId messageId ->
@@ -6310,7 +6312,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                     Nothing
 
 
-guildOrDmIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array MessageStateNoReply)
+guildOrDmIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
 guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
     let
         helper channel =

@@ -35,7 +35,7 @@ import VisibleMessages exposing (VisibleMessages)
 
 
 type alias DmChannel =
-    { messages : Array (Message ChannelMessageId)
+    { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
@@ -44,7 +44,7 @@ type alias DmChannel =
 
 
 type alias FrontendDmChannel =
-    { messages : Array (MessageState ChannelMessageId)
+    { messages : Array (MessageState ChannelMessageId (Id UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
@@ -52,14 +52,14 @@ type alias FrontendDmChannel =
 
 
 type alias Thread =
-    { messages : Array (Message ThreadMessageId)
+    { messages : Array (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     , linkedMessageIds : OneToOne ExternalMessageId (Id ThreadMessageId)
     }
 
 
 type alias FrontendThread =
-    { messages : Array (MessageState ThreadMessageId)
+    { messages : Array (MessageState ThreadMessageId (Id UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
     }
@@ -154,7 +154,7 @@ latestThreadMessageId thread =
     Array.length thread.messages - 1 |> Id.fromInt
 
 
-loadMessages : Bool -> Array (Message messageId) -> Array (MessageState messageId)
+loadMessages : Bool -> Array (Message messageId userId) -> Array (MessageState messageId userId)
 loadMessages preloadMessages messages =
     let
         messageCount : Int
@@ -193,8 +193,8 @@ loadMessages preloadMessages messages =
 
 toFrontendHelper :
     Bool
-    -> { a | messages : Array (Message ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Array (MessageState ChannelMessageId)
+    -> { a | messages : Array (Message ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> Array (MessageState ChannelMessageId userId)
 toFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->

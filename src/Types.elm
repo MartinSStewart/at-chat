@@ -593,7 +593,7 @@ type LocalMsg
 
 
 type ServerChange
-    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmIdNoThread (Nonempty RichText) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    = Server_SendMessage (Id UserId) Time.Posix GuildOrDmIdNoThread (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -611,12 +611,12 @@ type ServerChange
     | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
     | Server_AddReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
-    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DeleteMessage (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
-    | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty RichText) (Maybe (Id ChannelMessageId))
+    | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty (RichText (Id UserId))) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error
@@ -630,7 +630,7 @@ type ServerChange
 type LocalChange
     = Local_Invalid
     | Local_Admin AdminChange
-    | Local_SendMessage Time.Posix GuildOrDmIdNoThread (Nonempty RichText) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_SendMessage Time.Posix GuildOrDmIdNoThread (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_NewChannel Time.Posix (Id GuildId) ChannelName
     | Local_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
@@ -639,14 +639,14 @@ type LocalChange
     | Local_MemberTyping Time.Posix GuildOrDmId
     | Local_AddReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
-    | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty RichText) (SeqDict (Id FileId) FileData)
+    | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
-    | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
-    | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
+    | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | Local_LoadThreadMessages GuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | Local_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData

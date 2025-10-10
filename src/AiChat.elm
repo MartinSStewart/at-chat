@@ -417,7 +417,7 @@ chatToMessage text =
             []
 
 
-richTextToMessage : String -> List Message -> Nonempty RichText -> ( String, List Message )
+richTextToMessage : String -> List Message -> Nonempty (RichText a) -> ( String, List Message )
 richTextToMessage previousText previousList nonempty =
     List.foldl
         (\a ( currentText, list ) ->
