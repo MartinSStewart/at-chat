@@ -280,7 +280,7 @@ type alias BackendModel =
     , guilds : SeqDict (Id GuildId) BackendGuild
     , backendInitialized : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
-    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
@@ -294,7 +294,7 @@ type alias BackendModel =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
-    , discordUserData : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    , discordUser : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     }
 
 

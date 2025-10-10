@@ -137,7 +137,7 @@ addOrRemoveDiscordReaction :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addOrRemoveDiscordReaction isAdding reaction model =
-    case ( reaction.guildId, SeqDict.get reaction.userId model.discordUsers ) of
+    case ( reaction.guildId, SeqDict.get reaction.userId model.linkedDiscordUsers ) of
         ( Included discordGuildId, Just userId ) ->
             case discordGuildIdToGuild discordGuildId model of
                 Just ( guildId, guild ) ->
@@ -246,14 +246,14 @@ handleDiscordEditMessage edit model =
                 Just ( channelId, channel ) ->
                     case
                         ( OneToOne.second (DiscordMessageId edit.id) channel.linkedMessageIds
-                        , SeqDict.get edit.author.id model.discordUsers
+                        , SeqDict.get edit.author.id model.linkedDiscordUsers
                         )
                     of
                         ( Just messageIndex, Just userId ) ->
                             let
                                 richText : Nonempty RichText
                                 richText =
-                                    RichText.fromDiscord model.discordUserData edit.content
+                                    RichText.fromDiscord model.discordUser edit.content
                             in
                             case
                                 LocalState.editMessageHelper
@@ -372,7 +372,7 @@ addDiscordUsers time newUsers model =
     SeqDict.foldl
         (\discordUserId discordUser model2 ->
             { model2
-                | discordUserData =
+                | discordUser =
                     SeqDict.update
                         discordUserId
                         (\maybe ->
@@ -383,7 +383,7 @@ addDiscordUsers time newUsers model =
                                 Nothing ->
                                     BasicData discordUser |> Just
                         )
-                        model2.discordUserData
+                        model2.discordUser
             }
         )
         model
@@ -494,7 +494,7 @@ addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> Back
 addDiscordMessages threadRoute messages model channel =
     List.foldr
         (\message channel2 ->
-            case ( message.type_, SeqDict.get message.author.id model.discordUsers ) of
+            case ( message.type_, SeqDict.get message.author.id model.linkedDiscordUsers ) of
                 ( Discord.ThreadCreated, Nothing ) ->
                     channel2
 
@@ -515,7 +515,7 @@ addDiscordMessages threadRoute messages model channel =
                                 NoThreadWithMaybeMessage (discordReplyTo message channel2)
                         )
                         userId
-                        (RichText.fromDiscord model.discordUsers message.content)
+                        (RichText.fromDiscord model.linkedDiscordUsers message.content)
                         message
                         channel2
 
@@ -550,7 +550,7 @@ addDiscordGuilds time guilds model =
                     let
                         ownerId : Id UserId
                         ownerId =
-                            case SeqDict.get data.guild.ownerId model2.discordUsers of
+                            case SeqDict.get data.guild.ownerId model2.linkedDiscordUsers of
                                 Just ownerId2 ->
                                     ownerId2
 
@@ -585,7 +585,7 @@ addDiscordGuilds time guilds model =
                         members =
                             List.filterMap
                                 (\guildMember ->
-                                    case SeqDict.get guildMember.user.id model2.discordUsers of
+                                    case SeqDict.get guildMember.user.id model2.linkedDiscordUsers of
                                         Just userId ->
                                             if userId == ownerId then
                                                 Nothing
@@ -711,12 +711,12 @@ handleDiscordCreateMessage message model =
             ( model, Command.none )
 
         _ ->
-            case ( SeqDict.get message.author.id model.discordUsers, message.guildId ) of
+            case ( SeqDict.get message.author.id model.linkedDiscordUsers, message.guildId ) of
                 ( Just userId, Missing ) ->
                     let
                         richText : Nonempty RichText
                         richText =
-                            RichText.fromDiscord model.discordUsers message.content
+                            RichText.fromDiscord model.linkedDiscordUsers message.content
 
                         dmChannelId : DmChannelId
                         dmChannelId =
@@ -815,7 +815,7 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
     let
         richText : Nonempty RichText
         richText =
-            RichText.fromDiscord model.discordUsers message.content
+            RichText.fromDiscord model.linkedDiscordUsers message.content
 
         maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel, threadRoute : ThreadRouteWithMaybeMessage }
         maybeData =
@@ -1032,7 +1032,7 @@ discordGatewayIntents =
 
 discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
-    case SeqDict.get discordUserId model.discordUserData of
+    case SeqDict.get discordUserId model.discordUser of
         Just (FullData userData) ->
             let
                 _ =
@@ -1133,11 +1133,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
                 )
                 ( { model
-                    | discordUserData =
+                    | discordUser =
                         SeqDict.insert
                             discordUserId
                             (FullData { userData | connection = discordModel2 })
-                            model.discordUserData
+                            model.discordUser
                   }
                 , []
                 )
@@ -1165,8 +1165,8 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
                     Discord.userToken userAuth
             in
             ( { model
-                | discordUsers = SeqDict.insert discordUser.id userId model.discordUsers
-                , discordUserData =
+                | linkedDiscordUsers = SeqDict.insert discordUser.id userId model.linkedDiscordUsers
+                , discordUser =
                     SeqDict.insert
                         discordUser.id
                         (FullData
@@ -1175,7 +1175,7 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
                             , connection = Discord.init
                             }
                         )
-                        model.discordUserData
+                        model.discordUser
               }
             , Command.batch
                 [ Websocket.createHandle (WebsocketCreatedHandleForUser discordUser.id) Discord.websocketGatewayUrl

@@ -157,7 +157,7 @@ init =
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
       , backendInitialized = True
       , discordGuilds = OneToOne.empty
-      , discordUsers = SeqDict.empty
+      , linkedDiscordUsers = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
       , slackWorkspaces = OneToOne.empty
@@ -181,7 +181,7 @@ init =
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
       , textEditor = TextEditor.initLocalState
-      , discordUserData = SeqDict.empty
+      , discordUser = SeqDict.empty
       }
     , Command.none
     )
@@ -216,7 +216,7 @@ subscriptions model =
                     BasicData _ ->
                         Nothing
             )
-            (SeqDict.toList model.discordUserData)
+            (SeqDict.toList model.discordUser)
             |> Subscription.batch
         ]
 
@@ -412,7 +412,7 @@ update msg model =
                 Ok userAvatars ->
                     ( List.foldl
                         (\( discordUserId, maybeAvatar ) model2 ->
-                            case SeqDict.get discordUserId model2.discordUsers of
+                            case SeqDict.get discordUserId model2.linkedDiscordUsers of
                                 Just userId ->
                                     { model2
                                         | users =
@@ -598,7 +598,7 @@ update msg model =
                     Debug.log "discordUserId" connection
             in
             ( { model
-                | discordUserData =
+                | discordUser =
                     SeqDict.updateIfExists
                         discordUserId
                         (\userData ->
@@ -610,7 +610,7 @@ update msg model =
                                 BasicData _ ->
                                     userData
                         )
-                        model.discordUserData
+                        model.discordUser
               }
             , Command.none
             )
@@ -2700,7 +2700,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
 
 toDiscordContent : BackendModel -> SeqDict (Id FileId) FileData -> Nonempty RichText -> String
 toDiscordContent model attachedFiles content =
-    Discord.Markdown.toString (RichText.toDiscord model.discordUsers attachedFiles content)
+    Discord.Markdown.toString (RichText.toDiscord model.linkedDiscordUsers attachedFiles content)
 
 
 joinGuildByInvite :
