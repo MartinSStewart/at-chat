@@ -609,6 +609,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
                             model
+                        , Websocket.createHandle WebsocketCreatedHandleForUser Discord.websocketGatewayUrl
                         , Task.map2
                             Tuple.pair
                             (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> rustHttpRequest)
@@ -680,6 +681,11 @@ update msg model =
                             Debug.log "GotDiscordGuilds" error
                     in
                     ( model, Command.none )
+
+        WebsocketCreatedHandleForUser connection ->
+            ( { model | discordModel = Discord.createdHandle connection model.discordModel }
+            , Command.none
+            )
 
 
 addSlackServer :

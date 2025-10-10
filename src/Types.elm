@@ -555,6 +555,7 @@ type BackendMsg
                 )
             )
         )
+    | WebsocketCreatedHandleForUser Websocket.Connection
 
 
 type LoginResult
