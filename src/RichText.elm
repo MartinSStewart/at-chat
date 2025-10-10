@@ -32,6 +32,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (Id, UserId)
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import OneToOne exposing (OneToOne)
@@ -1330,14 +1331,14 @@ fromSlack users blocks =
         |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> String -> Nonempty RichText
+fromDiscord : SeqDict (Discord.Id.Id Discord.Id.UserId) a -> String -> Nonempty RichText
 fromDiscord users text =
     let
         textOrEmpty =
             String.Nonempty.fromString text
                 |> Maybe.withDefault (NonemptyString '<' "empty>")
     in
-    case Parser.run (discordParser users []) text of
+    case Parser.run (discordParser (Debug.todo "") []) text of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
@@ -1532,7 +1533,7 @@ discordStopOnChar =
 
 
 toDiscord :
-    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     -> SeqDict (Id FileId) FileData
     -> Nonempty RichText
     -> List (Discord.Markdown.Markdown a)
@@ -1541,8 +1542,11 @@ toDiscord mapping attachedFiles content =
         (\item ->
             case item of
                 UserMention userId ->
-                    case OneToOne.first userId mapping of
-                        Just discordUserId ->
+                    case
+                        SeqDict.toList mapping
+                            |> List.Extra.find (\( discordUserId, linkedUserId ) -> linkedUserId == userId)
+                    of
+                        Just ( discordUserId, _ ) ->
                             Discord.Markdown.ping discordUserId
 
                         Nothing ->

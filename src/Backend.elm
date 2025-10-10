@@ -58,7 +58,7 @@ import TOTP.Key
 import TextEditor
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
@@ -158,7 +158,7 @@ init =
       , discordModel = Discord.init
       , backendInitialized = True
       , discordGuilds = OneToOne.empty
-      , discordUsers = OneToOne.empty
+      , discordUsers = SeqDict.empty
       , discordBotId = Nothing
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
@@ -213,15 +213,19 @@ subscriptions model =
             model.discordModel
             |> Maybe.withDefault Subscription.none
             |> Subscription.map DiscordWebsocketMsg
-        , SeqDict.toList model.discordUserData
-            |> List.map
-                (\( discordUserId, data ) ->
-                    Discord.subscription
-                        (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
-                        data.connection
-                        |> Maybe.withDefault Subscription.none
-                        |> Subscription.map (DiscordUserWebsocketMsg discordUserId)
-                )
+        , List.filterMap
+            (\( discordUserId, data ) ->
+                case data of
+                    FullData data2 ->
+                        Discord.subscription
+                            (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
+                            data2.connection
+                            |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
+
+                    BasicData _ ->
+                        Nothing
+            )
+            (SeqDict.toList model.discordUserData)
             |> Subscription.batch
         ]
 
@@ -495,7 +499,7 @@ update msg model =
                 Ok userAvatars ->
                     ( List.foldl
                         (\( discordUserId, maybeAvatar ) model2 ->
-                            case OneToOne.second discordUserId model2.discordUsers of
+                            case SeqDict.get discordUserId model2.discordUsers of
                                 Just userId ->
                                     { model2
                                         | users =
@@ -600,21 +604,7 @@ update msg model =
         GotLinkedDiscordUser time clientId userId auth result ->
             case result of
                 Ok discordUser ->
-                    ( { model
-                        | users =
-                            NonemptyDict.updateIfExists
-                                userId
-                                (\user ->
-                                    { user
-                                        | linkedDiscordUsers =
-                                            SeqDict.insert
-                                                discordUser.id
-                                                { auth = auth, name = discordUser.username }
-                                                user.linkedDiscordUsers
-                                    }
-                                )
-                                model.users
-                      }
+                    ( model
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                         , Broadcast.toUser
@@ -698,7 +688,15 @@ update msg model =
                 | discordUserData =
                     SeqDict.updateIfExists
                         discordUserId
-                        (\userData -> { userData | connection = Discord.createdHandle connection userData.connection })
+                        (\userData ->
+                            case userData of
+                                FullData userData2 ->
+                                    { userData2 | connection = Discord.createdHandle connection userData2.connection }
+                                        |> FullData
+
+                                BasicData _ ->
+                                    userData
+                        )
                         model.discordUserData
               }
             , Command.none

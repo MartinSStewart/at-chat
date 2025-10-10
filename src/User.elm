@@ -7,7 +7,6 @@ module User exposing
     , FrontendUser
     , NotificationLevel(..)
     , addDirectMention
-    , addLinkedDiscordUser
     , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
@@ -61,7 +60,6 @@ type alias BackendUser =
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { auth : Discord.UserAuth, name : String }
     }
 
 
@@ -83,7 +81,6 @@ type alias FrontendCurrentUser =
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) { name : String }
     }
 
 
@@ -140,17 +137,7 @@ init createdAt name email userIsAdmin =
     , notifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , lastPushNotification = Nothing
-    , linkedDiscordUsers = SeqDict.empty
     }
-
-
-addLinkedDiscordUser :
-    Discord.Id.Id Discord.Id.UserId
-    -> data
-    -> { a | linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) data }
-    -> { a | linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) data }
-addLinkedDiscordUser discordUserId data user =
-    { user | linkedDiscordUsers = SeqDict.insert discordUserId data user.linkedDiscordUsers }
 
 
 addDirectMention :
@@ -306,7 +293,6 @@ backendToFrontendCurrent user =
     , notifyOnAllMessages = user.notifyOnAllMessages
     , directMentions = user.directMentions
     , lastPushNotification = user.lastPushNotification
-    , linkedDiscordUsers = SeqDict.map (\_ data -> { name = data.name }) user.linkedDiscordUsers
     }
 
 

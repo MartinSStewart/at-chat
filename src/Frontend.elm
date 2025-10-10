@@ -5013,12 +5013,7 @@ changeUpdate localMsg local =
                         localUser =
                             local.localUser
                     in
-                    { local
-                        | localUser =
-                            { localUser
-                                | user = User.addLinkedDiscordUser userId { name = name } localUser.user
-                            }
-                    }
+                    local
 
 
 memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState

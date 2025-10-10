@@ -360,14 +360,15 @@ view isMobile time local loggedIn loaded model =
                         )
                     ]
                     (Ui.text "Link Slack account")
-                , Ui.column
-                    []
-                    (SeqDict.toList local.localUser.user.linkedDiscordUsers
-                        |> List.map
-                            (\( _, data ) ->
-                                Ui.text data.name
-                            )
-                    )
+
+                --, Ui.column
+                --    []
+                --    (SeqDict.toList local.localUser.user.linkedDiscordUsers
+                --        |> List.map
+                --            (\( _, data ) ->
+                --                Ui.text data.name
+                --            )
+                --    )
                 , if model.showLinkDiscordSetup then
                     Ui.column
                         [ Ui.spacing 16, Ui.widthMax 400 ]

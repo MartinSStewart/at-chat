@@ -4,6 +4,7 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DiscordUserData(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -281,7 +282,7 @@ type alias BackendModel =
     , discordModel : Discord.Model Websocket.Connection
     , backendInitialized : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
-    , discordUsers : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
+    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
@@ -297,14 +298,17 @@ type alias BackendModel =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
-    , discordUserData :
-        SeqDict
-            (Discord.Id.Id Discord.Id.UserId)
-            { auth : Discord.UserAuth
-            , data : Discord.User
-            , connection : Discord.Model Websocket.Connection
-            }
+    , discordUserData : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     }
+
+
+type DiscordUserData
+    = BasicData Discord.GuildMember
+    | FullData
+        { auth : Discord.UserAuth
+        , data : Discord.User
+        , connection : Discord.Model Websocket.Connection
+        }
 
 
 type alias BackendFileData =

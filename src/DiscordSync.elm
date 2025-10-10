@@ -41,7 +41,7 @@ import RichText exposing (RichText)
 import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Types exposing (BackendModel, BackendMsg(..), LocalMsg(..), ServerChange(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalMsg(..), ServerChange(..), ToFrontend)
 import UInt64
 import User exposing (BackendUser, EmailStatus(..))
 
@@ -144,7 +144,7 @@ addOrRemoveDiscordReaction isAdding reaction model =
         ( model, Command.none )
 
     else
-        case ( reaction.guildId, OneToOne.second reaction.userId model.discordUsers ) of
+        case ( reaction.guildId, SeqDict.get reaction.userId model.discordUsers ) of
             ( Included discordGuildId, Just userId ) ->
                 case discordGuildIdToGuild discordGuildId model of
                     Just ( guildId, guild ) ->
@@ -257,14 +257,14 @@ handleDiscordEditMessage edit model =
                     Just ( channelId, channel ) ->
                         case
                             ( OneToOne.second (DiscordMessageId edit.id) channel.linkedMessageIds
-                            , OneToOne.second edit.author.id model.discordUsers
+                            , SeqDict.get edit.author.id model.discordUsers
                             )
                         of
                             ( Just messageIndex, Just userId ) ->
                                 let
                                     richText : Nonempty RichText
                                     richText =
-                                        RichText.fromDiscord model.discordUsers edit.content
+                                        RichText.fromDiscord model.discordUserData edit.content
                                 in
                                 case
                                     LocalState.editMessageHelper
@@ -382,28 +382,20 @@ addDiscordUsers :
 addDiscordUsers time newUsers model =
     SeqDict.foldl
         (\discordUserId discordUser model2 ->
-            case OneToOne.second discordUserId model2.discordUsers of
-                Just _ ->
-                    model2
+            { model2
+                | discordUserData =
+                    SeqDict.update
+                        discordUserId
+                        (\maybe ->
+                            case maybe of
+                                Just _ ->
+                                    maybe
 
-                Nothing ->
-                    let
-                        userId : Id UserId
-                        userId =
-                            Id.nextId (NonemptyDict.toSeqDict model2.users)
-
-                        user : BackendUser
-                        user =
-                            User.init
-                                time
-                                (PersonName.fromStringLossy discordUser.user.username)
-                                RegisteredFromDiscord
-                                False
-                    in
-                    { model2
-                        | discordUsers = OneToOne.insert discordUserId userId model2.discordUsers
-                        , users = NonemptyDict.insert userId user model2.users
-                    }
+                                Nothing ->
+                                    BasicData discordUser |> Just
+                        )
+                        model2.discordUserData
+            }
         )
         model
         newUsers
@@ -513,7 +505,7 @@ addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> Back
 addDiscordMessages threadRoute messages model channel =
     List.foldr
         (\message channel2 ->
-            case ( message.type_, OneToOne.second message.author.id model.discordUsers ) of
+            case ( message.type_, SeqDict.get message.author.id model.discordUsers ) of
                 ( Discord.ThreadCreated, Nothing ) ->
                     channel2
 
@@ -569,7 +561,7 @@ addDiscordGuilds time guilds model =
                     let
                         ownerId : Id UserId
                         ownerId =
-                            case OneToOne.second data.guild.ownerId model2.discordUsers of
+                            case SeqDict.get data.guild.ownerId model2.discordUsers of
                                 Just ownerId2 ->
                                     ownerId2
 
@@ -604,7 +596,7 @@ addDiscordGuilds time guilds model =
                         members =
                             List.filterMap
                                 (\guildMember ->
-                                    case OneToOne.second guildMember.user.id model2.discordUsers of
+                                    case SeqDict.get guildMember.user.id model2.discordUsers of
                                         Just userId ->
                                             if userId == ownerId then
                                                 Nothing
@@ -733,7 +725,7 @@ handleDiscordCreateMessage message model =
             ( model, Command.none )
 
         _ ->
-            case ( OneToOne.second message.author.id model.discordUsers, message.guildId ) of
+            case ( SeqDict.get message.author.id model.discordUsers, message.guildId ) of
                 ( Just userId, Missing ) ->
                     let
                         richText : Nonempty RichText
@@ -1165,7 +1157,7 @@ discordWebsocketMsg discordMsg model =
 discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
     case SeqDict.get discordUserId model.discordUserData of
-        Just userData ->
+        Just (FullData userData) ->
             let
                 _ =
                     Debug.log "discordUserWebsocketMsg" discordUserId
@@ -1268,7 +1260,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                 outMsgs
                 |> Tuple.mapSecond Command.batch
 
-        Nothing ->
+        _ ->
             ( model, Command.none )
 
 
@@ -1285,10 +1277,7 @@ gotCurrentUserGuilds time botToken result model =
                 botToken2 =
                     botTokenToAuth botToken
             in
-            ( { model
-                | discordBotId = Just botUser.id
-                , discordUsers = OneToOne.insert botUser.id Broadcast.adminUserId model.discordUsers
-              }
+            ( { model | discordBotId = Just botUser.id }
             , List.map
                 (\partialGuild ->
                     Task.map5
@@ -1406,13 +1395,16 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
             in
             ( { model
                 | discordBotId = Just discordUser.id
-                , discordUsers = OneToOne.insert discordUser.id userId model.discordUsers
+                , discordUsers = SeqDict.insert discordUser.id userId model.discordUsers
                 , discordUserData =
-                    SeqDict.insert discordUser.id
-                        { auth = userAuth
-                        , data = discordUser
-                        , connection = Discord.init
-                        }
+                    SeqDict.insert
+                        discordUser.id
+                        (FullData
+                            { auth = userAuth
+                            , data = discordUser
+                            , connection = Discord.init
+                            }
+                        )
                         model.discordUserData
               }
             , Command.batch
