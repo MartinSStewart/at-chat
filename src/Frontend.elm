@@ -434,7 +434,6 @@ loginDataToLocalState userAgent timezone loginData =
                     { users = adminData.users
                     , emailNotificationsEnabled = adminData.emailNotificationsEnabled
                     , twoFactorAuthentication = adminData.twoFactorAuthentication
-                    , botToken = adminData.botToken
                     , privateVapidKey = adminData.privateVapidKey
                     , slackClientSecret = adminData.slackClientSecret
                     , openRouterKey = adminData.openRouterKey
@@ -1039,9 +1038,6 @@ isPressMsg msg =
             AiChat.isPressMsg aiChatMsg
 
         UserNameEditableMsg editableMsg ->
-            Editable.isPressMsg editableMsg
-
-        BotTokenEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
         PublicVapidKeyEditableMsg editableMsg ->
@@ -2722,19 +2718,6 @@ updateLoaded msg model =
                 editableMsg
                 (\userOptions value -> { userOptions | name = value })
                 (\value loggedIn -> handleLocalChange model.time (Just (Local_SetName value)) loggedIn Command.none)
-                model
-
-        BotTokenEditableMsg editableMsg ->
-            handleEditable
-                editableMsg
-                (\userOptions value -> { userOptions | botToken = value })
-                (\value loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_Admin (Pages.Admin.SetDiscordBotToken value)))
-                        loggedIn
-                        Command.none
-                )
                 model
 
         PublicVapidKeyEditableMsg editableMsg ->
@@ -5820,9 +5803,6 @@ pendingChangesText localChange =
 
                     else
                         "Disabled email notifications"
-
-                Pages.Admin.SetDiscordBotToken _ ->
-                    "Set Discord bot token"
 
                 Pages.Admin.SetPrivateVapidKey _ ->
                     "Set private vapid key"

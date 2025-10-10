@@ -65,7 +65,7 @@ import GuildName exposing (GuildName)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBotToken, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -183,7 +183,6 @@ type alias LoggedIn2 =
 
 type alias UserOptionsModel =
     { name : Editable.Model
-    , botToken : Editable.Model
     , slackClientSecret : Editable.Model
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
@@ -279,15 +278,12 @@ type alias BackendModel =
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
     , guilds : SeqDict (Id GuildId) BackendGuild
-    , discordModel : Discord.Model Websocket.Connection
     , backendInitialized : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
-    , discordBotId : Maybe (Discord.Id.Id Discord.Id.UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
-    , botToken : Maybe DiscordBotToken
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
     , slackServers : OneToOne (Slack.Id Slack.TeamId) (Id GuildId)
@@ -429,7 +425,6 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
-    | BotTokenEditableMsg (Editable.Msg (Maybe DiscordBotToken))
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
@@ -507,28 +502,7 @@ type BackendMsg
     | UserDisconnected SessionId ClientId
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
-    | WebsocketCreatedHandle Websocket.Connection
-    | WebsocketSentData (Result Websocket.SendError ())
-    | WebsocketClosedByBackend Bool
-    | DiscordWebsocketMsg Discord.Msg
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
-    | GotCurrentUserGuilds Time.Posix DiscordBotToken (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
-    | GotDiscordGuilds
-        Time.Posix
-        (Discord.Id.Id Discord.Id.UserId)
-        (Result
-            Discord.HttpError
-            (List
-                ( Discord.Id.Id Discord.Id.GuildId
-                , { guild : Discord.Guild
-                  , members : List Discord.GuildMember
-                  , channels : List ( Discord.Channel2, List Discord.Message )
-                  , icon : Maybe FileStatus.UploadResponse
-                  , threads : List ( Discord.Channel, List Discord.Message )
-                  }
-                )
-            )
-        )
     | SentGuildMessageToDiscord (Id GuildId) (Id ChannelId) ThreadRouteWithMessage (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage

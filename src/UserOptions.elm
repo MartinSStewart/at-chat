@@ -3,12 +3,10 @@ module UserOptions exposing (init, view)
 import Editable
 import Effect.Browser.Dom as Dom
 import Env
-import Html
-import Html.Attributes
 import Icons
 import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
+import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
 import MyUi
 import PersonName
@@ -28,7 +26,6 @@ import UserSession exposing (NotificationMode(..), PushSubscription(..))
 init : UserOptionsModel
 init =
     { name = Editable.init
-    , botToken = Editable.init
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
@@ -188,30 +185,6 @@ view isMobile time local loggedIn loaded model =
                         isMobile
                         "Admin"
                         [ Editable.view
-                            (Dom.id "userOptions_botToken")
-                            True
-                            "Discord bot token"
-                            (\text ->
-                                let
-                                    text2 =
-                                        String.trim text
-                                in
-                                if text2 == "" then
-                                    Ok Nothing
-
-                                else
-                                    Just (DiscordBotToken text2) |> Ok
-                            )
-                            BotTokenEditableMsg
-                            (case adminData2.botToken of
-                                Just (DiscordBotToken a) ->
-                                    a
-
-                                Nothing ->
-                                    ""
-                            )
-                            model.botToken
-                        , Editable.view
                             (Dom.id "userOptions_slackClientSecret")
                             True
                             "Slack client secret"

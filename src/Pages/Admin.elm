@@ -33,7 +33,7 @@ import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminStatus(..), DiscordBotToken, LocalState, LogWithTime, PrivateVapidKey)
+import LocalState exposing (AdminData, AdminStatus(..), LocalState, LogWithTime, PrivateVapidKey)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -121,7 +121,6 @@ type alias InitAdminData =
     , users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
-    , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
@@ -139,7 +138,6 @@ type AdminChange
     | CollapseSection AdminUiSection
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
-    | SetDiscordBotToken (Maybe DiscordBotToken)
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
@@ -240,9 +238,6 @@ updateAdmin changedBy change adminData local =
 
         SetEmailNotificationsEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | emailNotificationsEnabled = isEnabled } }
-
-        SetDiscordBotToken botToken ->
-            { local | adminData = IsAdmin { adminData | botToken = botToken } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }

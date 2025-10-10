@@ -5,7 +5,6 @@ module LocalState exposing
     , BackendChannel
     , BackendGuild
     , ChannelStatus(..)
-    , DiscordBotToken(..)
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
@@ -276,7 +275,6 @@ type alias AdminData =
     { users : NonemptyDict (Id UserId) BackendUser
     , emailNotificationsEnabled : Bool
     , twoFactorAuthentication : SeqDict (Id UserId) Time.Posix
-    , botToken : Maybe DiscordBotToken
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
@@ -285,10 +283,6 @@ type alias AdminData =
 
 type PrivateVapidKey
     = PrivateVapidKey String
-
-
-type DiscordBotToken
-    = DiscordBotToken String
 
 
 

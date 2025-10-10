@@ -155,14 +155,11 @@ init =
       , twoFactorAuthentication = SeqDict.empty
       , twoFactorAuthenticationSetup = SeqDict.empty
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
-      , discordModel = Discord.init
       , backendInitialized = True
       , discordGuilds = OneToOne.empty
       , discordUsers = SeqDict.empty
-      , discordBotId = Nothing
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
-      , botToken = Nothing
       , slackWorkspaces = OneToOne.empty
       , slackUsers = OneToOne.empty
       , slackServers = OneToOne.empty
@@ -196,7 +193,6 @@ adminData model lastLogPageViewed =
     , users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
-    , botToken = model.botToken
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
@@ -208,11 +204,6 @@ subscriptions model =
     Subscription.batch
         [ Lamdera.onConnect UserConnected
         , Lamdera.onDisconnect UserDisconnected
-        , Discord.subscription
-            (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
-            model.discordModel
-            |> Maybe.withDefault Subscription.none
-            |> Subscription.map DiscordWebsocketMsg
         , List.filterMap
             (\( discordUserId, data ) ->
                 case data of
@@ -303,83 +294,8 @@ update msg model =
                 Err error ->
                     addLog time (Log.SendLogErrorEmailFailed error email) model
 
-        WebsocketCreatedHandle connection ->
-            ( { model | discordModel = Discord.createdHandle connection model.discordModel }
-            , Command.none
-            )
-
-        WebsocketSentData result ->
-            case result of
-                Ok () ->
-                    ( model, Command.none )
-
-                Err Websocket.ConnectionClosed ->
-                    let
-                        _ =
-                            Debug.log "WebsocketSentData" "ConnectionClosed"
-                    in
-                    ( model, Command.none )
-
-        WebsocketClosedByBackend reopen ->
-            ( model
-            , if reopen then
-                Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-
-              else
-                Command.none
-            )
-
-        DiscordWebsocketMsg discordMsg ->
-            DiscordSync.discordWebsocketMsg discordMsg model
-
         DiscordUserWebsocketMsg discordUserId discordMsg ->
             DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
-
-        GotDiscordGuilds time botUserId result ->
-            case result of
-                Ok data ->
-                    let
-                        users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-                        users =
-                            List.concatMap
-                                (\( _, { members } ) ->
-                                    List.map (\member -> ( member.user.id, member )) members
-                                )
-                                data
-                                |> SeqDict.fromList
-                    in
-                    ( DiscordSync.addDiscordUsers time (SeqDict.remove botUserId users) model
-                        |> DiscordSync.addDiscordGuilds time (SeqDict.fromList data)
-                    , List.map
-                        (\guildMember ->
-                            Task.map
-                                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
-                                (case guildMember.user.avatar of
-                                    Just avatar ->
-                                        DiscordSync.loadImage
-                                            (Discord.userAvatarUrl
-                                                { size = Discord.DefaultImageSize
-                                                , imageType = Discord.Choice1 Discord.Png
-                                                }
-                                                guildMember.user.id
-                                                avatar
-                                            )
-
-                                    Nothing ->
-                                        Task.succeed Nothing
-                                )
-                        )
-                        (SeqDict.values users)
-                        |> Task.sequence
-                        |> Task.attempt GotDiscordUserAvatars
-                    )
-
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "GotDiscordGuilds" error
-                    in
-                    ( model, Command.none )
 
         GotSlackChannels time userId result ->
             case result of
@@ -395,9 +311,6 @@ update msg model =
                             Debug.log "GotSlackChannels" error
                     in
                     ( model, Command.none )
-
-        GotCurrentUserGuilds time botToken result ->
-            DiscordSync.gotCurrentUserGuilds time botToken result model
 
         SentGuildMessageToDiscord guildId channelId threadRoute result ->
             case result of
@@ -1202,8 +1115,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             if model2.backendInitialized then
                 ( { model2 | backendInitialized = False }
                 , Command.batch
-                    [ Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-                    , Http.get
+                    [ Http.get
                         { url = FileStatus.domain ++ "/file/vapid"
                         , expect = Http.expectString GotVapidKeys
                         }
@@ -1874,12 +1786,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             ( NoThreadWithMessage messageIndex, Just discordDmId ) ->
                                                                 case
                                                                     ( OneToOne.first messageIndex dmChannel2.linkedMessageIds
-                                                                    , model2.botToken
+                                                                    , Debug.todo ""
                                                                     )
                                                                 of
                                                                     ( Just (DiscordMessageId discordMessageId), Just botToken ) ->
                                                                         Discord.editMessagePayload
-                                                                            (DiscordSync.botTokenToAuth botToken)
+                                                                            (Debug.todo "")
                                                                             { channelId = discordDmId
                                                                             , messageId = discordMessageId
                                                                             , content = toDiscordContent model2 attachedFiles2 newContent
@@ -2050,12 +1962,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , case
                                                     ( OneToOne.first channelId guild2.linkedChannelIds
                                                     , maybeDiscordMessageId
-                                                    , model2.botToken
+                                                    , Debug.todo ""
                                                     )
                                                   of
                                                     ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId), Just botToken ) ->
                                                         Discord.deleteMessagePayload
-                                                            (DiscordSync.botTokenToAuth botToken)
+                                                            (Debug.todo "")
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             }
@@ -2108,12 +2020,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , case
                                                             ( OneToOne.first dmChannelId model2.discordDms
                                                             , maybeDiscordMessageId
-                                                            , model2.botToken
+                                                            , Debug.todo ""
                                                             )
                                                           of
                                                             ( Just discordChannelId, Just (DiscordMessageId discordMessageId), Just botToken ) ->
                                                                 Discord.deleteMessagePayload
-                                                                    (DiscordSync.botTokenToAuth botToken)
+                                                                    (Debug.todo "")
                                                                     { channelId = discordChannelId
                                                                     , messageId = discordMessageId
                                                                     }
@@ -2723,7 +2635,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                 |> ServerChange
                             )
                             model2
-                        , case ( threadRoute, model2.botToken ) of
+                        , case ( threadRoute, Debug.todo "" ) of
                             ( ViewThreadWithMessage threadMessageIndex messageIndex, Just botToken ) ->
                                 case
                                     ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
@@ -2734,7 +2646,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                         case OneToOne.first messageIndex thread.linkedMessageIds of
                                             Just (DiscordMessageId discordMessageId) ->
                                                 Discord.editMessagePayload
-                                                    (DiscordSync.botTokenToAuth botToken)
+                                                    (Debug.todo "")
                                                     { channelId = discordChannelId
                                                     , messageId = discordMessageId
                                                     , content = toDiscordContent model2 attachedFiles2 newContent
@@ -2759,7 +2671,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                 of
                                     ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId) ) ->
                                         Discord.editMessagePayload
-                                            (DiscordSync.botTokenToAuth botToken)
+                                            (Debug.todo "")
                                             { channelId = discordChannelId
                                             , messageId = discordMessageId
                                             , content = toDiscordContent model2 attachedFiles2 newContent
@@ -3049,34 +2961,6 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
-        Pages.Admin.SetDiscordBotToken maybeBotToken ->
-            ( { model | botToken = maybeBotToken, discordModel = Discord.init }
-            , Command.batch
-                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                , case maybeBotToken of
-                    Just botToken ->
-                        Task.map2
-                            Tuple.pair
-                            (Discord.getCurrentUserPayload (DiscordSync.botTokenToAuth botToken) |> DiscordSync.http)
-                            (Discord.getCurrentUserGuildsPayload (DiscordSync.botTokenToAuth botToken) |> DiscordSync.http)
-                            |> Task.attempt (GotCurrentUserGuilds time botToken)
-
-                    Nothing ->
-                        Command.none
-                , case ( maybeBotToken, model.discordModel.websocketHandle ) of
-                    ( Nothing, Just handle ) ->
-                        Websocket.close handle |> Task.perform (\() -> WebsocketClosedByBackend False)
-
-                    ( Nothing, Nothing ) ->
-                        Command.none
-
-                    ( Just _, _ ) ->
-                        Websocket.createHandle WebsocketCreatedHandle Discord.websocketGatewayUrl
-
-                --, broadcastToOtherAdmins clientId model (Server_SetWebsocketToggled isEnabled |> ServerChange)
-                ]
-            )
-
         Pages.Admin.SetPrivateVapidKey privateKey ->
             ( { model
                 | privateVapidKey = privateKey
@@ -3210,10 +3094,10 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
               }
             , Command.batch
                 [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
-                , case ( OneToOne.first dmChannelId model.discordDms, model.botToken ) of
+                , case ( OneToOne.first dmChannelId model.discordDms, Debug.todo "" ) of
                     ( Just discordChannelId, Just botToken ) ->
                         Discord.createMessagePayload
-                            (DiscordSync.botTokenToAuth botToken)
+                            (Debug.todo "")
                             { channelId = discordChannelId
                             , content = toDiscordContent model attachedFiles text
                             , replyTo =
@@ -3408,7 +3292,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     text
                     (guild.owner :: SeqDict.keys guild.members)
                     model
-                , case ( model.botToken, threadRouteWithMaybeReplyTo ) of
+                , case ( Debug.todo "", threadRouteWithMaybeReplyTo ) of
                     ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
                         let
                             thread : Thread
@@ -3424,7 +3308,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         of
                             ( Nothing, Just (DiscordMessageId discordMessageId), Just (DiscordChannelId discordChannelId) ) ->
                                 Discord.startThreadFromMessagePayload
-                                    (DiscordSync.botTokenToAuth botToken)
+                                    (Debug.todo "")
                                     { name = "New thread"
                                     , channelId = discordChannelId
                                     , messageId = discordMessageId
@@ -3435,7 +3319,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                     |> Task.andThen
                                         (\discordThread ->
                                             Discord.createMessagePayload
-                                                (DiscordSync.botTokenToAuth botToken)
+                                                (Debug.todo "")
                                                 { channelId = discordThread.id
                                                 , content = toDiscordContent model attachedFiles text
                                                 , replyTo = Nothing
@@ -3453,7 +3337,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
 
                             ( Just (DiscordChannelId discordThreadId), _, _ ) ->
                                 Discord.createMessagePayload
-                                    (DiscordSync.botTokenToAuth botToken)
+                                    (Debug.todo "")
                                     { channelId = discordThreadId
                                     , content = toDiscordContent model attachedFiles text
                                     , replyTo =
@@ -3483,7 +3367,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         case OneToOne.first channelId guild.linkedChannelIds of
                             Just (DiscordChannelId discordChannelId) ->
                                 Discord.createMessagePayload
-                                    (DiscordSync.botTokenToAuth botToken)
+                                    (Debug.todo "")
                                     { channelId = discordChannelId
                                     , content = toDiscordContent model attachedFiles text
                                     , replyTo =
