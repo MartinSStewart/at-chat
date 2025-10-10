@@ -184,6 +184,7 @@ init =
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
       , textEditor = TextEditor.initLocalState
+      , discordUserData = SeqDict.empty
       }
     , Command.none
     )
@@ -212,6 +213,16 @@ subscriptions model =
             model.discordModel
             |> Maybe.withDefault Subscription.none
             |> Subscription.map DiscordWebsocketMsg
+        , SeqDict.toList model.discordUserData
+            |> List.map
+                (\( discordUserId, data ) ->
+                    Discord.subscription
+                        (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
+                        data.connection
+                        |> Maybe.withDefault Subscription.none
+                        |> Subscription.map (DiscordUserWebsocketMsg discordUserId)
+                )
+            |> Subscription.batch
         ]
 
 
@@ -316,6 +327,9 @@ update msg model =
 
         DiscordWebsocketMsg discordMsg ->
             DiscordSync.discordWebsocketMsg discordMsg model
+
+        DiscordUserWebsocketMsg discordUserId discordMsg ->
+            DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
 
         GotDiscordGuilds time botUserId result ->
             case result of
@@ -609,12 +623,11 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
                             model
-                        , Websocket.createHandle WebsocketCreatedHandleForUser Discord.websocketGatewayUrl
                         , Task.map2
                             Tuple.pair
                             (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> rustHttpRequest)
                             (Discord.getRelationshipsPayload auth |> rustHttpRequest)
-                            |> Task.attempt (GotLinkedDiscordUserData time userId auth discordUser.id)
+                            |> Task.attempt (GotLinkedDiscordUserData time userId auth discordUser)
                         ]
                     )
 
@@ -623,18 +636,12 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                     )
 
-        GotLinkedDiscordUserData time userId auth discordUserId result ->
+        GotLinkedDiscordUserData time userId auth discordUser result ->
             let
                 _ =
                     Debug.log "result" result
             in
-            DiscordSync.gotCurrentUserGuildsForUser
-                time
-                userId
-                discordUserId
-                auth
-                result
-                model
+            DiscordSync.gotCurrentUserGuildsForUser time userId auth discordUser result model
 
         GotLinkedDiscordGuilds time discordUserId result ->
             case result of
@@ -682,10 +689,41 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        WebsocketCreatedHandleForUser connection ->
-            ( { model | discordModel = Discord.createdHandle connection model.discordModel }
+        WebsocketCreatedHandleForUser discordUserId connection ->
+            let
+                _ =
+                    Debug.log "discordUserId" connection
+            in
+            ( { model
+                | discordUserData =
+                    SeqDict.updateIfExists
+                        discordUserId
+                        (\userData -> { userData | connection = Discord.createdHandle connection userData.connection })
+                        model.discordUserData
+              }
             , Command.none
             )
+
+        WebsocketClosedByBackendForUser discordUserId reopen ->
+            ( model
+            , if reopen then
+                Websocket.createHandle (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+
+              else
+                Command.none
+            )
+
+        WebsocketSentDataForUser discordUserId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err Websocket.ConnectionClosed ->
+                    let
+                        _ =
+                            Debug.log "WebsocketSentDataForUser" ( discordUserId, "ConnectionClosed" )
+                    in
+                    ( model, Command.none )
 
 
 addSlackServer :

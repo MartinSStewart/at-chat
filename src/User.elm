@@ -23,6 +23,7 @@ module User exposing
     , toString
     )
 
+import Base64
 import Codec exposing (Codec)
 import Discord
 import Discord.Id
@@ -30,9 +31,11 @@ import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
+import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
+import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
@@ -88,9 +91,29 @@ linkDiscordDataCodec : Codec Discord.UserAuth
 linkDiscordDataCodec =
     Codec.object Discord.UserAuth
         |> Codec.field "token" .token Codec.string
-        |> Codec.field "xSuperProperties" .xSuperProperties Codec.string
         |> Codec.field "userAgent" .userAgent Codec.string
+        |> Codec.field "xSuperProperties" .xSuperProperties superPropertiesCodec
         |> Codec.buildObject
+
+
+superPropertiesCodec : Codec SafeJson
+superPropertiesCodec =
+    Codec.andThen
+        (\base64 ->
+            case Base64.toString base64 of
+                Just text ->
+                    case Json.Decode.decodeString SafeJson.decoder text of
+                        Ok json ->
+                            Codec.succeed json
+
+                        Err _ ->
+                            Codec.fail "Invalid json"
+
+                Nothing ->
+                    Codec.fail "Invalid base64"
+        )
+        (\a -> Base64.fromString (SafeJson.toString 0 a) |> Maybe.withDefault "")
+        Codec.string
 
 
 type NotificationLevel

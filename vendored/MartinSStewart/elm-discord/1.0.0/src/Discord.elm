@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserAuth, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserAuth, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -90,6 +90,7 @@ import Json.Decode.Extra as JD
 import Json.Encode as JE
 import Json.Encode.Extra as JE
 import Quantity exposing (Quantity(..), Rate)
+import SafeJson exposing (SafeJson)
 import Set exposing (Set)
 import String.Nonempty exposing (NonemptyString)
 import Task exposing (Task)
@@ -1473,7 +1474,7 @@ bearerToken =
     BearerToken
 
 
-userToken : { token : String, userAgent : String, xSuperProperties : String } -> Authentication
+userToken : UserAuth -> Authentication
 userToken =
     UserToken
 
@@ -1541,7 +1542,9 @@ http authentication requestType decoder path queryParameters body =
             :: (case authentication of
                     UserToken data ->
                         [ header "User-Agent" data.userAgent
-                        , header "X-Super-Properties" data.xSuperProperties
+                        , header
+                            "X-Super-Properties"
+                            (Base64.fromString (SafeJson.toString 0 data.xSuperProperties) |> Maybe.withDefault "")
                         , header "X-Discord-Timezone" "Europe/Stockholm"
                         , header "X-Discord-Locale" "en-US"
                         , header "Host" "discord.com"
@@ -1766,7 +1769,7 @@ type Authentication
 
 
 type alias UserAuth =
-    { token : String, userAgent : String, xSuperProperties : String }
+    { token : String, userAgent : String, xSuperProperties : SafeJson }
 
 
 type OptionalData a
@@ -3945,6 +3948,97 @@ decodeGuildMemberUpdate =
         |> JD.andMap (decodeOptionalData "pending" JD.bool)
 
 
+{-| <https://docs.discord.food/topics/gateway#gateway-capabilities>
+-}
+type alias Capabilities =
+    { lazyUserNotes : Bool
+    , noAffineUserIds : Bool
+    , versionedReadStates : Bool
+    , versionedUserGuildSettings : Bool
+    , dedupeUserObjects : Bool
+    , prioritizedReadyPayload : Bool
+    , multipleGuildExperimentPopulations : Bool
+    , nonChannelReadStates : Bool
+    , authTokenRefresh : Bool
+    , userSettingsProto : Bool
+    , clientStateV2 : Bool
+    , passiveGuildUpdate : Bool
+    , autoCallConnect : Bool
+    , debounceMessageReactions : Bool
+    , passiveGuildUpdateV2 : Bool
+    , autoLobbyConnect : Bool
+    }
+
+
+defaultUserCapabilities : Capabilities
+defaultUserCapabilities =
+    { noCapabilities
+        | lazyUserNotes = True
+        , versionedReadStates = True
+        , versionedUserGuildSettings = True
+        , dedupeUserObjects = True
+        , prioritizedReadyPayload = True
+        , multipleGuildExperimentPopulations = True
+        , nonChannelReadStates = True
+        , authTokenRefresh = True
+        , userSettingsProto = True
+        , clientStateV2 = True
+        , autoCallConnect = True
+        , debounceMessageReactions = True
+        , passiveGuildUpdateV2 = True
+    }
+
+
+noCapabilities : Capabilities
+noCapabilities =
+    { lazyUserNotes = False
+    , noAffineUserIds = False
+    , versionedReadStates = False
+    , versionedUserGuildSettings = False
+    , dedupeUserObjects = False
+    , prioritizedReadyPayload = False
+    , multipleGuildExperimentPopulations = False
+    , nonChannelReadStates = False
+    , authTokenRefresh = False
+    , userSettingsProto = False
+    , clientStateV2 = False
+    , passiveGuildUpdate = False
+    , autoCallConnect = False
+    , debounceMessageReactions = False
+    , passiveGuildUpdateV2 = False
+    , autoLobbyConnect = False
+    }
+
+
+encodeCapabilities : Capabilities -> JE.Value
+encodeCapabilities intents =
+    let
+        setBit position bool previousValue =
+            if bool then
+                Bitwise.shiftLeftBy position 1 |> Bitwise.or previousValue
+
+            else
+                previousValue
+    in
+    setBit 0 intents.lazyUserNotes 0
+        |> setBit 1 intents.noAffineUserIds
+        |> setBit 2 intents.versionedReadStates
+        |> setBit 3 intents.versionedUserGuildSettings
+        |> setBit 4 intents.dedupeUserObjects
+        |> setBit 5 intents.prioritizedReadyPayload
+        |> setBit 6 intents.multipleGuildExperimentPopulations
+        |> setBit 7 intents.nonChannelReadStates
+        |> setBit 8 intents.authTokenRefresh
+        |> setBit 9 intents.userSettingsProto
+        |> setBit 10 intents.clientStateV2
+        |> setBit 11 intents.passiveGuildUpdate
+        |> setBit 12 intents.autoCallConnect
+        |> setBit 13 intents.debounceMessageReactions
+        |> setBit 14 intents.passiveGuildUpdateV2
+        |> setBit 16 intents.autoLobbyConnect
+        |> JE.int
+
+
 type alias Intents =
     { guild : Bool
     , guildMembers : Bool
@@ -3965,8 +4059,13 @@ type alias Intents =
     , guildScheduledEvents : Bool
     , autoModerationConfiguration : Bool
     , autoModerationExecution : Bool
+    , userRelationships : Bool -- Not allowed for bots
+    , userPresence : Bool -- Not allowed for bots
     , guildMessagePolls : Bool
     , directMessagePolls : Bool
+    , directEmbeddedActivities : Bool
+    , lobbies : Bool
+    , lobbyDelete : Bool
     }
 
 
@@ -3991,8 +4090,13 @@ noIntents =
     , guildScheduledEvents = False
     , autoModerationConfiguration = False
     , autoModerationExecution = False
+    , userRelationships = False
+    , userPresence = False
     , guildMessagePolls = False
     , directMessagePolls = False
+    , directEmbeddedActivities = False
+    , lobbies = False
+    , lobbyDelete = False
     }
 
 
@@ -4025,8 +4129,13 @@ encodeIntents intents =
         |> setBit 16 intents.guildScheduledEvents
         |> setBit 20 intents.autoModerationConfiguration
         |> setBit 21 intents.autoModerationExecution
+        |> setBit 22 intents.userRelationships
+        |> setBit 23 intents.userPresence
         |> setBit 24 intents.guildMessagePolls
         |> setBit 25 intents.directMessagePolls
+        |> setBit 26 intents.directEmbeddedActivities
+        |> setBit 27 intents.lobbies
+        |> setBit 28 intents.lobbyDelete
         |> JE.int
 
 
@@ -4037,36 +4146,50 @@ encodeGatewayCommand gatewayCommand =
             JE.object
                 [ ( "op", JE.int 2 )
                 , ( "d"
-                  , JE.object
-                        [ ( "token"
-                          , (case authToken of
-                                BotToken token ->
-                                    token
+                  , [ ( "token"
+                      , (case authToken of
+                            BotToken token ->
+                                token
 
-                                BearerToken token ->
-                                    token
+                            BearerToken token ->
+                                token
 
-                                UserToken record ->
-                                    record.token
-                            )
-                                |> JE.string
-                          )
-                        , ( "properties"
-                          , JE.object
-                                [ ( "$os", JE.string "Linux" )
-                                , ( "$browser", JE.string "Firefox" )
-                                , ( "$device", JE.string "Computer" )
-                                ]
-                          )
-                        , ( "intents"
-                          , encodeIntents intents
-                            --, Bitwise.shiftLeftBy 1 1
-                            --      |> Bitwise.or (Bitwise.shiftLeftBy 2 1)
-                            --      |> Bitwise.or (Bitwise.shiftLeftBy 9 1)
-                            --      |> Bitwise.or (Bitwise.shiftLeftBy 12 1)
-                            --      |> JE.int
-                          )
-                        ]
+                            UserToken record ->
+                                record.token
+                        )
+                            |> JE.string
+                      )
+                    , ( "properties"
+                      , case authToken of
+                            UserToken userAuth ->
+                                SafeJson.encoder userAuth.xSuperProperties
+
+                            _ ->
+                                JE.object
+                                    [ ( "$os", JE.string "Linux" )
+                                    , ( "$browser", JE.string "Firefox" )
+                                    , ( "$device", JE.string "Computer" )
+                                    ]
+                      )
+                    ]
+                        ++ (case authToken of
+                                UserToken _ ->
+                                    [ ( "presence"
+                                      , JE.object
+                                            [ ( "status", JE.string "unknown" )
+                                            , ( "since", JE.int 0 )
+                                            , ( "activities", JE.list identity [] )
+                                            , ( "afk", JE.bool False )
+                                            ]
+                                      )
+                                    , ( "client_state", JE.object [ ( "guild_versions", JE.object [] ) ] )
+                                    , ( "capabilities", JE.int 1734653 )
+                                    ]
+
+                                _ ->
+                                    [ ( "intents", encodeIntents intents ) ]
+                           )
+                        |> JE.object
                   )
                 ]
 
@@ -4183,7 +4306,7 @@ update authToken intents msg model =
 
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
 handleGateway authToken intents response model =
-    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response |> Debug.log "event" ) of
+    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) |> Debug.log "event" of
         ( Just connection, Ok data ) ->
             let
                 heartbeat : String

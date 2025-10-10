@@ -3,6 +3,7 @@ module DiscordSync exposing
     , addDiscordUsers
     , addReactionEmoji
     , botTokenToAuth
+    , discordUserWebsocketMsg
     , discordWebsocketMsg
     , gotCurrentUserGuilds
     , gotCurrentUserGuildsForUser
@@ -1161,6 +1162,116 @@ discordWebsocketMsg discordMsg model =
             ( model, Command.none )
 
 
+discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+discordUserWebsocketMsg discordUserId discordMsg model =
+    case SeqDict.get discordUserId model.discordUserData of
+        Just userData ->
+            let
+                _ =
+                    Debug.log "discordUserWebsocketMsg" discordUserId
+            in
+            let
+                ( discordModel2, outMsgs ) =
+                    Discord.update (Discord.userToken userData.auth) Discord.noIntents discordMsg userData.connection
+                        |> Debug.log "outMsgs"
+            in
+            List.foldl
+                (\outMsg ( model2, cmds ) ->
+                    case outMsg of
+                        Discord.CloseAndReopenHandle connection ->
+                            ( model2
+                            , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (Websocket.close connection)
+                                :: cmds
+                            )
+
+                        Discord.OpenHandle ->
+                            ( model2
+                            , Websocket.createHandle (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+                                :: cmds
+                            )
+
+                        Discord.SendWebsocketData connection data ->
+                            ( model2
+                            , Task.attempt (WebsocketSentDataForUser discordUserId) (Websocket.sendString connection data)
+                                :: cmds
+                            )
+
+                        Discord.SendWebsocketDataWithDelay connection duration data ->
+                            ( model2
+                            , (Process.sleep duration
+                                |> Task.andThen (\() -> Websocket.sendString connection data)
+                                |> Task.attempt (WebsocketSentDataForUser discordUserId)
+                              )
+                                :: cmds
+                            )
+
+                        Discord.UserCreatedMessage _ message ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordCreateMessage message model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserEditedMessage messageUpdate ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordEditMessage messageUpdate model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.FailedToParseWebsocketMessage error ->
+                            let
+                                _ =
+                                    Debug.log "gateway error" error
+                            in
+                            ( model2, cmds )
+
+                        Discord.ThreadCreatedOrUserAddedToThread _ ->
+                            ( model2, cmds )
+
+                        Discord.UserAddedReaction reaction ->
+                            let
+                                ( model3, cmd2 ) =
+                                    addOrRemoveDiscordReaction True reaction model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserRemovedReaction reaction ->
+                            let
+                                ( model3, cmd2 ) =
+                                    addOrRemoveDiscordReaction False reaction model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.AllReactionsRemoved reactionRemoveAll ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordRemoveAllReactions reactionRemoveAll model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.ReactionsRemoveForEmoji reactionRemoveEmoji ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model2
+                            in
+                            ( model3, cmd2 :: cmds )
+                )
+                ( { model | discordModel = discordModel2 }, [] )
+                outMsgs
+                |> Tuple.mapSecond Command.batch
+
+        Nothing ->
+            ( model, Command.none )
+
+
 gotCurrentUserGuilds :
     Time.Posix
     -> DiscordBotToken
@@ -1280,12 +1391,12 @@ gotCurrentUserGuilds time botToken result model =
 gotCurrentUserGuildsForUser :
     Time.Posix
     -> Id UserId
-    -> Discord.Id.Id Discord.Id.UserId
     -> Discord.UserAuth
+    -> Discord.User
     -> Result error ( List Discord.PartialGuild, List Discord.Relationship )
     -> BackendModel
     -> ( BackendModel, Command restriction toMsg BackendMsg )
-gotCurrentUserGuildsForUser time userId discordUserId userAuth result model =
+gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
     case result of
         Ok ( guilds, relationships ) ->
             let
@@ -1294,98 +1405,108 @@ gotCurrentUserGuildsForUser time userId discordUserId userAuth result model =
                     Discord.userToken userAuth
             in
             ( { model
-                | discordBotId = Just discordUserId
-                , discordUsers = OneToOne.insert discordUserId userId model.discordUsers
+                | discordBotId = Just discordUser.id
+                , discordUsers = OneToOne.insert discordUser.id userId model.discordUsers
+                , discordUserData =
+                    SeqDict.insert discordUser.id
+                        { auth = userAuth
+                        , data = discordUser
+                        , connection = Discord.init
+                        }
+                        model.discordUserData
               }
-            , List.map
-                (\partialGuild ->
-                    Task.map5
-                        (\guild members channels maybeIcon threads ->
-                            ( guild.id
-                            , { guild = guild
-                              , members = members
-                              , channels = channels
-                              , icon = maybeIcon
-                              , threads = threads
-                              }
+            , Command.batch
+                [ Websocket.createHandle (WebsocketCreatedHandleForUser discordUser.id) Discord.websocketGatewayUrl
+                , List.map
+                    (\partialGuild ->
+                        Task.map5
+                            (\guild members channels maybeIcon threads ->
+                                ( guild.id
+                                , { guild = guild
+                                  , members = members
+                                  , channels = channels
+                                  , icon = maybeIcon
+                                  , threads = threads
+                                  }
+                                )
                             )
-                        )
-                        (Discord.getGuildPayload auth partialGuild.id |> http)
-                        (Discord.listGuildMembersPayload
-                            auth
-                            { guildId = partialGuild.id
-                            , limit = 1000
-                            , after = Discord.Missing
-                            }
-                            |> http
-                        )
-                        (Discord.getGuildChannelsPayload auth partialGuild.id
-                            |> http
-                            |> Task.andThen
-                                (\channels ->
-                                    List.map
-                                        (\channel ->
-                                            Discord.getMessagesPayload
-                                                auth
-                                                { channelId = channel.id
-                                                , limit = 100
-                                                , relativeTo = Discord.MostRecent
-                                                }
-                                                |> http
-                                                |> Task.onError (\_ -> Task.succeed [])
-                                                |> Task.map (Tuple.pair channel)
-                                        )
-                                        channels
-                                        |> Task.sequence
-                                )
-                        )
-                        (case partialGuild.icon of
-                            Just icon ->
-                                loadImage
-                                    (Discord.guildIconUrl
-                                        { size = Discord.DefaultImageSize
-                                        , imageType = Discord.Choice1 Discord.Png
-                                        }
-                                        partialGuild.id
-                                        icon
+                            (Discord.getGuildPayload auth partialGuild.id |> http)
+                            (Discord.listGuildMembersPayload
+                                auth
+                                { guildId = partialGuild.id
+                                , limit = 1000
+                                , after = Discord.Missing
+                                }
+                                |> http
+                            )
+                            (Discord.getGuildChannelsPayload auth partialGuild.id
+                                |> http
+                                |> Task.andThen
+                                    (\channels ->
+                                        List.map
+                                            (\channel ->
+                                                Discord.getMessagesPayload
+                                                    auth
+                                                    { channelId = channel.id
+                                                    , limit = 100
+                                                    , relativeTo = Discord.MostRecent
+                                                    }
+                                                    |> http
+                                                    |> Task.onError (\_ -> Task.succeed [])
+                                                    |> Task.map (Tuple.pair channel)
+                                            )
+                                            channels
+                                            |> Task.sequence
                                     )
-
-                            Nothing ->
-                                Task.succeed Nothing
-                        )
-                        (Discord.listActiveThreadsPayload auth partialGuild.id
-                            |> http
-                            |> Task.andThen
-                                (\activeThreads ->
-                                    List.map
-                                        (\thread ->
-                                            Discord.getMessagesPayload
-                                                auth
-                                                { channelId = thread.id
-                                                , limit = 100
-                                                , relativeTo = Discord.MostRecent
-                                                }
-                                                |> http
-                                                |> Task.onError (\_ -> Task.succeed [])
-                                                |> Task.map (Tuple.pair thread)
+                            )
+                            (case partialGuild.icon of
+                                Just icon ->
+                                    loadImage
+                                        (Discord.guildIconUrl
+                                            { size = Discord.DefaultImageSize
+                                            , imageType = Discord.Choice1 Discord.Png
+                                            }
+                                            partialGuild.id
+                                            icon
                                         )
-                                        activeThreads.threads
-                                        |> Task.sequence
-                                )
-                        )
-                )
-                (if Env.isProduction then
-                    guilds
 
-                 else
-                    List.filter
-                        (\guild ->
-                            Just guild.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
-                        )
+                                Nothing ->
+                                    Task.succeed Nothing
+                            )
+                            (Discord.listActiveThreadsPayload auth partialGuild.id
+                                |> http
+                                |> Task.andThen
+                                    (\activeThreads ->
+                                        List.map
+                                            (\thread ->
+                                                Discord.getMessagesPayload
+                                                    auth
+                                                    { channelId = thread.id
+                                                    , limit = 100
+                                                    , relativeTo = Discord.MostRecent
+                                                    }
+                                                    |> http
+                                                    |> Task.onError (\_ -> Task.succeed [])
+                                                    |> Task.map (Tuple.pair thread)
+                                            )
+                                            activeThreads.threads
+                                            |> Task.sequence
+                                    )
+                            )
+                    )
+                    (if Env.isProduction then
                         guilds
-                )
-                |> Task.sequence
-                |> Task.attempt (GotLinkedDiscordGuilds time discordUserId)
+
+                     else
+                        List.filter
+                            (\guild ->
+                                Just guild.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
+                            )
+                            guilds
+                    )
+                    |> Task.sequence
+                    |> Task.attempt (GotLinkedDiscordGuilds time discordUser.id)
+                ]
             )
 
         Err error ->

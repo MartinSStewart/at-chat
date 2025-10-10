@@ -297,6 +297,13 @@ type alias BackendModel =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
+    , discordUserData :
+        SeqDict
+            (Discord.Id.Id Discord.Id.UserId)
+            { auth : Discord.UserAuth
+            , data : Discord.User
+            , connection : Discord.Model Websocket.Connection
+            }
     }
 
 
@@ -500,6 +507,7 @@ type BackendMsg
     | WebsocketSentData (Result Websocket.SendError ())
     | WebsocketClosedByBackend Bool
     | DiscordWebsocketMsg Discord.Msg
+    | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
     | GotCurrentUserGuilds Time.Posix DiscordBotToken (Result Discord.HttpError ( Discord.User, List Discord.PartialGuild ))
     | GotDiscordGuilds
         Time.Posix
@@ -538,7 +546,7 @@ type BackendMsg
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | GotLinkedDiscordUser Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
-    | GotLinkedDiscordUserData Time.Posix (Id UserId) Discord.UserAuth (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError ( List Discord.PartialGuild, List Discord.Relationship ))
+    | GotLinkedDiscordUserData Time.Posix (Id UserId) Discord.UserAuth Discord.User (Result Discord.HttpError ( List Discord.PartialGuild, List Discord.Relationship ))
     | GotLinkedDiscordGuilds
         Time.Posix
         (Discord.Id.Id Discord.Id.UserId)
@@ -555,7 +563,9 @@ type BackendMsg
                 )
             )
         )
-    | WebsocketCreatedHandleForUser Websocket.Connection
+    | WebsocketCreatedHandleForUser (Discord.Id.Id Discord.Id.UserId) Websocket.Connection
+    | WebsocketClosedByBackendForUser (Discord.Id.Id Discord.Id.UserId) Bool
+    | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
 
 
 type LoginResult
