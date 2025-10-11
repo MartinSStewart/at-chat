@@ -103,7 +103,7 @@ adminUser =
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 init =
     let
-        guild : BackendGuild
+        guild : BackendGuild (Id ChannelId)
         guild =
             { createdAt = Time.millisToPosix 0
             , createdBy = Broadcast.adminUserId
@@ -136,7 +136,6 @@ init =
                         }
                       )
                     ]
-            , linkedChannelIds = OneToOne.empty
             , members = SeqDict.fromList []
             , owner = Broadcast.adminUserId
             , invites = SeqDict.empty
@@ -646,208 +645,185 @@ addSlackServer :
     -> BackendModel
     -> BackendModel
 addSlackServer time currentUserId team slackUsers channels model =
-    case OneToOne.second team.id model.slackServers of
-        Just _ ->
-            model
+    Debug.todo ""
 
-        Nothing ->
-            let
-                ownerId : Id UserId
-                ownerId =
-                    --case OneToOne.second data.guild.ownerId model.slackUsers of
-                    --    Just ownerId2 ->
-                    --        ownerId2
-                    --
-                    --    Nothing ->
-                    Broadcast.adminUserId
 
-                threads : SeqDict (Slack.Id Slack.ChannelId) (List ( Channel, List Slack.Message ))
-                threads =
-                    SeqDict.empty
 
-                --List.foldl
-                --    (\a dict ->
-                --        case (Tuple.first a).parentId of
-                --            Included (Just parentId) ->
-                --                SeqDict.update
-                --                    parentId
-                --                    (\maybe ->
-                --                        case maybe of
-                --                            Just list ->
-                --                                Just (a :: list)
-                --
-                --                            Nothing ->
-                --                                Just [ a ]
-                --                    )
-                --                    dict
-                --
-                --            _ ->
-                --                dict
-                --    )
-                --    SeqDict.empty
-                --    data.threads
-                members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-                members =
-                    List.filterMap
-                        (\guildMember ->
-                            case OneToOne.second guildMember.id model.slackUsers of
-                                Just userId ->
-                                    if userId == ownerId then
-                                        Nothing
-
-                                    else
-                                        Just ( userId, { joinedAt = time } )
-
-                                Nothing ->
-                                    Nothing
-                        )
-                        slackUsers
-                        |> SeqDict.fromList
-
-                newGuild : BackendGuild
-                newGuild =
-                    { createdAt = time
-                    , createdBy = ownerId
-                    , name = GuildName.fromStringLossy team.name
-                    , icon = Nothing
-                    , channels = SeqDict.empty
-                    , linkedChannelIds = OneToOne.empty
-                    , members = members
-                    , owner = ownerId
-                    , invites = SeqDict.empty
-                    }
-
-                newGuild2 =
-                    List.foldl
-                        (\( index, ( slackChannel, messages ) ) guild2 ->
-                            case addSlackChannel time ownerId model threads index slackChannel messages of
-                                Just ( slackChannelId, channelId, channel ) ->
-                                    { newGuild
-                                        | channels = SeqDict.insert channelId channel guild2.channels
-                                        , linkedChannelIds =
-                                            OneToOne.insert
-                                                (SlackChannelId slackChannelId)
-                                                channelId
-                                                guild2.linkedChannelIds
-                                    }
-
-                                Nothing ->
-                                    guild2
-                        )
-                        newGuild
-                        (List.indexedMap Tuple.pair channels)
-
-                newGuild3 : BackendGuild
-                newGuild3 =
-                    LocalState.addMember time Broadcast.adminUserId newGuild2
-                        |> Result.withDefault newGuild2
-
-                guildId : Id GuildId
-                guildId =
-                    Id.nextId model.guilds
-            in
-            { model
-                | slackServers = OneToOne.insert team.id guildId model.slackServers
-                , guilds = SeqDict.insert guildId newGuild3 model.guilds
-                , users =
-                    SeqDict.foldl
-                        (\userId _ users ->
-                            NonemptyDict.updateIfExists
-                                userId
-                                (\user ->
-                                    SeqDict.foldl
-                                        (\channelId channel user2 ->
-                                            { user2
-                                                | lastViewed =
-                                                    SeqDict.insert
-                                                        (GuildOrDmId_Guild guildId channelId)
-                                                        (DmChannel.latestMessageId channel)
-                                                        user2.lastViewed
-                                                , lastViewedThreads =
-                                                    SeqDict.foldl
-                                                        (\threadId thread lastViewedThreads ->
-                                                            SeqDict.insert
-                                                                ( GuildOrDmId_Guild guildId channelId, threadId )
-                                                                (DmChannel.latestThreadMessageId thread)
-                                                                lastViewedThreads
-                                                        )
-                                                        user2.lastViewedThreads
-                                                        channel.threads
-                                            }
-                                        )
-                                        user
-                                        newGuild3.channels
-                                )
-                                users
-                        )
-                        model.users
-                        members
-                , dmChannels =
-                    List.foldl
-                        (\( channel, messages ) dmChannels ->
-                            case channel of
-                                ImChannel data ->
-                                    case OneToOne.second data.user model.slackUsers of
-                                        Just otherUserId ->
-                                            SeqDict.update
-                                                (DmChannel.channelIdFromUserIds
-                                                    currentUserId
-                                                    otherUserId
-                                                )
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just dmChannel ->
-                                                            dmChannel
-                                                                |> addSlackMessages NoThread messages model
-                                                                |> Just
-
-                                                        Nothing ->
-                                                            DmChannel.init
-                                                                |> addSlackMessages NoThread messages model
-                                                                |> Just
-                                                )
-                                                dmChannels
-
-                                        Nothing ->
-                                            dmChannels
-
-                                NormalChannel _ ->
-                                    dmChannels
-                        )
-                        model.dmChannels
-                        channels
-            }
+--case OneToOne.second team.id model.slackServers of
+--    Just _ ->
+--        model
+--
+--    Nothing ->
+--        let
+--            ownerId : Id UserId
+--            ownerId =
+--                --case OneToOne.second data.guild.ownerId model.slackUsers of
+--                --    Just ownerId2 ->
+--                --        ownerId2
+--                --
+--                --    Nothing ->
+--                Broadcast.adminUserId
+--
+--            threads : SeqDict (Slack.Id Slack.ChannelId) (List ( Channel, List Slack.Message ))
+--            threads =
+--                SeqDict.empty
+--
+--            --List.foldl
+--            --    (\a dict ->
+--            --        case (Tuple.first a).parentId of
+--            --            Included (Just parentId) ->
+--            --                SeqDict.update
+--            --                    parentId
+--            --                    (\maybe ->
+--            --                        case maybe of
+--            --                            Just list ->
+--            --                                Just (a :: list)
+--            --
+--            --                            Nothing ->
+--            --                                Just [ a ]
+--            --                    )
+--            --                    dict
+--            --
+--            --            _ ->
+--            --                dict
+--            --    )
+--            --    SeqDict.empty
+--            --    data.threads
+--            members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+--            members =
+--                List.filterMap
+--                    (\guildMember ->
+--                        case OneToOne.second guildMember.id model.slackUsers of
+--                            Just userId ->
+--                                if userId == ownerId then
+--                                    Nothing
+--
+--                                else
+--                                    Just ( userId, { joinedAt = time } )
+--
+--                            Nothing ->
+--                                Nothing
+--                    )
+--                    slackUsers
+--                    |> SeqDict.fromList
+--
+--            newGuild : BackendGuild (Id ChannelId)
+--            newGuild =
+--                { createdAt = time
+--                , createdBy = ownerId
+--                , name = GuildName.fromStringLossy team.name
+--                , icon = Nothing
+--                , channels = SeqDict.empty
+--                , members = members
+--                , owner = ownerId
+--                , invites = SeqDict.empty
+--                }
+--
+--            newGuild2 =
+--                List.foldl
+--                    (\( index, ( slackChannel, messages ) ) guild2 ->
+--                        case addSlackChannel time ownerId model threads index slackChannel messages of
+--                            Just ( slackChannelId, channelId, channel ) ->
+--                                { newGuild
+--                                    | channels = SeqDict.insert channelId channel guild2.channels
+--                                    , linkedChannelIds =
+--                                        OneToOne.insert
+--                                            (SlackChannelId slackChannelId)
+--                                            channelId
+--                                            guild2.linkedChannelIds
+--                                }
+--
+--                            Nothing ->
+--                                guild2
+--                    )
+--                    newGuild
+--                    (List.indexedMap Tuple.pair channels)
+--
+--            newGuild3 : BackendGuild
+--            newGuild3 =
+--                LocalState.addMember time Broadcast.adminUserId newGuild2
+--                    |> Result.withDefault newGuild2
+--
+--            guildId : Id GuildId
+--            guildId =
+--                Id.nextId model.guilds
+--        in
+--        { model
+--            | slackServers = OneToOne.insert team.id guildId model.slackServers
+--            , guilds = SeqDict.insert guildId newGuild3 model.guilds
+--            , users =
+--                SeqDict.foldl
+--                    (\userId _ users ->
+--                        NonemptyDict.updateIfExists
+--                            userId
+--                            (\user ->
+--                                SeqDict.foldl
+--                                    (\channelId channel user2 ->
+--                                        { user2
+--                                            | lastViewed =
+--                                                SeqDict.insert
+--                                                    (GuildOrDmId_Guild guildId channelId)
+--                                                    (DmChannel.latestMessageId channel)
+--                                                    user2.lastViewed
+--                                            , lastViewedThreads =
+--                                                SeqDict.foldl
+--                                                    (\threadId thread lastViewedThreads ->
+--                                                        SeqDict.insert
+--                                                            ( GuildOrDmId_Guild guildId channelId, threadId )
+--                                                            (DmChannel.latestThreadMessageId thread)
+--                                                            lastViewedThreads
+--                                                    )
+--                                                    user2.lastViewedThreads
+--                                                    channel.threads
+--                                        }
+--                                    )
+--                                    user
+--                                    newGuild3.channels
+--                            )
+--                            users
+--                    )
+--                    model.users
+--                    members
+--            , dmChannels =
+--                List.foldl
+--                    (\( channel, messages ) dmChannels ->
+--                        case channel of
+--                            ImChannel data ->
+--                                case OneToOne.second data.user model.slackUsers of
+--                                    Just otherUserId ->
+--                                        SeqDict.update
+--                                            (DmChannel.channelIdFromUserIds
+--                                                currentUserId
+--                                                otherUserId
+--                                            )
+--                                            (\maybe ->
+--                                                case maybe of
+--                                                    Just dmChannel ->
+--                                                        dmChannel
+--                                                            |> addSlackMessages NoThread messages model
+--                                                            |> Just
+--
+--                                                    Nothing ->
+--                                                        DmChannel.init
+--                                                            |> addSlackMessages NoThread messages model
+--                                                            |> Just
+--                                            )
+--                                            dmChannels
+--
+--                                    Nothing ->
+--                                        dmChannels
+--
+--                            NormalChannel _ ->
+--                                dmChannels
+--                    )
+--                    model.dmChannels
+--                    channels
+--        }
 
 
 addSlackUsers : Time.Posix -> Id UserId -> Slack.CurrentUser -> List Slack.User -> BackendModel -> BackendModel
 addSlackUsers time currentUserId currentUser newUsers model =
-    List.foldl
-        (\slackUser model2 ->
-            case ( OneToOne.second slackUser.id model2.slackUsers, slackUser.id == currentUser.userId ) of
-                ( Nothing, False ) ->
-                    let
-                        userId : Id UserId
-                        userId =
-                            Id.nextId (NonemptyDict.toSeqDict model2.users)
-
-                        user : BackendUser
-                        user =
-                            User.init
-                                time
-                                (PersonName.fromStringLossy slackUser.name)
-                                RegisteredFromSlack
-                                False
-                    in
-                    { model2
-                        | slackUsers = OneToOne.insert slackUser.id userId model2.slackUsers
-                        , users = NonemptyDict.insert userId user model2.users
-                    }
-
-                _ ->
-                    model2
-        )
-        { model | slackUsers = OneToOne.insert currentUser.userId currentUserId model.slackUsers }
-        newUsers
+    Debug.todo ""
 
 
 addSlackChannel :
@@ -1501,7 +1477,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId =
                                     Id.nextId model2.guilds
 
-                                newGuild : BackendGuild
+                                newGuild : BackendGuild (Id ChannelId)
                                 newGuild =
                                     LocalState.createGuild time userId guildName
                             in
@@ -1960,7 +1936,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     (Server_DeleteMessage userId guildOrDmId threadRoute |> ServerChange)
                                                     model2
                                                 , case
-                                                    ( OneToOne.first channelId guild2.linkedChannelIds
+                                                    ( Debug.todo ""
                                                     , maybeDiscordMessageId
                                                     , Debug.todo ""
                                                     )
@@ -2591,7 +2567,7 @@ sendEditMessage :
     -> ThreadRouteWithMessage
     -> BackendModel
     -> Id UserId
-    -> BackendGuild
+    -> BackendGuild (Id ChannelId)
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendEditMessage clientId changeId time newContent attachedFiles2 guildId channelId threadRoute model2 userId guild =
     case SeqDict.get channelId guild.channels of
@@ -2665,7 +2641,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
 
                             ( NoThreadWithMessage messageIndex, Just botToken ) ->
                                 case
-                                    ( OneToOne.first channelId guild.linkedChannelIds
+                                    ( Debug.todo ""
                                     , OneToOne.first messageIndex channel2.linkedMessageIds
                                     )
                                 of
@@ -3156,7 +3132,7 @@ sendGuildMessage :
     -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
-    -> BackendGuild
+    -> BackendGuild (Id ChannelId)
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
     case SeqDict.get channelId guild.channels of
@@ -3307,7 +3283,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                         case
                             ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
                             , OneToOne.first threadMessageIndex channel2.linkedMessageIds
-                            , OneToOne.first channelId guild.linkedChannelIds
+                            , Debug.todo ""
                             )
                         of
                             ( Nothing, Just (DiscordMessageId discordMessageId), Just (DiscordChannelId discordChannelId) ) ->
@@ -3368,7 +3344,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 Command.none
 
                     ( Just botToken, NoThreadWithMaybeMessage maybeRepliedTo ) ->
-                        case OneToOne.first channelId guild.linkedChannelIds of
+                        case Debug.todo "" of
                             Just (DiscordChannelId discordChannelId) ->
                                 Discord.createMessagePayload
                                     (Debug.todo "")
@@ -3472,7 +3448,7 @@ asGuildMember :
     BackendModel
     -> SessionId
     -> Id GuildId
-    -> (UserSession -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendGuild (Id ChannelId) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildMember model sessionId guildId func =
     case SeqDict.get sessionId model.sessions of
@@ -3492,7 +3468,7 @@ asGuildOwner :
     BackendModel
     -> SessionId
     -> Id GuildId
-    -> (Id UserId -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (Id UserId -> BackendUser -> BackendGuild (Id ChannelId) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildOwner model sessionId guildId func =
     asGuildMember model

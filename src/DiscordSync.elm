@@ -43,7 +43,7 @@ import UInt64
 import User exposing (BackendUser, EmailStatus(..))
 
 
-getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
+getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild (Id ChannelId) )
 getGuildFromDiscordId discordGuildId model =
     case OneToOne.second discordGuildId model.discordGuilds of
         Just guildId ->
@@ -58,7 +58,7 @@ getGuildFromDiscordId discordGuildId model =
             Nothing
 
 
-discordGuildIdToGuild : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild )
+discordGuildIdToGuild : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild (Id ChannelId) )
 discordGuildIdToGuild discordGuildId model =
     case OneToOne.second discordGuildId model.discordGuilds of
         Just guildId ->
@@ -70,7 +70,7 @@ discordGuildIdToGuild discordGuildId model =
 
 addReactionEmoji :
     Id GuildId
-    -> BackendGuild
+    -> BackendGuild (Id ChannelId)
     -> Id ChannelId
     -> ThreadRouteWithMessage
     -> Id UserId
@@ -98,7 +98,7 @@ addReactionEmoji guildId guild channelId threadRoute userId emoji model cmds =
 
 removeReactionEmoji :
     Id GuildId
-    -> BackendGuild
+    -> BackendGuild (Id ChannelId)
     -> Id ChannelId
     -> ThreadRouteWithMessage
     -> Id UserId
@@ -137,92 +137,96 @@ addOrRemoveDiscordReaction :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addOrRemoveDiscordReaction isAdding reaction model =
-    case ( reaction.guildId, SeqDict.get reaction.userId model.linkedDiscordUsers ) of
-        ( Included discordGuildId, Just userId ) ->
-            case discordGuildIdToGuild discordGuildId model of
-                Just ( guildId, guild ) ->
-                    case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
-                        Just channelId ->
-                            case SeqDict.get channelId guild.channels of
-                                Just channel ->
-                                    case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
-                                        Just messageId ->
-                                            (if isAdding then
-                                                addReactionEmoji
+    Debug.todo ""
 
-                                             else
-                                                removeReactionEmoji
-                                            )
-                                                guildId
-                                                guild
-                                                channelId
-                                                (NoThreadWithMessage messageId)
-                                                userId
-                                                (Emoji.fromDiscord reaction.emoji)
-                                                model
-                                                Command.none
 
-                                        Nothing ->
-                                            ( model, Command.none )
 
-                                Nothing ->
-                                    ( model, Command.none )
-
-                        -- If we don't find the channel ID among the guild channels then the Discord channel ID is actually a thread channel ID
-                        Nothing ->
-                            let
-                                maybeThread : Maybe ( Id ChannelId, BackendChannel, Id ChannelMessageId )
-                                maybeThread =
-                                    List.Extra.findMap
-                                        (\( channelId, channel ) ->
-                                            case
-                                                OneToOne.second
-                                                    (DiscordChannelId reaction.channelId)
-                                                    channel.linkedThreadIds
-                                            of
-                                                Just threadId ->
-                                                    Just ( channelId, channel, threadId )
-
-                                                Nothing ->
-                                                    Nothing
-                                        )
-                                        (SeqDict.toList guild.channels)
-                            in
-                            case maybeThread of
-                                Just ( channelId, channel, threadId ) ->
-                                    case SeqDict.get threadId channel.threads of
-                                        Just thread ->
-                                            case OneToOne.second (DiscordMessageId reaction.messageId) thread.linkedMessageIds of
-                                                Just messageId ->
-                                                    (if isAdding then
-                                                        addReactionEmoji
-
-                                                     else
-                                                        removeReactionEmoji
-                                                    )
-                                                        guildId
-                                                        guild
-                                                        channelId
-                                                        (ViewThreadWithMessage threadId messageId)
-                                                        userId
-                                                        (Emoji.fromDiscord reaction.emoji)
-                                                        model
-                                                        Command.none
-
-                                                Nothing ->
-                                                    ( model, Command.none )
-
-                                        Nothing ->
-                                            ( model, Command.none )
-
-                                Nothing ->
-                                    ( model, Command.none )
-
-                Nothing ->
-                    ( model, Command.none )
-
-        _ ->
-            ( model, Command.none )
+--case ( reaction.guildId, SeqDict.get reaction.userId model.linkedDiscordUsers ) of
+--    ( Included discordGuildId, Just userId ) ->
+--        case discordGuildIdToGuild discordGuildId model of
+--            Just ( guildId, guild ) ->
+--                case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
+--                    Just channelId ->
+--                        case SeqDict.get channelId guild.channels of
+--                            Just channel ->
+--                                case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
+--                                    Just messageId ->
+--                                        (if isAdding then
+--                                            addReactionEmoji
+--
+--                                         else
+--                                            removeReactionEmoji
+--                                        )
+--                                            guildId
+--                                            guild
+--                                            channelId
+--                                            (NoThreadWithMessage messageId)
+--                                            userId
+--                                            (Emoji.fromDiscord reaction.emoji)
+--                                            model
+--                                            Command.none
+--
+--                                    Nothing ->
+--                                        ( model, Command.none )
+--
+--                            Nothing ->
+--                                ( model, Command.none )
+--
+--                    -- If we don't find the channel ID among the guild channels then the Discord channel ID is actually a thread channel ID
+--                    Nothing ->
+--                        let
+--                            maybeThread : Maybe ( Id ChannelId, BackendChannel, Id ChannelMessageId )
+--                            maybeThread =
+--                                List.Extra.findMap
+--                                    (\( channelId, channel ) ->
+--                                        case
+--                                            OneToOne.second
+--                                                (DiscordChannelId reaction.channelId)
+--                                                channel.linkedThreadIds
+--                                        of
+--                                            Just threadId ->
+--                                                Just ( channelId, channel, threadId )
+--
+--                                            Nothing ->
+--                                                Nothing
+--                                    )
+--                                    (SeqDict.toList guild.channels)
+--                        in
+--                        case maybeThread of
+--                            Just ( channelId, channel, threadId ) ->
+--                                case SeqDict.get threadId channel.threads of
+--                                    Just thread ->
+--                                        case OneToOne.second (DiscordMessageId reaction.messageId) thread.linkedMessageIds of
+--                                            Just messageId ->
+--                                                (if isAdding then
+--                                                    addReactionEmoji
+--
+--                                                 else
+--                                                    removeReactionEmoji
+--                                                )
+--                                                    guildId
+--                                                    guild
+--                                                    channelId
+--                                                    (ViewThreadWithMessage threadId messageId)
+--                                                    userId
+--                                                    (Emoji.fromDiscord reaction.emoji)
+--                                                    model
+--                                                    Command.none
+--
+--                                            Nothing ->
+--                                                ( model, Command.none )
+--
+--                                    Nothing ->
+--                                        ( model, Command.none )
+--
+--                            Nothing ->
+--                                ( model, Command.none )
+--
+--            Nothing ->
+--                ( model, Command.none )
+--
+--    _ ->
+--        ( model, Command.none )
 
 
 handleDiscordRemoveAllReactions : Discord.ReactionRemoveAll -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -311,60 +315,64 @@ handleDiscordDeleteMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
-    case getGuildFromDiscordId discordGuildId model of
-        Just ( guildId, guild ) ->
-            case LocalState.linkedChannel (DiscordChannelId discordChannelId) guild of
-                Just ( channelId, channel ) ->
-                    case OneToOne.second (DiscordMessageId messageId) channel.linkedMessageIds of
-                        Just messageIndex ->
-                            case DmChannel.getArray messageIndex channel.messages of
-                                Just (UserTextMessage data) ->
-                                    ( { model
-                                        | guilds =
-                                            SeqDict.insert
-                                                guildId
-                                                { guild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            { channel
-                                                                | messages =
-                                                                    DmChannel.setArray
-                                                                        messageIndex
-                                                                        (DeletedMessage data.createdAt)
-                                                                        channel.messages
-                                                                , linkedMessageIds =
-                                                                    OneToOne.removeFirst
-                                                                        (DiscordMessageId messageId)
-                                                                        channel.linkedMessageIds
-                                                            }
-                                                            guild.channels
-                                                }
-                                                model.guilds
-                                      }
-                                    , Broadcast.toGuild
-                                        guildId
-                                        (Server_DiscordDeleteMessage
-                                            { guildId = guildId
-                                            , channelId = channelId
-                                            , messageIndex = messageIndex
-                                            }
-                                            |> ServerChange
-                                        )
-                                        model
-                                    )
+    Debug.todo ""
 
-                                _ ->
-                                    ( model, Command.none )
 
-                        Nothing ->
-                            ( model, Command.none )
 
-                Nothing ->
-                    ( model, Command.none )
-
-        Nothing ->
-            ( model, Command.none )
+--case getGuildFromDiscordId discordGuildId model of
+--    Just ( guildId, guild ) ->
+--        case LocalState.linkedChannel (DiscordChannelId discordChannelId) guild of
+--            Just ( channelId, channel ) ->
+--                case OneToOne.second (DiscordMessageId messageId) channel.linkedMessageIds of
+--                    Just messageIndex ->
+--                        case DmChannel.getArray messageIndex channel.messages of
+--                            Just (UserTextMessage data) ->
+--                                ( { model
+--                                    | guilds =
+--                                        SeqDict.insert
+--                                            guildId
+--                                            { guild
+--                                                | channels =
+--                                                    SeqDict.insert
+--                                                        channelId
+--                                                        { channel
+--                                                            | messages =
+--                                                                DmChannel.setArray
+--                                                                    messageIndex
+--                                                                    (DeletedMessage data.createdAt)
+--                                                                    channel.messages
+--                                                            , linkedMessageIds =
+--                                                                OneToOne.removeFirst
+--                                                                    (DiscordMessageId messageId)
+--                                                                    channel.linkedMessageIds
+--                                                        }
+--                                                        guild.channels
+--                                            }
+--                                            model.guilds
+--                                  }
+--                                , Broadcast.toGuild
+--                                    guildId
+--                                    (Server_DiscordDeleteMessage
+--                                        { guildId = guildId
+--                                        , channelId = channelId
+--                                        , messageIndex = messageIndex
+--                                        }
+--                                        |> ServerChange
+--                                    )
+--                                    model
+--                                )
+--
+--                            _ ->
+--                                ( model, Command.none )
+--
+--                    Nothing ->
+--                        ( model, Command.none )
+--
+--            Nothing ->
+--                ( model, Command.none )
+--
+--    Nothing ->
+--        ( model, Command.none )
 
 
 addDiscordUsers :
@@ -548,162 +556,165 @@ addDiscordGuilds :
     -> BackendModel
     -> BackendModel
 addDiscordGuilds time guilds model =
-    SeqDict.foldl
-        (\discordGuildId data model2 ->
-            case OneToOne.second discordGuildId model2.discordGuilds of
-                Just _ ->
-                    model2
+    Debug.todo ""
 
-                Nothing ->
-                    let
-                        ownerId : Id UserId
-                        ownerId =
-                            case SeqDict.get data.guild.ownerId model2.linkedDiscordUsers of
-                                Just ownerId2 ->
-                                    ownerId2
 
-                                Nothing ->
-                                    Broadcast.adminUserId
 
-                        threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
-                        threads =
-                            List.foldl
-                                (\a dict ->
-                                    case (Tuple.first a).parentId of
-                                        Included (Just parentId) ->
-                                            SeqDict.update
-                                                parentId
-                                                (\maybe ->
-                                                    case maybe of
-                                                        Just list ->
-                                                            Just (a :: list)
-
-                                                        Nothing ->
-                                                            Just [ a ]
-                                                )
-                                                dict
-
-                                        _ ->
-                                            dict
-                                )
-                                SeqDict.empty
-                                data.threads
-
-                        members : SeqDict (Id UserId) { joinedAt : Time.Posix }
-                        members =
-                            List.filterMap
-                                (\guildMember ->
-                                    case SeqDict.get guildMember.user.id model2.linkedDiscordUsers of
-                                        Just userId ->
-                                            if userId == ownerId then
-                                                Nothing
-
-                                            else
-                                                Just ( userId, { joinedAt = time } )
-
-                                        Nothing ->
-                                            Nothing
-                                )
-                                data.members
-                                |> SeqDict.fromList
-
-                        newGuild : BackendGuild
-                        newGuild =
-                            { createdAt = time
-                            , createdBy = ownerId
-                            , name = GuildName.fromStringLossy data.guild.name
-                            , icon = Maybe.map .fileHash data.icon
-                            , channels = SeqDict.empty
-                            , linkedChannelIds = OneToOne.empty
-                            , members = members
-                            , owner = ownerId
-                            , invites = SeqDict.empty
-                            }
-
-                        newGuild2 =
-                            List.sortBy
-                                (\( channel, _ ) ->
-                                    case channel.position of
-                                        Included position ->
-                                            position
-
-                                        Missing ->
-                                            9999
-                                )
-                                data.channels
-                                |> List.indexedMap Tuple.pair
-                                |> List.foldl
-                                    (\( index, ( discordChannel, messages ) ) guild2 ->
-                                        case addDiscordChannel time ownerId model2 threads index discordChannel messages of
-                                            Just ( channelId, channel ) ->
-                                                { newGuild
-                                                    | channels =
-                                                        SeqDict.insert
-                                                            channelId
-                                                            channel
-                                                            guild2.channels
-                                                    , linkedChannelIds =
-                                                        OneToOne.insert
-                                                            (DiscordChannelId discordChannel.id)
-                                                            channelId
-                                                            guild2.linkedChannelIds
-                                                }
-
-                                            Nothing ->
-                                                guild2
-                                    )
-                                    newGuild
-
-                        newGuild3 : BackendGuild
-                        newGuild3 =
-                            LocalState.addMember time Broadcast.adminUserId newGuild2
-                                |> Result.withDefault newGuild2
-
-                        guildId : Id GuildId
-                        guildId =
-                            Id.nextId model2.guilds
-                    in
-                    { model2
-                        | discordGuilds =
-                            OneToOne.insert discordGuildId guildId model2.discordGuilds
-                        , guilds = SeqDict.insert guildId newGuild3 model2.guilds
-                        , users =
-                            SeqDict.foldl
-                                (\userId _ users ->
-                                    NonemptyDict.updateIfExists
-                                        userId
-                                        (\user ->
-                                            SeqDict.foldl
-                                                (\channelId channel user2 ->
-                                                    { user2
-                                                        | lastViewed =
-                                                            SeqDict.insert
-                                                                (GuildOrDmId_Guild guildId channelId)
-                                                                (DmChannel.latestMessageId channel)
-                                                                user2.lastViewed
-                                                        , lastViewedThreads =
-                                                            SeqDict.foldl
-                                                                (\threadId thread lastViewedThreads ->
-                                                                    SeqDict.insert
-                                                                        ( GuildOrDmId_Guild guildId channelId, threadId )
-                                                                        (DmChannel.latestThreadMessageId thread)
-                                                                        lastViewedThreads
-                                                                )
-                                                                user2.lastViewedThreads
-                                                                channel.threads
-                                                    }
-                                                )
-                                                user
-                                                newGuild3.channels
-                                        )
-                                        users
-                                )
-                                model2.users
-                                members
-                    }
-        )
-        model
-        guilds
+--SeqDict.foldl
+--    (\discordGuildId data model2 ->
+--        case OneToOne.second discordGuildId model2.discordGuilds of
+--            Just _ ->
+--                model2
+--
+--            Nothing ->
+--                let
+--                    ownerId : Id UserId
+--                    ownerId =
+--                        case SeqDict.get data.guild.ownerId model2.linkedDiscordUsers of
+--                            Just ownerId2 ->
+--                                ownerId2
+--
+--                            Nothing ->
+--                                Broadcast.adminUserId
+--
+--                    threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+--                    threads =
+--                        List.foldl
+--                            (\a dict ->
+--                                case (Tuple.first a).parentId of
+--                                    Included (Just parentId) ->
+--                                        SeqDict.update
+--                                            parentId
+--                                            (\maybe ->
+--                                                case maybe of
+--                                                    Just list ->
+--                                                        Just (a :: list)
+--
+--                                                    Nothing ->
+--                                                        Just [ a ]
+--                                            )
+--                                            dict
+--
+--                                    _ ->
+--                                        dict
+--                            )
+--                            SeqDict.empty
+--                            data.threads
+--
+--                    members : SeqDict (Id UserId) { joinedAt : Time.Posix }
+--                    members =
+--                        List.filterMap
+--                            (\guildMember ->
+--                                case SeqDict.get guildMember.user.id model2.linkedDiscordUsers of
+--                                    Just userId ->
+--                                        if userId == ownerId then
+--                                            Nothing
+--
+--                                        else
+--                                            Just ( userId, { joinedAt = time } )
+--
+--                                    Nothing ->
+--                                        Nothing
+--                            )
+--                            data.members
+--                            |> SeqDict.fromList
+--
+--                    newGuild : BackendGuild (Id ChannelId)
+--                    newGuild =
+--                        { createdAt = time
+--                        , createdBy = ownerId
+--                        , name = GuildName.fromStringLossy data.guild.name
+--                        , icon = Maybe.map .fileHash data.icon
+--                        , channels = SeqDict.empty
+--                        , members = members
+--                        , owner = ownerId
+--                        , invites = SeqDict.empty
+--                        }
+--
+--                    newGuild2 =
+--                        List.sortBy
+--                            (\( channel, _ ) ->
+--                                case channel.position of
+--                                    Included position ->
+--                                        position
+--
+--                                    Missing ->
+--                                        9999
+--                            )
+--                            data.channels
+--                            |> List.indexedMap Tuple.pair
+--                            |> List.foldl
+--                                (\( index, ( discordChannel, messages ) ) guild2 ->
+--                                    case addDiscordChannel time ownerId model2 threads index discordChannel messages of
+--                                        Just ( channelId, channel ) ->
+--                                            { newGuild
+--                                                | channels =
+--                                                    SeqDict.insert
+--                                                        channelId
+--                                                        channel
+--                                                        guild2.channels
+--                                                , linkedChannelIds =
+--                                                    OneToOne.insert
+--                                                        (DiscordChannelId discordChannel.id)
+--                                                        channelId
+--                                                        guild2.linkedChannelIds
+--                                            }
+--
+--                                        Nothing ->
+--                                            guild2
+--                                )
+--                                newGuild
+--
+--                    newGuild3 : BackendGuild
+--                    newGuild3 =
+--                        LocalState.addMember time Broadcast.adminUserId newGuild2
+--                            |> Result.withDefault newGuild2
+--
+--                    guildId : Id GuildId
+--                    guildId =
+--                        Id.nextId model2.guilds
+--                in
+--                { model2
+--                    | discordGuilds =
+--                        OneToOne.insert discordGuildId guildId model2.discordGuilds
+--                    , guilds = SeqDict.insert guildId newGuild3 model2.guilds
+--                    , users =
+--                        SeqDict.foldl
+--                            (\userId _ users ->
+--                                NonemptyDict.updateIfExists
+--                                    userId
+--                                    (\user ->
+--                                        SeqDict.foldl
+--                                            (\channelId channel user2 ->
+--                                                { user2
+--                                                    | lastViewed =
+--                                                        SeqDict.insert
+--                                                            (GuildOrDmId_Guild guildId channelId)
+--                                                            (DmChannel.latestMessageId channel)
+--                                                            user2.lastViewed
+--                                                    , lastViewedThreads =
+--                                                        SeqDict.foldl
+--                                                            (\threadId thread lastViewedThreads ->
+--                                                                SeqDict.insert
+--                                                                    ( GuildOrDmId_Guild guildId channelId, threadId )
+--                                                                    (DmChannel.latestThreadMessageId thread)
+--                                                                    lastViewedThreads
+--                                                            )
+--                                                            user2.lastViewedThreads
+--                                                            channel.threads
+--                                                }
+--                                            )
+--                                            user
+--                                            newGuild3.channels
+--                                    )
+--                                    users
+--                            )
+--                            model2.users
+--                            members
+--                }
+--    )
+--    model
+--    guilds
 
 
 handleDiscordCreateMessage :

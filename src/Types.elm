@@ -277,7 +277,7 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
-    , guilds : SeqDict (Id GuildId) BackendGuild
+    , guilds : SeqDict (Id GuildId) (BackendGuild (Id ChannelId))
     , backendInitialized : Bool
     , discordGuilds : OneToOne (Discord.Id.Id Discord.Id.GuildId) (Id GuildId)
     , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
@@ -572,7 +572,7 @@ type alias LoginData =
     { session : UserSession
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
-    , guilds : SeqDict (Id GuildId) FrontendGuild
+    , guilds : SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
@@ -603,7 +603,7 @@ type ServerChange
         (Result
             JoinGuildError
             { guildId : Id GuildId
-            , guild : FrontendGuild
+            , guild : FrontendGuild (Id ChannelId)
             , owner : FrontendUser
             , members : SeqDict (Id UserId) FrontendUser
             }

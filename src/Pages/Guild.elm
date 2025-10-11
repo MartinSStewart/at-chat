@@ -134,7 +134,7 @@ channelNewMessageCount guildOrDmId currentUser channel =
         channel.threads
 
 
-guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> Int
+guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild (Id ChannelId) -> Int
 guildNewMessageCount currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel count ->
@@ -144,7 +144,7 @@ guildNewMessageCount currentUser guildId guild =
         guild.channels
 
 
-guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild -> ChannelNotificationType
+guildHasNotifications : FrontendCurrentUser -> Id GuildId -> FrontendGuild (Id ChannelId) -> ChannelNotificationType
 guildHasNotifications currentUser guildId guild =
     if SeqSet.member guildId currentUser.notifyOnAllMessages then
         case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
@@ -190,7 +190,7 @@ guildColumn :
     -> Route
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
-    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
     -> Bool
     -> Element FrontendMsg
 guildColumn isMobile route localUser dmChannels guilds canScroll2 =
@@ -920,7 +920,7 @@ threadPreviewText threadMessageIndex channel localUser =
             "Thread not found"
 
 
-channelView : ChannelRoute -> Id GuildId -> FrontendGuild -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+channelView : ChannelRoute -> Id GuildId -> FrontendGuild (Id ChannelId) -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
 channelView channelRoute guildId guild loggedIn local model =
     case channelRoute of
         ChannelRoute channelId threadRoute ->
@@ -992,7 +992,7 @@ channelView channelRoute guildId guild loggedIn local model =
             Ui.none
 
 
-inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
+inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild (Id ChannelId) -> Element FrontendMsg
 inviteLinkCreatorForm model local guildId guild =
     Ui.el
         [ Ui.height Ui.fill ]
@@ -3706,7 +3706,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
 channelColumnNotMobile :
     LocalUser
     -> Id GuildId
-    -> FrontendGuild
+    -> FrontendGuild (Id ChannelId)
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> Element FrontendMsg
@@ -3717,7 +3717,7 @@ channelColumnNotMobile localUser guildId guild channelRoute channelNameHover =
 channelColumnCanScrollMobile :
     LocalUser
     -> Id GuildId
-    -> FrontendGuild
+    -> FrontendGuild (Id ChannelId)
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> Element FrontendMsg
@@ -3728,7 +3728,7 @@ channelColumnCanScrollMobile localUser guildId guild channelRoute channelNameHov
 channelColumnCannotScrollMobile :
     LocalUser
     -> Id GuildId
-    -> FrontendGuild
+    -> FrontendGuild (Id ChannelId)
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> Element FrontendMsg
@@ -3775,7 +3775,7 @@ channelColumn :
     Bool
     -> LocalUser
     -> Id GuildId
-    -> FrontendGuild
+    -> FrontendGuild (Id ChannelId)
     -> ChannelRoute
     -> Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
     -> Bool

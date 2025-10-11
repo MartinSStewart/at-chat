@@ -141,7 +141,7 @@ notificationView userAgent xOffset yOffset borderColor notification =
             notificationHelper userAgent MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-view : UserAgent -> Mode -> FrontendGuild -> Element msg
+view : UserAgent -> Mode -> FrontendGuild channelId -> Element msg
 view userAgent mode guild =
     let
         name : String
