@@ -8,7 +8,7 @@ import Dict exposing (Dict)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events exposing (Visibility(..))
-import Effect.Lamdera exposing (SessionId)
+import Effect.Lamdera as Lamdera exposing (SessionId)
 import Effect.Test as T exposing (DelayInMs, FileUpload(..), HttpRequest, HttpResponse(..), MultipleFilesUpload(..))
 import EmailAddress exposing (EmailAddress)
 import Env
@@ -214,17 +214,17 @@ isLoginEmail emailAddress httpRequest =
 
 sessionId0 : SessionId
 sessionId0 =
-    Effect.Lamdera.sessionIdFromString "sessionId0"
+    Lamdera.sessionIdFromString "sessionId0"
 
 
 sessionId1 : SessionId
 sessionId1 =
-    Effect.Lamdera.sessionIdFromString "sessionId1"
+    Lamdera.sessionIdFromString "sessionId1"
 
 
 sessionId2 : SessionId
 sessionId2 =
-    Effect.Lamdera.sessionIdFromString "sessionId2"
+    Lamdera.sessionIdFromString "sessionId2"
 
 
 handleLogin :
@@ -1301,7 +1301,7 @@ tests fileData =
         config
         [ T.connectFrontend
             0
-            (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
+            (Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
             "/"
             { width = 1887, height = 770 }
             (\tabA ->
@@ -1314,7 +1314,7 @@ tests fileData =
                 , tabA.portEvent 19 "load_user_settings_from_js" (Json.Encode.string "")
                 , T.connectFrontend
                     17
-                    (Effect.Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
+                    (Lamdera.sessionIdFromString "24334c04b8f7b594cdeedebc2a8029b82943b0a6")
                     "/"
                     { width = 1887, height = 674 }
                     (\tabB ->
@@ -1393,7 +1393,7 @@ tests fileData =
         config
         [ T.connectFrontend
             0
-            (Effect.Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
+            (Lamdera.sessionIdFromString "207950c04b8f7b594cdeedebc2a8029b82943b0a")
             "/g/1/c/0"
             { width = 1615, height = 820 }
             (\tab1 ->

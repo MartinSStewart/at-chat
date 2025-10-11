@@ -3,12 +3,14 @@ module Unsafe exposing
     , emailAddress
     , guildName
     , personName
+    , uint64
     )
 
 import ChannelName exposing (ChannelName)
 import EmailAddress exposing (EmailAddress)
 import GuildName exposing (GuildName)
 import PersonName exposing (PersonName)
+import UInt64
 
 
 personName : String -> PersonName
@@ -44,6 +46,16 @@ channelName a =
 emailAddress : String -> EmailAddress
 emailAddress a =
     case EmailAddress.fromString a of
+        Just b ->
+            b
+
+        Nothing ->
+            unreachable 0
+
+
+uint64 : String -> UInt64.UInt64
+uint64 text =
+    case UInt64.fromString text of
         Just b ->
             b
 
