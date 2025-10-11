@@ -59,7 +59,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
+import DmChannel exposing (DiscordThread, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -127,13 +127,11 @@ type alias BackendGuild channelId =
 
 
 type alias DiscordBackendGuild =
-    { createdAt : Time.Posix
-    , createdBy : Discord.Id.Id Discord.Id.UserId
-    , name : GuildName
+    { name : GuildName
     , icon : Maybe FileHash
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordBackendChannel
     , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
-    , owner : Id UserId
+    , owner : Discord.Id.Id Discord.Id.UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
@@ -227,14 +225,12 @@ type alias BackendChannel =
 
 
 type alias DiscordBackendChannel =
-    { createdAt : Time.Posix
-    , createdBy : Discord.Id.Id Discord.Id.UserId
-    , name : ChannelName
+    { name : ChannelName
     , messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) Thread
+    , threads : SeqDict (Id ChannelMessageId) DiscordThread
     }
 
 

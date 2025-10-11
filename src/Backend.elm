@@ -525,8 +525,8 @@ update msg model =
                             model
                         , Task.map2
                             Tuple.pair
-                            (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> rustHttpRequest)
-                            (Discord.getRelationshipsPayload auth |> rustHttpRequest)
+                            (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> DiscordSync.http)
+                            (Discord.getRelationshipsPayload auth |> DiscordSync.http)
                             |> Task.attempt (GotLinkedDiscordUserData time userId auth discordUser)
                         ]
                     )
@@ -556,8 +556,8 @@ update msg model =
                                 data
                                 |> SeqDict.fromList
                     in
-                    ( DiscordSync.addDiscordUsers time (SeqDict.remove discordUserId users) model
-                        |> DiscordSync.addDiscordGuilds time (SeqDict.fromList data)
+                    ( DiscordSync.addDiscordUsers users model
+                        |> DiscordSync.addDiscordGuilds (SeqDict.fromList data)
                     , List.map
                         (\guildMember ->
                             Task.map
@@ -590,10 +590,6 @@ update msg model =
                     ( model, Command.none )
 
         WebsocketCreatedHandleForUser discordUserId connection ->
-            let
-                _ =
-                    Debug.log "discordUserId" connection
-            in
             ( { model
                 | discordUser =
                     SeqDict.updateIfExists
@@ -2350,70 +2346,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 (\session user ->
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
-                        |> rustHttpRequest
+                        |> DiscordSync.http
                         |> Task.attempt (GotLinkedDiscordUser time clientId session.userId data)
                     )
                 )
-
-
-rustHttpRequest : Discord.HttpRequest value -> Task restriction Discord.HttpError value
-rustHttpRequest request =
-    Http.task
-        { method = "POST"
-        , headers = []
-        , url = FileStatus.domain ++ "/file/custom-request"
-        , body =
-            Json.Encode.object
-                [ ( "method", Json.Encode.string request.method )
-                , ( "url", Json.Encode.string request.url )
-                , ( "headers"
-                  , Json.Encode.list
-                        (\( key, value ) ->
-                            Json.Encode.object
-                                [ ( "key", Json.Encode.string key )
-                                , ( "value", Json.Encode.string value )
-                                ]
-                        )
-                        ((if request.method == "GET" then
-                            []
-
-                          else
-                            [ ( "Content-Type", "application/json" ) ]
-                         )
-                            ++ request.headers
-                        )
-                  )
-                , ( "body"
-                  , case request.body of
-                        Just body ->
-                            Json.Encode.encode 0 body |> Json.Encode.string
-
-                        Nothing ->
-                            Json.Encode.null
-                  )
-                ]
-                |> Http.jsonBody
-        , resolver =
-            Http.stringResolver
-                (\response ->
-                    case response of
-                        Http.BadUrl_ badUrl ->
-                            "Bad url " ++ badUrl |> Discord.UnexpectedError |> Err
-
-                        Http.Timeout_ ->
-                            Err Discord.Timeout
-
-                        Http.NetworkError_ ->
-                            Err Discord.NetworkError
-
-                        Http.BadStatus_ metadata body ->
-                            Discord.handleBadStatus metadata body
-
-                        Http.GoodStatus_ _ body ->
-                            Discord.handleGoodStatus request.decoder body
-                )
-        , timeout = Nothing
-        }
 
 
 loadMessagesHelper :

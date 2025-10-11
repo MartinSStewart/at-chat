@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserAuth, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GuildMemberNoUser, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), ThreadMember, UserAuth, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3674,6 +3674,9 @@ decodeDispatchEvent eventName =
         "MESSAGE_REACTION_REMOVE_EMOJI" ->
             JD.field "d" decodeReactionRemoveEmoji |> JD.map MessageReactionRemoveEmoji
 
+        "GUILD_MEMBERS_CHUNK" ->
+            JD.field "d" decodeGuildMembersChunk |> JD.map GuildMembersChunk
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -3739,11 +3742,30 @@ decodeGatewayEvent =
             )
 
 
+type Nonce
+    = Nonce String
+
+
+nonce : String -> Nonce
+nonce =
+    Nonce
+
+
+encodeNonce : Nonce -> JE.Value
+encodeNonce (Nonce a) =
+    JE.string a
+
+
+decodeNonce : JD.Decoder Nonce
+decodeNonce =
+    JD.map Nonce JD.string
+
+
 type GatewayCommand
     = OpIdentify Authentication Intents
     | OpResume Authentication SessionId SequenceCounter
     | OpHeatbeat
-    | OpRequestGuildMembers
+    | OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
     | OpUpdateVoiceState
     | OpUpdatePresence
 
@@ -3771,6 +3793,16 @@ type OpDispatchEvent
     | MessageReactionRemove ReactionRemove
     | MessageReactionRemoveAll ReactionRemoveAll
     | MessageReactionRemoveEmoji ReactionRemoveEmoji
+    | GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
+
+
+type alias GuildMembersChunkData =
+    { guildId : Id GuildId
+    , members : List GuildMember
+    , chunkIndex : Int
+    , chunkCount : Int
+    , nonce : OptionalData Nonce
+    }
 
 
 type alias ReactionAdd =
@@ -3853,6 +3885,16 @@ decodeReactionRemoveEmoji =
         |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "message_id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "emoji" decodeEmoji)
+
+
+decodeGuildMembersChunk : JD.Decoder GuildMembersChunkData
+decodeGuildMembersChunk =
+    JD.succeed GuildMembersChunkData
+        |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "members" (JD.list decodeGuildMember))
+        |> JD.andMap (JD.field "chunk_index" JD.int)
+        |> JD.andMap (JD.field "chunk_count" JD.int)
+        |> JD.andMap (decodeOptionalData "nonce" decodeNonce)
 
 
 type GatewayCloseEventCode
@@ -4220,8 +4262,18 @@ encodeGatewayCommand gatewayCommand =
         OpHeatbeat ->
             JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
 
-        OpRequestGuildMembers ->
-            JE.object []
+        OpRequestGuildMembers guildIds nonce2 ->
+            JE.object
+                [ ( "op", JE.int 8 )
+                , ( "d"
+                  , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
+                    , ( "query", JE.string "" )
+                    , ( "limit", JE.int 100 )
+                    ]
+                        ++ encodeOptionalData "nonce" encodeNonce nonce2
+                        |> JE.object
+                  )
+                ]
 
         OpUpdateVoiceState ->
             JE.object []
@@ -4248,6 +4300,7 @@ type OutMsg connection
     | UserRemovedReaction ReactionRemove
     | AllReactionsRemoved ReactionRemoveAll
     | ReactionsRemoveForEmoji ReactionRemoveEmoji
+    | ListGuildMembersResponse GuildMembersChunkData
 
 
 type alias Model connection =
@@ -4306,7 +4359,7 @@ update authToken intents msg model =
 
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
 handleGateway authToken intents response model =
-    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) |> Debug.log "event" of
+    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) of
         ( Just connection, Ok data ) ->
             let
                 heartbeat : String
@@ -4408,6 +4461,9 @@ handleGateway authToken intents response model =
 
                         MessageReactionRemoveEmoji reactionRemoveEmoji ->
                             ( model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
+
+                        GuildMembersChunk guildMembersChunkData ->
+                            ( model, [ ListGuildMembersResponse guildMembersChunkData ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )

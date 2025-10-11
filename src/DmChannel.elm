@@ -1,5 +1,6 @@
 module DmChannel exposing
-    ( DmChannel
+    ( DiscordThread
+    , DmChannel
     , DmChannelId(..)
     , ExternalChannelId(..)
     , ExternalMessageId(..)
@@ -52,6 +53,13 @@ type alias FrontendDmChannel =
 type alias Thread =
     { messages : Array (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
+    }
+
+
+type alias DiscordThread =
+    { messages : Array (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
+    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
+    , linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     }
 
 

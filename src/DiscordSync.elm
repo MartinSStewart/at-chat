@@ -25,14 +25,14 @@ import Emoji exposing (Emoji)
 import Env
 import FileStatus
 import GuildName
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel)
 import Message exposing (Message(..))
 import NonemptyDict
-import OneToOne
+import OneToOne exposing (OneToOne)
 import PersonName
 import RichText exposing (RichText)
 import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -351,11 +351,10 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
 
 
 addDiscordUsers :
-    Time.Posix
-    -> SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
+    SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
     -> BackendModel
     -> BackendModel
-addDiscordUsers time newUsers model =
+addDiscordUsers newUsers model =
     SeqDict.foldl
         (\discordUserId discordUser model2 ->
             { model2
@@ -378,16 +377,139 @@ addDiscordUsers time newUsers model =
 
 
 addDiscordChannel :
-    Time.Posix
-    -> Id UserId
-    -> BackendModel
-    -> SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
-    -> Int
+    SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
     -> Discord.Channel2
     -> List Discord.Message
-    -> Maybe ( Id ChannelId, BackendChannel )
-addDiscordChannel time ownerId model threads index discordChannel messages =
-    Debug.todo ""
+    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel )
+addDiscordChannel threads discordChannel messages =
+    let
+        isTextChannel : Bool
+        isTextChannel =
+            case discordChannel.type_ of
+                Discord.GuildAnnouncement ->
+                    True
+
+                Discord.GuildText ->
+                    True
+
+                Discord.DirectMessage ->
+                    True
+
+                Discord.GuildVoice ->
+                    False
+
+                Discord.GroupDirectMessage ->
+                    True
+
+                Discord.GuildCategory ->
+                    False
+
+                Discord.AnnouncementThread ->
+                    True
+
+                Discord.PublicThread ->
+                    True
+
+                Discord.PrivateThread ->
+                    True
+
+                Discord.GuildStageVoice ->
+                    False
+
+                Discord.GuildDirectory ->
+                    False
+
+                Discord.GuildForum ->
+                    False
+
+                Discord.GuildMedia ->
+                    False
+    in
+    if isTextChannel then
+        let
+            channelMessagesAndLinks =
+                messagesAndLinks messages
+
+            linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+            linkedMessages =
+                List.map Tuple.first channelMessagesAndLinks |> OneToOne.fromList
+        in
+        ( discordChannel.id
+        , { name =
+                case discordChannel.name of
+                    Included name ->
+                        ChannelName.fromStringLossy name
+
+                    Missing ->
+                        ChannelName.fromStringLossy "Missing"
+          , messages = List.map Tuple.second channelMessagesAndLinks |> Array.fromList
+          , status = ChannelActive
+          , lastTypedAt = SeqDict.empty
+          , linkedMessageIds = linkedMessages
+          , threads =
+                case SeqDict.get discordChannel.id threads of
+                    Just threads2 ->
+                        List.filterMap
+                            (\( threadChannel, threadMessages ) ->
+                                case OneToOne.second (Discord.Id.toUInt64 threadChannel.id |> Discord.Id.fromUInt64) linkedMessages of
+                                    Just channelMessageIndex ->
+                                        let
+                                            threadMessagesAndLinks :
+                                                List
+                                                    ( ( Discord.Id.Id Discord.Id.MessageId, Id ThreadMessageId )
+                                                    , Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
+                                                    )
+                                            threadMessagesAndLinks =
+                                                messagesAndLinks threadMessages
+                                        in
+                                        ( channelMessageIndex
+                                        , { messages = List.map Tuple.second threadMessagesAndLinks |> Array.fromList
+                                          , lastTypedAt = SeqDict.empty
+                                          , linkedMessages = List.map Tuple.first threadMessagesAndLinks |> OneToOne.fromList
+                                          }
+                                        )
+                                            |> Just
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            threads2
+                            |> SeqDict.fromList
+
+                    -- threads2
+                    Nothing ->
+                        SeqDict.empty
+          }
+        )
+            |> Just
+
+    else
+        Nothing
+
+
+messagesAndLinks :
+    List Discord.Message
+    ->
+        List
+            ( ( Discord.Id.Id Discord.Id.MessageId, Id messageId )
+            , Message messageId (Discord.Id.Id Discord.Id.UserId)
+            )
+messagesAndLinks messages =
+    List.indexedMap
+        (\index message ->
+            ( ( message.id, Id.fromInt index )
+            , UserTextMessage
+                { createdAt = message.timestamp
+                , createdBy = message.author.id
+                , content = RichText.fromDiscord message.content
+                , reactions = SeqDict.empty
+                , editedAt = Nothing
+                , repliedTo = Nothing
+                , attachedFiles = SeqDict.empty
+                }
+            )
+        )
+        messages
 
 
 
@@ -479,7 +601,7 @@ addDiscordChannel time ownerId model threads index discordChannel messages =
 --    Nothing
 
 
-addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> BackendChannel -> BackendChannel
+addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> DiscordBackendChannel -> DiscordBackendChannel
 addDiscordMessages threadRoute messages model channel =
     Debug.todo ""
 
@@ -520,20 +642,74 @@ addDiscordMessages threadRoute messages model channel =
 
 
 addDiscordGuilds :
-    Time.Posix
-    ->
-        SeqDict
-            (Discord.Id.Id Discord.Id.GuildId)
-            { guild : Discord.Guild
-            , members : List Discord.GuildMember
-            , channels : List ( Discord.Channel2, List Discord.Message )
-            , icon : Maybe FileStatus.UploadResponse
-            , threads : List ( Discord.Channel, List Discord.Message )
-            }
+    SeqDict
+        (Discord.Id.Id Discord.Id.GuildId)
+        { guild : Discord.Guild
+        , members : List Discord.GuildMember
+        , channels : List ( Discord.Channel2, List Discord.Message )
+        , icon : Maybe FileStatus.UploadResponse
+        , threads : List ( Discord.Channel, List Discord.Message )
+        }
     -> BackendModel
     -> BackendModel
-addDiscordGuilds time guilds model =
-    Debug.todo ""
+addDiscordGuilds guilds model =
+    { model
+        | discordGuilds =
+            SeqDict.foldl
+                (\guildId data discordGuilds ->
+                    SeqDict.update
+                        guildId
+                        (\maybe ->
+                            case maybe of
+                                Just _ ->
+                                    maybe
+
+                                Nothing ->
+                                    let
+                                        threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+                                        threads =
+                                            List.foldl
+                                                (\a dict ->
+                                                    case (Tuple.first a).parentId of
+                                                        Included (Just parentId) ->
+                                                            SeqDict.update
+                                                                parentId
+                                                                (\maybe2 ->
+                                                                    case maybe2 of
+                                                                        Just list ->
+                                                                            Just (a :: list)
+
+                                                                        Nothing ->
+                                                                            Just [ a ]
+                                                                )
+                                                                dict
+
+                                                        _ ->
+                                                            dict
+                                                )
+                                                SeqDict.empty
+                                                data.threads
+                                    in
+                                    { name = GuildName.fromStringLossy data.guild.name
+                                    , icon = Maybe.map .fileHash data.icon
+                                    , channels =
+                                        List.filterMap
+                                            (\( channel, messages ) -> addDiscordChannel threads channel messages)
+                                            data.channels
+                                            |> SeqDict.fromList
+                                    , members =
+                                        List.map (\member -> ( member.user.id, { joinedAt = member.joinedAt } )) data.members
+                                            |> SeqDict.fromList
+                                    , owner = data.guild.ownerId
+                                    , invites = SeqDict.empty
+                                    }
+                                        |> Just
+                        )
+                        discordGuilds
+                )
+                model.discordGuilds
+                guilds
+    }
 
 
 
@@ -963,8 +1139,8 @@ handleDiscordCreateGuildMessageHelper :
     -> Id UserId
     -> Nonempty (RichText (Id UserId))
     -> Discord.Message
-    -> BackendChannel
-    -> BackendChannel
+    -> DiscordBackendChannel
+    -> DiscordBackendChannel
 handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRouteWithMaybeReplyTo userId richText message channel =
     Debug.todo ""
 
@@ -1030,13 +1206,8 @@ discordUserWebsocketMsg discordUserId discordMsg model =
     case SeqDict.get discordUserId model.discordUser of
         Just (FullData userData) ->
             let
-                _ =
-                    Debug.log "discordUserWebsocketMsg" discordUserId
-            in
-            let
                 ( discordModel2, outMsgs ) =
                     Discord.update (Discord.userToken userData.auth) Discord.noIntents discordMsg userData.connection
-                        |> Debug.log "outMsgs"
             in
             List.foldl
                 (\outMsg ( model2, cmds ) ->
@@ -1309,12 +1480,39 @@ loadImage url =
 http : Discord.HttpRequest value -> Task restriction Discord.HttpError value
 http request =
     Http.task
-        { method = request.method
+        { method = "POST"
         , headers = []
-        , url = FileStatus.domain ++ "/custom-request"
+        , url = FileStatus.domain ++ "/file/custom-request"
         , body =
             Json.Encode.object
-                []
+                [ ( "method", Json.Encode.string request.method )
+                , ( "url", Json.Encode.string request.url )
+                , ( "headers"
+                  , Json.Encode.list
+                        (\( key, value ) ->
+                            Json.Encode.object
+                                [ ( "key", Json.Encode.string key )
+                                , ( "value", Json.Encode.string value )
+                                ]
+                        )
+                        ((if request.method == "GET" then
+                            []
+
+                          else
+                            [ ( "Content-Type", "application/json" ) ]
+                         )
+                            ++ request.headers
+                        )
+                  )
+                , ( "body"
+                  , case request.body of
+                        Just body ->
+                            Json.Encode.encode 0 body |> Json.Encode.string
+
+                        Nothing ->
+                            Json.Encode.null
+                  )
+                ]
                 |> Http.jsonBody
         , resolver =
             Http.stringResolver
