@@ -118,9 +118,7 @@ init =
                         , messages = Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
-                        , linkedMessageIds = OneToOne.empty
                         , threads = SeqDict.empty
-                        , linkedThreadIds = OneToOne.empty
                         }
                       )
                     , ( Id.fromInt 1
@@ -130,9 +128,7 @@ init =
                         , messages = Array.empty
                         , status = ChannelActive
                         , lastTypedAt = SeqDict.empty
-                        , linkedMessageIds = OneToOne.empty
                         , threads = SeqDict.empty
-                        , linkedThreadIds = OneToOne.empty
                         }
                       )
                     ]
@@ -314,62 +310,63 @@ update msg model =
         SentGuildMessageToDiscord guildId channelId threadRoute result ->
             case result of
                 Ok message ->
-                    ( { model
-                        | guilds =
-                            SeqDict.updateIfExists
-                                guildId
-                                (\guild ->
-                                    { guild
-                                        | channels =
-                                            SeqDict.updateIfExists
-                                                channelId
-                                                (\channel ->
-                                                    case threadRoute of
-                                                        ViewThreadWithMessage threadMessageIndex messageId ->
-                                                            { channel
-                                                                | threads =
-                                                                    SeqDict.update
-                                                                        threadMessageIndex
-                                                                        (\maybe ->
-                                                                            let
-                                                                                thread : Thread
-                                                                                thread =
-                                                                                    Maybe.withDefault DmChannel.threadInit maybe
-                                                                            in
-                                                                            { thread
-                                                                                | linkedMessageIds =
-                                                                                    OneToOne.insert
-                                                                                        (DiscordMessageId message.id)
-                                                                                        messageId
-                                                                                        thread.linkedMessageIds
-                                                                            }
-                                                                                |> Just
-                                                                        )
-                                                                        channel.threads
-                                                                , linkedThreadIds =
-                                                                    OneToOne.insert
-                                                                        (DiscordChannelId message.channelId)
-                                                                        threadMessageIndex
-                                                                        channel.linkedThreadIds
-                                                            }
+                    Debug.todo ""
 
-                                                        NoThreadWithMessage messageId ->
-                                                            { channel
-                                                                | linkedMessageIds =
-                                                                    OneToOne.insert
-                                                                        (DiscordMessageId message.id)
-                                                                        messageId
-                                                                        channel.linkedMessageIds
-                                                            }
-                                                )
-                                                guild.channels
-                                    }
-                                )
-                                model.guilds
-                      }
-                    , Command.none
-                    )
-
+                --( { model
+                --    | guilds =
+                --        SeqDict.updateIfExists
+                --            guildId
+                --            (\guild ->
+                --                { guild
+                --                    | channels =
+                --                        SeqDict.updateIfExists
+                --                            channelId
+                --                            (\channel ->
+                --                                case threadRoute of
+                --                                    ViewThreadWithMessage threadMessageIndex messageId ->
+                --                                        { channel
+                --                                            | threads =
+                --                                                SeqDict.update
+                --                                                    threadMessageIndex
+                --                                                    (\maybe ->
+                --                                                        let
+                --                                                            thread : Thread
+                --                                                            thread =
+                --                                                                Maybe.withDefault DmChannel.threadInit maybe
+                --                                                        in
+                --                                                        { thread
+                --                                                            | linkedMessageIds =
+                --                                                                OneToOne.insert
+                --                                                                    (DiscordMessageId message.id)
+                --                                                                    messageId
+                --                                                                    thread.linkedMessageIds
+                --                                                        }
+                --                                                            |> Just
+                --                                                    )
+                --                                                    channel.threads
+                --                                            , linkedThreadIds =
+                --                                                OneToOne.insert
+                --                                                    (DiscordChannelId message.channelId)
+                --                                                    threadMessageIndex
+                --                                                    channel.linkedThreadIds
+                --                                        }
+                --
+                --                                    NoThreadWithMessage messageId ->
+                --                                        { channel
+                --                                            | linkedMessageIds =
+                --                                                OneToOne.insert
+                --                                                    (DiscordMessageId message.id)
+                --                                                    messageId
+                --                                                    channel.linkedMessageIds
+                --                                        }
+                --                            )
+                --                            guild.channels
+                --                }
+                --            )
+                --            model.guilds
+                --  }
+                --, Command.none
+                --)
                 Err _ ->
                     ( model, Command.none )
 
@@ -383,29 +380,30 @@ update msg model =
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
         SentDirectMessageToDiscord dmChannelId messageId result ->
-            case result of
-                Ok message ->
-                    ( { model
-                        | dmChannels =
-                            SeqDict.updateIfExists
-                                dmChannelId
-                                (\dmChannel ->
-                                    { dmChannel
-                                        | linkedMessageIds =
-                                            OneToOne.insert
-                                                (DiscordMessageId message.id)
-                                                messageId
-                                                dmChannel.linkedMessageIds
-                                    }
-                                )
-                                model.dmChannels
-                      }
-                    , Command.none
-                    )
+            Debug.todo ""
 
-                Err _ ->
-                    ( model, Command.none )
-
+        --case result of
+        --    Ok message ->
+        --        ( { model
+        --            | dmChannels =
+        --                SeqDict.updateIfExists
+        --                    dmChannelId
+        --                    (\dmChannel ->
+        --                        { dmChannel
+        --                            | linkedMessageIds =
+        --                                OneToOne.insert
+        --                                    (DiscordMessageId message.id)
+        --                                    messageId
+        --                                    dmChannel.linkedMessageIds
+        --                        }
+        --                    )
+        --                    model.dmChannels
+        --          }
+        --        , Command.none
+        --        )
+        --
+        --    Err _ ->
+        --        ( model, Command.none )
         GotDiscordUserAvatars result ->
             case result of
                 Ok userAvatars ->
@@ -836,45 +834,7 @@ addSlackChannel :
     -> List Slack.Message
     -> Maybe ( Slack.Id Slack.ChannelId, Id ChannelId, BackendChannel )
 addSlackChannel time ownerId model _ index slackChannel messages =
-    case slackChannel of
-        NormalChannel slackChannel2 ->
-            let
-                channel : BackendChannel
-                channel =
-                    { createdAt = time
-                    , createdBy = ownerId
-                    , name = ChannelName.fromStringLossy slackChannel2.name
-                    , messages = Array.empty
-                    , status = ChannelActive
-                    , lastTypedAt = SeqDict.empty
-                    , linkedMessageIds = OneToOne.empty
-                    , threads = SeqDict.empty
-                    , linkedThreadIds = OneToOne.empty
-                    }
-                        |> addSlackMessages NoThread messages model
-            in
-            ( slackChannel2.id
-            , Id.fromInt index
-            , --List.foldl
-              --    (\( thread, threadMessages ) channel2 ->
-              --        case
-              --            OneToOne.second
-              --                (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64)
-              --                channel2.linkedMessageIds
-              --        of
-              --            Just messageIndex ->
-              --                addDiscordMessages (ViewThread messageIndex) threadMessages model channel2
-              --
-              --            Nothing ->
-              --                channel2
-              --    )
-              channel
-              --(SeqDict.get slackChannel.id threads |> Maybe.withDefault [])
-            )
-                |> Just
-
-        ImChannel _ ->
-            Nothing
+    Debug.todo ""
 
 
 addSlackMessages :
@@ -913,7 +873,6 @@ addSlackMessages _ messages model channel =
 
                         Nothing ->
                             LocalState.createChannelMessageBackend
-                                (Just (SlackMessageId messageId))
                                 (UserTextMessage
                                     { createdAt = message.createdAt
                                     , createdBy = userId
@@ -1758,28 +1717,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     attachedFiles2
                                                             )
                                                             model2
-                                                        , case ( threadRoute, OneToOne.first dmChannelId model2.discordDms ) of
-                                                            ( NoThreadWithMessage messageIndex, Just discordDmId ) ->
-                                                                case
-                                                                    ( OneToOne.first messageIndex dmChannel2.linkedMessageIds
-                                                                    , Debug.todo ""
-                                                                    )
-                                                                of
-                                                                    ( Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                                        Discord.editMessagePayload
-                                                                            (Debug.todo "")
-                                                                            { channelId = discordDmId
-                                                                            , messageId = discordMessageId
-                                                                            , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
-                                                                            }
-                                                                            |> DiscordSync.http
-                                                                            |> Task.attempt (\_ -> EditedDiscordMessage)
-
-                                                                    _ ->
-                                                                        Command.none
-
-                                                            _ ->
-                                                                Command.none
                                                         ]
                                                     )
 
@@ -1924,7 +1861,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 (\{ userId } _ guild ->
                                     case LocalState.deleteMessageBackend userId channelId threadRoute guild of
-                                        Ok ( maybeDiscordMessageId, guild2 ) ->
+                                        Ok guild2 ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend
@@ -1935,23 +1872,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     guildId
                                                     (Server_DeleteMessage userId guildOrDmId threadRoute |> ServerChange)
                                                     model2
-                                                , case
-                                                    ( Debug.todo ""
-                                                    , maybeDiscordMessageId
-                                                    , Debug.todo ""
-                                                    )
-                                                  of
-                                                    ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                        Discord.deleteMessagePayload
-                                                            (Debug.todo "")
-                                                            { channelId = discordChannelId
-                                                            , messageId = discordMessageId
-                                                            }
-                                                            |> DiscordSync.http
-                                                            |> Task.attempt (\_ -> DeletedDiscordMessage)
-
-                                                    _ ->
-                                                        Command.none
                                                 ]
                                             )
 
@@ -1976,7 +1896,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
                                             case LocalState.deleteMessageBackendHelper userId threadRoute dmChannel of
-                                                Ok ( maybeDiscordMessageId, dmChannel2 ) ->
+                                                Ok dmChannel2 ->
                                                     ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
                                                     , Command.batch
                                                         [ Lamdera.sendToFrontend
@@ -1993,23 +1913,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                     threadRoute
                                                             )
                                                             model2
-                                                        , case
-                                                            ( OneToOne.first dmChannelId model2.discordDms
-                                                            , maybeDiscordMessageId
-                                                            , Debug.todo ""
-                                                            )
-                                                          of
-                                                            ( Just discordChannelId, Just (DiscordMessageId discordMessageId), Just botToken ) ->
-                                                                Discord.deleteMessagePayload
-                                                                    (Debug.todo "")
-                                                                    { channelId = discordChannelId
-                                                                    , messageId = discordMessageId
-                                                                    }
-                                                                    |> DiscordSync.http
-                                                                    |> Task.attempt (\_ -> DeletedDiscordMessage)
-
-                                                            _ ->
-                                                                Command.none
                                                         ]
                                                     )
 
@@ -2611,55 +2514,6 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                                 |> ServerChange
                             )
                             model2
-                        , case ( threadRoute, Debug.todo "" ) of
-                            ( ViewThreadWithMessage threadMessageIndex messageIndex, Just botToken ) ->
-                                case
-                                    ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
-                                    , SeqDict.get threadMessageIndex channel2.threads
-                                    )
-                                of
-                                    ( Just (DiscordChannelId discordChannelId), Just thread ) ->
-                                        case OneToOne.first messageIndex thread.linkedMessageIds of
-                                            Just (DiscordMessageId discordMessageId) ->
-                                                Discord.editMessagePayload
-                                                    (Debug.todo "")
-                                                    { channelId = discordChannelId
-                                                    , messageId = discordMessageId
-                                                    , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
-                                                    }
-                                                    |> DiscordSync.http
-                                                    |> Task.attempt (\_ -> EditedDiscordMessage)
-
-                                            Just (SlackMessageId _) ->
-                                                Command.none
-
-                                            Nothing ->
-                                                Command.none
-
-                                    _ ->
-                                        Command.none
-
-                            ( NoThreadWithMessage messageIndex, Just botToken ) ->
-                                case
-                                    ( Debug.todo ""
-                                    , OneToOne.first messageIndex channel2.linkedMessageIds
-                                    )
-                                of
-                                    ( Just (DiscordChannelId discordChannelId), Just (DiscordMessageId discordMessageId) ) ->
-                                        Discord.editMessagePayload
-                                            (Debug.todo "")
-                                            { channelId = discordChannelId
-                                            , messageId = discordMessageId
-                                            , content = Debug.todo "" --toDiscordContent model2 attachedFiles2 newContent
-                                            }
-                                            |> DiscordSync.http
-                                            |> Task.attempt (\_ -> EditedDiscordMessage)
-
-                                    _ ->
-                                        Command.none
-
-                            _ ->
-                                Command.none
                         ]
                     )
 
@@ -3049,7 +2903,6 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                 dmChannel2 : DmChannel
                 dmChannel2 =
                     LocalState.createChannelMessageBackend
-                        Nothing
                         (UserTextMessage
                             { createdAt = time
                             , createdBy = session.userId
@@ -3074,30 +2927,6 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
               }
             , Command.batch
                 [ Broadcast.broadcastDm changeId time clientId session.userId otherUserId text threadRouteWithReplyTo attachedFiles model
-                , case ( OneToOne.first dmChannelId model.discordDms, Debug.todo "" ) of
-                    ( Just discordChannelId, Just botToken ) ->
-                        Discord.createMessagePayload
-                            (Debug.todo "")
-                            { channelId = discordChannelId
-                            , content = Debug.todo "" --toDiscordContent model attachedFiles text
-                            , replyTo =
-                                case repliedTo of
-                                    Just index ->
-                                        case OneToOne.first index dmChannel2.linkedMessageIds of
-                                            Just (DiscordMessageId replyTo) ->
-                                                Just replyTo
-
-                                            _ ->
-                                                Nothing
-
-                                    Nothing ->
-                                        Nothing
-                            }
-                            |> DiscordSync.http
-                            |> Task.attempt (SentDirectMessageToDiscord dmChannelId messageIndex)
-
-                    _ ->
-                        Command.none
                 ]
             )
 
@@ -3143,7 +2972,6 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
                             LocalState.createThreadMessageBackend
-                                Nothing
                                 threadId
                                 (UserTextMessage
                                     { createdAt = time
@@ -3159,7 +2987,6 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
 
                         NoThreadWithMaybeMessage maybeReplyTo ->
                             LocalState.createChannelMessageBackend
-                                Nothing
                                 (UserTextMessage
                                     { createdAt = time
                                     , createdBy = session.userId
@@ -3272,110 +3099,111 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                     text
                     (guild.owner :: SeqDict.keys guild.members)
                     model
-                , case ( Debug.todo "", threadRouteWithMaybeReplyTo ) of
-                    ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
-                        let
-                            thread : Thread
-                            thread =
-                                SeqDict.get threadMessageIndex channel2.threads
-                                    |> Maybe.withDefault DmChannel.threadInit
-                        in
-                        case
-                            ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
-                            , OneToOne.first threadMessageIndex channel2.linkedMessageIds
-                            , Debug.todo ""
-                            )
-                        of
-                            ( Nothing, Just (DiscordMessageId discordMessageId), Just (DiscordChannelId discordChannelId) ) ->
-                                Discord.startThreadFromMessagePayload
-                                    (Debug.todo "")
-                                    { name = "New thread"
-                                    , channelId = discordChannelId
-                                    , messageId = discordMessageId
-                                    , autoArchiveDuration = Missing
-                                    , rateLimitPerUser = Missing
-                                    }
-                                    |> DiscordSync.http
-                                    |> Task.andThen
-                                        (\discordThread ->
-                                            Discord.createMessagePayload
-                                                (Debug.todo "")
-                                                { channelId = discordThread.id
-                                                , content = Debug.todo "" --toDiscordContent model attachedFiles text
-                                                , replyTo = Nothing
-                                                }
-                                                |> DiscordSync.http
-                                        )
-                                    |> Task.attempt
-                                        (SentGuildMessageToDiscord
-                                            guildId
-                                            channelId
-                                            (DmChannel.latestThreadMessageId thread
-                                                |> ViewThreadWithMessage threadMessageIndex
-                                            )
-                                        )
 
-                            ( Just (DiscordChannelId discordThreadId), _, _ ) ->
-                                Discord.createMessagePayload
-                                    (Debug.todo "")
-                                    { channelId = discordThreadId
-                                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
-                                    , replyTo =
-                                        case maybeRepliedTo of
-                                            Just index ->
-                                                case OneToOne.first index thread.linkedMessageIds of
-                                                    Just (DiscordMessageId replyTo) ->
-                                                        Just replyTo
-
-                                                    _ ->
-                                                        Nothing
-
-                                            Nothing ->
-                                                Nothing
-                                    }
-                                    |> DiscordSync.http
-                                    |> Task.attempt
-                                        (DmChannel.latestThreadMessageId thread
-                                            |> ViewThreadWithMessage threadMessageIndex
-                                            |> SentGuildMessageToDiscord guildId channelId
-                                        )
-
-                            _ ->
-                                Command.none
-
-                    ( Just botToken, NoThreadWithMaybeMessage maybeRepliedTo ) ->
-                        case Debug.todo "" of
-                            Just (DiscordChannelId discordChannelId) ->
-                                Discord.createMessagePayload
-                                    (Debug.todo "")
-                                    { channelId = discordChannelId
-                                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
-                                    , replyTo =
-                                        case maybeRepliedTo of
-                                            Just index ->
-                                                case OneToOne.first index channel2.linkedMessageIds of
-                                                    Just (DiscordMessageId replyTo) ->
-                                                        Just replyTo
-
-                                                    _ ->
-                                                        Nothing
-
-                                            Nothing ->
-                                                Nothing
-                                    }
-                                    |> DiscordSync.http
-                                    |> Task.attempt
-                                        (SentGuildMessageToDiscord
-                                            guildId
-                                            channelId
-                                            (NoThreadWithMessage (DmChannel.latestMessageId channel2))
-                                        )
-
-                            _ ->
-                                Command.none
-
-                    _ ->
-                        Command.none
+                --, case ( Debug.todo "", threadRouteWithMaybeReplyTo ) of
+                --    ( Just botToken, ViewThreadWithMaybeMessage threadMessageIndex maybeRepliedTo ) ->
+                --        let
+                --            thread : Thread
+                --            thread =
+                --                SeqDict.get threadMessageIndex channel2.threads
+                --                    |> Maybe.withDefault DmChannel.threadInit
+                --        in
+                --        case
+                --            ( OneToOne.first threadMessageIndex channel2.linkedThreadIds
+                --            , OneToOne.first threadMessageIndex channel2.linkedMessageIds
+                --            , Debug.todo ""
+                --            )
+                --        of
+                --            ( Nothing, Just (DiscordMessageId discordMessageId), Just (DiscordChannelId discordChannelId) ) ->
+                --                Discord.startThreadFromMessagePayload
+                --                    (Debug.todo "")
+                --                    { name = "New thread"
+                --                    , channelId = discordChannelId
+                --                    , messageId = discordMessageId
+                --                    , autoArchiveDuration = Missing
+                --                    , rateLimitPerUser = Missing
+                --                    }
+                --                    |> DiscordSync.http
+                --                    |> Task.andThen
+                --                        (\discordThread ->
+                --                            Discord.createMessagePayload
+                --                                (Debug.todo "")
+                --                                { channelId = discordThread.id
+                --                                , content = Debug.todo "" --toDiscordContent model attachedFiles text
+                --                                , replyTo = Nothing
+                --                                }
+                --                                |> DiscordSync.http
+                --                        )
+                --                    |> Task.attempt
+                --                        (SentGuildMessageToDiscord
+                --                            guildId
+                --                            channelId
+                --                            (DmChannel.latestThreadMessageId thread
+                --                                |> ViewThreadWithMessage threadMessageIndex
+                --                            )
+                --                        )
+                --
+                --            ( Just (DiscordChannelId discordThreadId), _, _ ) ->
+                --                Discord.createMessagePayload
+                --                    (Debug.todo "")
+                --                    { channelId = discordThreadId
+                --                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
+                --                    , replyTo =
+                --                        case maybeRepliedTo of
+                --                            Just index ->
+                --                                case OneToOne.first index thread.linkedMessageIds of
+                --                                    Just (DiscordMessageId replyTo) ->
+                --                                        Just replyTo
+                --
+                --                                    _ ->
+                --                                        Nothing
+                --
+                --                            Nothing ->
+                --                                Nothing
+                --                    }
+                --                    |> DiscordSync.http
+                --                    |> Task.attempt
+                --                        (DmChannel.latestThreadMessageId thread
+                --                            |> ViewThreadWithMessage threadMessageIndex
+                --                            |> SentGuildMessageToDiscord guildId channelId
+                --                        )
+                --
+                --            _ ->
+                --                Command.none
+                --
+                --    ( Just botToken, NoThreadWithMaybeMessage maybeRepliedTo ) ->
+                --        case Debug.todo "" of
+                --            Just (DiscordChannelId discordChannelId) ->
+                --                Discord.createMessagePayload
+                --                    (Debug.todo "")
+                --                    { channelId = discordChannelId
+                --                    , content = Debug.todo "" --toDiscordContent model attachedFiles text
+                --                    , replyTo =
+                --                        case maybeRepliedTo of
+                --                            Just index ->
+                --                                case OneToOne.first index channel2.linkedMessageIds of
+                --                                    Just (DiscordMessageId replyTo) ->
+                --                                        Just replyTo
+                --
+                --                                    _ ->
+                --                                        Nothing
+                --
+                --                            Nothing ->
+                --                                Nothing
+                --                    }
+                --                    |> DiscordSync.http
+                --                    |> Task.attempt
+                --                        (SentGuildMessageToDiscord
+                --                            guildId
+                --                            channelId
+                --                            (NoThreadWithMessage (DmChannel.latestMessageId channel2))
+                --                        )
+                --
+                --            _ ->
+                --                Command.none
+                --
+                --    _ ->
+                --        Command.none
                 ]
             )
 

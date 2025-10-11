@@ -222,9 +222,7 @@ type alias BackendChannel =
     , messages : Array (Message ChannelMessageId (Id UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
-    , linkedThreadIds : OneToOne ExternalChannelId (Id ChannelMessageId)
     }
 
 
@@ -361,67 +359,53 @@ getUser userId localUser =
 
 
 createThreadMessageBackend :
-    Maybe ( ExternalMessageId, ExternalChannelId )
-    -> Id ChannelMessageId
+    Id ChannelMessageId
     -> Message ThreadMessageId (Id UserId)
     -> BackendChannel
     -> BackendChannel
-createThreadMessageBackend maybeDiscordMessageId threadId message channel =
+createThreadMessageBackend threadId message channel =
     { channel
         | threads =
             SeqDict.update
                 threadId
                 (\maybe ->
                     Maybe.withDefault DmChannel.threadInit maybe
-                        |> createMessageBackend (Maybe.map Tuple.first maybeDiscordMessageId) message
+                        |> createMessageBackend message
                         |> Just
                 )
                 channel.threads
-        , linkedThreadIds =
-            case maybeDiscordMessageId of
-                Just ( _, discordChannelId ) ->
-                    OneToOne.insert discordChannelId threadId channel.linkedThreadIds
-
-                Nothing ->
-                    channel.linkedThreadIds
     }
 
 
 createChannelMessageBackend :
-    Maybe ExternalMessageId
-    -> Message ChannelMessageId (Id UserId)
+    Message ChannelMessageId (Id UserId)
     ->
         { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
     ->
         { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
-createChannelMessageBackend maybeDiscordMessageId message channel =
-    createMessageBackend maybeDiscordMessageId message channel
+createChannelMessageBackend message channel =
+    createMessageBackend message channel
 
 
 createMessageBackend :
-    Maybe ExternalMessageId
-    -> Message messageId (Id UserId)
+    Message messageId (Id UserId)
     ->
         { d
             | messages : Array (Message messageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id messageId)
         }
     ->
         { d
             | messages : Array (Message messageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id messageId)
         }
-createMessageBackend maybeDiscordMessageId message channel =
+createMessageBackend message channel =
     let
         previousIndex : Id messageId
         previousIndex =
@@ -450,16 +434,6 @@ createMessageBackend maybeDiscordMessageId message channel =
 
                 DeletedMessage _ ->
                     channel.lastTypedAt
-        , linkedMessageIds =
-            case maybeDiscordMessageId of
-                Just discordMessageId ->
-                    OneToOne.insert
-                        discordMessageId
-                        (Array.length channel.messages |> Id.fromInt)
-                        channel.linkedMessageIds
-
-                Nothing ->
-                    channel.linkedMessageIds
     }
 
 
@@ -611,9 +585,7 @@ createGuild time userId guildName =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
-                , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
-                , linkedThreadIds = OneToOne.empty
                 }
               )
             ]
@@ -645,9 +617,7 @@ createChannel time userId channelName guild =
                 , messages = Array.empty
                 , status = ChannelActive
                 , lastTypedAt = SeqDict.empty
-                , linkedMessageIds = OneToOne.empty
                 , threads = SeqDict.empty
-                , linkedThreadIds = OneToOne.empty
                 }
                 guild.channels
     }
@@ -956,7 +926,7 @@ addMember time userId guild =
             , channels =
                 SeqDict.updateIfExists
                     (announcementChannel guild)
-                    (createChannelMessageBackend Nothing (UserJoinedMessage time userId SeqDict.empty))
+                    (createChannelMessageBackend (UserJoinedMessage time userId SeqDict.empty))
                     guild.channels
         }
             |> Ok
@@ -1346,30 +1316,26 @@ deleteMessageBackend :
                     { c
                         | messages : Array (Message ChannelMessageId (Id UserId))
                         , threads : SeqDict (Id ChannelMessageId) Thread
-                        , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
                     }
         }
     ->
         Result
             ()
-            ( Maybe ExternalMessageId
-            , { a
+            { a
                 | channels :
                     SeqDict
                         (Id ChannelId)
                         { c
                             | messages : Array (Message ChannelMessageId (Id UserId))
                             , threads : SeqDict (Id ChannelMessageId) Thread
-                            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
                         }
-              }
-            )
+            }
 deleteMessageBackend userId channelId threadRoute guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             case deleteMessageBackendHelper userId threadRoute channel of
-                Ok ( maybeDiscordId, channel2 ) ->
-                    Ok ( maybeDiscordId, { guild | channels = SeqDict.insert channelId channel2 guild.channels } )
+                Ok channel2 ->
+                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
 
                 _ ->
                     Err ()
@@ -1385,18 +1351,14 @@ deleteMessageBackendHelper :
         { a
             | messages : Array (Message ChannelMessageId (Id UserId))
             , threads : SeqDict (Id ChannelMessageId) Thread
-            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
         }
     ->
         Result
             ()
-            ( Maybe ExternalMessageId
-            , { a
+            { a
                 | messages : Array (Message ChannelMessageId (Id UserId))
                 , threads : SeqDict (Id ChannelMessageId) Thread
-                , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
-              }
-            )
+            }
 deleteMessageBackendHelper userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
@@ -1405,8 +1367,7 @@ deleteMessageBackendHelper userId threadRoute channel =
                     case DmChannel.getArray messageId thread.messages of
                         Just (UserTextMessage message) ->
                             if message.createdBy == userId then
-                                ( OneToOne.first messageId thread.linkedMessageIds
-                                , { channel
+                                { channel
                                     | threads =
                                         SeqDict.insert
                                             threadId
@@ -1414,8 +1375,7 @@ deleteMessageBackendHelper userId threadRoute channel =
                                                 | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) thread.messages
                                             }
                                             channel.threads
-                                  }
-                                )
+                                }
                                     |> Ok
 
                             else
@@ -1431,9 +1391,7 @@ deleteMessageBackendHelper userId threadRoute channel =
             case DmChannel.getArray messageId channel.messages of
                 Just (UserTextMessage message) ->
                     if message.createdBy == userId then
-                        ( OneToOne.first messageId channel.linkedMessageIds
-                        , { channel | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) channel.messages }
-                        )
+                        { channel | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) channel.messages }
                             |> Ok
 
                     else

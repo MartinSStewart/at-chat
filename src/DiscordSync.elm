@@ -387,94 +387,96 @@ addDiscordChannel :
     -> List Discord.Message
     -> Maybe ( Id ChannelId, BackendChannel )
 addDiscordChannel time ownerId model threads index discordChannel messages =
-    let
-        isTextChannel : Bool
-        isTextChannel =
-            case discordChannel.type_ of
-                Discord.GuildAnnouncement ->
-                    True
+    Debug.todo ""
 
-                Discord.GuildText ->
-                    True
 
-                Discord.DirectMessage ->
-                    True
 
-                Discord.GuildVoice ->
-                    False
-
-                Discord.GroupDirectMessage ->
-                    True
-
-                Discord.GuildCategory ->
-                    False
-
-                Discord.AnnouncementThread ->
-                    True
-
-                Discord.PublicThread ->
-                    True
-
-                Discord.PrivateThread ->
-                    True
-
-                Discord.GuildStageVoice ->
-                    False
-
-                Discord.GuildDirectory ->
-                    False
-
-                Discord.GuildForum ->
-                    False
-
-                Discord.GuildMedia ->
-                    False
-    in
-    if not (List.any (\a -> a.deny.viewChannel) discordChannel.permissionOverwrites) && isTextChannel then
-        let
-            channel : BackendChannel
-            channel =
-                { createdAt = time
-                , createdBy = ownerId
-                , name =
-                    (case discordChannel.name of
-                        Included name ->
-                            name
-
-                        Missing ->
-                            "Channel " ++ String.fromInt index
-                    )
-                        |> ChannelName.fromStringLossy
-                , messages = Array.empty
-                , status = ChannelActive
-                , lastTypedAt = SeqDict.empty
-                , linkedMessageIds = OneToOne.empty
-                , threads = SeqDict.empty
-                , linkedThreadIds = OneToOne.empty
-                }
-                    |> addDiscordMessages NoThread messages model
-        in
-        ( Id.fromInt index
-        , List.foldl
-            (\( thread, threadMessages ) channel2 ->
-                case
-                    OneToOne.second
-                        (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64 |> DiscordMessageId)
-                        channel2.linkedMessageIds
-                of
-                    Just messageId ->
-                        addDiscordMessages (ViewThread messageId) threadMessages model channel2
-
-                    Nothing ->
-                        channel2
-            )
-            channel
-            (SeqDict.get discordChannel.id threads |> Maybe.withDefault [])
-        )
-            |> Just
-
-    else
-        Nothing
+--let
+--    isTextChannel : Bool
+--    isTextChannel =
+--        case discordChannel.type_ of
+--            Discord.GuildAnnouncement ->
+--                True
+--
+--            Discord.GuildText ->
+--                True
+--
+--            Discord.DirectMessage ->
+--                True
+--
+--            Discord.GuildVoice ->
+--                False
+--
+--            Discord.GroupDirectMessage ->
+--                True
+--
+--            Discord.GuildCategory ->
+--                False
+--
+--            Discord.AnnouncementThread ->
+--                True
+--
+--            Discord.PublicThread ->
+--                True
+--
+--            Discord.PrivateThread ->
+--                True
+--
+--            Discord.GuildStageVoice ->
+--                False
+--
+--            Discord.GuildDirectory ->
+--                False
+--
+--            Discord.GuildForum ->
+--                False
+--
+--            Discord.GuildMedia ->
+--                False
+--in
+--if not (List.any (\a -> a.deny.viewChannel) discordChannel.permissionOverwrites) && isTextChannel then
+--    let
+--        channel : BackendChannel
+--        channel =
+--            { createdAt = time
+--            , createdBy = ownerId
+--            , name =
+--                (case discordChannel.name of
+--                    Included name ->
+--                        name
+--
+--                    Missing ->
+--                        "Channel " ++ String.fromInt index
+--                )
+--                    |> ChannelName.fromStringLossy
+--            , messages = Array.empty
+--            , status = ChannelActive
+--            , lastTypedAt = SeqDict.empty
+--            , threads = SeqDict.empty
+--            }
+--                |> addDiscordMessages NoThread messages model
+--    in
+--    ( Id.fromInt index
+--    , List.foldl
+--        (\( thread, threadMessages ) channel2 ->
+--            case
+--                OneToOne.second
+--                    (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64 |> DiscordMessageId)
+--                    channel2.linkedMessageIds
+--            of
+--                Just messageId ->
+--                    addDiscordMessages (ViewThread messageId) threadMessages model channel2
+--
+--                Nothing ->
+--                    channel2
+--        )
+--        channel
+--        (SeqDict.get discordChannel.id threads |> Maybe.withDefault [])
+--    )
+--        |> Just
+--
+--else
+--    Nothing
 
 
 addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> BackendChannel -> BackendChannel
@@ -954,19 +956,6 @@ handleDiscordCreateGuildMessage userId discordGuildId message model =
 --        ( model, Command.none )
 
 
-discordReplyTo : Discord.Message -> BackendChannel -> Maybe (Id ChannelMessageId)
-discordReplyTo message channel =
-    case message.referencedMessage of
-        Discord.Referenced referenced ->
-            OneToOne.second (DiscordMessageId referenced.id) channel.linkedMessageIds
-
-        Discord.ReferenceDeleted ->
-            Nothing
-
-        Discord.NoReference ->
-            Nothing
-
-
 handleDiscordCreateGuildMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
     -> Discord.Id.Id Discord.Id.ChannelId
@@ -977,37 +966,41 @@ handleDiscordCreateGuildMessageHelper :
     -> BackendChannel
     -> BackendChannel
 handleDiscordCreateGuildMessageHelper discordMessageId discordChannelId threadRouteWithMaybeReplyTo userId richText message channel =
-    case threadRouteWithMaybeReplyTo of
-        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-            LocalState.createThreadMessageBackend
-                (Just ( DiscordMessageId discordMessageId, DiscordChannelId discordChannelId ))
-                threadId
-                (UserTextMessage
-                    { createdAt = message.timestamp
-                    , createdBy = userId
-                    , content = richText
-                    , reactions = SeqDict.empty
-                    , editedAt = Nothing
-                    , repliedTo = maybeReplyTo
-                    , attachedFiles = SeqDict.empty
-                    }
-                )
-                channel
+    Debug.todo ""
 
-        NoThreadWithMaybeMessage maybeReplyTo ->
-            LocalState.createChannelMessageBackend
-                (Just (DiscordMessageId discordMessageId))
-                (UserTextMessage
-                    { createdAt = message.timestamp
-                    , createdBy = userId
-                    , content = richText
-                    , reactions = SeqDict.empty
-                    , editedAt = Nothing
-                    , repliedTo = maybeReplyTo
-                    , attachedFiles = SeqDict.empty
-                    }
-                )
-                channel
+
+
+--case threadRouteWithMaybeReplyTo of
+--    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+--        LocalState.createThreadMessageBackend
+--            (Just ( DiscordMessageId discordMessageId, DiscordChannelId discordChannelId ))
+--            threadId
+--            (UserTextMessage
+--                { createdAt = message.timestamp
+--                , createdBy = userId
+--                , content = richText
+--                , reactions = SeqDict.empty
+--                , editedAt = Nothing
+--                , repliedTo = maybeReplyTo
+--                , attachedFiles = SeqDict.empty
+--                }
+--            )
+--            channel
+--
+--    NoThreadWithMaybeMessage maybeReplyTo ->
+--        LocalState.createChannelMessageBackend
+--            (Just (DiscordMessageId discordMessageId))
+--            (UserTextMessage
+--                { createdAt = message.timestamp
+--                , createdBy = userId
+--                , content = richText
+--                , reactions = SeqDict.empty
+--                , editedAt = Nothing
+--                , repliedTo = maybeReplyTo
+--                , attachedFiles = SeqDict.empty
+--                }
+--            )
+--            channel
 
 
 discordGatewayIntents : Discord.Intents

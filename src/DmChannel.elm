@@ -37,9 +37,7 @@ import VisibleMessages exposing (VisibleMessages)
 type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
-    , linkedThreadIds : OneToOne ExternalChannelId (Id ChannelMessageId)
     }
 
 
@@ -54,7 +52,6 @@ type alias FrontendDmChannel =
 type alias Thread =
     { messages : Array (Message ThreadMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    , linkedMessageIds : OneToOne ExternalMessageId (Id ThreadMessageId)
     }
 
 
@@ -79,7 +76,6 @@ threadInit : Thread
 threadInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
     }
 
 
@@ -105,9 +101,7 @@ init : DmChannel
 init =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
     , threads = SeqDict.empty
-    , linkedThreadIds = OneToOne.empty
     }
 
 
