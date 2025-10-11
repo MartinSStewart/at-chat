@@ -43,31 +43,6 @@ import UInt64
 import User exposing (BackendUser, EmailStatus(..))
 
 
-getGuildFromDiscordId : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild (Id ChannelId) )
-getGuildFromDiscordId discordGuildId model =
-    case OneToOne.second discordGuildId model.discordGuilds of
-        Just guildId ->
-            case SeqDict.get guildId model.guilds of
-                Just guild ->
-                    Just ( guildId, guild )
-
-                Nothing ->
-                    Nothing
-
-        Nothing ->
-            Nothing
-
-
-discordGuildIdToGuild : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> Maybe ( Id GuildId, BackendGuild (Id ChannelId) )
-discordGuildIdToGuild discordGuildId model =
-    case OneToOne.second discordGuildId model.discordGuilds of
-        Just guildId ->
-            SeqDict.get guildId model.guilds |> Maybe.map (Tuple.pair guildId)
-
-        Nothing ->
-            Nothing
-
-
 addReactionEmoji :
     Id GuildId
     -> BackendGuild (Id ChannelId)
