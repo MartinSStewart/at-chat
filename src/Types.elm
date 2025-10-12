@@ -294,12 +294,12 @@ type alias BackendModel =
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
-    , discordUser : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     }
 
 
 type DiscordUserData
-    = BasicData Discord.GuildMember
+    = BasicData Discord.User
     | FullData
         { auth : Discord.UserAuth
         , data : Discord.User
@@ -533,10 +533,8 @@ type BackendMsg
             (List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.Guild
-                  , members : List Discord.GuildMember
                   , channels : List ( Discord.Channel2, List Discord.Message )
                   , icon : Maybe FileStatus.UploadResponse
-                  , threads : List ( Discord.Channel, List Discord.Message )
                   }
                 )
             )

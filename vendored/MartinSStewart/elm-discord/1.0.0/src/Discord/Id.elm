@@ -9,6 +9,8 @@ module Discord.Id exposing
     , MessageId
     , OverwriteId
     , RoleId
+    , StickerId
+    , StickerPackId
     , TeamId
     , UserId
     , WebhookId
@@ -77,6 +79,14 @@ type TeamId
 
 type AchievementId
     = AchievementId Never
+
+
+type StickerId
+    = StickerId Never
+
+
+type StickerPackId
+    = StickerPackId Never
 
 
 encodeId : Id idType -> JE.Value

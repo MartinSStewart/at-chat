@@ -176,7 +176,7 @@ init =
       , slackClientSecret = Nothing
       , openRouterKey = Nothing
       , textEditor = TextEditor.initLocalState
-      , discordUser = SeqDict.empty
+      , discordUsers = SeqDict.empty
       }
     , Command.none
     )
@@ -211,7 +211,7 @@ subscriptions model =
                     BasicData _ ->
                         Nothing
             )
-            (SeqDict.toList model.discordUser)
+            (SeqDict.toList model.discordUsers)
             |> Subscription.batch
         ]
 
@@ -541,45 +541,25 @@ update msg model =
                 _ =
                     Debug.log "result" result
             in
-            DiscordSync.gotCurrentUserGuildsForUser time userId auth discordUser result model
+            DiscordSync.gotCurrentUserGuilds time userId auth discordUser result model
 
         GotLinkedDiscordGuilds time discordUserId result ->
             case result of
                 Ok data ->
-                    let
-                        users : SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-                        users =
-                            List.concatMap
-                                (\( _, { members } ) ->
-                                    List.map (\member -> ( member.user.id, member )) members
+                    ( DiscordSync.addDiscordGuilds (SeqDict.fromList data) model
+                    , case SeqDict.get discordUserId model.discordUsers of
+                        Just (FullData user) ->
+                            Discord.requestGuildMembers
+                                (\connection data2 ->
+                                    Websocket.sendString connection data2
+                                        |> Task.attempt (WebsocketSentDataForUser discordUserId)
                                 )
-                                data
-                                |> SeqDict.fromList
-                    in
-                    ( DiscordSync.addDiscordUsers users model
-                        |> DiscordSync.addDiscordGuilds (SeqDict.fromList data)
-                    , List.map
-                        (\guildMember ->
-                            Task.map
-                                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
-                                (case guildMember.user.avatar of
-                                    Just avatar ->
-                                        DiscordSync.loadImage
-                                            (Discord.userAvatarUrl
-                                                { size = Discord.DefaultImageSize
-                                                , imageType = Discord.Choice1 Discord.Png
-                                                }
-                                                guildMember.user.id
-                                                avatar
-                                            )
+                                (List.map Tuple.first data)
+                                user.connection
+                                |> Result.withDefault Command.none
 
-                                    Nothing ->
-                                        Task.succeed Nothing
-                                )
-                        )
-                        (SeqDict.values users)
-                        |> Task.sequence
-                        |> Task.attempt GotDiscordUserAvatars
+                        _ ->
+                            Command.none
                     )
 
                 Err error ->
@@ -591,7 +571,7 @@ update msg model =
 
         WebsocketCreatedHandleForUser discordUserId connection ->
             ( { model
-                | discordUser =
+                | discordUsers =
                     SeqDict.updateIfExists
                         discordUserId
                         (\userData ->
@@ -603,7 +583,7 @@ update msg model =
                                 BasicData _ ->
                                     userData
                         )
-                        model.discordUser
+                        model.discordUsers
               }
             , Command.none
             )

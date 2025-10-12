@@ -1,9 +1,8 @@
 module DiscordSync exposing
     ( addDiscordGuilds
-    , addDiscordUsers
     , addReactionEmoji
     , discordUserWebsocketMsg
-    , gotCurrentUserGuildsForUser
+    , gotCurrentUserGuilds
     , http
     , loadImage
     )
@@ -29,7 +28,7 @@ import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel)
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild)
 import Message exposing (Message(..))
 import NonemptyDict
 import OneToOne exposing (OneToOne)
@@ -350,34 +349,8 @@ handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
 --        ( model, Command.none )
 
 
-addDiscordUsers :
-    SeqDict (Discord.Id.Id Discord.Id.UserId) Discord.GuildMember
-    -> BackendModel
-    -> BackendModel
-addDiscordUsers newUsers model =
-    SeqDict.foldl
-        (\discordUserId discordUser model2 ->
-            { model2
-                | discordUser =
-                    SeqDict.update
-                        discordUserId
-                        (\maybe ->
-                            case maybe of
-                                Just _ ->
-                                    maybe
-
-                                Nothing ->
-                                    BasicData discordUser |> Just
-                        )
-                        model2.discordUser
-            }
-        )
-        model
-        newUsers
-
-
 addDiscordChannel :
-    SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+    SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel2, List Discord.Message ))
     -> Discord.Channel2
     -> List Discord.Message
     -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel )
@@ -645,10 +618,8 @@ addDiscordGuilds :
     SeqDict
         (Discord.Id.Id Discord.Id.GuildId)
         { guild : Discord.Guild
-        , members : List Discord.GuildMember
         , channels : List ( Discord.Channel2, List Discord.Message )
         , icon : Maybe FileStatus.UploadResponse
-        , threads : List ( Discord.Channel, List Discord.Message )
         }
     -> BackendModel
     -> BackendModel
@@ -666,29 +637,31 @@ addDiscordGuilds guilds model =
 
                                 Nothing ->
                                     let
-                                        threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+                                        threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel2, List Discord.Message ))
                                         threads =
-                                            List.foldl
-                                                (\a dict ->
-                                                    case (Tuple.first a).parentId of
-                                                        Included (Just parentId) ->
-                                                            SeqDict.update
-                                                                parentId
-                                                                (\maybe2 ->
-                                                                    case maybe2 of
-                                                                        Just list ->
-                                                                            Just (a :: list)
+                                            SeqDict.empty
 
-                                                                        Nothing ->
-                                                                            Just [ a ]
-                                                                )
-                                                                dict
-
-                                                        _ ->
-                                                            dict
-                                                )
-                                                SeqDict.empty
-                                                data.threads
+                                        --List.foldl
+                                        --    (\( channel, messages ) dict ->
+                                        --        case (Tuple.first channel).parentId of
+                                        --            Included (Just parentId) ->
+                                        --                SeqDict.update
+                                        --                    parentId
+                                        --                    (\maybe2 ->
+                                        --                        case maybe2 of
+                                        --                            Just list ->
+                                        --                                Just (( channel, messages ) :: list)
+                                        --
+                                        --                            Nothing ->
+                                        --                                Just [ ( channel, messages ) ]
+                                        --                    )
+                                        --                    dict
+                                        --
+                                        --            _ ->
+                                        --                dict
+                                        --    )
+                                        --    SeqDict.empty
+                                        --    data.channels
                                     in
                                     { name = GuildName.fromStringLossy data.guild.name
                                     , icon = Maybe.map .fileHash data.icon
@@ -697,9 +670,7 @@ addDiscordGuilds guilds model =
                                             (\( channel, messages ) -> addDiscordChannel threads channel messages)
                                             data.channels
                                             |> SeqDict.fromList
-                                    , members =
-                                        List.map (\member -> ( member.user.id, { joinedAt = member.joinedAt } )) data.members
-                                            |> SeqDict.fromList
+                                    , members = SeqDict.empty -- Gets filled in via the websocket connection
                                     , owner = data.guild.ownerId
                                     , invites = SeqDict.empty
                                     }
@@ -1203,7 +1174,7 @@ discordGatewayIntents =
 
 discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
-    case SeqDict.get discordUserId model.discordUser of
+    case SeqDict.get discordUserId model.discordUsers of
         Just (FullData userData) ->
             let
                 ( discordModel2, outMsgs ) =
@@ -1297,13 +1268,20 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.ListGuildMembersResponse chunkData ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleListGuildMembersResponse chunkData model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
-                    | discordUser =
+                    | discordUsers =
                         SeqDict.insert
                             discordUserId
                             (FullData { userData | connection = discordModel2 })
-                            model.discordUser
+                            model.discordUsers
                   }
                 , []
                 )
@@ -1314,7 +1292,84 @@ discordUserWebsocketMsg discordUserId discordMsg model =
             ( model, Command.none )
 
 
-gotCurrentUserGuildsForUser :
+handleListGuildMembersResponse :
+    Discord.GuildMembersChunkData
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleListGuildMembersResponse chunkData model =
+    ( { model
+        | discordUsers =
+            List.foldl
+                (\member discordUsers ->
+                    SeqDict.update
+                        member.user.id
+                        (\maybe ->
+                            (case maybe of
+                                Just (FullData fullData) ->
+                                    FullData { fullData | data = member.user }
+
+                                _ ->
+                                    BasicData member.user
+                            )
+                                |> Just
+                        )
+                        discordUsers
+                )
+                model.discordUsers
+                chunkData.members
+        , discordGuilds =
+            SeqDict.updateIfExists
+                chunkData.guildId
+                (\guild ->
+                    { guild
+                        | members =
+                            List.foldl
+                                (\member guildMembers ->
+                                    SeqDict.update
+                                        member.user.id
+                                        (\maybe ->
+                                            case maybe of
+                                                Just _ ->
+                                                    maybe
+
+                                                Nothing ->
+                                                    { joinedAt = member.joinedAt }
+                                                        |> Just
+                                        )
+                                        guildMembers
+                                )
+                                guild.members
+                                chunkData.members
+                    }
+                )
+                model.discordGuilds
+      }
+    , List.map
+        (\guildMember ->
+            Task.map
+                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
+                (case guildMember.user.avatar of
+                    Just avatar ->
+                        loadImage
+                            (Discord.userAvatarUrl
+                                { size = Discord.DefaultImageSize
+                                , imageType = Discord.Choice1 Discord.Png
+                                }
+                                guildMember.user.id
+                                avatar
+                            )
+
+                    Nothing ->
+                        Task.succeed Nothing
+                )
+        )
+        chunkData.members
+        |> Task.sequence
+        |> Task.attempt GotDiscordUserAvatars
+    )
+
+
+gotCurrentUserGuilds :
     Time.Posix
     -> Id UserId
     -> Discord.UserAuth
@@ -1322,7 +1377,7 @@ gotCurrentUserGuildsForUser :
     -> Result error ( List Discord.PartialGuild, List Discord.Relationship )
     -> BackendModel
     -> ( BackendModel, Command restriction toMsg BackendMsg )
-gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
+gotCurrentUserGuilds time userId userAuth discordUser result model =
     case result of
         Ok ( guilds, relationships ) ->
             let
@@ -1332,7 +1387,7 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
             in
             ( { model
                 | linkedDiscordUsers = SeqDict.insert discordUser.id userId model.linkedDiscordUsers
-                , discordUser =
+                , discordUsers =
                     SeqDict.insert
                         discordUser.id
                         (FullData
@@ -1341,32 +1396,22 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
                             , connection = Discord.init
                             }
                         )
-                        model.discordUser
+                        model.discordUsers
               }
             , Command.batch
                 [ Websocket.createHandle (WebsocketCreatedHandleForUser discordUser.id) Discord.websocketGatewayUrl
                 , List.map
                     (\partialGuild ->
-                        Task.map5
-                            (\guild members channels maybeIcon threads ->
+                        Task.map3
+                            (\guild channels maybeIcon ->
                                 ( guild.id
                                 , { guild = guild
-                                  , members = members
                                   , channels = channels
                                   , icon = maybeIcon
-                                  , threads = threads
                                   }
                                 )
                             )
                             (Discord.getGuildPayload auth partialGuild.id |> http)
-                            (Discord.listGuildMembersPayload
-                                auth
-                                { guildId = partialGuild.id
-                                , limit = 1000
-                                , after = Discord.Missing
-                                }
-                                |> http
-                            )
                             (Discord.getGuildChannelsPayload auth partialGuild.id
                                 |> http
                                 |> Task.andThen
@@ -1401,26 +1446,26 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
                                 Nothing ->
                                     Task.succeed Nothing
                             )
-                            (Discord.listActiveThreadsPayload auth partialGuild.id
-                                |> http
-                                |> Task.andThen
-                                    (\activeThreads ->
-                                        List.map
-                                            (\thread ->
-                                                Discord.getMessagesPayload
-                                                    auth
-                                                    { channelId = thread.id
-                                                    , limit = 100
-                                                    , relativeTo = Discord.MostRecent
-                                                    }
-                                                    |> http
-                                                    |> Task.onError (\_ -> Task.succeed [])
-                                                    |> Task.map (Tuple.pair thread)
-                                            )
-                                            activeThreads.threads
-                                            |> Task.sequence
-                                    )
-                            )
+                     --(Discord.listActiveThreadsPayload auth partialGuild.id
+                     --    |> http
+                     --    |> Task.andThen
+                     --        (\activeThreads ->
+                     --            List.map
+                     --                (\thread ->
+                     --                    Discord.getMessagesPayload
+                     --                        auth
+                     --                        { channelId = thread.id
+                     --                        , limit = 100
+                     --                        , relativeTo = Discord.MostRecent
+                     --                        }
+                     --                        |> http
+                     --                        |> Task.onError (\_ -> Task.succeed [])
+                     --                        |> Task.map (Tuple.pair thread)
+                     --                )
+                     --                activeThreads.threads
+                     --                |> Task.sequence
+                     --        )
+                     --)
                     )
                     (if Env.isProduction then
                         guilds
@@ -1440,7 +1485,7 @@ gotCurrentUserGuildsForUser time userId userAuth discordUser result model =
         Err error ->
             let
                 _ =
-                    Debug.log "GotCurrentUserGuilds" error
+                    Debug.log "Error in GotCurrentUserGuilds" error
             in
             ( model, Command.none )
 
