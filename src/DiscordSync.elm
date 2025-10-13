@@ -1320,7 +1320,10 @@ handleReadySupplementalData data model =
                                     | members =
                                         List.foldl
                                             (\mergedMembers2 members ->
-                                                SeqDict.insert mergedMembers2.userId { joinedAt = mergedMembers2.joinedAt } members
+                                                SeqDict.insert
+                                                    mergedMembers2.userId
+                                                    { joinedAt = mergedMembers2.joinedAt }
+                                                    members
                                             )
                                             guild.members
                                             mergedMembers

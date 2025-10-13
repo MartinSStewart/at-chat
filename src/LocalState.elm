@@ -148,6 +148,16 @@ type alias FrontendGuild channelId =
     }
 
 
+type alias DiscordFrontendGuild =
+    { name : GuildName
+    , icon : Maybe FileHash
+    , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordFrontendChannel
+    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    , owner : Discord.Id.Id Discord.Id.UserId
+    , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
+    }
+
+
 guildToFrontendForUser : Maybe ( channelId, ThreadRoute ) -> Id UserId -> BackendGuild channelId -> Maybe (FrontendGuild channelId)
 guildToFrontendForUser requestMessagesFor userId guild =
     if userId == guild.owner || SeqDict.member userId guild.members then
@@ -243,6 +253,17 @@ type alias FrontendChannel =
     , isArchived : Maybe Archived
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) FrontendThread
+    }
+
+
+type alias DiscordFrontendChannel =
+    { name : ChannelName
+    , messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , visibleMessages : VisibleMessages ChannelMessageId
+    , status : ChannelStatus
+    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , threads : SeqDict (Id ChannelMessageId) DiscordThread
     }
 
 

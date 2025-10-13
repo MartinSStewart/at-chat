@@ -570,6 +570,7 @@ type alias LoginData =
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
+    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
