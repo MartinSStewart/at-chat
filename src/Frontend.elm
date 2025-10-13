@@ -5642,10 +5642,6 @@ updateLoadedFromBackend msg model =
         LinkDiscordResponse result ->
             case result of
                 Ok ok ->
-                    let
-                        _ =
-                            Debug.log "ok" ok
-                    in
                     ( model, Command.none )
 
                 Err error ->

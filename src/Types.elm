@@ -523,17 +523,15 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | GotLinkedDiscordUser Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
-    | GotLinkedDiscordUserData Time.Posix (Id UserId) Discord.UserAuth Discord.User (Result Discord.HttpError ( List Discord.PartialGuild, List Discord.Relationship ))
-    | GotLinkedDiscordGuilds
-        Time.Posix
+    | LinkDiscordUserStep1 ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
+    | LinkDiscordUserStep2
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
             (List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.Guild
-                  , channels : List ( Discord.Channel2, List Discord.Message )
+                  , channels : List ( Discord.Channel, List Discord.Message )
                   , icon : Maybe FileStatus.UploadResponse
                   }
                 )

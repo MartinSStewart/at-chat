@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyEventData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), Sticker, ThreadMember, UserAuth, UserDiscriminator(..), UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), Sticker, SupplementalGuild, ThreadMember, UserAuth, UserDiscriminator(..), UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -2111,7 +2111,6 @@ type alias Guild =
     , discoverySplash : Maybe (ImageHash DiscoverySplashHash)
     , owner : OptionalData Bool
     , ownerId : Id UserId
-    , permissions : OptionalData Permissions
     , region : String
     , afkChannelId : Maybe (Id ChannelId)
     , afkTimeout : Quantity Int Seconds
@@ -2184,8 +2183,8 @@ type alias PartialGuild =
     { id : Id GuildId
     , name : String
     , icon : Maybe (ImageHash IconHash)
-    , owner : Bool
-    , permissions : Permissions
+    , emojis : List EmojiData
+    , stickers : List Sticker
     }
 
 
@@ -3150,8 +3149,8 @@ decodePartialGuild =
         |> JD.andMap (JD.field "id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "name" JD.string)
         |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
-        |> JD.andMap (JD.field "owner" JD.bool)
-        |> JD.andMap (JD.field "permissions" decodePermissions)
+        |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
+        |> JD.andMap (JD.field "stickers" (JD.list stickerDecoder))
 
 
 decodeGuild : JD.Decoder Guild
@@ -3164,7 +3163,6 @@ decodeGuild =
         |> JD.andMap (JD.field "discovery_splash" (JD.nullable decodeHash))
         |> JD.andMap (decodeOptionalData "owner" JD.bool)
         |> JD.andMap (JD.field "owner_id" Discord.Id.decodeId)
-        |> JD.andMap (decodeOptionalData "permissions" decodePermissions)
         |> JD.andMap (JD.field "region" JD.string)
         |> JD.andMap (JD.field "afk_channel_id" (JD.nullable Discord.Id.decodeId))
         |> JD.andMap (JD.field "afk_timeout" (JD.map Quantity JD.int))
@@ -3611,7 +3609,6 @@ type alias GatewayGuild =
     , unavailable : OptionalData Bool
     , geoRestricted : OptionalData Bool
     , memberCount : Int
-    , members : List GuildMember
     , channels : List Channel
     , threads : List Channel
 
@@ -3621,7 +3618,7 @@ type alias GatewayGuild =
     --, stageInstances : List StageInstance
     --, guildScheduledEvents : List GuildScheduledEvent
     , dataMode : String
-    , properties : PartialGuild
+    , properties : GatewayGuildProperties
     , stickers : List Sticker
 
     --, roles : List Role
@@ -3630,6 +3627,43 @@ type alias GatewayGuild =
     --, soundboardSounds : List SoundboardSound
     , premiumSubscriptionCount : Int
     }
+
+
+type alias GatewayGuildProperties =
+    { nsfw_level : Int
+    , system_channel_flags : Int
+    , icon : Maybe (ImageHash IconHash)
+    , max_video_channel_users : Int
+    , id : Id GuildId
+    , system_channel_id : Maybe (Id ChannelId)
+    , afk_channel_id : Maybe (Id ChannelId)
+    , name : String
+    , max_members : Maybe Int
+    , nsfw : Bool
+    , description : Maybe String
+    , preferred_locale : String
+    , rules_channel_id : Maybe (Id ChannelId)
+    , owner_id : Id UserId
+    }
+
+
+decodeGatewayGuildProperties : JD.Decoder GatewayGuildProperties
+decodeGatewayGuildProperties =
+    JD.succeed GatewayGuildProperties
+        |> JD.andMap (JD.field "nsfw_level" JD.int)
+        |> JD.andMap (JD.field "system_channel_flags" JD.int)
+        |> JD.andMap (JD.field "icon" (JD.nullable decodeHash))
+        |> JD.andMap (JD.field "max_video_channel_users" JD.int)
+        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "system_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "afk_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "name" JD.string)
+        |> JD.andMap (JD.field "max_members" (JD.nullable JD.int))
+        |> JD.andMap (JD.field "nsfw" JD.bool)
+        |> JD.andMap (JD.field "description" (JD.nullable JD.string))
+        |> JD.andMap (JD.field "preferred_locale" JD.string)
+        |> JD.andMap (JD.field "rules_channel_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "owner_id" Discord.Id.decodeId)
 
 
 type alias Sticker =
@@ -3715,7 +3749,63 @@ formatTypeDecoder =
         JD.int
 
 
-type alias ReadyEventData =
+type alias ReadySupplementalData =
+    { guilds : List SupplementalGuild
+    , mergedMembers : List (List MergedMember)
+    , lazyPrivateChannels : List Channel
+    , disclose : List String
+    }
+
+
+readySupplementalDecoder : JD.Decoder ReadySupplementalData
+readySupplementalDecoder =
+    JD.succeed ReadySupplementalData
+        |> JD.andMap (JD.field "guilds" (JD.list supplementalGuildDecoder))
+        |> JD.andMap (JD.field "merged_members" (JD.list (JD.list decodeMergedMember)))
+        |> JD.andMap (JD.field "lazy_private_channels" (JD.list decodeChannel))
+        |> JD.andMap (JD.field "disclose" (JD.list JD.string))
+
+
+type alias MergedMember =
+    { userId : Id UserId
+    , premiumSince : Maybe Time.Posix
+    , pending : Bool
+    , nick : Maybe String
+    , roles : List (Id RoleId)
+    , mute : Bool
+    , joinedAt : Time.Posix
+    , flags : Int
+    , deaf : Bool
+    , avatar : Maybe (ImageHash AvatarHash)
+    }
+
+
+decodeMergedMember : JD.Decoder MergedMember
+decodeMergedMember =
+    JD.succeed MergedMember
+        |> JD.andMap (JD.field "user_id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "premium_since" (JD.nullable Iso8601.decoder))
+        |> JD.andMap (JD.field "pending" JD.bool)
+        |> JD.andMap (JD.field "nick" (JD.nullable JD.string))
+        |> JD.andMap (JD.field "roles" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "mute" JD.bool)
+        |> JD.andMap (JD.field "joined_at" Iso8601.decoder)
+        |> JD.andMap (JD.field "flags" JD.int)
+        |> JD.andMap (JD.field "deaf" JD.bool)
+        |> JD.andMap (JD.field "avatar" (JD.nullable decodeHash))
+
+
+type alias SupplementalGuild =
+    { id : Id GuildId
+    }
+
+
+supplementalGuildDecoder : JD.Decoder SupplementalGuild
+supplementalGuildDecoder =
+    JD.map SupplementalGuild (JD.field "id" Discord.Id.decodeId)
+
+
+type alias ReadyData =
     { trace : List String
     , v : Int
     , user : User
@@ -3736,7 +3826,7 @@ type alias ReadyEventData =
     --, notes : OptionalData (Dict String String)
     --, presences : List Presence
     --, mergedPresences : OptionalData MergedPresences
-    , mergedMembers : OptionalData (List (List GuildMember))
+    , mergedMembers : OptionalData (List (List MergedMember))
     , users : List PartialUser
 
     --, application : OptionalData GatewayApplication
@@ -3749,7 +3839,6 @@ type alias ReadyEventData =
     , authSessionIdHash : OptionalData String
     , authToken : OptionalData String
     , analyticsToken : OptionalData String
-    , authenticatorTypes : List Int
     , requiredAction : OptionalData RequiredAction
     , countryCode : OptionalData String
     , geoOrderedRtcRegions : List String
@@ -3789,9 +3878,9 @@ type RequiredAction
     | RequiresReverifiedEmailOrReverifiedPhone
 
 
-readyEventDecoder : JD.Decoder ReadyEventData
+readyEventDecoder : JD.Decoder ReadyData
 readyEventDecoder =
-    JD.succeed ReadyEventData
+    JD.succeed ReadyData
         |> JD.andMap (JD.field "_trace" (JD.list JD.string))
         |> JD.andMap (JD.field "v" JD.int)
         |> JD.andMap (JD.field "user" decodeUser)
@@ -3800,7 +3889,7 @@ readyEventDecoder =
         |> JD.andMap (decodeOptionalData "relationships" (JD.list relationshipDecoder))
         |> JD.andMap (decodeOptionalData "friend_suggestion_count" JD.int)
         |> JD.andMap (decodeOptionalData "private_channels" (JD.list decodeChannel))
-        |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list decodeGuildMember)))
+        |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list decodeMergedMember)))
         |> JD.andMap (JD.field "users" (JD.list decodePartialUser))
         |> JD.andMap (decodeOptionalData "scopes" (JD.list JD.string))
         |> JD.andMap (JD.field "session_id" decodeSessionId)
@@ -3809,7 +3898,6 @@ readyEventDecoder =
         |> JD.andMap (decodeOptionalData "auth_session_id_hash" JD.string)
         |> JD.andMap (decodeOptionalData "auth_token" JD.string)
         |> JD.andMap (decodeOptionalData "analytics_token" JD.string)
-        |> JD.andMap (JD.field "authenticator_types" (JD.list JD.int))
         |> JD.andMap (decodeOptionalData "required_action" requiredActionDecoder)
         |> JD.andMap (decodeOptionalData "country_code" JD.string)
         |> JD.andMap (JD.field "geo_ordered_rtc_regions" (JD.list JD.string))
@@ -3897,7 +3985,6 @@ gatewayGuildDecoder =
         |> JD.andMap (decodeOptionalData "unavailable" JD.bool)
         |> JD.andMap (decodeOptionalData "geo_restricted" JD.bool)
         |> JD.andMap (JD.field "member_count" JD.int)
-        |> JD.andMap (JD.field "members" (JD.list decodeGuildMember))
         |> JD.andMap (JD.field "channels" (JD.list decodeChannel))
         |> JD.andMap (JD.field "threads" (JD.list decodeChannel))
         --|> JD.andMap (JD.field "presences" (JD.list presenceDecoder))
@@ -3906,7 +3993,7 @@ gatewayGuildDecoder =
         --|> JD.andMap (JD.field "stage_instances" (JD.list stageInstanceDecoder))
         --|> JD.andMap (JD.field "guild_scheduled_events" (JD.list scheduledEventDecoder))
         |> JD.andMap (JD.field "data_mode" JD.string)
-        |> JD.andMap (JD.field "properties" decodePartialGuild)
+        |> JD.andMap (JD.field "properties" decodeGatewayGuildProperties)
         |> JD.andMap (JD.field "stickers" (JD.list stickerDecoder))
         --|> JD.andMap (JD.field "roles" (JD.list roleDecoder))
         |> JD.andMap (JD.field "emojis" (JD.list decodeEmoji))
@@ -3989,6 +4076,9 @@ decodeDispatchUserEvent eventName =
     case eventName of
         "READY" ->
             JD.field "d" (JD.map DispatchUser_ReadyEvent readyEventDecoder)
+
+        "READY_SUPPLEMENTAL" ->
+            JD.field "d" (JD.map DispatchUser_ReadySupplementalEvent readySupplementalDecoder)
 
         "RESUMED" ->
             JD.field "d" (JD.succeed DispatchUser_ResumedEvent)
@@ -4181,7 +4271,8 @@ type OpDispatchBotEvent
 
 
 type OpDispatchUserEvent
-    = DispatchUser_ReadyEvent ReadyEventData
+    = DispatchUser_ReadyEvent ReadyData
+    | DispatchUser_ReadySupplementalEvent ReadySupplementalData
     | DispatchUser_ResumedEvent
     | DispatchUser_MessageCreateEvent ChannelType Message
     | DispatchUser_MessageUpdateEvent MessageUpdate
@@ -4792,6 +4883,8 @@ type UserOutMsg connection
     | UserOutMsg_AllReactionsRemoved ReactionRemoveAll
     | UserOutMsg_ReactionsRemoveForEmoji ReactionRemoveEmoji
     | UserOutMsg_ListGuildMembersResponse GuildMembersChunkData
+    | UserOutMsg_InitialData ReadyData
+    | UserOutMsg_SupplementalInitialData ReadySupplementalData
 
 
 type alias Model connection =
@@ -5022,7 +5115,12 @@ handleUserGateway authToken intents response model =
                 OpDispatch sequenceCounter opDispatchEvent ->
                     case opDispatchEvent of
                         DispatchUser_ReadyEvent readyEvent ->
-                            ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }, [] )
+                            ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }
+                            , []
+                            )
+
+                        DispatchUser_ReadySupplementalEvent readySupplementalEvent ->
+                            ( model, [] )
 
                         DispatchUser_ResumedEvent ->
                             ( model, [] )
@@ -5108,7 +5206,6 @@ handleUserGateway authToken intents response model =
 type alias Relationship =
     { id : Id UserId
     , type_ : RelationshipType
-    , user : PartialUser
     , nickname : Maybe String
     , isSpamRequest : OptionalData Bool
     , strangerRequest : OptionalData Bool
@@ -5123,7 +5220,6 @@ relationshipDecoder =
     JD.succeed Relationship
         |> JD.andMap (JD.field "id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "type" relationshipTypeDecoder)
-        |> JD.andMap (JD.field "user" decodePartialUser)
         |> JD.andMap (JD.field "nickname" (JD.nullable JD.string))
         |> JD.andMap (decodeOptionalData "is_spam_request" JD.bool)
         |> JD.andMap (decodeOptionalData "stranger_request" JD.bool)

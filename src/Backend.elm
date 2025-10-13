@@ -511,10 +511,22 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        GotLinkedDiscordUser time clientId userId auth result ->
+        LinkDiscordUserStep1 clientId userId auth result ->
             case result of
                 Ok discordUser ->
-                    ( model
+                    ( { model
+                        | linkedDiscordUsers = SeqDict.insert discordUser.id userId model.linkedDiscordUsers
+                        , discordUsers =
+                            SeqDict.insert
+                                discordUser.id
+                                (FullData
+                                    { auth = auth
+                                    , data = discordUser
+                                    , connection = Discord.init
+                                    }
+                                )
+                                model.discordUsers
+                      }
                     , Command.batch
                         [ Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                         , Broadcast.toUser
@@ -523,11 +535,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
                             model
-                        , Task.map2
-                            Tuple.pair
-                            (Discord.getCurrentUserGuildsPayload (Discord.userToken auth) |> DiscordSync.http)
-                            (Discord.getRelationshipsPayload auth |> DiscordSync.http)
-                            |> Task.attempt (GotLinkedDiscordUserData time userId auth discordUser)
+                        , Websocket.createHandle (WebsocketCreatedHandleForUser discordUser.id) Discord.websocketGatewayUrl
                         ]
                     )
 
@@ -536,14 +544,7 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                     )
 
-        GotLinkedDiscordUserData time userId auth discordUser result ->
-            let
-                _ =
-                    Debug.log "result" result
-            in
-            DiscordSync.gotCurrentUserGuilds time userId auth discordUser result model
-
-        GotLinkedDiscordGuilds time discordUserId result ->
+        LinkDiscordUserStep2 discordUserId result ->
             case result of
                 Ok data ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList data) model
@@ -2327,7 +2328,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> DiscordSync.http
-                        |> Task.attempt (GotLinkedDiscordUser time clientId session.userId data)
+                        |> Task.attempt (LinkDiscordUserStep1 clientId session.userId data)
                     )
                 )
 
