@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchEvent(..), OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), Sticker, ThreadMember, UserAuth, UserDiscriminator(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, websocketGatewayUrl
+    , ActiveThreads, AutoArchiveDuration(..), Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyEventData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), Sticker, ThreadMember, UserAuth, UserDiscriminator(..), UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -3715,30 +3715,36 @@ formatTypeDecoder =
         JD.int
 
 
-type alias ReadyEvent =
+type alias ReadyEventData =
     { trace : List String
     , v : Int
     , user : User
     , userSettingsProto : OptionalData String
-    , notificationSettings : OptionalData NotificationSettings
-    , userGuildSettings : OptionalData VersionedUserGuildSettings
+
+    --, notificationSettings : OptionalData NotificationSettings
+    --, userGuildSettings : OptionalData VersionedUserGuildSettings
     , guilds : List GatewayGuild
-    , guildJoinRequests : OptionalData (List PartialGuildJoinRequest)
+
+    --, guildJoinRequests : OptionalData (List PartialGuildJoinRequest)
     , relationships : OptionalData (List Relationship)
-    , gameRelationships : OptionalData (List GameRelationship)
+
+    --, gameRelationships : OptionalData (List GameRelationship)
     , friendSuggestionCount : OptionalData Int
     , privateChannels : OptionalData (List Channel)
-    , connectedAccounts : List Connection
-    , notes : OptionalData (Dict String String)
-    , presences : List Presence
-    , mergedPresences : OptionalData MergedPresences
+
+    --, connectedAccounts : List Connection
+    --, notes : OptionalData (Dict String String)
+    --, presences : List Presence
+    --, mergedPresences : OptionalData MergedPresences
     , mergedMembers : OptionalData (List (List GuildMember))
     , users : List PartialUser
-    , application : OptionalData GatewayApplication
+
+    --, application : OptionalData GatewayApplication
     , scopes : OptionalData (List String)
-    , sessionId : String
+    , sessionId : SessionId
     , sessionType : SessionType
-    , sessions : OptionalData (List Session)
+
+    --, sessions : OptionalData (List Session)
     , staticClientSessionId : String
     , authSessionIdHash : OptionalData String
     , authToken : OptionalData String
@@ -3767,44 +3773,38 @@ type alias ReadyEvent =
 
 
 type SessionType
-    = NormalSession
-    | UnknownSessionType String
+    = SessionType_Normal
+    | SessionType_OAuth
 
 
 type RequiredAction
-    = RequiresCaptcha
+    = RequiresAgreementToTerms
     | RequiresVerifiedEmail
+    | RequiresReverifiedEmail
     | RequiresVerifiedPhone
-    | RequiresAgreementToTerms
-    | UnknownRequiredAction String
+    | RequiresReverifiedPhone
+    | RequiresVerifiedEmailOrVerifiedPhone
+    | RequiresReverifiedEmailOrVerifiedPhone
+    | RequiresVerifiedEmailOrReverifiedPhone
+    | RequiresReverifiedEmailOrReverifiedPhone
 
 
-readyEventDecoder : JD.Decoder ReadyEvent
+readyEventDecoder : JD.Decoder ReadyEventData
 readyEventDecoder =
-    JD.succeed ReadyEvent
+    JD.succeed ReadyEventData
         |> JD.andMap (JD.field "_trace" (JD.list JD.string))
         |> JD.andMap (JD.field "v" JD.int)
         |> JD.andMap (JD.field "user" decodeUser)
         |> JD.andMap (decodeOptionalData "user_settings_proto" JD.string)
-        |> JD.andMap (decodeOptionalData "notification_settings" notificationSettingsDecoder)
-        |> JD.andMap (decodeOptionalData "user_guild_settings" versionedUserGuildSettingsDecoder)
         |> JD.andMap (JD.field "guilds" (JD.list gatewayGuildDecoder))
-        |> JD.andMap (decodeOptionalData "guild_join_requests" (JD.list partialGuildJoinRequestDecoder))
         |> JD.andMap (decodeOptionalData "relationships" (JD.list relationshipDecoder))
-        |> JD.andMap (decodeOptionalData "game_relationships" (JD.list gameRelationshipDecoder))
         |> JD.andMap (decodeOptionalData "friend_suggestion_count" JD.int)
-        |> JD.andMap (decodeOptionalData "private_channels" (JD.list channelDecoder))
-        |> JD.andMap (JD.field "connected_accounts" (JD.list connectionDecoder))
-        |> JD.andMap (decodeOptionalData "notes" (dictDecoder JD.string JD.string))
-        |> JD.andMap (JD.field "presences" (JD.list presenceDecoder))
-        |> JD.andMap (decodeOptionalData "merged_presences" mergedPresencesDecoder)
-        |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list guildMemberDecoder)))
-        |> JD.andMap (JD.field "users" (JD.list partialUserDecoder))
-        |> JD.andMap (decodeOptionalData "application" gatewayApplicationDecoder)
+        |> JD.andMap (decodeOptionalData "private_channels" (JD.list decodeChannel))
+        |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list decodeGuildMember)))
+        |> JD.andMap (JD.field "users" (JD.list decodePartialUser))
         |> JD.andMap (decodeOptionalData "scopes" (JD.list JD.string))
-        |> JD.andMap (JD.field "session_id" JD.string)
+        |> JD.andMap (JD.field "session_id" decodeSessionId)
         |> JD.andMap (JD.field "session_type" sessionTypeDecoder)
-        |> JD.andMap (decodeOptionalData "sessions" (JD.list sessionDecoder))
         |> JD.andMap (JD.field "static_client_session_id" JD.string)
         |> JD.andMap (decodeOptionalData "auth_session_id_hash" JD.string)
         |> JD.andMap (decodeOptionalData "auth_token" JD.string)
@@ -3820,44 +3820,62 @@ readyEventDecoder =
         |> JD.andMap (decodeOptionalData "av_sf_protocol_floor" JD.int)
 
 
-sessionTypeDecoder : Decoder SessionType
+sessionTypeDecoder : JD.Decoder SessionType
 sessionTypeDecoder =
-    JD.string
-        |> JD.map
-            (\str ->
-                case str of
-                    "normal" ->
-                        NormalSession
+    JD.andThen
+        (\str ->
+            case str of
+                "normal" ->
+                    JD.succeed SessionType_Normal
 
-                    _ ->
-                        UnknownSessionType str
-            )
+                "oauth" ->
+                    JD.succeed SessionType_OAuth
+
+                _ ->
+                    JD.fail ("Invalid session type: " ++ str)
+        )
+        JD.string
 
 
-requiredActionDecoder : Decoder RequiredAction
+requiredActionDecoder : JD.Decoder RequiredAction
 requiredActionDecoder =
-    JD.string
-        |> JD.map
-            (\str ->
-                case str of
-                    "REQUIRE_CAPTCHA" ->
-                        RequiresCaptcha
+    JD.andThen
+        (\str ->
+            case str of
+                "AGREEMENTS" ->
+                    JD.succeed RequiresAgreementToTerms
 
-                    "REQUIRE_VERIFIED_EMAIL" ->
-                        RequiresVerifiedEmail
+                "REQUIRE_VERIFIED_EMAIL" ->
+                    JD.succeed RequiresVerifiedEmail
 
-                    "REQUIRE_VERIFIED_PHONE" ->
-                        RequiresVerifiedPhone
+                "REQUIRE_REVERIFIED_EMAIL" ->
+                    JD.succeed RequiresReverifiedEmail
 
-                    "AGREEMENTS" ->
-                        RequiresAgreementToTerms
+                "REQUIRE_VERIFIED_PHONE" ->
+                    JD.succeed RequiresVerifiedPhone
 
-                    _ ->
-                        UnknownRequiredAction str
-            )
+                "REQUIRE_REVERIFIED_PHONE" ->
+                    JD.succeed RequiresReverifiedPhone
+
+                "REQUIRE_VERIFIED_EMAIL_OR_VERIFIED_PHONE" ->
+                    JD.succeed RequiresVerifiedEmailOrVerifiedPhone
+
+                "REQUIRE_REVERIFIED_EMAIL_OR_VERIFIED_PHONE" ->
+                    JD.succeed RequiresReverifiedEmailOrVerifiedPhone
+
+                "REQUIRE_VERIFIED_EMAIL_OR_REVERIFIED_PHONE" ->
+                    JD.succeed RequiresVerifiedEmailOrReverifiedPhone
+
+                "REQUIRE_REVERIFIED_EMAIL_OR_REVERIFIED_PHONE" ->
+                    JD.succeed RequiresReverifiedEmailOrReverifiedPhone
+
+                _ ->
+                    JD.fail ("Invalid required action: " ++ str)
+        )
+        JD.string
 
 
-shardDecoder : Decoder ( Int, Int )
+shardDecoder : JD.Decoder ( Int, Int )
 shardDecoder =
     JD.list JD.int
         |> JD.andThen
@@ -3896,30 +3914,27 @@ gatewayGuildDecoder =
         |> JD.andMap (JD.field "premium_subscription_count" JD.int)
 
 
-decodeDispatchEvent : String -> JD.Decoder OpDispatchEvent
+decodeDispatchEvent : String -> JD.Decoder OpDispatchBotEvent
 decodeDispatchEvent eventName =
     case eventName of
         "READY" ->
-            JD.field "d"
-                (JD.succeed ReadyEvent
-                    |> JD.andMap (JD.field "session_id" decodeSessionId)
-                )
+            JD.field "d" (JD.map DispatchBot_ReadyEvent decodeSessionId)
 
         "RESUMED" ->
-            JD.field "d" (JD.succeed ResumedEvent)
+            JD.field "d" (JD.succeed DispatchBot_ResumedEvent)
 
         "MESSAGE_CREATE" ->
             JD.map2
-                MessageCreateEvent
+                DispatchBot_MessageCreateEvent
                 (JD.at [ "d", "channel_type" ] decodeChannelType)
                 (JD.field "d" decodeMessage)
 
         "MESSAGE_UPDATE" ->
-            JD.field "d" decodeMessageUpdate |> JD.map MessageUpdateEvent
+            JD.field "d" decodeMessageUpdate |> JD.map DispatchBot_MessageUpdateEvent
 
         "MESSAGE_DELETE" ->
             JD.field "d"
-                (JD.succeed MessageDeleteEvent
+                (JD.succeed DispatchBot_MessageDeleteEvent
                     |> JD.andMap (JD.field "id" Discord.Id.decodeId)
                     |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
                     |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
@@ -3927,7 +3942,7 @@ decodeDispatchEvent eventName =
 
         "MESSAGE_DELETE_BULK" ->
             JD.field "d"
-                (JD.succeed MessageDeleteBulkEvent
+                (JD.succeed DispatchBot_MessageDeleteBulkEvent
                     |> JD.andMap (JD.field "id" (JD.list Discord.Id.decodeId))
                     |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
                     |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
@@ -3935,38 +3950,108 @@ decodeDispatchEvent eventName =
 
         "GUILD_MEMBER_ADD" ->
             JD.field "d"
-                (JD.succeed GuildMemberAddEvent
+                (JD.succeed DispatchBot_GuildMemberAddEvent
                     |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
                     |> JD.andMap decodeGuildMember
                 )
 
         "GUILD_MEMBER_REMOVE" ->
             JD.field "d"
-                (JD.succeed GuildMemberRemoveEvent
+                (JD.succeed DispatchBot_GuildMemberRemoveEvent
                     |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
                     |> JD.andMap (JD.field "user" decodeUser)
                 )
 
         "GUILD_MEMBER_UPDATE" ->
-            JD.field "d" decodeGuildMemberUpdate |> JD.map GuildMemberUpdateEvent
+            JD.field "d" decodeGuildMemberUpdate |> JD.map DispatchBot_GuildMemberUpdateEvent
 
         "THREAD_CREATE" ->
-            JD.field "d" decodeChannel |> JD.map ThreadCreatedOrUserAddedToThreadEvent
+            JD.field "d" decodeChannel |> JD.map DispatchBot_ThreadCreatedOrUserAddedToThreadEvent
 
         "MESSAGE_REACTION_ADD" ->
-            JD.field "d" decodeReactionAdd |> JD.map MessageReactionAdd
+            JD.field "d" decodeReactionAdd |> JD.map DispatchBot_MessageReactionAdd
 
         "MESSAGE_REACTION_REMOVE" ->
-            JD.field "d" decodeReactionRemove |> JD.map MessageReactionRemove
+            JD.field "d" decodeReactionRemove |> JD.map DispatchBot_MessageReactionRemove
 
         "MESSAGE_REACTION_REMOVE_ALL" ->
-            JD.field "d" decodeReactionRemoveAll |> JD.map MessageReactionRemoveAll
+            JD.field "d" decodeReactionRemoveAll |> JD.map DispatchBot_MessageReactionRemoveAll
 
         "MESSAGE_REACTION_REMOVE_EMOJI" ->
-            JD.field "d" decodeReactionRemoveEmoji |> JD.map MessageReactionRemoveEmoji
+            JD.field "d" decodeReactionRemoveEmoji |> JD.map DispatchBot_MessageReactionRemoveEmoji
+
+        _ ->
+            JD.fail <| "Invalid event name: " ++ eventName
+
+
+decodeDispatchUserEvent : String -> JD.Decoder OpDispatchUserEvent
+decodeDispatchUserEvent eventName =
+    case eventName of
+        "READY" ->
+            JD.field "d" (JD.map DispatchUser_ReadyEvent readyEventDecoder)
+
+        "RESUMED" ->
+            JD.field "d" (JD.succeed DispatchUser_ResumedEvent)
+
+        "MESSAGE_CREATE" ->
+            JD.map2
+                DispatchUser_MessageCreateEvent
+                (JD.at [ "d", "channel_type" ] decodeChannelType)
+                (JD.field "d" decodeMessage)
+
+        "MESSAGE_UPDATE" ->
+            JD.field "d" decodeMessageUpdate |> JD.map DispatchUser_MessageUpdateEvent
+
+        "MESSAGE_DELETE" ->
+            JD.field "d"
+                (JD.succeed DispatchUser_MessageDeleteEvent
+                    |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                )
+
+        "MESSAGE_DELETE_BULK" ->
+            JD.field "d"
+                (JD.succeed DispatchUser_MessageDeleteBulkEvent
+                    |> JD.andMap (JD.field "id" (JD.list Discord.Id.decodeId))
+                    |> JD.andMap (JD.field "channel_id" Discord.Id.decodeId)
+                    |> JD.andMap (decodeOptionalData "guild_id" Discord.Id.decodeId)
+                )
+
+        "GUILD_MEMBER_ADD" ->
+            JD.field "d"
+                (JD.succeed DispatchUser_GuildMemberAddEvent
+                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap decodeGuildMember
+                )
+
+        "GUILD_MEMBER_REMOVE" ->
+            JD.field "d"
+                (JD.succeed DispatchUser_GuildMemberRemoveEvent
+                    |> JD.andMap (JD.field "guild_id" Discord.Id.decodeId)
+                    |> JD.andMap (JD.field "user" decodeUser)
+                )
+
+        "GUILD_MEMBER_UPDATE" ->
+            JD.field "d" decodeGuildMemberUpdate |> JD.map DispatchUser_GuildMemberUpdateEvent
+
+        "THREAD_CREATE" ->
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ThreadCreatedOrUserAddedToThreadEvent
+
+        "MESSAGE_REACTION_ADD" ->
+            JD.field "d" decodeReactionAdd |> JD.map DispatchUser_MessageReactionAdd
+
+        "MESSAGE_REACTION_REMOVE" ->
+            JD.field "d" decodeReactionRemove |> JD.map DispatchUser_MessageReactionRemove
+
+        "MESSAGE_REACTION_REMOVE_ALL" ->
+            JD.field "d" decodeReactionRemoveAll |> JD.map DispatchUser_MessageReactionRemoveAll
+
+        "MESSAGE_REACTION_REMOVE_EMOJI" ->
+            JD.field "d" decodeReactionRemoveEmoji |> JD.map DispatchUser_MessageReactionRemoveEmoji
 
         "GUILD_MEMBERS_CHUNK" ->
-            JD.field "d" decodeGuildMembersChunk |> JD.map GuildMembersChunk
+            JD.field "d" decodeGuildMembersChunk |> JD.map DispatchUser_GuildMembersChunk
 
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
@@ -3993,15 +4078,15 @@ decodeMessageUpdate =
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
 
 
-decodeGatewayEvent : JD.Decoder GatewayEvent
-decodeGatewayEvent =
+decodeGatewayEvent : (String -> JD.Decoder event) -> JD.Decoder (GatewayEvent event)
+decodeGatewayEvent eventDecoder =
     JD.field "op" JD.int
         |> JD.andThen
             (\opCode ->
                 case opCode of
                     0 ->
                         JD.field "t" JD.string
-                            |> JD.andThen decodeDispatchEvent
+                            |> JD.andThen eventDecoder
                             |> JD.andThen
                                 (\event ->
                                     JD.field "s" JD.int
@@ -4061,30 +4146,56 @@ type GatewayCommand
     | OpUpdatePresence
 
 
-type GatewayEvent
+type GatewayUserCommand
+    = GatewayUser_OpIdentify UserAuth Intents
+    | GatewayUser_OpResume UserAuth SessionId SequenceCounter
+    | GatewayUser_OpHeatbeat
+    | GatewayUser_OpRequestGuildMembers (List (Id GuildId)) (OptionalData Nonce)
+    | GatewayUser_OpUpdateVoiceState
+    | GatewayUser_OpUpdatePresence
+
+
+type GatewayEvent event
     = OpHello { heartbeatInterval : Duration }
     | OpAck
-    | OpDispatch SequenceCounter OpDispatchEvent
+    | OpDispatch SequenceCounter event
     | OpReconnect
     | OpInvalidSession
 
 
-type OpDispatchEvent
-    = ReadyEvent SessionId
-    | ResumedEvent
-    | MessageCreateEvent ChannelType Message
-    | MessageUpdateEvent MessageUpdate
-    | MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
-    | MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
-    | GuildMemberAddEvent (Id GuildId) GuildMember
-    | GuildMemberRemoveEvent (Id GuildId) User
-    | GuildMemberUpdateEvent GuildMemberUpdate
-    | ThreadCreatedOrUserAddedToThreadEvent Channel
-    | MessageReactionAdd ReactionAdd
-    | MessageReactionRemove ReactionRemove
-    | MessageReactionRemoveAll ReactionRemoveAll
-    | MessageReactionRemoveEmoji ReactionRemoveEmoji
-    | GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
+type OpDispatchBotEvent
+    = DispatchBot_ReadyEvent SessionId
+    | DispatchBot_ResumedEvent
+    | DispatchBot_MessageCreateEvent ChannelType Message
+    | DispatchBot_MessageUpdateEvent MessageUpdate
+    | DispatchBot_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
+    | DispatchBot_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
+    | DispatchBot_GuildMemberAddEvent (Id GuildId) GuildMember
+    | DispatchBot_GuildMemberRemoveEvent (Id GuildId) User
+    | DispatchBot_GuildMemberUpdateEvent GuildMemberUpdate
+    | DispatchBot_ThreadCreatedOrUserAddedToThreadEvent Channel
+    | DispatchBot_MessageReactionAdd ReactionAdd
+    | DispatchBot_MessageReactionRemove ReactionRemove
+    | DispatchBot_MessageReactionRemoveAll ReactionRemoveAll
+    | DispatchBot_MessageReactionRemoveEmoji ReactionRemoveEmoji
+
+
+type OpDispatchUserEvent
+    = DispatchUser_ReadyEvent ReadyEventData
+    | DispatchUser_ResumedEvent
+    | DispatchUser_MessageCreateEvent ChannelType Message
+    | DispatchUser_MessageUpdateEvent MessageUpdate
+    | DispatchUser_MessageDeleteEvent (Id MessageId) (Id ChannelId) (OptionalData (Id GuildId))
+    | DispatchUser_MessageDeleteBulkEvent (List (Id MessageId)) (Id ChannelId) (OptionalData (Id GuildId))
+    | DispatchUser_GuildMemberAddEvent (Id GuildId) GuildMember
+    | DispatchUser_GuildMemberRemoveEvent (Id GuildId) User
+    | DispatchUser_GuildMemberUpdateEvent GuildMemberUpdate
+    | DispatchUser_ThreadCreatedOrUserAddedToThreadEvent Channel
+    | DispatchUser_MessageReactionAdd ReactionAdd
+    | DispatchUser_MessageReactionRemove ReactionRemove
+    | DispatchUser_MessageReactionRemoveAll ReactionRemoveAll
+    | DispatchUser_MessageReactionRemoveEmoji ReactionRemoveEmoji
+    | DispatchUser_GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
 
 
 requestGuildMembers : (connection -> String -> cmd) -> List (Id GuildId) -> Model connection -> Result () cmd
@@ -4587,6 +4698,65 @@ encodeGatewayCommand gatewayCommand =
             JE.object []
 
 
+encodeUserGatewayCommand : GatewayUserCommand -> JE.Value
+encodeUserGatewayCommand gatewayCommand =
+    case gatewayCommand of
+        GatewayUser_OpIdentify authToken intents ->
+            JE.object
+                [ ( "op", JE.int 2 )
+                , ( "d"
+                  , [ ( "token", authToken.token |> JE.string )
+                    , ( "properties", SafeJson.encoder authToken.xSuperProperties )
+                    , ( "presence"
+                      , JE.object
+                            [ ( "status", JE.string "unknown" )
+                            , ( "since", JE.int 0 )
+                            , ( "activities", JE.list identity [] )
+                            , ( "afk", JE.bool False )
+                            ]
+                      )
+                    , ( "client_state", JE.object [ ( "guild_versions", JE.object [] ) ] )
+                    , ( "capabilities", JE.int 1734653 )
+                    ]
+                        |> JE.object
+                  )
+                ]
+
+        GatewayUser_OpResume authToken sessionId (SequenceCounter sequenceCounter) ->
+            JE.object
+                [ ( "op", JE.int 6 )
+                , ( "d"
+                  , JE.object
+                        [ ( "token", authToken.token |> JE.string )
+                        , ( "session_id", encodeSessionId sessionId )
+                        , ( "seq", JE.int sequenceCounter )
+                        ]
+                  )
+                ]
+
+        GatewayUser_OpHeatbeat ->
+            JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
+
+        GatewayUser_OpRequestGuildMembers guildIds nonce2 ->
+            JE.object
+                [ ( "op", JE.int 8 )
+                , ( "d"
+                  , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
+                    , ( "query", JE.string "" )
+                    , ( "limit", JE.int 100 )
+                    ]
+                        ++ encodeOptionalData "nonce" encodeNonce nonce2
+                        |> JE.object
+                  )
+                ]
+
+        GatewayUser_OpUpdateVoiceState ->
+            JE.object []
+
+        GatewayUser_OpUpdatePresence ->
+            JE.object []
+
+
 
 --- Gateway code
 
@@ -4605,7 +4775,23 @@ type OutMsg connection
     | UserRemovedReaction ReactionRemove
     | AllReactionsRemoved ReactionRemoveAll
     | ReactionsRemoveForEmoji ReactionRemoveEmoji
-    | ListGuildMembersResponse GuildMembersChunkData
+
+
+type UserOutMsg connection
+    = UserOutMsg_CloseAndReopenHandle connection
+    | UserOutMsg_OpenHandle
+    | UserOutMsg_SendWebsocketData connection String
+    | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
+    | UserOutMsg_UserCreatedMessage ChannelType Message
+    | UserOutMsg_UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
+    | UserOutMsg_UserEditedMessage MessageUpdate
+    | UserOutMsg_FailedToParseWebsocketMessage JD.Error
+    | UserOutMsg_ThreadCreatedOrUserAddedToThread Channel
+    | UserOutMsg_UserAddedReaction ReactionAdd
+    | UserOutMsg_UserRemovedReaction ReactionRemove
+    | UserOutMsg_AllReactionsRemoved ReactionRemoveAll
+    | UserOutMsg_ReactionsRemoveForEmoji ReactionRemoveEmoji
+    | UserOutMsg_ListGuildMembersResponse GuildMembersChunkData
 
 
 type alias Model connection =
@@ -4662,9 +4848,23 @@ update authToken intents msg model =
             ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
 
+userUpdate : UserAuth -> Intents -> Msg -> Model connection -> ( Model connection, List (UserOutMsg connection) )
+userUpdate authToken intents msg model =
+    case msg of
+        GotWebsocketData data ->
+            handleUserGateway authToken intents data model
+
+        WebsocketClosed ->
+            let
+                _ =
+                    Debug.log "WebsocketClosed" ()
+            in
+            ( { model | websocketHandle = Nothing }, [ UserOutMsg_OpenHandle ] )
+
+
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )
 handleGateway authToken intents response model =
-    case ( model.websocketHandle, JD.decodeString decodeGatewayEvent response ) of
+    case ( model.websocketHandle, JD.decodeString (decodeGatewayEvent decodeDispatchEvent) response ) of
         ( Just connection, Ok data ) ->
             let
                 heartbeat : String
@@ -4703,19 +4903,19 @@ handleGateway authToken intents response model =
 
                 OpDispatch sequenceCounter opDispatchEvent ->
                     case opDispatchEvent of
-                        ReadyEvent discordSessionId ->
+                        DispatchBot_ReadyEvent discordSessionId ->
                             ( { model | gatewayState = Just ( discordSessionId, sequenceCounter ) }, [] )
 
-                        ResumedEvent ->
+                        DispatchBot_ResumedEvent ->
                             ( model, [] )
 
-                        MessageCreateEvent channelType message ->
+                        DispatchBot_MessageCreateEvent channelType message ->
                             ( model, [ UserCreatedMessage channelType message ] )
 
-                        MessageUpdateEvent messageUpdate ->
+                        DispatchBot_MessageUpdateEvent messageUpdate ->
                             ( model, [ UserEditedMessage messageUpdate ] )
 
-                        MessageDeleteEvent messageId channelId maybeGuildId ->
+                        DispatchBot_MessageDeleteEvent messageId channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
                                     ( model
@@ -4727,7 +4927,7 @@ handleGateway authToken intents response model =
                                     , []
                                     )
 
-                        MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
+                        DispatchBot_MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
                             case maybeGuildId of
                                 Included guildId ->
                                     ( model
@@ -4739,36 +4939,33 @@ handleGateway authToken intents response model =
                                 Missing ->
                                     ( model, [] )
 
-                        GuildMemberAddEvent guildId guildMember ->
+                        DispatchBot_GuildMemberAddEvent guildId guildMember ->
                             ( model
                             , []
                             )
 
-                        GuildMemberRemoveEvent guildId user ->
+                        DispatchBot_GuildMemberRemoveEvent guildId user ->
                             ( model
                             , []
                             )
 
-                        GuildMemberUpdateEvent _ ->
+                        DispatchBot_GuildMemberUpdateEvent _ ->
                             ( model, [] )
 
-                        ThreadCreatedOrUserAddedToThreadEvent channel ->
+                        DispatchBot_ThreadCreatedOrUserAddedToThreadEvent channel ->
                             ( model, [ ThreadCreatedOrUserAddedToThread channel ] )
 
-                        MessageReactionAdd reactionAdd ->
+                        DispatchBot_MessageReactionAdd reactionAdd ->
                             ( model, [ UserAddedReaction reactionAdd ] )
 
-                        MessageReactionRemove reactionRemove ->
+                        DispatchBot_MessageReactionRemove reactionRemove ->
                             ( model, [ UserRemovedReaction reactionRemove ] )
 
-                        MessageReactionRemoveAll reactionRemoveAll ->
+                        DispatchBot_MessageReactionRemoveAll reactionRemoveAll ->
                             ( model, [ AllReactionsRemoved reactionRemoveAll ] )
 
-                        MessageReactionRemoveEmoji reactionRemoveEmoji ->
+                        DispatchBot_MessageReactionRemoveEmoji reactionRemoveEmoji ->
                             ( model, [ ReactionsRemoveForEmoji reactionRemoveEmoji ] )
-
-                        GuildMembersChunk guildMembersChunkData ->
-                            ( model, [ ListGuildMembersResponse guildMembersChunkData ] )
 
                 OpReconnect ->
                     ( model, [ CloseAndReopenHandle connection ] )
@@ -4778,6 +4975,127 @@ handleGateway authToken intents response model =
 
         ( _, Err error ) ->
             ( model, [ FailedToParseWebsocketMessage error ] )
+
+        ( Nothing, Ok _ ) ->
+            ( model, [] )
+
+
+handleUserGateway : UserAuth -> Intents -> String -> Model connection -> ( Model connection, List (UserOutMsg connection) )
+handleUserGateway authToken intents response model =
+    case ( model.websocketHandle, JD.decodeString (decodeGatewayEvent decodeDispatchUserEvent) response ) of
+        ( Just connection, Ok data ) ->
+            let
+                heartbeat : String
+                heartbeat =
+                    encodeUserGatewayCommand GatewayUser_OpHeatbeat
+                        |> JE.encode 0
+            in
+            case data of
+                OpHello { heartbeatInterval } ->
+                    let
+                        command =
+                            (case model.gatewayState of
+                                Just ( discordSessionId, sequenceCounter ) ->
+                                    GatewayUser_OpResume authToken discordSessionId sequenceCounter
+
+                                Nothing ->
+                                    GatewayUser_OpIdentify authToken intents
+                            )
+                                |> encodeUserGatewayCommand
+                                |> JE.encode 0
+                    in
+                    ( { model | heartbeatInterval = Just heartbeatInterval }
+                    , [ UserOutMsg_SendWebsocketDataWithDelay connection heartbeatInterval heartbeat
+                      , UserOutMsg_SendWebsocketData connection command
+                      ]
+                    )
+
+                OpAck ->
+                    ( model
+                    , [ UserOutMsg_SendWebsocketDataWithDelay
+                            connection
+                            (Maybe.withDefault (Duration.seconds 60) model.heartbeatInterval)
+                            heartbeat
+                      ]
+                    )
+
+                OpDispatch sequenceCounter opDispatchEvent ->
+                    case opDispatchEvent of
+                        DispatchUser_ReadyEvent readyEvent ->
+                            ( { model | gatewayState = Just ( readyEvent.sessionId, sequenceCounter ) }, [] )
+
+                        DispatchUser_ResumedEvent ->
+                            ( model, [] )
+
+                        DispatchUser_MessageCreateEvent channelType message ->
+                            ( model, [ UserOutMsg_UserCreatedMessage channelType message ] )
+
+                        DispatchUser_MessageUpdateEvent messageUpdate ->
+                            ( model, [ UserOutMsg_UserEditedMessage messageUpdate ] )
+
+                        DispatchUser_MessageDeleteEvent messageId channelId maybeGuildId ->
+                            case maybeGuildId of
+                                Included guildId ->
+                                    ( model
+                                    , [ UserOutMsg_UserDeletedMessage guildId channelId messageId ]
+                                    )
+
+                                Missing ->
+                                    ( model
+                                    , []
+                                    )
+
+                        DispatchUser_MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
+                            case maybeGuildId of
+                                Included guildId ->
+                                    ( model
+                                    , List.map
+                                        (UserOutMsg_UserDeletedMessage guildId channelId)
+                                        messageIds
+                                    )
+
+                                Missing ->
+                                    ( model, [] )
+
+                        DispatchUser_GuildMemberAddEvent guildId guildMember ->
+                            ( model
+                            , []
+                            )
+
+                        DispatchUser_GuildMemberRemoveEvent guildId user ->
+                            ( model
+                            , []
+                            )
+
+                        DispatchUser_GuildMemberUpdateEvent _ ->
+                            ( model, [] )
+
+                        DispatchUser_ThreadCreatedOrUserAddedToThreadEvent channel ->
+                            ( model, [ UserOutMsg_ThreadCreatedOrUserAddedToThread channel ] )
+
+                        DispatchUser_MessageReactionAdd reactionAdd ->
+                            ( model, [ UserOutMsg_UserAddedReaction reactionAdd ] )
+
+                        DispatchUser_MessageReactionRemove reactionRemove ->
+                            ( model, [ UserOutMsg_UserRemovedReaction reactionRemove ] )
+
+                        DispatchUser_MessageReactionRemoveAll reactionRemoveAll ->
+                            ( model, [ UserOutMsg_AllReactionsRemoved reactionRemoveAll ] )
+
+                        DispatchUser_MessageReactionRemoveEmoji reactionRemoveEmoji ->
+                            ( model, [ UserOutMsg_ReactionsRemoveForEmoji reactionRemoveEmoji ] )
+
+                        DispatchUser_GuildMembersChunk guildMembersChunkData ->
+                            ( model, [ UserOutMsg_ListGuildMembersResponse guildMembersChunkData ] )
+
+                OpReconnect ->
+                    ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )
+
+                OpInvalidSession ->
+                    ( { model | gatewayState = Nothing }, [ UserOutMsg_CloseAndReopenHandle connection ] )
+
+        ( _, Err error ) ->
+            ( model, [ UserOutMsg_FailedToParseWebsocketMessage error ] )
 
         ( Nothing, Ok _ ) ->
             ( model, [] )

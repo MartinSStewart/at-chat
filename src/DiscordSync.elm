@@ -1178,30 +1178,30 @@ discordUserWebsocketMsg discordUserId discordMsg model =
         Just (FullData userData) ->
             let
                 ( discordModel2, outMsgs ) =
-                    Discord.update (Discord.userToken userData.auth) Discord.noIntents discordMsg userData.connection
+                    Discord.userUpdate userData.auth Discord.noIntents discordMsg userData.connection
             in
             List.foldl
                 (\outMsg ( model2, cmds ) ->
                     case outMsg of
-                        Discord.CloseAndReopenHandle connection ->
+                        Discord.UserOutMsg_CloseAndReopenHandle connection ->
                             ( model2
                             , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (Websocket.close connection)
                                 :: cmds
                             )
 
-                        Discord.OpenHandle ->
+                        Discord.UserOutMsg_OpenHandle ->
                             ( model2
                             , Websocket.createHandle (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
                                 :: cmds
                             )
 
-                        Discord.SendWebsocketData connection data ->
+                        Discord.UserOutMsg_SendWebsocketData connection data ->
                             ( model2
                             , Task.attempt (WebsocketSentDataForUser discordUserId) (Websocket.sendString connection data)
                                 :: cmds
                             )
 
-                        Discord.SendWebsocketDataWithDelay connection duration data ->
+                        Discord.UserOutMsg_SendWebsocketDataWithDelay connection duration data ->
                             ( model2
                             , (Process.sleep duration
                                 |> Task.andThen (\() -> Websocket.sendString connection data)
@@ -1210,66 +1210,66 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
-                        Discord.UserCreatedMessage _ message ->
+                        Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
                                 ( model3, cmd2 ) =
                                     handleDiscordCreateMessage message model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserDeletedMessage discordGuildId discordChannelId messageId ->
+                        Discord.UserOutMsg_UserDeletedMessage discordGuildId discordChannelId messageId ->
                             let
                                 ( model3, cmd2 ) =
                                     handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserEditedMessage messageUpdate ->
+                        Discord.UserOutMsg_UserEditedMessage messageUpdate ->
                             let
                                 ( model3, cmd2 ) =
                                     handleDiscordEditMessage messageUpdate model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.FailedToParseWebsocketMessage error ->
+                        Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
                                 _ =
                                     Debug.log "gateway error" error
                             in
                             ( model2, cmds )
 
-                        Discord.ThreadCreatedOrUserAddedToThread _ ->
+                        Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
                             ( model2, cmds )
 
-                        Discord.UserAddedReaction reaction ->
+                        Discord.UserOutMsg_UserAddedReaction reaction ->
                             let
                                 ( model3, cmd2 ) =
                                     addOrRemoveDiscordReaction True reaction model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserRemovedReaction reaction ->
+                        Discord.UserOutMsg_UserRemovedReaction reaction ->
                             let
                                 ( model3, cmd2 ) =
                                     addOrRemoveDiscordReaction False reaction model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.AllReactionsRemoved reactionRemoveAll ->
+                        Discord.UserOutMsg_AllReactionsRemoved reactionRemoveAll ->
                             let
                                 ( model3, cmd2 ) =
                                     handleDiscordRemoveAllReactions reactionRemoveAll model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.ReactionsRemoveForEmoji reactionRemoveEmoji ->
+                        Discord.UserOutMsg_ReactionsRemoveForEmoji reactionRemoveEmoji ->
                             let
                                 ( model3, cmd2 ) =
                                     handleDiscordRemoveReactionForEmoji reactionRemoveEmoji model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.ListGuildMembersResponse chunkData ->
+                        Discord.UserOutMsg_ListGuildMembersResponse chunkData ->
                             let
                                 ( model3, cmd2 ) =
                                     handleListGuildMembersResponse chunkData model2
