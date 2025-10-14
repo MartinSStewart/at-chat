@@ -933,6 +933,12 @@ getLoginData sessionId session user requestMessagesFor model =
                     guild
             )
             model.guilds
+    , discordGuilds =
+        SeqDict.filterMap
+            (\guildId guild ->
+                LocalState.discordGuildToFrontendForUser Nothing guild
+            )
+            model.discordGuilds
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->

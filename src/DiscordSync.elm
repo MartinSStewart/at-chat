@@ -671,7 +671,6 @@ addDiscordGuilds guilds model =
                                             |> SeqDict.fromList
                                     , members = SeqDict.empty -- Gets filled in via the websocket connection
                                     , owner = data.guild.ownerId
-                                    , invites = SeqDict.empty
                                     }
                                         |> Just
                         )

@@ -20,6 +20,7 @@ module DmChannel exposing
     , setArray
     , threadInit
     , threadToFrontend
+    , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
     )
@@ -195,9 +196,31 @@ loadMessages preloadMessages messages =
 
 toFrontendHelper :
     Bool
-    -> { a | messages : Array (Message ChannelMessageId userId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Array (MessageState ChannelMessageId userId)
+    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) Thread }
+    -> Array (MessageState messageId userId)
 toFrontendHelper preloadMessages channel =
+    SeqDict.foldl
+        (\threadId _ messages ->
+            setArray
+                threadId
+                (case getArray threadId channel.messages of
+                    Just message ->
+                        MessageLoaded message
+
+                    Nothing ->
+                        MessageUnloaded
+                )
+                messages
+        )
+        (loadMessages preloadMessages channel.messages)
+        channel.threads
+
+
+toDiscordFrontendHelper :
+    Bool
+    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) DiscordThread }
+    -> Array (MessageState messageId userId)
+toDiscordFrontendHelper preloadMessages channel =
     SeqDict.foldl
         (\threadId _ messages ->
             setArray

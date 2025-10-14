@@ -7,6 +7,8 @@ module LocalState exposing
     , ChannelStatus(..)
     , DiscordBackendChannel
     , DiscordBackendGuild
+    , DiscordFrontendChannel
+    , DiscordFrontendGuild
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
@@ -35,6 +37,7 @@ module LocalState exposing
     , deleteMessageBackendHelper
     , deleteMessageFrontend
     , deleteMessageFrontendHelper
+    , discordGuildToFrontendForUser
     , editChannel
     , editMessageFrontendHelper
     , editMessageHelper
@@ -132,7 +135,6 @@ type alias DiscordBackendGuild =
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordBackendChannel
     , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
     , owner : Discord.Id.Id Discord.Id.UserId
-    , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
 
@@ -154,7 +156,6 @@ type alias DiscordFrontendGuild =
     , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) DiscordFrontendChannel
     , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
     , owner : Discord.Id.Id Discord.Id.UserId
-    , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
     }
 
 
@@ -191,6 +192,37 @@ guildToFrontendForUser requestMessagesFor userId guild =
 
     else
         Nothing
+
+
+discordGuildToFrontendForUser :
+    Maybe ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+    -> DiscordBackendGuild
+    -> Maybe DiscordFrontendGuild
+discordGuildToFrontendForUser requestMessagesFor guild =
+    { name = guild.name
+    , icon = guild.icon
+    , channels =
+        SeqDict.filterMap
+            (\channelId channel ->
+                discordChannelToFrontend
+                    (case requestMessagesFor of
+                        Just ( channelIdB, threadRoute ) ->
+                            if channelId == channelIdB then
+                                Just threadRoute
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    channel
+            )
+            guild.channels
+    , members = guild.members
+    , owner = guild.owner
+    }
+        |> Just
 
 
 guildToFrontend : Maybe ( channelId, ThreadRoute ) -> BackendGuild channelId -> FrontendGuild channelId
@@ -260,7 +292,6 @@ type alias DiscordFrontendChannel =
     { name : ChannelName
     , messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
-    , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordThread
@@ -287,6 +318,35 @@ channelToFrontend threadRoute channel =
                     (\threadId thread -> DmChannel.threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
             }
+                |> Just
+
+        ChannelDeleted _ ->
+            Nothing
+
+
+discordChannelToFrontend : Maybe ThreadRoute -> DiscordBackendChannel -> Maybe DiscordFrontendChannel
+discordChannelToFrontend threadRoute channel =
+    case channel.status of
+        ChannelActive ->
+            let
+                preloadMessages =
+                    Just NoThread == threadRoute
+
+                channel2 : DiscordFrontendChannel
+                channel2 =
+                    { name = channel.name
+                    , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
+                    , visibleMessages = VisibleMessages.init preloadMessages channel
+                    , linkedMessageIds = channel.linkedMessageIds
+                    , lastTypedAt = channel.lastTypedAt
+                    , threads = SeqDict.empty
+
+                    --SeqDict.map
+                    --    (\threadId thread -> DmChannel.threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    --    channel.threads
+                    }
+            in
+            channel2
                 |> Just
 
         ChannelDeleted _ ->
