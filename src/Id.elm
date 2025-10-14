@@ -1,6 +1,8 @@
 module Id exposing
-    ( ChannelId(..)
+    ( AnyGuildOrDmIdNoThread(..)
+    , ChannelId(..)
     , ChannelMessageId(..)
+    , DiscordGuildOrDmIdNoThread(..)
     , GuildId(..)
     , GuildOrDmId
     , GuildOrDmIdNoThread(..)
@@ -33,8 +35,17 @@ type alias GuildOrDmId =
 
 type GuildOrDmIdNoThread
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
-    | GuildOrDmId_DiscordGuild (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Discord.Id.Id Discord.Id.UserId)
     | GuildOrDmId_Dm (Id UserId)
+
+
+type DiscordGuildOrDmIdNoThread
+    = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordGuildOrDmId_Dm (Discord.Id.Id Discord.Id.UserId)
+
+
+type AnyGuildOrDmIdNoThread
+    = NormalGuildOrDmId GuildOrDmIdNoThread
+    | DiscordGuildOrDmId DiscordGuildOrDmIdNoThread
 
 
 type ThreadRoute

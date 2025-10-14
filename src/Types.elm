@@ -4,6 +4,7 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DiscordBasicUserData
     , DiscordFullUserData
     , DiscordUserData(..)
     , Drag(..)
@@ -18,6 +19,7 @@ module Types exposing
     , LoadedFrontend
     , LoadingFrontend
     , LocalChange(..)
+    , LocalDiscordChange(..)
     , LocalMsg(..)
     , LoggedIn2
     , LoginData
@@ -63,7 +65,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmIdNoThread, ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread, GuildId, GuildOrDmId, GuildOrDmIdNoThread, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
@@ -299,7 +301,7 @@ type alias BackendModel =
 
 
 type DiscordUserData
-    = BasicData Discord.User
+    = BasicData DiscordBasicUserData
     | FullData DiscordFullUserData
 
 
@@ -308,7 +310,12 @@ type alias DiscordFullUserData =
     , data : Discord.User
     , connection : Discord.Model Websocket.Connection
     , linkedTo : Id UserId
+    , icon : Maybe FileHash
     }
+
+
+type alias DiscordBasicUserData =
+    { user : Discord.User, icon : Maybe FileHash }
 
 
 type alias BackendFileData =
@@ -484,9 +491,9 @@ type alias GuildChannelAndMessageId =
 
 
 type ToBackend
-    = CheckLoginRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
-    | LoginWithTokenRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
-    | LoginWithTwoFactorRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
+    = CheckLoginRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ))
+    | LoginWithTokenRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
+    | LoginWithTwoFactorRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )) Int UserAgent
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
@@ -495,7 +502,7 @@ type ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
-    | ReloadDataRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | ReloadDataRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
 
@@ -623,7 +630,7 @@ type ServerChange
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing SessionIdHash (Maybe ( GuildOrDmIdNoThread, ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) String
 
@@ -652,3 +659,22 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
     | Local_TextEditor TextEditor.LocalChange
+    | Local_DiscordChange (Discord.Id.Id Discord.Id.UserId) LocalDiscordChange
+
+
+type LocalDiscordChange
+    = Local_Discord_SendMessage Time.Posix DiscordGuildOrDmIdNoThread (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Local_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
+    | Local_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
+    | Local_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | Local_Discord_MemberTyping Time.Posix GuildOrDmId
+    | Local_Discord_AddReactionEmoji DiscordGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Local_Discord_RemoveReactionEmoji DiscordGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Local_Discord_SendEditMessage Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
+    | Local_Discord_MemberEditTyping Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_Discord_SetLastViewed DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_Discord_DeleteMessage DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_Discord_SetName PersonName
+    | Local_Discord_LoadChannelMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | Local_Discord_LoadThreadMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | Local_Discord_SetGuildNotificationLevel (Id GuildId) NotificationLevel

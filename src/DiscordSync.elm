@@ -1435,11 +1435,14 @@ handleListGuildMembersResponse chunkData model =
                         member.user.id
                         (\maybe ->
                             (case maybe of
-                                Just (FullData fullData) ->
-                                    FullData { fullData | data = member.user }
+                                Just (FullData data) ->
+                                    FullData { data | data = member.user }
 
-                                _ ->
-                                    BasicData member.user
+                                Just (BasicData data) ->
+                                    BasicData { data | user = member.user }
+
+                                Nothing ->
+                                    BasicData { user = member.user, icon = Nothing }
                             )
                                 |> Just
                         )

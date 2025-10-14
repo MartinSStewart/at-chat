@@ -31,13 +31,13 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Hex
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -58,7 +58,7 @@ import TOTP.Key
 import TextEditor
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
@@ -406,23 +406,25 @@ update msg model =
         GotDiscordUserAvatars result ->
             case result of
                 Ok userAvatars ->
-                    ( List.foldl
-                        (\( discordUserId, maybeAvatar ) model2 ->
-                            case SeqDict.get discordUserId model2.linkedDiscordUsers of
-                                Just userId ->
-                                    { model2
-                                        | users =
-                                            NonemptyDict.updateIfExists
-                                                userId
-                                                (\user -> { user | icon = Maybe.map .fileHash maybeAvatar })
-                                                model2.users
-                                    }
+                    ( { model
+                        | discordUsers =
+                            List.foldl
+                                (\( discordUserId, maybeAvatar ) discordUsers ->
+                                    SeqDict.updateIfExists
+                                        discordUserId
+                                        (\user ->
+                                            case user of
+                                                FullData data ->
+                                                    FullData { data | icon = Maybe.map .fileHash maybeAvatar }
 
-                                Nothing ->
-                                    model2
-                        )
-                        model
-                        userAvatars
+                                                BasicData data ->
+                                                    BasicData { data | icon = Maybe.map .fileHash maybeAvatar }
+                                        )
+                                        discordUsers
+                                )
+                                model.discordUsers
+                                userAvatars
+                      }
                     , Command.none
                     )
 
@@ -514,14 +516,15 @@ update msg model =
             case result of
                 Ok discordUser ->
                     ( { model
-                        | linkedDiscordUsers = SeqDict.insert discordUser.id userId model.linkedDiscordUsers
-                        , discordUsers =
+                        | discordUsers =
                             SeqDict.insert
                                 discordUser.id
                                 (FullData
                                     { auth = auth
                                     , data = discordUser
                                     , connection = Discord.init
+                                    , linkedTo = userId
+                                    , icon = Nothing
                                     }
                                 )
                                 model.discordUsers
@@ -900,7 +903,7 @@ getLoginData :
     SessionId
     -> UserSession
     -> BackendUser
-    -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
@@ -918,7 +921,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\guildId guild ->
                 LocalState.guildToFrontendForUser
                     (case requestMessagesFor of
-                        Just ( GuildOrDmId_Guild guildIdB channelId, threadRoute ) ->
+                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdB channelId), threadRoute ) ->
                             if guildId == guildIdB then
                                 Just ( channelId, threadRoute )
 
@@ -946,7 +949,7 @@ getLoginData sessionId session user requestMessagesFor model =
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
                                 (case requestMessagesFor of
-                                    Just ( GuildOrDmId_Dm otherUserIdB, threadRoute ) ->
+                                    Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdB), threadRoute ) ->
                                         if otherUserId == otherUserIdB then
                                             Just threadRoute
 
@@ -1064,7 +1067,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             session : UserSession
                             session =
-                                UserSession.init sessionId userId requestMessagesFor userAgent
+                                UserSession.init
+                                    sessionId
+                                    userId
+                                    (Maybe.map (Tuple.mapFirst NormalGuildOrDmId) requestMessagesFor)
+                                    userAgent
 
                             newUser : BackendUser
                             newUser =
@@ -1083,7 +1090,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , getLoginData sessionId session newUser requestMessagesFor model3
+                        , getLoginData
+                            sessionId
+                            session
+                            newUser
+                            (Maybe.map (Tuple.mapFirst NormalGuildOrDmId) requestMessagesFor)
+                            model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId
@@ -1297,24 +1309,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     clientId
                                     changeId
                                     otherUserId
-                                    threadRoute
-                                    text
-                                    (validateAttachedFiles model2.files attachedFiles)
-                                )
-
-                        GuildOrDmId_DiscordGuild guildId channelId discordUserId ->
-                            asDiscordGuildMember
-                                model2
-                                sessionId
-                                guildId
-                                discordUserId
-                                (sendDiscordGuildMessage
-                                    model2
-                                    time
-                                    clientId
-                                    changeId
-                                    guildId
-                                    channelId
                                     threadRoute
                                     text
                                     (validateAttachedFiles model2.files attachedFiles)
@@ -1933,7 +1927,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewingChannel : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
                         viewingChannel =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -2109,6 +2103,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
                                     )
                                 )
+
+                        ViewDiscordChannel guildId channelId _ ->
+                            Debug.todo ""
+
+                        ViewDiscordChannelThread guildId channelId threadId _ ->
+                            Debug.todo ""
 
                 Local_SetName name ->
                     asUser
@@ -2293,6 +2293,74 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ]
                             )
                         )
+
+                Local_DiscordChange currentUserId discordChange ->
+                    case discordChange of
+                        Local_Discord_SendMessage _ guildOrDmId text threadRoute attachedFiles ->
+                            case guildOrDmId of
+                                DiscordGuildOrDmId_Guild guildId channelId ->
+                                    asDiscordGuildMember
+                                        model2
+                                        sessionId
+                                        guildId
+                                        currentUserId
+                                        (sendDiscordGuildMessage
+                                            model2
+                                            time
+                                            clientId
+                                            changeId
+                                            guildId
+                                            channelId
+                                            currentUserId
+                                            threadRoute
+                                            text
+                                            (validateAttachedFiles model2.files attachedFiles)
+                                        )
+
+                                DiscordGuildOrDmId_Dm otherUserId ->
+                                    Debug.todo ""
+
+                        Local_Discord_NewChannel posix id channelName ->
+                            Debug.todo ""
+
+                        Local_Discord_EditChannel guildId channelId channelName ->
+                            Debug.todo ""
+
+                        Local_Discord_DeleteChannel guildId channelId ->
+                            Debug.todo ""
+
+                        Local_Discord_MemberTyping posix guildOrDmId ->
+                            Debug.todo ""
+
+                        Local_Discord_AddReactionEmoji discordGuildOrDmIdNoThread threadRouteWithMessage emoji ->
+                            Debug.todo ""
+
+                        Local_Discord_RemoveReactionEmoji discordGuildOrDmIdNoThread threadRouteWithMessage emoji ->
+                            Debug.todo ""
+
+                        Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
+                            Debug.todo ""
+
+                        Local_Discord_MemberEditTyping posix discordGuildOrDmIdNoThread threadRouteWithMessage ->
+                            Debug.todo ""
+
+                        Local_Discord_SetLastViewed discordGuildOrDmIdNoThread threadRouteWithMessage ->
+                            Debug.todo ""
+
+                        Local_Discord_DeleteMessage discordGuildOrDmIdNoThread threadRouteWithMessage ->
+                            Debug.todo ""
+
+                        Local_Discord_SetName personName ->
+                            Debug.todo ""
+
+                        Local_Discord_LoadChannelMessages discordGuildOrDmIdNoThread id toBeFilledInByBackend ->
+                            Debug.todo ""
+
+                        Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
+                            Debug.todo ""
+
+                        Local_Discord_SetGuildNotificationLevel id notificationLevel ->
+                            Debug.todo ""
 
         TwoFactorToBackend toBackend2 ->
             asUser
@@ -2968,7 +3036,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 isViewing =
                                     List.any
                                         (\( _, userSession ) ->
-                                            userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                            userSession.currentlyViewing == Just ( NormalGuildOrDmId guildOrDmId, threadRouteNoReply )
                                         )
                                         (Broadcast.userGetAllSessions userId2 model)
                             in
@@ -3146,6 +3214,33 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                 --        Command.none
                 ]
             )
+
+        Nothing ->
+            ( model
+            , invalidChangeResponse changeId clientId
+            )
+
+
+sendDiscordGuildMessage :
+    BackendModel
+    -> Time.Posix
+    -> ClientId
+    -> ChangeId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> ThreadRouteWithMaybeMessage
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> SeqDict (Id FileId) FileData
+    -> UserSession
+    -> DiscordFullUserData
+    -> BackendUser
+    -> DiscordBackendGuild
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+sendDiscordGuildMessage model time clientId changeId guildId channelId discordUserId threadRouteWithMaybeReplyTo text attachedFiles session discordUser user guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            Debug.todo ""
 
         Nothing ->
             ( model
@@ -3391,7 +3486,7 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
-    -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
     -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

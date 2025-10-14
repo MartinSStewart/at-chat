@@ -4,7 +4,7 @@ import Editable
 import Effect.Browser.Dom as Dom
 import Env
 import Icons
-import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
+import Id exposing (AnyGuildOrDmIdNoThread, GuildOrDmIdNoThread, ThreadRoute)
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
@@ -40,7 +40,7 @@ viewConnectedDevice :
     ->
         { a
             | notificationMode : NotificationMode
-            , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+            , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
             , userAgent : UserAgent
         }
     -> Element FrontendMsg

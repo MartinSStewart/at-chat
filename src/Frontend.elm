@@ -32,7 +32,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (ChannelId, ChannelMessageId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -54,7 +54,7 @@ import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
@@ -5895,7 +5895,7 @@ layout model attributes child =
                     local =
                         Local.model loggedIn.localState
 
-                    maybeMessageId : Maybe GuildOrDmId
+                    maybeMessageId : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
                     maybeMessageId =
                         routeToGuildOrDmId model.route
                 in
@@ -6210,6 +6210,9 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
+                    DiscordGuildRoute guildId maybeChannelId ->
+                        requiresLogin (Debug.todo "")
+
                     DmRoute userId thread ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) loaded)
@@ -6435,11 +6438,11 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                     Nothing
 
 
-routeToGuildOrDmId : Route -> Maybe GuildOrDmId
+routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
 routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->
-            ( GuildOrDmId_Guild guildId channelId
+            ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId
@@ -6450,7 +6453,18 @@ routeToGuildOrDmId route =
                 |> Just
 
         DmRoute otherUserId threadRoute ->
-            ( GuildOrDmId_Dm otherUserId
+            ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId
+            , case threadRoute of
+                ViewThreadWithFriends threadMessageId _ _ ->
+                    ViewThread threadMessageId
+
+                NoThreadWithFriends _ _ ->
+                    NoThread
+            )
+                |> Just
+
+        DiscordGuildRoute guildId (DiscordChannel_ChannelRoute channelId threadRoute) ->
+            ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId

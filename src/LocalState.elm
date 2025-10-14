@@ -1598,13 +1598,17 @@ getGuildAndChannel guildId channelId local =
 
 usersMentionedOrRepliedToBackend :
     ThreadRouteWithMaybeMessage
-    -> Nonempty (RichText (Id UserId))
-    -> List (Id UserId)
-    -> BackendChannel
-    -> SeqSet (Id UserId)
+    -> Nonempty (RichText userId)
+    -> List userId
+    ->
+        { a
+            | threads : SeqDict (Id ChannelMessageId) { b | messages : Array (Message ThreadMessageId userId) }
+            , messages : Array (Message ChannelMessageId userId)
+        }
+    -> SeqSet userId
 usersMentionedOrRepliedToBackend threadRouteWithRepliedTo content members channel =
     let
-        userIds : SeqSet (Id UserId)
+        userIds : SeqSet userId
         userIds =
             (case threadRouteWithRepliedTo of
                 ViewThreadWithMaybeMessage threadId maybeRepliedTo ->
@@ -1683,7 +1687,7 @@ usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =
         |> List.foldl SeqSet.insert (RichText.mentionsUser content)
 
 
-repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId (Id UserId)) } -> Maybe (Id UserId)
+repliedToUserId : Maybe (Id messageId) -> { a | messages : Array (Message messageId userId) } -> Maybe userId
 repliedToUserId maybeRepliedTo channel =
     case maybeRepliedTo of
         Just repliedTo ->

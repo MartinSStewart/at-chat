@@ -16,7 +16,7 @@ module UserSession exposing
 import Discord.Id
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
@@ -29,7 +29,7 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     }
@@ -37,7 +37,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -68,26 +68,26 @@ type SetViewing
     | StopViewingChannel
 
 
-setViewingToCurrentlyViewing : SetViewing -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
 setViewingToCurrentlyViewing viewing =
     case viewing of
         ViewDm otherUserId _ ->
-            Just ( GuildOrDmId_Dm otherUserId, NoThread )
+            Just ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId, NoThread )
 
         ViewDmThread otherUserId threadId _ ->
-            Just ( GuildOrDmId_Dm otherUserId, ViewThread threadId )
+            Just ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId, ViewThread threadId )
 
         ViewChannel guildId channelId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId, NoThread )
+            Just ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId, NoThread )
 
         ViewChannelThread guildId channelId threadId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId, ViewThread threadId )
+            Just ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId, ViewThread threadId )
 
         ViewDiscordChannel guildId channelId _ ->
-            Just ( GuildOrDmId_DiscordGuild guildId channelId, NoThread )
+            Just ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId, NoThread )
 
         ViewDiscordChannelThread guildId channelId threadId _ ->
-            Just ( GuildOrDmId_DiscordGuild guildId channelId, ViewThread threadId )
+            Just ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId, ViewThread threadId )
 
         StopViewingChannel ->
             Nothing
@@ -98,7 +98,7 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
+init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
 init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
@@ -110,9 +110,9 @@ init sessionId userId currentlyViewing userAgent =
 
 
 setCurrentlyViewing :
-    Maybe ( GuildOrDmIdNoThread, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
+    Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) }
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) }
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 

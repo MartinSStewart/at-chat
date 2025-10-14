@@ -474,9 +474,6 @@ userDropdownList guildOrDmId local =
                 Nothing ->
                     []
 
-        GuildOrDmId_DiscordGuild guildId _ ->
-            Debug.todo ""
-
         GuildOrDmId_Dm otherUserId ->
             [ local.localUser.session.userId, otherUserId ]
     )
