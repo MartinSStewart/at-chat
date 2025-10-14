@@ -1,5 +1,6 @@
 module Route exposing
     ( ChannelRoute(..)
+    , DiscordChannelRoute(..)
     , Route(..)
     , ShowMembersTab(..)
     , ThreadRouteWithFriends(..)
@@ -9,6 +10,7 @@ module Route exposing
 
 import AppUrl
 import Dict
+import Discord.Id
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -21,6 +23,7 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
+    | DiscordGuildRoute (Discord.Id.Id Discord.Id.GuildId) DiscordChannelRoute
     | DmRoute (Id UserId) ThreadRouteWithFriends
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
@@ -33,6 +36,12 @@ type ChannelRoute
     | EditChannelRoute (Id ChannelId)
     | InviteLinkCreatorRoute
     | JoinRoute (SecretId InviteLinkId)
+
+
+type DiscordChannelRoute
+    = DiscordChannel_ChannelRoute (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithFriends
+    | DiscordChannel_NewChannelRoute
+    | DiscordChannel_EditChannelRoute (Discord.Id.Id Discord.Id.ChannelId)
 
 
 type ThreadRouteWithFriends
@@ -139,6 +148,59 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
+        "dg" :: guildId :: rest ->
+            case Discord.Id.fromString guildId of
+                Just guildId2 ->
+                    case rest of
+                        "c" :: channelId :: rest2 ->
+                            case ( Discord.Id.fromString channelId, rest2 ) of
+                                ( Just channelId2, [ "t", threadMessageIndex, "m", messageIndex ] ) ->
+                                    DiscordGuildRoute
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (stringToThread showMembers threadMessageIndex messageIndex)
+                                        )
+
+                                ( Just channelId2, [ "t", threadMessageIndex ] ) ->
+                                    DiscordGuildRoute
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (stringToThread showMembers threadMessageIndex "")
+                                        )
+
+                                ( Just channelId2, [ "m", messageIndex ] ) ->
+                                    DiscordGuildRoute
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                        )
+
+                                ( Just channelId2, [] ) ->
+                                    DiscordGuildRoute
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends Nothing showMembers)
+                                        )
+
+                                ( Just channelId2, [ "edit" ] ) ->
+                                    DiscordGuildRoute guildId2 (DiscordChannel_EditChannelRoute channelId2)
+
+                                _ ->
+                                    HomePageRoute
+
+                        [ "new" ] ->
+                            DiscordGuildRoute guildId2 DiscordChannel_NewChannelRoute
+
+                        _ ->
+                            HomePageRoute
+
+                Nothing ->
+                    HomePageRoute
+
         "d" :: userId :: rest ->
             case Id.fromString userId of
                 Just userId2 ->
@@ -237,6 +299,34 @@ encode route =
 
                         JoinRoute inviteLinkId ->
                             ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ], [] )
+
+                DiscordGuildRoute guildId maybeChannelId ->
+                    case maybeChannelId of
+                        DiscordChannel_ChannelRoute channelId thread ->
+                            case thread of
+                                ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
+                                    ( [ "g"
+                                      , Discord.Id.toString guildId
+                                      , "c"
+                                      , Discord.Id.toString channelId
+                                      , "t"
+                                      , Id.toString threadMessageIndex
+                                      ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
+
+                                NoThreadWithFriends maybeMessageId showMembers ->
+                                    ( [ "g", Discord.Id.toString guildId, "c", Discord.Id.toString channelId ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
+
+                        DiscordChannel_EditChannelRoute channelId ->
+                            ( [ "g", Discord.Id.toString guildId, "c", Discord.Id.toString channelId, "edit" ], [] )
+
+                        DiscordChannel_NewChannelRoute ->
+                            ( [ "g", Discord.Id.toString guildId, "new" ], [] )
 
                 DmRoute userId thread ->
                     case thread of

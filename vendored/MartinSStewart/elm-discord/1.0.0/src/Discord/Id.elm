@@ -16,6 +16,7 @@ module Discord.Id exposing
     , WebhookId
     , decodeId
     , encodeId
+    , fromString
     , fromUInt64
     , toString
     , toUInt64
@@ -97,16 +98,30 @@ encodeId id =
 decodeId : JD.Decoder (Id idType)
 decodeId =
     JD.andThen
-        (UInt64.fromString
-            >> Maybe.map (Id >> JD.succeed)
-            >> Maybe.withDefault (JD.fail "Invalid snowflake ID.")
+        (\text ->
+            case fromString text of
+                Just id ->
+                    JD.succeed id
+
+                Nothing ->
+                    JD.fail "Invalid snowflake ID."
         )
         JD.string
 
 
 toString : Id idType -> String
-toString =
-    toUInt64 >> UInt64.toString
+toString id =
+    toUInt64 id |> UInt64.toString
+
+
+fromString : String -> Maybe (Id idType)
+fromString text =
+    case UInt64.fromString text of
+        Just uint ->
+            Id uint |> Just
+
+        Nothing ->
+            Nothing
 
 
 toUInt64 : Id idType -> UInt64

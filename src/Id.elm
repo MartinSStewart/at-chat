@@ -22,6 +22,7 @@ module Id exposing
     , toString
     )
 
+import Discord.Id
 import List.Extra
 import SeqDict exposing (SeqDict)
 
@@ -32,6 +33,7 @@ type alias GuildOrDmId =
 
 type GuildOrDmIdNoThread
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
+    | GuildOrDmId_DiscordGuild (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Discord.Id.Id Discord.Id.UserId)
     | GuildOrDmId_Dm (Id UserId)
 
 

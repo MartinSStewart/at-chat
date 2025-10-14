@@ -93,6 +93,7 @@ import VisibleMessages exposing (VisibleMessages)
 type alias LocalState =
     { adminData : AdminStatus
     , guilds : SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
+    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser

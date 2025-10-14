@@ -37,7 +37,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -58,7 +58,7 @@ import TOTP.Key
 import TextEditor
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import Url
 import User exposing (BackendUser, EmailStatus(..))
@@ -152,7 +152,6 @@ init =
       , guilds = SeqDict.fromList [ ( Id.fromInt 0, guild ) ]
       , backendInitialized = True
       , discordGuilds = SeqDict.empty
-      , linkedDiscordUsers = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDms = OneToOne.empty
       , slackWorkspaces = OneToOne.empty
@@ -1298,6 +1297,24 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     clientId
                                     changeId
                                     otherUserId
+                                    threadRoute
+                                    text
+                                    (validateAttachedFiles model2.files attachedFiles)
+                                )
+
+                        GuildOrDmId_DiscordGuild guildId channelId discordUserId ->
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                discordUserId
+                                (sendDiscordGuildMessage
+                                    model2
+                                    time
+                                    clientId
+                                    changeId
+                                    guildId
+                                    channelId
                                     threadRoute
                                     text
                                     (validateAttachedFiles model2.files attachedFiles)
@@ -3207,6 +3224,32 @@ asGuildMember model sessionId guildId func =
             case ( NonemptyDict.get session.userId model.users, SeqDict.get guildId model.guilds ) of
                 ( Just user, Just guild ) ->
                     func session user guild
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+asDiscordGuildMember :
+    BackendModel
+    -> SessionId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordGuildMember model sessionId guildId discordUserId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case
+                ( NonemptyDict.get session.userId model.users
+                , SeqDict.get guildId model.discordGuilds
+                , SeqDict.get discordUserId model.discordUsers
+                )
+            of
+                ( Just user, Just guild, Just (FullData discordUser) ) ->
+                    func session discordUser user guild
 
                 _ ->
                     ( model, Command.none )

@@ -33,6 +33,7 @@ import Codec exposing (Codec)
 import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord.Id
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
@@ -367,6 +368,12 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
+
+        GuildOrDmId_DiscordGuild guildId channelId ->
+            "d"
+                ++ Discord.Id.toString guildId
+                ++ ","
+                ++ Discord.Id.toString channelId
 
         GuildOrDmId_Dm otherUserId ->
             Id.toString otherUserId

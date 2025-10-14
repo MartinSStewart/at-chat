@@ -13,11 +13,12 @@ module UserSession exposing
     , toFrontend
     )
 
+import Discord.Id
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import Route exposing (ChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
@@ -62,6 +63,8 @@ type SetViewing
     | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDiscordChannelThread (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | StopViewingChannel
 
 
@@ -79,6 +82,12 @@ setViewingToCurrentlyViewing viewing =
 
         ViewChannelThread guildId channelId threadId _ ->
             Just ( GuildOrDmId_Guild guildId channelId, ViewThread threadId )
+
+        ViewDiscordChannel guildId channelId _ ->
+            Just ( GuildOrDmId_DiscordGuild guildId channelId, NoThread )
+
+        ViewDiscordChannelThread guildId channelId threadId _ ->
+            Just ( GuildOrDmId_DiscordGuild guildId channelId, ViewThread threadId )
 
         StopViewingChannel ->
             Nothing
@@ -150,6 +159,22 @@ routeToViewing route =
                     StopViewingChannel
 
                 JoinRoute _ ->
+                    StopViewingChannel
+
+        DiscordGuildRoute guildId channelRoute ->
+            case channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    case threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            ViewDiscordChannel guildId channelId EmptyPlaceholder
+
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewDiscordChannelThread guildId channelId threadId EmptyPlaceholder
+
+                DiscordChannel_NewChannelRoute ->
+                    StopViewingChannel
+
+                DiscordChannel_EditChannelRoute _ ->
                     StopViewingChannel
 
         DmRoute otherUserId threadRoute ->

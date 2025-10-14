@@ -4,6 +4,7 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DiscordFullUserData
     , DiscordUserData(..)
     , Drag(..)
     , EditMessage
@@ -280,7 +281,6 @@ type alias BackendModel =
     , guilds : SeqDict (Id GuildId) (BackendGuild (Id ChannelId))
     , backendInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
-    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) (Id UserId)
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
@@ -300,11 +300,15 @@ type alias BackendModel =
 
 type DiscordUserData
     = BasicData Discord.User
-    | FullData
-        { auth : Discord.UserAuth
-        , data : Discord.User
-        , connection : Discord.Model Websocket.Connection
-        }
+    | FullData DiscordFullUserData
+
+
+type alias DiscordFullUserData =
+    { auth : Discord.UserAuth
+    , data : Discord.User
+    , connection : Discord.Model Websocket.Connection
+    , linkedTo : Id UserId
+    }
 
 
 type alias BackendFileData =
