@@ -442,6 +442,7 @@ loginDataToLocalState userAgent timezone loginData =
             IsNotAdminLoginData ->
                 IsNotAdmin
     , guilds = loginData.guilds
+    , discordGuilds = loginData.discordGuilds
     , dmChannels = loginData.dmChannels
     , joinGuildError = Nothing
     , localUser =
@@ -713,6 +714,94 @@ routeRequest previousRoute newRoute model =
                                 ]
                             )
 
+        DiscordGuildRoute guildId channelRoute ->
+            let
+                model3 : LoadedFrontend
+                model3 =
+                    { model2
+                        | loginStatus =
+                            case model2.loginStatus of
+                                LoggedIn loggedIn ->
+                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+
+                                NotLoggedIn _ ->
+                                    model2.loginStatus
+                    }
+
+                ( sameGuild, _ ) =
+                    case previousRoute of
+                        Just (DiscordGuildRoute previousGuildId previousChannelRoute) ->
+                            ( guildId == previousGuildId
+                            , guildId == previousGuildId && channelRoute == previousChannelRoute
+                            )
+
+                        _ ->
+                            ( False, False )
+            in
+            case channelRoute of
+                DiscordChannel_ChannelRoute _ threadRoute ->
+                    let
+                        showMembers : ShowMembersTab
+                        showMembers =
+                            case threadRoute of
+                                ViewThreadWithFriends _ _ showMembers2 ->
+                                    showMembers2
+
+                                NoThreadWithFriends _ showMembers2 ->
+                                    showMembers2
+
+                        --previousShowMembers : ShowMembersTab
+                        --previousShowMembers =
+                        --    case threadRoute of
+                        --        ViewThreadWithFriends threadId _ showMembers2 ->
+                        --            showMembers2
+                        --
+                        --        NoThreadWithFriends maybeId showMembers2 ->
+                        --            showMembers2
+                    in
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( case showMembers of
+                                ShowMembersTab ->
+                                    startOpeningChannelSidebar { loggedIn | sidebarMode = ChannelSidebarClosed }
+
+                                HideMembersTab ->
+                                    if sameGuild || previousRoute == Nothing then
+                                        startOpeningChannelSidebar loggedIn
+
+                                    else
+                                        loggedIn
+                            , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                            )
+                        )
+                        model3
+
+                DiscordChannel_NewChannelRoute ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startOpeningChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , viewCmd
+                            )
+                        )
+                        model3
+
+                DiscordChannel_EditChannelRoute _ ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startOpeningChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , viewCmd
+                            )
+                        )
+                        model3
+
         AiChatRoute ->
             ( model2, Command.batch [ viewCmd, Command.map AiChatToBackend AiChatMsg AiChat.getModels ] )
 
@@ -800,6 +889,9 @@ routeRequiresLogin route =
             False
 
         GuildRoute _ _ ->
+            True
+
+        DiscordGuildRoute _ _ ->
             True
 
         DmRoute _ _ ->
@@ -1229,6 +1321,7 @@ updateLoaded msg model =
 
                 NotLoggedIn notLoggedIn ->
                     let
+                        requestMessagesFor : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
                         requestMessagesFor =
                             routeToGuildOrDmId model.route
                     in

@@ -1067,11 +1067,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             session : UserSession
                             session =
-                                UserSession.init
-                                    sessionId
-                                    userId
-                                    (Maybe.map (Tuple.mapFirst NormalGuildOrDmId) requestMessagesFor)
-                                    userAgent
+                                UserSession.init sessionId userId requestMessagesFor userAgent
 
                             newUser : BackendUser
                             newUser =
@@ -1090,12 +1086,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 }
                         in
                         ( model3
-                        , getLoginData
-                            sessionId
-                            session
-                            newUser
-                            (Maybe.map (Tuple.mapFirst NormalGuildOrDmId) requestMessagesFor)
-                            model3
+                        , getLoginData sessionId session newUser requestMessagesFor model3
                             |> LoginSuccess
                             |> LoginWithTokenResponse
                             |> Lamdera.sendToFrontends sessionId

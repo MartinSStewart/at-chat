@@ -500,7 +500,7 @@ type ToBackend
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest (Maybe ( GuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
+    | FinishUserCreationRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
