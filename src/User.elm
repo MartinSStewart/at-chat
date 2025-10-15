@@ -29,7 +29,7 @@ import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmIdNoThread, ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
@@ -52,8 +52,8 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId)
+    , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash
@@ -73,8 +73,8 @@ type alias FrontendCurrentUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( GuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId)
+    , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , icon : Maybe FileHash

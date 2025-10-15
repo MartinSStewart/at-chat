@@ -33,7 +33,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
@@ -114,7 +114,7 @@ newMessageCount maybeLastViewed channel =
 
 
 channelNewMessageCount :
-    GuildOrDmIdNoThread
+    AnyGuildOrDmIdNoThread
     -> FrontendCurrentUser
     ->
         { b
@@ -138,7 +138,7 @@ guildNewMessageCount : FrontendCurrentUser -> Id GuildId -> FrontendGuild (Id Ch
 guildNewMessageCount currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel count ->
-            channelNewMessageCount (GuildOrDmId_Guild guildId channelId) currentUser channel + count
+            channelNewMessageCount (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId)) currentUser channel + count
         )
         0
         guild.channels
@@ -172,7 +172,7 @@ guildHasNotifications currentUser guildId guild =
 
 dmHasNotifications : FrontendCurrentUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
-    channelNewMessageCount (GuildOrDmId_Dm otherUserId) currentUser dmChannel |> OneOrGreater.fromInt
+    channelNewMessageCount (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
 
 
 canScroll : Drag -> Bool
@@ -451,7 +451,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                         |> Maybe.withDefault DmChannel.frontendThreadInit
                         |> threadConversationView
                             (SeqDict.get
-                                ( GuildOrDmId_Dm otherUserId, threadMessageIndex )
+                                ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
                                 local.localUser.user.lastViewedThreads
                                 |> Maybe.withDefault (Id.fromInt -1)
                                 |> Id.changeType
@@ -467,11 +467,11 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                 NoThreadWithFriends maybeUrlMessageId _ ->
                     conversationView
                         (SeqDict.get
-                            (GuildOrDmId_Dm otherUserId)
+                            (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId))
                             local.localUser.user.lastViewed
                             |> Maybe.withDefault (Id.fromInt -1)
                         )
-                        (GuildOrDmId_Dm otherUserId)
+                        (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId))
                         maybeUrlMessageId
                         loggedIn
                         model
@@ -932,7 +932,7 @@ channelView channelRoute guildId guild loggedIn local model =
                                 |> Maybe.withDefault DmChannel.frontendThreadInit
                                 |> threadConversationView
                                     (SeqDict.get
-                                        ( GuildOrDmId_Guild guildId channelId, threadMessageIndex )
+                                        ( NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
                                         local.localUser.user.lastViewedThreads
                                         |> Maybe.withDefault (Id.fromInt -1)
                                         |> Id.changeType
@@ -951,11 +951,11 @@ channelView channelRoute guildId guild loggedIn local model =
                         NoThreadWithFriends maybeUrlMessageId _ ->
                             conversationView
                                 (SeqDict.get
-                                    (GuildOrDmId_Guild guildId channelId)
+                                    (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
                                     local.localUser.user.lastViewed
                                     |> Maybe.withDefault (Id.fromInt -1)
                                 )
-                                (GuildOrDmId_Guild guildId channelId)
+                                (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
                                 maybeUrlMessageId
                                 loggedIn
                                 model
@@ -1147,7 +1147,7 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-messageHover : GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
+messageHover : AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 messageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
         MessageMenu messageMenu ->
@@ -1898,7 +1898,7 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-messageInputConfig : GuildOrDmId -> MsgConfig FrontendMsg
+messageInputConfig : ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> MsgConfig FrontendMsg
 messageInputConfig ( guildOrDmId, threadRoute ) =
     { gotPingUserPosition = GotPingUserPosition
     , textInputGotFocus = TextInputGotFocus
@@ -1957,7 +1957,7 @@ showFilesButton =
 
 conversationView :
     Id ChannelMessageId
-    -> GuildOrDmIdNoThread
+    -> AnyGuildOrDmIdNoThread
     -> Maybe (Id ChannelMessageId)
     -> LoggedIn2
     -> LoadedFrontend
@@ -1973,7 +1973,7 @@ conversationView :
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
-        guildOrDmId : GuildOrDmId
+        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 

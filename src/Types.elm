@@ -161,7 +161,7 @@ type LoginStatus
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
-    , drafts : SeqDict GuildOrDmId NonemptyString
+    , drafts : SeqDict ( AnyGuildOrDmIdNoThread, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
@@ -170,13 +170,13 @@ type alias LoggedIn2 =
     , pingUser : Maybe MentionUserDropdown
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
-    , editMessage : SeqDict GuildOrDmId EditMessage
-    , replyTo : SeqDict GuildOrDmId (Id ChannelMessageId)
+    , editMessage : SeqDict ( AnyGuildOrDmIdNoThread, ThreadRoute ) EditMessage
+    , replyTo : SeqDict ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Id ChannelMessageId)
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : SeqDict GuildOrDmId (NonemptyDict (Id FileId) FileStatus)
+    , filesToUpload : SeqDict ( AnyGuildOrDmIdNoThread, ThreadRoute ) (NonemptyDict (Id FileId) FileStatus)
     , showFileToUploadInfo : Maybe FileDataWithImage
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
@@ -211,13 +211,13 @@ type ChannelSidebarMode
 
 type MessageHover
     = NoMessageHover
-    | MessageHover GuildOrDmIdNoThread ThreadRouteWithMessage
+    | MessageHover AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | MessageMenu MessageMenuExtraOptions
 
 
 type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
-    , guildOrDmId : GuildOrDmIdNoThread
+    , guildOrDmId : AnyGuildOrDmIdNoThread
     , isThreadStarter : Bool
     , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
@@ -368,9 +368,9 @@ type FrontendMsg
     | ScrolledToLogSection
     | PressedLink Route
     | PressedTextInput
-    | TypedMessage GuildOrDmId String
-    | PressedSendMessage GuildOrDmIdNoThread ThreadRoute
-    | PressedAttachFiles GuildOrDmId
+    | TypedMessage ( AnyGuildOrDmIdNoThread, ThreadRoute ) String
+    | PressedSendMessage AnyGuildOrDmIdNoThread ThreadRoute
+    | PressedAttachFiles ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | SelectedFilesToAttach GuildOrDmId File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
@@ -389,22 +389,22 @@ type FrontendMsg
     | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
-    | PressedPingUser GuildOrDmId Int
+    | PressedPingUser ( AnyGuildOrDmIdNoThread, ThreadRoute ) Int
     | SetFocus
     | RemoveFocus
-    | PressedArrowInDropdown GuildOrDmIdNoThread Int
+    | PressedArrowInDropdown AnyGuildOrDmIdNoThread Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
-    | MessageMenu_PressedShowReactionEmojiSelector GuildOrDmIdNoThread ThreadRouteWithMessage (Coord CssPixels)
-    | MessageMenu_PressedEditMessage GuildOrDmIdNoThread ThreadRouteWithMessage
+    | MessageMenu_PressedShowReactionEmojiSelector AnyGuildOrDmIdNoThread ThreadRouteWithMessage (Coord CssPixels)
+    | MessageMenu_PressedEditMessage AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | PressedEmojiSelectorEmoji Emoji
     | GotPingUserPositionForEditMessage (Result Dom.Error MentionUserDropdown)
-    | TypedEditMessage GuildOrDmId String
-    | PressedSendEditMessage GuildOrDmId
-    | PressedArrowInDropdownForEditMessage GuildOrDmIdNoThread Int
-    | PressedPingUserForEditMessage GuildOrDmId Int
-    | PressedArrowUpInEmptyInput GuildOrDmId
+    | TypedEditMessage ( AnyGuildOrDmIdNoThread, ThreadRoute ) String
+    | PressedSendEditMessage ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    | PressedArrowInDropdownForEditMessage AnyGuildOrDmIdNoThread Int
+    | PressedPingUserForEditMessage ( AnyGuildOrDmIdNoThread, ThreadRoute ) Int
+    | PressedArrowUpInEmptyInput ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
     | PressedCloseReplyTo GuildOrDmId
@@ -423,7 +423,7 @@ type FrontendMsg
     | UserScrolled GuildOrDmIdNoThread ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
-    | MessageMenu_PressedDeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
+    | MessageMenu_PressedDeleteMessage AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
@@ -446,12 +446,12 @@ type FrontendMsg
     | PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
     | EditMessage_PressedDeleteAttachedFile GuildOrDmId (Id FileId)
     | EditMessage_PressedViewAttachedFileInfo GuildOrDmId (Id FileId)
-    | EditMessage_PressedAttachFiles GuildOrDmId
+    | EditMessage_PressedAttachFiles ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | EditMessage_SelectedFilesToAttach GuildOrDmId File (List File)
     | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
-    | EditMessage_PastedFiles GuildOrDmId (Nonempty File)
-    | PastedFiles GuildOrDmId (Nonempty File)
-    | FileUploadProgress GuildOrDmId (Id FileId) Http.Progress
+    | EditMessage_PastedFiles ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Nonempty File)
+    | PastedFiles ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Nonempty File)
+    | FileUploadProgress ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Id FileId) Http.Progress
     | MessageViewMsg GuildOrDmIdNoThread ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String SubscribeData)
     | SelectedNotificationMode NotificationMode
@@ -616,7 +616,7 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
-    | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId
+    | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | Server_AddReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
@@ -644,12 +644,12 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
-    | Local_MemberTyping Time.Posix GuildOrDmId
+    | Local_MemberTyping Time.Posix ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | Local_AddReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_SetLastViewed GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_SetLastViewed AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
@@ -667,12 +667,10 @@ type LocalDiscordChange
     | Local_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
     | Local_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Local_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | Local_Discord_MemberTyping Time.Posix GuildOrDmId
     | Local_Discord_AddReactionEmoji DiscordGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_Discord_RemoveReactionEmoji DiscordGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Local_Discord_SendEditMessage Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Local_Discord_MemberEditTyping Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_Discord_SetLastViewed DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_Discord_DeleteMessage DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_Discord_SetName PersonName
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))

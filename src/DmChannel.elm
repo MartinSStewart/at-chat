@@ -1,5 +1,6 @@
 module DmChannel exposing
-    ( DiscordThread
+    ( DiscordFrontendThread
+    , DiscordThread
     , DmChannel
     , DmChannelId(..)
     , ExternalChannelId(..)
@@ -9,6 +10,8 @@ module DmChannel exposing
     , LastTypedAt
     , Thread
     , channelIdFromUserIds
+    , discordFrontendThreadInit
+    , discordThreadInit
     , frontendInit
     , frontendThreadInit
     , getArray
@@ -71,6 +74,14 @@ type alias FrontendThread =
     }
 
 
+type alias DiscordFrontendThread =
+    { messages : Array (MessageState ThreadMessageId (Id UserId))
+    , visibleMessages : VisibleMessages ThreadMessageId
+    , linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
+    }
+
+
 type ExternalChannelId
     = DiscordChannelId (Discord.Id.Id Discord.Id.ChannelId)
     | SlackChannelId (Slack.Id Slack.ChannelId)
@@ -93,6 +104,23 @@ frontendThreadInit =
     { messages = Array.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
+    }
+
+
+discordThreadInit : DiscordThread
+discordThreadInit =
+    { messages = Array.empty
+    , lastTypedAt = SeqDict.empty
+    , linkedMessages = OneToOne.empty
+    }
+
+
+discordFrontendThreadInit : DiscordFrontendThread
+discordFrontendThreadInit =
+    { messages = Array.empty
+    , visibleMessages = VisibleMessages.empty
+    , lastTypedAt = SeqDict.empty
+    , linkedMessages = OneToOne.empty
     }
 
 

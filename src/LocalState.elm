@@ -41,6 +41,7 @@ module LocalState exposing
     , editChannel
     , editMessageFrontendHelper
     , editMessageHelper
+    , getDiscordGuildAndChannel
     , getGuildAndChannel
     , getUser
     , guildToFrontend
@@ -62,13 +63,13 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DiscordThread, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
+import DmChannel exposing (DiscordFrontendThread, DiscordThread, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -295,7 +296,7 @@ type alias DiscordFrontendChannel =
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) DiscordThread
+    , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     }
 
 
@@ -1365,15 +1366,15 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 markAllChannelsAsViewed :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
-    -> { d | lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId) }
-    -> { d | lastViewed : SeqDict GuildOrDmIdNoThread (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId) }
 markAllChannelsAsViewed guildId guild user =
     { user
         | lastViewed =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
-                        (GuildOrDmId_Guild guildId channelId)
+                        (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
                         (DmChannel.latestMessageId channel)
                         state
                 )
@@ -1584,6 +1585,21 @@ deleteMessageFrontendHelper userId threadRoute channel =
 getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild (Id ChannelId), FrontendChannel )
 getGuildAndChannel guildId channelId local =
     case SeqDict.get guildId local.guilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    Just ( guild, channel )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+getDiscordGuildAndChannel : Discord.Id.Id Discord.Id.GuildId -> Discord.Id.Id Discord.Id.ChannelId -> LocalState -> Maybe ( DiscordFrontendGuild, DiscordFrontendChannel )
+getDiscordGuildAndChannel guildId channelId local =
+    case SeqDict.get guildId local.discordGuilds of
         Just guild ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->

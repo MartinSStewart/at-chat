@@ -1451,7 +1451,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        guildOrDmIdWithThread : GuildOrDmId
+                        guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread, ThreadRoute )
                         guildOrDmIdWithThread =
                             ( guildOrDmId, threadRoute )
                     in
@@ -1887,9 +1887,9 @@ updateLoaded msg model =
                                                          of
                                                             Just messages ->
                                                                 case guildOrDmId of
-                                                                    GuildOrDmId_Guild guildId channelId ->
+                                                                    NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                                                                         Local_SetLastViewed
-                                                                            (GuildOrDmId_Guild guildId channelId)
+                                                                            (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
                                                                             (case threadRoute of
                                                                                 ViewThread threadId ->
                                                                                     ViewThreadWithMessage
@@ -1902,9 +1902,24 @@ updateLoaded msg model =
                                                                             )
                                                                             |> Just
 
-                                                                    GuildOrDmId_Dm otherUserId ->
+                                                                    NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                                                                         Local_SetLastViewed
-                                                                            (GuildOrDmId_Dm otherUserId)
+                                                                            (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                                                            (case threadRoute of
+                                                                                ViewThread threadId ->
+                                                                                    ViewThreadWithMessage
+                                                                                        threadId
+                                                                                        (messages - 1 |> Id.fromInt)
+
+                                                                                NoThread ->
+                                                                                    NoThreadWithMessage
+                                                                                        (messages - 1 |> Id.fromInt)
+                                                                            )
+                                                                            |> Just
+
+                                                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+                                                                        Local_SetLastViewed
+                                                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId))
                                                                             (case threadRoute of
                                                                                 ViewThread threadId ->
                                                                                     ViewThreadWithMessage
@@ -6490,13 +6505,13 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
 
 guildOrDmIdNoThreadToMessagesCount :
-    GuildOrDmIdNoThread
+    AnyGuildOrDmIdNoThread
     -> ThreadRoute
     -> LocalState
     -> Maybe Int
 guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -6513,7 +6528,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     case threadRoute of
@@ -6526,6 +6541,23 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
 
                         NoThread ->
                             Just (Array.length dmChannel.messages)
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            SeqDict.get threadMessageIndex channel.threads
+                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                |> .messages
+                                |> Array.length
+                                |> Just
+
+                        NoThread ->
+                            Just (Array.length channel.messages)
 
                 Nothing ->
                     Nothing

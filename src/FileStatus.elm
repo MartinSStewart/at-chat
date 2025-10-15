@@ -44,7 +44,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..))
+import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmIdNoThread(..), GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -345,7 +345,7 @@ type alias ExposureTime =
 upload :
     (Result Http.Error UploadResponse -> msg)
     -> SessionIdHash
-    -> GuildOrDmId
+    -> ( AnyGuildOrDmIdNoThread, ThreadRoute )
     -> Id FileId
     -> File
     -> Command restriction toFrontend msg
@@ -361,16 +361,25 @@ upload onResult sessionId guildOrDmId fileId file2 =
         }
 
 
-uploadTrackerId : GuildOrDmId -> Id FileId -> String
+uploadTrackerId : ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             Id.toString otherUserId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            "d"
+                ++ Discord.Id.toString guildId
+                ++ ","
+                ++ Discord.Id.toString channelId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            "d" ++ Discord.Id.toString otherUserId
     )
         ++ (case threadRoute of
                 ViewThread threadMessageIndex ->

@@ -11,6 +11,7 @@ module MessageMenu exposing
     , width
     )
 
+import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import DmChannel
@@ -18,7 +19,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (GuildOrDmIdNoThread(..), ThreadRoute, ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmIdNoThread(..), GuildOrDmIdNoThread(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
@@ -98,7 +99,7 @@ mobileMenuMaxHeightHelper itemCount =
 
 
 mobileMenuOpeningOffset :
-    GuildOrDmIdNoThread
+    AnyGuildOrDmIdNoThread
     -> ThreadRouteWithMessage
     -> LocalState
     -> LoadedFrontend
@@ -118,7 +119,7 @@ messageMenuSpeed =
 
 
 desktopMenuHeight :
-    { a | guildOrDmId : GuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
+    { a | guildOrDmId : AnyGuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -309,7 +310,7 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : GuildOrDmIdNoThread -> ThreadRoute -> MsgConfig FrontendMsg
+editMessageTextInputConfig : AnyGuildOrDmIdNoThread -> ThreadRoute -> MsgConfig FrontendMsg
 editMessageTextInputConfig guildOrDmId threadRoute =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
@@ -332,9 +333,10 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
+        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )
         helper messageId thread =
             case DmChannel.getArray messageId thread.messages of
                 Just (MessageLoaded message) ->
@@ -360,9 +362,10 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 _ ->
                     Nothing
 
+        maybeData : Maybe ( Bool, String )
         maybeData =
             case guildOrDmId of
-                GuildOrDmId_Guild guildId channelId ->
+                NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                     case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
@@ -380,7 +383,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                GuildOrDmId_Dm otherUserId ->
+                NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of
@@ -397,6 +400,27 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         Nothing ->
                             Nothing
+
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                        Just ( _, channel ) ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex channel.threads of
+                                        Just thread ->
+                                            Debug.todo ""
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    Debug.todo ""
+
+                        Nothing ->
+                            Nothing
+
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+                    Debug.todo ""
     in
     case maybeData of
         Just ( canEditAndDelete, text ) ->
