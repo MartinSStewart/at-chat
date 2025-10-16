@@ -1514,7 +1514,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId ->
+                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1531,7 +1531,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         (Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg))
                                 )
 
-                        GuildOrDmId_Dm otherUserId ->
+                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1565,9 +1565,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
+                        DiscordGuildOrDmId _ ->
+                            Debug.todo ""
+
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId ->
+                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1591,7 +1594,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_RemoveReactionEmoji userId guildOrDmId threadRoute emoji
+                                            (Server_RemoveReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -1599,7 +1602,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        GuildOrDmId_Dm otherUserId ->
+                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1633,6 +1636,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ]
                                     )
                                 )
+
+                        DiscordGuildOrDmId _ ->
+                            Debug.todo ""
 
                 Local_SendEditMessage _ guildOrDmId threadRoute newContent attachedFiles ->
                     let
@@ -1727,7 +1733,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId ->
+                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1763,7 +1769,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        GuildOrDmId_Dm otherUserId ->
+                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1810,6 +1816,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                             )
                                 )
+
+                        DiscordGuildOrDmId _ ->
+                            Debug.todo ""
 
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     asUser
@@ -2328,16 +2337,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         Local_Discord_DeleteChannel guildId channelId ->
                             Debug.todo ""
 
-                        Local_Discord_AddReactionEmoji discordGuildOrDmIdNoThread threadRouteWithMessage emoji ->
-                            Debug.todo ""
-
-                        Local_Discord_RemoveReactionEmoji discordGuildOrDmIdNoThread threadRouteWithMessage emoji ->
-                            Debug.todo ""
-
                         Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
-                            Debug.todo ""
-
-                        Local_Discord_MemberEditTyping posix discordGuildOrDmIdNoThread threadRouteWithMessage ->
                             Debug.todo ""
 
                         Local_Discord_DeleteMessage discordGuildOrDmIdNoThread threadRouteWithMessage ->
