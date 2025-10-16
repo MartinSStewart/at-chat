@@ -411,7 +411,7 @@ type FrontendMsg
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
-    | TouchStart (Maybe ( GuildOrDmIdNoThread, ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
+    | TouchStart (Maybe ( AnyGuildOrDmIdNoThread, ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix
@@ -430,7 +430,7 @@ type FrontendMsg
     | PressedCancelMessageEdit ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
-    | CheckMessageAltPress Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage Bool
+    | CheckMessageAltPress Time.Posix AnyGuildOrDmIdNoThread ThreadRouteWithMessage Bool
     | PressedShowUserOption
     | PressedCloseUserOptions
     | TwoFactorMsg TwoFactorAuthentication.Msg
@@ -448,7 +448,7 @@ type FrontendMsg
     | EditMessage_PressedViewAttachedFileInfo ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Id FileId)
     | EditMessage_PressedAttachFiles ( AnyGuildOrDmIdNoThread, ThreadRoute )
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmIdNoThread, ThreadRoute ) File (List File)
-    | EditMessage_GotFileHashName GuildOrDmId (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
+    | EditMessage_GotFileHashName ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | EditMessage_PastedFiles ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Nonempty File)
     | PastedFiles ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Nonempty File)
     | FileUploadProgress ( AnyGuildOrDmIdNoThread, ThreadRoute ) (Id FileId) Http.Progress
@@ -621,7 +621,7 @@ type ServerChange
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage
-    | Server_DeleteMessage (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Server_DeleteMessage (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty (RichText (Id UserId))) (Maybe (Id ChannelMessageId))
@@ -650,7 +650,7 @@ type LocalChange
     | Local_SendEditMessage Time.Posix GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmIdNoThread ThreadRouteWithMessage
-    | Local_DeleteMessage GuildOrDmIdNoThread ThreadRouteWithMessage
+    | Local_DeleteMessage AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
@@ -668,7 +668,6 @@ type LocalDiscordChange
     | Local_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Local_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | Local_Discord_SendEditMessage Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
-    | Local_Discord_DeleteMessage DiscordGuildOrDmIdNoThread ThreadRouteWithMessage
     | Local_Discord_SetName PersonName
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
     | Local_Discord_LoadThreadMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))

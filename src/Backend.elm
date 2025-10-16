@@ -1798,7 +1798,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Server_MemberEditTyping
                                                                 time
                                                                 userId
-                                                                (GuildOrDmId_Dm userId)
+                                                                guildOrDmId
                                                                 threadRoute
                                                                 |> ServerChange
                                                             )
@@ -1856,7 +1856,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId ->
+                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1885,7 +1885,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        GuildOrDmId_Dm otherUserId ->
+                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1911,7 +1911,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (\otherUserId2 ->
                                                                 Server_DeleteMessage
                                                                     userId
-                                                                    (GuildOrDmId_Dm otherUserId2)
+                                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                                     threadRoute
                                                             )
                                                             model2
@@ -1932,6 +1932,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 (LocalChangeResponse changeId Local_Invalid)
                                             )
                                 )
+
+                        DiscordGuildOrDmId _ ->
+                            Debug.todo ""
 
                 Local_CurrentlyViewing viewing ->
                     let
@@ -2338,9 +2341,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             Debug.todo ""
 
                         Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
-                            Debug.todo ""
-
-                        Local_Discord_DeleteMessage discordGuildOrDmIdNoThread threadRouteWithMessage ->
                             Debug.todo ""
 
                         Local_Discord_SetName personName ->
