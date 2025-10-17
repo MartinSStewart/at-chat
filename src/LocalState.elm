@@ -31,6 +31,7 @@ module LocalState exposing
     , createGuild
     , createThreadMessageBackend
     , createThreadMessageFrontend
+    , currentDiscordUser
     , deleteChannel
     , deleteChannelFrontend
     , deleteMessageBackend
@@ -744,18 +745,18 @@ deleteChannelFrontend channelId guild =
 
 
 memberIsTyping :
-    Id UserId
+    userId
     -> Time.Posix
     -> ThreadRoute
     ->
         { e
-            | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId) }
+            | lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId) }
         }
     ->
         { e
-            | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId) }
+            | lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) { f | lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId) }
         }
 memberIsTyping userId time threadRoute channel =
     case threadRoute of
@@ -1080,10 +1081,18 @@ addReactionEmoji emoji userId threadRoute channel =
 
 addReactionEmojiFrontend :
     Emoji
-    -> Id UserId
+    -> userId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-    -> { b | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+        }
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+        }
 addReactionEmojiFrontend emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
@@ -1129,9 +1138,9 @@ addReactionEmojiFrontend emoji userId threadRoute channel =
 
 updateChannel :
     (v -> v)
-    -> Id ChannelId
-    -> { a | channels : SeqDict (Id ChannelId) v }
-    -> { a | channels : SeqDict (Id ChannelId) v }
+    -> channelId
+    -> { a | channels : SeqDict channelId v }
+    -> { a | channels : SeqDict channelId v }
 updateChannel updateFunc channelId guild =
     { guild | channels = SeqDict.updateIfExists channelId updateFunc guild.channels }
 
@@ -1316,10 +1325,18 @@ removeReactionEmoji emoji userId threadRoute channel =
 
 removeReactionEmojiFrontend :
     Emoji
-    -> Id UserId
+    -> userId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-    -> { b | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+        }
+    ->
+        { b
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
+        }
 removeReactionEmojiFrontend emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageIndex ->
@@ -1361,6 +1378,11 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
                         )
                         channel.messages
             }
+
+
+currentDiscordUser : LocalState -> Discord.Id.Id Discord.Id.UserId
+currentDiscordUser local =
+    Debug.todo ""
 
 
 markAllChannelsAsViewed :

@@ -17,6 +17,7 @@ module User exposing
     , sectionToString
     , setGuildNotificationLevel
     , setLastChannelViewed
+    , setLastDiscordChannelViewed
     , setLastDmViewed
     , setName
     , toString
@@ -56,32 +57,17 @@ type alias BackendUser =
     , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
+    , lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
+    , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     }
 
 
 type alias FrontendCurrentUser =
-    { name : PersonName
-    , isAdmin : Bool
-    , email : EmailStatus
-    , recentLoginEmails : List Time.Posix
-    , lastLogPageViewed : Int
-    , expandedSections : SeqSet AdminUiSection
-    , createdAt : Time.Posix
-    , emailNotifications : EmailNotifications
-    , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
-    , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
-    , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
-    , icon : Maybe FileHash
-    , notifyOnAllMessages : SeqSet (Id GuildId)
-    , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
-    , lastPushNotification : Maybe Time.Posix
-    }
+    BackendUser
 
 
 linkDiscordDataCodec : Codec Discord.UserAuth
@@ -133,9 +119,11 @@ init createdAt name email userIsAdmin =
     , lastViewedThreads = SeqDict.empty
     , lastDmViewed = Nothing
     , lastChannelViewed = SeqDict.empty
+    , lastDiscordChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
+    , discordDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
     }
 
@@ -225,6 +213,40 @@ setLastChannelViewed guildId channelId threadRoute user =
     }
 
 
+setLastDiscordChannelViewed :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> ThreadRoute
+    ->
+        { a
+            | lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+            , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+        }
+    ->
+        { a
+            | lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+            , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
+        }
+setLastDiscordChannelViewed guildId channelId threadRoute user =
+    { user
+        | lastDiscordChannelViewed = SeqDict.insert guildId ( channelId, threadRoute ) user.lastDiscordChannelViewed
+        , discordDirectMentions =
+            SeqDict.update
+                guildId
+                (\maybeDict ->
+                    case maybeDict of
+                        Just dict ->
+                            NonemptyDict.toSeqDict dict
+                                |> SeqDict.remove ( channelId, threadRoute )
+                                |> NonemptyDict.fromSeqDict
+
+                        Nothing ->
+                            Nothing
+                )
+                user.discordDirectMentions
+    }
+
+
 setLastDmViewed :
     Id UserId
     -> ThreadRoute
@@ -289,9 +311,11 @@ backendToFrontendCurrent user =
     , lastViewedThreads = user.lastViewedThreads
     , lastDmViewed = user.lastDmViewed
     , lastChannelViewed = user.lastChannelViewed
+    , lastDiscordChannelViewed = user.lastDiscordChannelViewed
     , icon = user.icon
     , notifyOnAllMessages = user.notifyOnAllMessages
     , directMentions = user.directMentions
+    , discordDirectMentions = user.discordDirectMentions
     , lastPushNotification = user.lastPushNotification
     }
 

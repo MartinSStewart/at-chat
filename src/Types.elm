@@ -34,6 +34,7 @@ module Types exposing
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
+    , ServerDiscordChange(..)
     , ToBackend(..)
     , ToFrontend(..)
     , UserOptionsModel
@@ -617,8 +618,8 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmIdNoThread, ThreadRoute )
-    | Server_AddReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
-    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Server_AddReactionEmoji (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
+    | Server_RemoveReactionEmoji (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage
     | Server_DeleteMessage (Id UserId) AnyGuildOrDmIdNoThread ThreadRouteWithMessage
@@ -633,6 +634,19 @@ type ServerChange
     | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) String
+    | Server_DiscordChange (Discord.Id.Id Discord.Id.UserId) ServerDiscordChange
+
+
+type ServerDiscordChange
+    = Server_Discord_SendMessage Time.Posix DiscordGuildOrDmIdNoThread (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
+    | Server_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
+    | Server_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | Server_Discord_SendEditMessage Time.Posix DiscordGuildOrDmIdNoThread ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
+    | Server_Discord_SetName PersonName
+    | Server_Discord_LoadChannelMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | Server_Discord_LoadThreadMessages DiscordGuildOrDmIdNoThread (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | Server_Discord_SetGuildNotificationLevel (Id GuildId) NotificationLevel
 
 
 type LocalChange

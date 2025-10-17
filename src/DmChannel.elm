@@ -75,10 +75,10 @@ type alias FrontendThread =
 
 
 type alias DiscordFrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Id UserId))
+    { messages : Array (MessageState ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
     , linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
+    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
     }
 
 

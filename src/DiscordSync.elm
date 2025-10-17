@@ -1,6 +1,5 @@
 module DiscordSync exposing
     ( addDiscordGuilds
-    , addReactionEmoji
     , discordUserWebsocketMsg
     , http
     , loadImage
@@ -39,62 +38,6 @@ import SeqSet exposing (SeqSet)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalMsg(..), ServerChange(..), ToFrontend)
 import UInt64
 import User exposing (BackendUser, EmailStatus(..))
-
-
-addReactionEmoji :
-    Id GuildId
-    -> BackendGuild (Id ChannelId)
-    -> Id ChannelId
-    -> ThreadRouteWithMessage
-    -> Id UserId
-    -> Emoji
-    -> BackendModel
-    -> Command BackendOnly ToFrontend msg
-    -> ( BackendModel, Command BackendOnly ToFrontend msg )
-addReactionEmoji guildId guild channelId threadRoute userId emoji model cmds =
-    ( { model
-        | guilds =
-            SeqDict.insert
-                guildId
-                (LocalState.updateChannel (LocalState.addReactionEmoji emoji userId threadRoute) channelId guild)
-                model.guilds
-      }
-    , Command.batch
-        [ cmds
-        , Broadcast.toGuild
-            guildId
-            (Server_AddReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji |> ServerChange)
-            model
-        ]
-    )
-
-
-removeReactionEmoji :
-    Id GuildId
-    -> BackendGuild (Id ChannelId)
-    -> Id ChannelId
-    -> ThreadRouteWithMessage
-    -> Id UserId
-    -> Emoji
-    -> BackendModel
-    -> Command BackendOnly ToFrontend msg
-    -> ( BackendModel, Command BackendOnly ToFrontend msg )
-removeReactionEmoji guildId guild channelId threadRoute userId emoji model cmds =
-    ( { model
-        | guilds =
-            SeqDict.insert
-                guildId
-                (LocalState.updateChannel (LocalState.removeReactionEmoji emoji userId threadRoute) channelId guild)
-                model.guilds
-      }
-    , Command.batch
-        [ cmds
-        , Broadcast.toGuild
-            guildId
-            (Server_RemoveReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji |> ServerChange)
-            model
-        ]
-    )
 
 
 addOrRemoveDiscordReaction :

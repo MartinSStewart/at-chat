@@ -1520,15 +1520,21 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 (\{ userId } _ guild ->
-                                    DiscordSync.addReactionEmoji
-                                        guildId
-                                        guild
-                                        channelId
-                                        threadRoute
-                                        userId
-                                        emoji
-                                        model2
-                                        (Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg))
+                                    ( { model2
+                                        | guilds =
+                                            SeqDict.insert
+                                                guildId
+                                                (LocalState.updateChannel (LocalState.addReactionEmoji emoji userId threadRoute) channelId guild)
+                                                model2.guilds
+                                      }
+                                    , Command.batch
+                                        [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                        , Broadcast.toGuild
+                                            guildId
+                                            (Server_AddReactionEmoji userId guildOrDmId threadRoute emoji |> ServerChange)
+                                            model2
+                                        ]
+                                    )
                                 )
 
                         NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
@@ -1556,7 +1562,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_AddReactionEmoji
                                                     userId
-                                                    (GuildOrDmId_Dm otherUserId2)
+                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                     threadRoute
                                                     emoji
                                             )
@@ -1594,7 +1600,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_RemoveReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji
+                                            (Server_RemoveReactionEmoji userId guildOrDmId threadRoute emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -1628,7 +1634,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_RemoveReactionEmoji
                                                     userId
-                                                    (GuildOrDmId_Dm otherUserId2)
+                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                     threadRoute
                                                     emoji
                                             )

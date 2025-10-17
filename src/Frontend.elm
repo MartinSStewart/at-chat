@@ -1511,6 +1511,7 @@ updateLoaded msg model =
                                                 Nothing ->
                                                     SeqDict.empty
                                             )
+                                            |> Local_DiscordChange (LocalState.currentDiscordUser local)
                                  )
                                     |> Just
                                 )
@@ -1969,6 +1970,9 @@ updateLoaded msg model =
                                                                             )
                                                                             |> Just
 
+                                                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+                                                                        Debug.todo ""
+
                                                             Nothing ->
                                                                 Nothing
                                                         )
@@ -2201,6 +2205,7 @@ updateLoaded msg model =
                                                         )
                                                         richText
                                                         (FileStatus.onlyUploadedFiles edit.attachedFiles)
+                                                        |> Local_DiscordChange (LocalState.currentDiscordUser local)
                                                         |> Just
 
                                             _ ->
@@ -3829,7 +3834,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                                         ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
                                         { messageIndex = Id.threadRouteToMessageId threadRoute
                                         , text = content
-                                        , attachedFiles = attachedFiles
+                                        , attachedFiles = SeqDict.map (\_ a -> FileUploaded a) attachedFiles
                                         }
                                         loggedIn.editMessage
                             }
@@ -4451,7 +4456,7 @@ changeUpdate localMsg local =
                                                     { user
                                                         | lastViewed =
                                                             SeqDict.insert
-                                                                guildOrDmId
+                                                                (NormalGuildOrDmId guildOrDmId)
                                                                 (Array.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
@@ -4514,7 +4519,7 @@ changeUpdate localMsg local =
                                             { user
                                                 | lastViewed =
                                                     SeqDict.insert
-                                                        guildOrDmId
+                                                        (NormalGuildOrDmId guildOrDmId)
                                                         (DmChannel.latestMessageId dmChannel2)
                                                         user.lastViewed
                                             }
@@ -4649,10 +4654,7 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user = User.setLastDmViewed otherUserId NoThread localUser.user
-                                        , session =
-                                            UserSession.setCurrentlyViewing
-                                                (Just ( GuildOrDmId_Dm otherUserId, NoThread ))
-                                                localUser.session
+                                        , session = session
                                     }
                                 , dmChannels =
                                     SeqDict.updateIfExists
@@ -4726,6 +4728,55 @@ changeUpdate localMsg local =
 
                         StopViewingChannel ->
                             { local | localUser = { localUser | session = session } }
+
+                        ViewDiscordChannel guildId channelId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastDiscordChannelViewed
+                                                guildId
+                                                channelId
+                                                NoThread
+                                                localUser.user
+                                        , session = session
+                                    }
+                                , discordGuilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel (Debug.todo "") channelId)
+                                        local.discordGuilds
+                            }
+
+                        ViewDiscordChannelThread guildId channelId threadId messagesLoaded ->
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user =
+                                            User.setLastDiscordChannelViewed
+                                                guildId
+                                                channelId
+                                                (ViewThread threadId)
+                                                localUser.user
+                                        , session = session
+                                    }
+                                , discordGuilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (Debug.todo "")
+                                                            channel.threads
+                                                }
+                                            )
+                                            channelId
+                                        )
+                                        local.discordGuilds
+                            }
 
                 Local_SetName name ->
                     let
@@ -4851,6 +4902,9 @@ changeUpdate localMsg local =
                             TextEditor.localChangeUpdate local.localUser.session.userId localChange2 local.textEditor
                     }
 
+                Local_DiscordChange currentDiscordUserId localDiscordChange ->
+                    Debug.todo ""
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -4870,7 +4924,7 @@ changeUpdate localMsg local =
                                         isNotViewing : Bool
                                         isNotViewing =
                                             isViewing
-                                                guildOrDmId
+                                                (NormalGuildOrDmId guildOrDmId)
                                                 (case threadRouteWithRepliedTo of
                                                     ViewThreadWithMaybeMessage threadId _ ->
                                                         ViewThread threadId
@@ -4929,7 +4983,7 @@ changeUpdate localMsg local =
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
-                                                                    guildOrDmId
+                                                                    (NormalGuildOrDmId guildOrDmId)
                                                                     (Array.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
@@ -5018,7 +5072,7 @@ changeUpdate localMsg local =
                                                 { user
                                                     | lastViewed =
                                                         SeqDict.insert
-                                                            guildOrDmId
+                                                            (NormalGuildOrDmId guildOrDmId)
                                                             (DmChannel.latestMessageId dmChannel2)
                                                             user.lastViewed
                                                 }
@@ -5260,11 +5314,14 @@ changeUpdate localMsg local =
                     in
                     local
 
+                Server_DiscordChange currentDiscordUserId serverDiscordChange ->
+                    Debug.todo ""
 
-memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> LocalState -> LocalState
+
+memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5273,7 +5330,7 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5282,11 +5339,23 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.dmChannels
             }
 
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (LocalState.updateChannel (LocalState.memberIsTyping (Debug.todo "") time threadRoute) channelId)
+                        local.discordGuilds
+            }
 
-addReactionEmoji : Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
+
+
+addReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5298,7 +5367,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5307,11 +5376,26 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.dmChannels
             }
 
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (LocalState.updateChannel
+                            (LocalState.addReactionEmojiFrontend emoji (Debug.todo "") threadRoute)
+                            channelId
+                        )
+                        local.discordGuilds
+            }
 
-removeReactionEmoji : Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
+
+
+removeReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 removeReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5323,7 +5407,7 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5332,11 +5416,26 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.dmChannels
             }
 
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (LocalState.updateChannel
+                            (LocalState.removeReactionEmojiFrontend emoji (Debug.todo "") threadRoute)
+                            channelId
+                        )
+                        local.discordGuilds
+            }
 
-memberEditTyping : Time.Posix -> Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
+
+
+memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5348,7 +5447,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5359,6 +5458,21 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                         )
                         local.dmChannels
             }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild ->
+                            Debug.todo ""
+                                |> Result.withDefault guild
+                        )
+                        local.discordGuilds
+            }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
 
 
 editMessage :
@@ -5412,10 +5526,10 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
             }
 
 
-deleteMessage : Id UserId -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
+deleteMessage : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
 deleteMessage userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5424,7 +5538,7 @@ deleteMessage userId guildOrDmId threadRoute local =
                         local.guilds
             }
 
-        GuildOrDmId_Dm otherUserId ->
+        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5432,6 +5546,18 @@ deleteMessage userId guildOrDmId threadRoute local =
                         (LocalState.deleteMessageFrontendHelper userId threadRoute)
                         local.dmChannels
             }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+            { local
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (Debug.todo "")
+                        local.discordGuilds
+            }
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
 
 
 loadOlderMessages :
@@ -5718,7 +5844,7 @@ updateLoadedFromBackend msg model =
                             case viewing of
                                 ViewChannel guildId channelId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, NoThread ) ->
+                                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5730,7 +5856,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewDm otherUserId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( GuildOrDmId_Dm otherUserIdRoute, NoThread ) ->
+                                        Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5742,7 +5868,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewChannelThread guildId channelId threadId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( GuildOrDmId_Guild guildIdRoute channelIdRoute, ViewThread threadIdRoute ) ->
+                                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5754,7 +5880,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewDmThread otherUserId threadId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( GuildOrDmId_Dm otherUserIdRoute, ViewThread threadIdRoute ) ->
+                                        Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
                                             if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5766,6 +5892,30 @@ updateLoadedFromBackend msg model =
 
                                 StopViewingChannel ->
                                     Command.none
+
+                                ViewDiscordChannel guildId channelId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
+                                            if guildId == guildIdRoute && channelId == channelIdRoute then
+                                                scrollToBottomOfChannel
+
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
+
+                                ViewDiscordChannelThread guildId channelId threadId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
+                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                                scrollToBottomOfChannel
+
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
 
                         _ ->
                             Command.none
@@ -5972,7 +6122,7 @@ smoothScrollToBottomOfChannelHelper startY endY count =
         Task.succeed ()
 
 
-isViewing : GuildOrDmIdNoThread -> ThreadRoute -> LocalState -> Bool
+isViewing : AnyGuildOrDmIdNoThread -> ThreadRoute -> LocalState -> Bool
 isViewing guildOrDmId threadRoute local =
     let
         a =
@@ -6142,6 +6292,40 @@ pendingChangesText localChange =
         Local_TextEditor _ ->
             "Text editor change"
 
+        Local_DiscordChange _ localDiscordChange ->
+            case localDiscordChange of
+                Local_Discord_SendMessage posix discordGuildOrDmIdNoThread nonempty threadRouteWithMaybeMessage seqDict ->
+                    "Send a message"
+
+                Local_Discord_NewChannel posix id channelName ->
+                    "Created new channel"
+
+                Local_Discord_EditChannel id _ channelName ->
+                    "Edited channel"
+
+                Local_Discord_DeleteChannel id _ ->
+                    "Deleted channel"
+
+                Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
+                    "Edit message"
+
+                Local_Discord_SetName personName ->
+                    "Set display name"
+
+                Local_Discord_LoadChannelMessages discordGuildOrDmIdNoThread id toBeFilledInByBackend ->
+                    "Load channel messages"
+
+                Local_Discord_LoadThreadMessages discordGuildOrDmIdNoThread id _ toBeFilledInByBackend ->
+                    "Load thread messages"
+
+                Local_Discord_SetGuildNotificationLevel id notificationLevel ->
+                    case notificationLevel of
+                        NotifyOnEveryMessage ->
+                            "Enabled notifications for all messages"
+
+                        NotifyOnMention ->
+                            "Disabled notifications for all messages"
+
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg
 layout model attributes child =
@@ -6177,18 +6361,24 @@ layout model attributes child =
                     Just ( guildOrDmId, threadRoute ) ->
                         case loggedIn.pingUser of
                             Just pingUser ->
-                                MessageInput.pingDropdownView
-                                    (case pingUser.target of
-                                        MessageInput.NewMessage ->
-                                            Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute )
+                                (case guildOrDmId of
+                                    NormalGuildOrDmId guildOrDmId2 ->
+                                        MessageInput.pingDropdownView
+                                            (case pingUser.target of
+                                                MessageInput.NewMessage ->
+                                                    Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute )
 
-                                        MessageInput.EditMessage ->
-                                            MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute
-                                    )
-                                    guildOrDmId
-                                    local
-                                    Pages.Guild.dropdownButtonId
-                                    pingUser
+                                                MessageInput.EditMessage ->
+                                                    MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute
+                                            )
+                                            guildOrDmId2
+                                            local
+                                            Pages.Guild.dropdownButtonId
+                                            pingUser
+
+                                    DiscordGuildOrDmId guildOrDmId2 ->
+                                        Debug.todo ""
+                                )
                                     |> Ui.inFront
 
                             Nothing ->
@@ -6779,6 +6969,9 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+            Debug.todo ""
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )

@@ -46,9 +46,9 @@ type MessageNoReply userId
 
 type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
-    , createdBy : Id UserId
+    , createdBy : userId
     , content : Nonempty (RichText userId)
-    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , reactions : SeqDict Emoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
     }
