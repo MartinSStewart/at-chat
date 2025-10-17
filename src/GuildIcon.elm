@@ -10,8 +10,8 @@ module GuildIcon exposing
     )
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import FileStatus
-import GuildName
+import FileStatus exposing (FileHash)
+import GuildName exposing (GuildName)
 import Html
 import Html.Attributes
 import Icons
@@ -141,7 +141,7 @@ notificationView userAgent xOffset yOffset borderColor notification =
             notificationHelper userAgent MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-view : UserAgent -> Mode -> FrontendGuild channelId -> Element msg
+view : UserAgent -> Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
 view userAgent mode guild =
     let
         name : String

@@ -38,6 +38,7 @@ module LocalState exposing
     , deleteMessageBackendHelper
     , deleteMessageFrontend
     , deleteMessageFrontendHelper
+    , discordAnnouncementChannel
     , discordGuildToFrontendForUser
     , editChannel
     , editMessageFrontendHelper
@@ -85,6 +86,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import TextEditor
+import UInt64
 import Unsafe
 import User exposing (BackendUser, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
@@ -1032,6 +1034,13 @@ addMemberFrontend time userId guild =
 announcementChannel : { a | channels : SeqDict (Id ChannelId) b } -> Id ChannelId
 announcementChannel guild =
     SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Id.fromInt 0)
+
+
+discordAnnouncementChannel :
+    { a | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) b }
+    -> Discord.Id.Id Discord.Id.ChannelId
+discordAnnouncementChannel guild =
+    SeqDict.keys guild.channels |> List.head |> Maybe.withDefault (Discord.Id.fromUInt64 (UInt64.fromInt 0))
 
 
 allUsers : LocalState -> SeqDict (Id UserId) FrontendUser

@@ -21,6 +21,7 @@ import Bitwise
 import ChannelName
 import Coord
 import Date exposing (Date)
+import Discord.Id
 import DmChannel exposing (FrontendDmChannel, FrontendThread, LastTypedAt)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -33,11 +34,11 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
-import LocalState exposing (FrontendChannel, FrontendGuild, LocalState, LocalUser)
+import LocalState exposing (DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import MessageInput exposing (MentionUserDropdown, MsgConfig)
@@ -50,7 +51,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -119,7 +120,7 @@ channelNewMessageCount :
     ->
         { b
             | messages : Array (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (MessageState ThreadMessageId userId) }
         }
     -> Int
 channelNewMessageCount guildOrDmId currentUser channel =
@@ -139,6 +140,20 @@ guildNewMessageCount currentUser guildId guild =
     SeqDict.foldl
         (\channelId channel count ->
             channelNewMessageCount (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId)) currentUser channel + count
+        )
+        0
+        guild.channels
+
+
+discordGuildNewMessageCount :
+    FrontendCurrentUser
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> DiscordFrontendGuild
+    -> Int
+discordGuildNewMessageCount currentUser guildId guild =
+    SeqDict.foldl
+        (\channelId channel count ->
+            channelNewMessageCount (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId)) currentUser channel + count
         )
         0
         guild.channels
@@ -170,6 +185,36 @@ guildHasNotifications currentUser guildId guild =
                         NoNotification
 
 
+discordGuildHasNotifications :
+    FrontendCurrentUser
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> DiscordFrontendGuild
+    -> ChannelNotificationType
+discordGuildHasNotifications currentUser guildId guild =
+    --if SeqSet.member guildId currentUser.notifyOnAllMessages then
+    --    case guildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+    --        Just count ->
+    --            NewMessageForUser count
+    --
+    --        Nothing ->
+    --            NoNotification
+    --
+    --else
+    case SeqDict.get guildId currentUser.discordDirectMentions of
+        Just directMentions ->
+            NonemptyDict.values directMentions
+                |> List.Nonempty.foldl1 OneOrGreater.plus
+                |> NewMessageForUser
+
+        Nothing ->
+            case discordGuildNewMessageCount currentUser guildId guild |> OneOrGreater.fromInt of
+                Just count ->
+                    NewMessage count
+
+                Nothing ->
+                    NoNotification
+
+
 dmHasNotifications : FrontendCurrentUser -> Id UserId -> FrontendDmChannel -> Maybe OneOrGreater
 dmHasNotifications currentUser otherUserId dmChannel =
     channelNewMessageCount (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId)) currentUser dmChannel |> OneOrGreater.fromInt
@@ -191,9 +236,10 @@ guildColumn :
     -> LocalUser
     -> SeqDict (Id UserId) FrontendDmChannel
     -> SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     -> Bool
     -> Element FrontendMsg
-guildColumn isMobile route localUser dmChannels guilds canScroll2 =
+guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 =
     let
         allUsers =
             LocalState.allUsers2 localUser
@@ -303,6 +349,49 @@ guildColumn isMobile route localUser dmChannels guilds canScroll2 =
                             )
                     )
                     (SeqDict.toList guilds)
+                ++ List.map
+                    (\( guildId, guild ) ->
+                        elLinkButton
+                            (Dom.id ("guild_openDiscordGuild_" ++ Discord.Id.toString guildId))
+                            (DiscordGuildRoute
+                                guildId
+                                (case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
+                                    Just ( channelId, threadRoute ) ->
+                                        DiscordChannel_ChannelRoute
+                                            channelId
+                                            (case threadRoute of
+                                                ViewThread threadId ->
+                                                    ViewThreadWithFriends threadId Nothing HideMembersTab
+
+                                                NoThread ->
+                                                    NoThreadWithFriends Nothing HideMembersTab
+                                            )
+
+                                    Nothing ->
+                                        DiscordChannel_ChannelRoute
+                                            (LocalState.discordAnnouncementChannel guild)
+                                            (NoThreadWithFriends Nothing HideMembersTab)
+                                )
+                            )
+                            []
+                            (GuildIcon.view
+                                localUser.userAgent
+                                (case route of
+                                    DiscordGuildRoute a _ ->
+                                        if a == guildId then
+                                            GuildIcon.IsSelected
+
+                                        else
+                                            discordGuildHasNotifications localUser.user guildId guild
+                                                |> GuildIcon.Normal
+
+                                    _ ->
+                                        discordGuildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
+                                )
+                                guild
+                            )
+                    )
+                    (SeqDict.toList discordGuilds)
                 ++ [ GuildIcon.addGuildButton (Dom.id "guild_createGuild") False PressedCreateGuild ]
             )
         )
@@ -380,14 +469,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy6
-                                guildColumn
-                                True
-                                model.route
-                                local.localUser
-                                local.dmChannels
-                                local.guilds
-                                (canScroll model.drag)
+                            [ guildColumnLazy True model local
                             , friendsColumn True maybeOtherUserId local
                             ]
                         , loggedInAsView local
@@ -403,14 +485,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.height Ui.fill, Ui.width (Ui.px 300) ]
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                            [ Ui.Lazy.lazy6
-                                guildColumn
-                                False
-                                model.route
-                                local.localUser
-                                local.dmChannels
-                                local.guilds
-                                (canScroll model.drag)
+                            [ guildColumnLazy False model local
                             , friendsColumn False maybeOtherUserId local
                             ]
                         , loggedInAsView local
@@ -433,6 +508,37 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         Nothing ->
                             Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
                     ]
+
+
+guildColumnLazy : Bool -> LoadedFrontend -> LocalState -> Element FrontendMsg
+guildColumnLazy isMobile model local =
+    if canScroll model.drag then
+        Ui.Lazy.lazy6
+            guildColumnCanScroll
+            isMobile
+            model.route
+            local.localUser
+            local.dmChannels
+            local.guilds
+            local.discordGuilds
+
+    else
+        Ui.Lazy.lazy6
+            guildColumnCannotScroll
+            isMobile
+            model.route
+            local.localUser
+            local.dmChannels
+            local.guilds
+            local.discordGuilds
+
+
+guildColumnCanScroll isMobile route localUser dmChannels guilds discordGuilds =
+    guildColumn isMobile route localUser dmChannels guilds discordGuilds True
+
+
+guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds =
+    guildColumn isMobile route localUser dmChannels guilds discordGuilds False
 
 
 dmChannelView : Id UserId -> ThreadRouteWithFriends -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
@@ -589,14 +695,7 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ Ui.Lazy.lazy6
-                                    guildColumn
-                                    True
-                                    model.route
-                                    local.localUser
-                                    local.dmChannels
-                                    local.guilds
-                                    canScroll2
+                                [ guildColumnLazy True model local
                                 , Ui.Lazy.lazy5
                                     (if canScroll2 then
                                         channelColumnCanScrollMobile
@@ -622,14 +721,7 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ Ui.Lazy.lazy6
-                                        guildColumn
-                                        False
-                                        model.route
-                                        local.localUser
-                                        local.dmChannels
-                                        local.guilds
-                                        True
+                                    [ guildColumnLazy False model local
                                     , Ui.Lazy.lazy5
                                         channelColumnNotMobile
                                         local.localUser
@@ -674,14 +766,7 @@ guildView model guildId channelRoute loggedIn local =
                             ]
                             [ Ui.row
                                 [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ Ui.Lazy.lazy6
-                                    guildColumn
-                                    True
-                                    model.route
-                                    local.localUser
-                                    local.dmChannels
-                                    local.guilds
-                                    canScroll2
+                                [ guildColumnLazy True model local
                                 , pageMissingMobile "Guild not found"
                                 ]
                             , loggedInAsView local
@@ -696,14 +781,7 @@ guildView model guildId channelRoute loggedIn local =
                                 ]
                                 [ Ui.row
                                     [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ Ui.Lazy.lazy6
-                                        guildColumn
-                                        False
-                                        model.route
-                                        local.localUser
-                                        local.dmChannels
-                                        local.guilds
-                                        True
+                                    [ guildColumnLazy False model local
                                     , Ui.el
                                         [ Ui.background MyUi.background2
                                         , Ui.height Ui.fill
