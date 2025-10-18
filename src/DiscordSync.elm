@@ -559,7 +559,7 @@ addDiscordMessages threadRoute messages model channel =
 addDiscordGuilds :
     SeqDict
         (Discord.Id.Id Discord.Id.GuildId)
-        { guild : Discord.Guild
+        { guild : Discord.GatewayGuild
         , channels : List ( Discord.Channel, List Discord.Message )
         , icon : Maybe FileStatus.UploadResponse
         }
@@ -605,7 +605,7 @@ addDiscordGuilds guilds model =
                                         --    SeqDict.empty
                                         --    data.channels
                                     in
-                                    { name = GuildName.fromStringLossy data.guild.name
+                                    { name = GuildName.fromStringLossy data.guild.properties.name
                                     , icon = Maybe.map .fileHash data.icon
                                     , channels =
                                         List.filterMap
@@ -613,7 +613,7 @@ addDiscordGuilds guilds model =
                                             data.channels
                                             |> SeqDict.fromList
                                     , members = SeqDict.empty -- Gets filled in via the websocket connection
-                                    , owner = data.guild.ownerId
+                                    , owner = data.guild.properties.ownerId
                                     }
                                         |> Just
                         )
@@ -1285,20 +1285,75 @@ handleReadyData userAuth readyData model =
             Discord.userToken userAuth
     in
     ( model
+      --{ model
+      --    | discordGuilds =
+      --        SeqDict.foldl
+      --            (\guildId data discordGuilds ->
+      --                SeqDict.update
+      --                    guildId
+      --                    (\maybe ->
+      --                        case maybe of
+      --                            Just _ ->
+      --                                maybe
+      --
+      --                            Nothing ->
+      --                                let
+      --                                    threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+      --                                    threads =
+      --                                        SeqDict.empty
+      --
+      --                                    --List.foldl
+      --                                    --    (\( channel, messages ) dict ->
+      --                                    --        case (Tuple.first channel).parentId of
+      --                                    --            Included (Just parentId) ->
+      --                                    --                SeqDict.update
+      --                                    --                    parentId
+      --                                    --                    (\maybe2 ->
+      --                                    --                        case maybe2 of
+      --                                    --                            Just list ->
+      --                                    --                                Just (( channel, messages ) :: list)
+      --                                    --
+      --                                    --                            Nothing ->
+      --                                    --                                Just [ ( channel, messages ) ]
+      --                                    --                    )
+      --                                    --                    dict
+      --                                    --
+      --                                    --            _ ->
+      --                                    --                dict
+      --                                    --    )
+      --                                    --    SeqDict.empty
+      --                                    --    data.channels
+      --                                in
+      --                                { name = GuildName.fromStringLossy data.properties.name
+      --                                , icon = Nothing
+      --                                , channels =
+      --                                    List.filterMap
+      --                                        (\( channel, messages ) -> addDiscordChannel threads channel messages)
+      --                                        data.channels
+      --                                        |> SeqDict.fromList
+      --                                , members = SeqDict.empty -- Gets filled in via the websocket connection
+      --                                , owner = data.properties.ownerId
+      --                                }
+      --                                    |> Just
+      --                    )
+      --                    discordGuilds
+      --            )
+      --            model.discordGuilds
+      --            readyData.guilds
+      --  }
     , Command.batch
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
         , List.map
             (\gatewayGuild ->
-                Task.map3
-                    (\guild channels maybeIcon ->
+                Task.map2
+                    (\channels maybeIcon ->
                         ( gatewayGuild.properties.id
-                        , { guild = guild
+                        , { guild = gatewayGuild
                           , channels = channels
                           , icon = maybeIcon
                           }
                         )
                     )
-                    (Discord.getGuildPayload auth gatewayGuild.properties.id |> http)
                     (List.map
                         (\channel ->
                             Discord.getMessagesPayload
@@ -1349,16 +1404,17 @@ handleReadyData userAuth readyData model =
              --        )
              --)
             )
-            (if Env.isProduction then
-                readyData.guilds
-
-             else
-                List.filter
-                    (\guild ->
-                        Just guild.properties.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
-                    )
-                    readyData.guilds
-            )
+            readyData.guilds
+            --(if Env.isProduction then
+            --    readyData.guilds
+            --
+            -- else
+            --    List.filter
+            --        (\guild ->
+            --            Just guild.properties.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
+            --        )
+            --        readyData.guilds
+            --)
             |> Task.sequence
             |> Task.attempt (LinkDiscordUserStep2 readyData.user.id)
         ]

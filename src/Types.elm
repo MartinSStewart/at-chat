@@ -542,7 +542,7 @@ type BackendMsg
             Discord.HttpError
             (List
                 ( Discord.Id.Id Discord.Id.GuildId
-                , { guild : Discord.Guild
+                , { guild : Discord.GatewayGuild
                   , channels : List ( Discord.Channel, List Discord.Message )
                   , icon : Maybe FileStatus.UploadResponse
                   }

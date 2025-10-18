@@ -547,22 +547,23 @@ update msg model =
                     )
 
         LinkDiscordUserStep2 discordUserId result ->
-            case result of
+            case Debug.log "discordGuildsReuslt" result of
                 Ok data ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList data) model
-                    , case SeqDict.get discordUserId model.discordUsers of
-                        Just (FullData user) ->
-                            Discord.requestGuildMembers
-                                (\connection data2 ->
-                                    Websocket.sendString connection data2
-                                        |> Task.attempt (WebsocketSentDataForUser discordUserId)
-                                )
-                                (List.map Tuple.first data)
-                                user.connection
-                                |> Result.withDefault Command.none
-
-                        _ ->
-                            Command.none
+                    , Command.none
+                      --, case SeqDict.get discordUserId model.discordUsers of
+                      --    Just (FullData user) ->
+                      --        Discord.requestGuildMembers
+                      --            (\connection data2 ->
+                      --                Websocket.sendString connection data2
+                      --                    |> Task.attempt (WebsocketSentDataForUser discordUserId)
+                      --            )
+                      --            (List.map Tuple.first data)
+                      --            user.connection
+                      --            |> Result.withDefault Command.none
+                      --
+                      --    _ ->
+                      --        Command.none
                     )
 
                 Err error ->
@@ -941,6 +942,7 @@ getLoginData sessionId session user requestMessagesFor model =
                 LocalState.discordGuildToFrontendForUser Nothing guild
             )
             model.discordGuilds
+            |> Debug.log "discordGuilds"
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
