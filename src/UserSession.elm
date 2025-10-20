@@ -61,6 +61,8 @@ type NotificationMode
 type SetViewing
     = ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordDm (Discord.Id.Id Discord.Id.UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDiscordDmThread (Discord.Id.Id Discord.Id.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | ViewDiscordChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
@@ -76,6 +78,12 @@ setViewingToCurrentlyViewing viewing =
 
         ViewDmThread otherUserId threadId _ ->
             Just ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId, ViewThread threadId )
+
+        ViewDiscordDm otherUserId _ ->
+            Just ( DiscordGuildOrDmId_Dm otherUserId |> DiscordGuildOrDmId, NoThread )
+
+        ViewDiscordDmThread otherUserId threadId _ ->
+            Just ( DiscordGuildOrDmId_Dm otherUserId |> DiscordGuildOrDmId, ViewThread threadId )
 
         ViewChannel guildId channelId _ ->
             Just ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId, NoThread )
@@ -184,6 +192,14 @@ routeToViewing route =
 
                 ViewThreadWithFriends threadId _ _ ->
                     ViewDmThread otherUserId threadId EmptyPlaceholder
+
+        DiscordDmRoute otherUserId threadRoute ->
+            case threadRoute of
+                NoThreadWithFriends _ _ ->
+                    ViewDiscordDm otherUserId EmptyPlaceholder
+
+                ViewThreadWithFriends threadId _ _ ->
+                    ViewDiscordDmThread otherUserId threadId EmptyPlaceholder
 
         AiChatRoute ->
             StopViewingChannel

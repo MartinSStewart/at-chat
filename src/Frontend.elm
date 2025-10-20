@@ -450,6 +450,7 @@ loginDataToLocalState userAgent timezone loginData =
         { session = loginData.session
         , user = loginData.user
         , otherUsers = loginData.otherUsers
+        , otherDiscordUsers = loginData.otherDiscordUsers
         , timezone = timezone
         , userAgent = userAgent
         }
@@ -828,6 +829,28 @@ routeRequest previousRoute newRoute model =
                 )
                 model3
 
+        DiscordDmRoute _ threadRoute ->
+            let
+                model3 : LoadedFrontend
+                model3 =
+                    { model2
+                        | loginStatus =
+                            case model2.loginStatus of
+                                LoggedIn loggedIn ->
+                                    LoggedIn { loggedIn | revealedSpoilers = Nothing }
+
+                                NotLoggedIn _ ->
+                                    model2.loginStatus
+                    }
+            in
+            updateLoggedIn
+                (\loggedIn ->
+                    ( startOpeningChannelSidebar loggedIn
+                    , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                    )
+                )
+                model3
+
         SlackOAuthRedirect result ->
             ( model2
             , case result of
@@ -903,6 +926,9 @@ routeRequiresLogin route =
 
         TextEditorRoute ->
             False
+
+        DiscordDmRoute id threadRouteWithFriends ->
+            True
 
 
 isPressMsg : FrontendMsg -> Bool
@@ -6663,7 +6689,7 @@ view model =
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
                     DiscordGuildRoute guildId maybeChannelId ->
-                        requiresLogin (Debug.todo "")
+                        requiresLogin (Pages.Guild.discordGuildView loaded guildId maybeChannelId)
 
                     DmRoute userId thread ->
                         requiresLogin

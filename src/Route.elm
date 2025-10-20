@@ -25,6 +25,7 @@ type Route
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute (Discord.Id.Id Discord.Id.GuildId) DiscordChannelRoute
     | DmRoute (Id UserId) ThreadRouteWithFriends
+    | DiscordDmRoute (Discord.Id.Id Discord.Id.UserId) ThreadRouteWithFriends
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
@@ -220,6 +221,25 @@ decode url =
                 Nothing ->
                     HomePageRoute
 
+        "dd" :: userId :: rest ->
+            case Discord.Id.fromString userId of
+                Just userId2 ->
+                    case rest of
+                        [ "t", threadMessageIndex, "m", messageIndex ] ->
+                            DiscordDmRoute userId2 (stringToThread showMembers threadMessageIndex messageIndex)
+
+                        [ "t", threadMessageIndex ] ->
+                            DiscordDmRoute userId2 (stringToThread showMembers threadMessageIndex "")
+
+                        [ "m", messageIndex ] ->
+                            DiscordDmRoute userId2 (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+
+                        _ ->
+                            DiscordDmRoute userId2 (NoThreadWithFriends Nothing showMembers)
+
+                Nothing ->
+                    HomePageRoute
+
         [ "slack-oauth" ] ->
             case ( Dict.get "code" url2.queryParameters, Dict.get "state" url2.queryParameters ) of
                 ( Just [ code ], Just [ state ] ) ->
@@ -338,6 +358,19 @@ encode route =
 
                         NoThreadWithFriends maybeMessageId showMembers ->
                             ( [ "d", Id.toString userId ] ++ maybeMessageIdToString maybeMessageId
+                            , encodeShowMembers showMembers
+                            )
+
+                DiscordDmRoute userId thread ->
+                    case thread of
+                        ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
+                            ( [ "dd", Discord.Id.toString userId, "t", Id.toString threadMessageIndex ]
+                                ++ maybeMessageIdToString maybeMessageId
+                            , encodeShowMembers showMembers
+                            )
+
+                        NoThreadWithFriends maybeMessageId showMembers ->
+                            ( [ "dd", Discord.Id.toString userId ] ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers
                             )
 

@@ -1,6 +1,7 @@
 module User exposing
     ( AdminUiSection(..)
     , BackendUser
+    , DiscordFrontendUser
     , EmailNotifications(..)
     , EmailStatus(..)
     , FrontendCurrentUser
@@ -292,6 +293,12 @@ type alias FrontendUser =
     { name : PersonName
     , isAdmin : Bool
     , createdAt : Time.Posix
+    , icon : Maybe FileHash
+    }
+
+
+type alias DiscordFrontendUser =
+    { name : PersonName
     , icon : Maybe FileHash
     }
 

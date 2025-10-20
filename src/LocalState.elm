@@ -88,7 +88,7 @@ import Slack
 import TextEditor
 import UInt64
 import Unsafe
-import User exposing (BackendUser, FrontendCurrentUser, FrontendUser)
+import User exposing (BackendUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
@@ -111,6 +111,7 @@ type alias LocalUser =
     { session : UserSession
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
+    , otherDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent

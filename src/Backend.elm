@@ -982,6 +982,17 @@ getLoginData sessionId session user requestMessagesFor model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
+    , otherDiscordUsers =
+        SeqDict.filterMap
+            (\discordUserId userData ->
+                case userData of
+                    FullData data ->
+                        { name = PersonName.fromStringLossy data.data.username, icon = data.icon } |> Just
+
+                    BasicData data ->
+                        { name = PersonName.fromStringLossy data.user.username, icon = data.icon } |> Just
+            )
+            model.discordUsers
     , otherSessions =
         SeqDict.remove sessionId model.sessions
             |> SeqDict.toList

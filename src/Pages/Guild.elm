@@ -5,6 +5,7 @@ module Pages.Guild exposing
     , channelMessageHtmlId
     , channelTextInputId
     , conversationContainerId
+    , discordGuildView
     , dropdownButtonId
     , guildView
     , homePageLoggedInView
@@ -796,6 +797,186 @@ guildView model guildId channelRoute loggedIn local =
                             ]
 
 
+discordGuildView :
+    LoadedFrontend
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> DiscordChannelRoute
+    -> LoggedIn2
+    -> LocalState
+    -> Element FrontendMsg
+discordGuildView model guildId channelRoute loggedIn local =
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
+            FileStatus.imageInfoView PressedCloseImageInfo fileData
+
+        ( Nothing, Just form ) ->
+            newGuildFormView form
+
+        ( Nothing, Nothing ) ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    if MyUi.isMobile model then
+                        let
+                            canScroll2 =
+                                canScroll model.drag
+
+                            showMembers : ShowMembersTab
+                            showMembers =
+                                case channelRoute of
+                                    DiscordChannel_ChannelRoute _ threadRoute ->
+                                        case threadRoute of
+                                            ViewThreadWithFriends _ _ showMembers2 ->
+                                                showMembers2
+
+                                            NoThreadWithFriends _ showMembers2 ->
+                                                showMembers2
+
+                                    _ ->
+                                        HideMembersTab
+                        in
+                        Ui.column
+                            [ Ui.height Ui.fill
+                            , Ui.background MyUi.background1
+                            , Ui.heightMin 0
+                            , Ui.clip
+                            , (case showMembers of
+                                ShowMembersTab ->
+                                    Ui.Lazy.lazy4
+                                        memberColumnMobile
+                                        canScroll2
+                                        local.localUser
+                                        guild.owner
+                                        guild.members
+                                        |> Ui.el
+                                            [ Ui.height Ui.fill
+                                            , Ui.background MyUi.background3
+                                            , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                            , sidebarOffsetAttr loggedIn model
+                                            , Ui.heightMin 0
+                                            ]
+
+                                HideMembersTab ->
+                                    Ui.none
+                              )
+                                |> Ui.inFront
+                            , channelView channelRoute guildId guild loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                    , case showMembers of
+                                        ShowMembersTab ->
+                                            Ui.noAttr
+
+                                        HideMembersTab ->
+                                            sidebarOffsetAttr loggedIn model
+                                    , Ui.heightMin 0
+                                    ]
+                                |> Ui.inFront
+                            ]
+                            [ Ui.row
+                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ guildColumnLazy True model local
+                                , Ui.Lazy.lazy5
+                                    (if canScroll2 then
+                                        channelColumnCanScrollMobile
+
+                                     else
+                                        channelColumnCannotScrollMobile
+                                    )
+                                    local.localUser
+                                    guildId
+                                    guild
+                                    channelRoute
+                                    loggedIn.channelNameHover
+                                ]
+                            , loggedInAsView local
+                            ]
+
+                    else
+                        Ui.row
+                            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
+                            [ Ui.column
+                                [ Ui.height Ui.fill
+                                , Ui.width (Ui.px 300)
+                                ]
+                                [ Ui.row
+                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                    [ guildColumnLazy False model local
+                                    , Ui.Lazy.lazy5
+                                        channelColumnNotMobile
+                                        local.localUser
+                                        guildId
+                                        guild
+                                        channelRoute
+                                        loggedIn.channelNameHover
+                                    ]
+                                , loggedInAsView local
+                                ]
+                            , channelView channelRoute guildId guild loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
+                            , Ui.Lazy.lazy3 memberColumnNotMobile local.localUser guild.owner guild.members
+                                |> Ui.el
+                                    [ Ui.width Ui.shrink
+                                    , Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
+                            ]
+
+                Nothing ->
+                    if MyUi.isMobile model then
+                        let
+                            canScroll2 =
+                                canScroll model.drag
+                        in
+                        Ui.column
+                            [ Ui.height Ui.fill
+                            , Ui.background MyUi.background1
+                            , Ui.heightMin 0
+                            , Ui.clip
+                            ]
+                            [ Ui.row
+                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                [ guildColumnLazy True model local
+                                , pageMissingMobile "Guild not found"
+                                ]
+                            , loggedInAsView local
+                            ]
+
+                    else
+                        Ui.row
+                            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
+                            [ Ui.column
+                                [ Ui.height Ui.fill
+                                , Ui.width (Ui.px 300)
+                                ]
+                                [ Ui.row
+                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                                    [ guildColumnLazy False model local
+                                    , Ui.el
+                                        [ Ui.background MyUi.background2
+                                        , Ui.height Ui.fill
+                                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+                                        , Ui.borderColor MyUi.border1
+                                        ]
+                                        Ui.none
+                                    ]
+                                , loggedInAsView local
+                                ]
+                            , pageMissing "Guild not found"
+                            ]
+
+
 memberColumnWidth : number
 memberColumnWidth =
     200
@@ -887,6 +1068,30 @@ memberLabel : Bool -> LocalUser -> Id UserId -> Element FrontendMsg
 memberLabel isMobile localUser userId =
     rowLinkButton
         (Dom.id ("guild_openDm_" ++ Id.toString userId))
+        (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
+        [ Ui.spacing 8
+        , Ui.paddingXY 0 4
+        , MyUi.hover
+            isMobile
+            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
+            , Ui.Anim.fontColor MyUi.font1
+            ]
+        , Ui.Font.color MyUi.font3
+        , Ui.clipWithEllipsis
+        ]
+        (case LocalState.getUser userId localUser of
+            Just user ->
+                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+
+            Nothing ->
+                []
+        )
+
+
+discordMemberLabel : Bool -> LocalUser -> Discord.Id.Id Discord.Id.UserId -> Element FrontendMsg
+discordMemberLabel isMobile localUser userId =
+    rowLinkButton
+        (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
         (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab))
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
