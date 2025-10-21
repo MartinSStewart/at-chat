@@ -37,7 +37,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalMsg(..), ServerChange(..), ToFrontend)
 import UInt64
-import User exposing (BackendUser, EmailStatus(..))
+import User exposing (BackendUser)
 
 
 addOrRemoveDiscordReaction :

@@ -44,6 +44,7 @@ module LocalState exposing
     , editMessageFrontendHelper
     , editMessageHelper
     , getDiscordGuildAndChannel
+    , getDiscordUser
     , getGuildAndChannel
     , getUser
     , guildToFrontend
@@ -88,7 +89,7 @@ import Slack
 import TextEditor
 import UInt64
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
@@ -96,7 +97,7 @@ import VisibleMessages exposing (VisibleMessages)
 
 type alias LocalState =
     { adminData : AdminStatus
-    , guilds : SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
+    , guilds : SeqDict (Id GuildId) FrontendGuild
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
@@ -112,6 +113,7 @@ type alias LocalUser =
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , otherDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
     , -- This data is redundant as it already exists in FrontendLoading and FrontendLoaded. We need it here anyway to reduce the number of parameters passed into messageView so lazy rendering is possible.
       timezone : Time.Zone
     , userAgent : UserAgent
@@ -123,12 +125,12 @@ type JoinGuildError
     | InviteIsInvalid
 
 
-type alias BackendGuild channelId =
+type alias BackendGuild =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : GuildName
     , icon : Maybe FileHash
-    , channels : SeqDict channelId BackendChannel
+    , channels : SeqDict (Id ChannelId) BackendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
@@ -144,12 +146,12 @@ type alias DiscordBackendGuild =
     }
 
 
-type alias FrontendGuild channelId =
+type alias FrontendGuild =
     { createdAt : Time.Posix
     , createdBy : Id UserId
     , name : GuildName
     , icon : Maybe FileHash
-    , channels : SeqDict channelId FrontendChannel
+    , channels : SeqDict (Id ChannelId) FrontendChannel
     , members : SeqDict (Id UserId) { joinedAt : Time.Posix }
     , owner : Id UserId
     , invites : SeqDict (SecretId InviteLinkId) { createdAt : Time.Posix, createdBy : Id UserId }
@@ -165,7 +167,7 @@ type alias DiscordFrontendGuild =
     }
 
 
-guildToFrontendForUser : Maybe ( channelId, ThreadRoute ) -> Id UserId -> BackendGuild channelId -> Maybe (FrontendGuild channelId)
+guildToFrontendForUser : Maybe ( Id ChannelId, ThreadRoute ) -> Id UserId -> BackendGuild -> Maybe FrontendGuild
 guildToFrontendForUser requestMessagesFor userId guild =
     if userId == guild.owner || SeqDict.member userId guild.members then
         { createdAt = guild.createdAt
@@ -231,7 +233,7 @@ discordGuildToFrontendForUser requestMessagesFor guild =
         |> Just
 
 
-guildToFrontend : Maybe ( channelId, ThreadRoute ) -> BackendGuild channelId -> FrontendGuild channelId
+guildToFrontend : Maybe ( Id ChannelId, ThreadRoute ) -> BackendGuild -> FrontendGuild
 guildToFrontend requestMessagesFor guild =
     { createdAt = guild.createdAt
     , createdBy = guild.createdBy
@@ -439,6 +441,16 @@ getUser userId localUser =
 
     else
         SeqDict.get userId localUser.otherUsers
+
+
+getDiscordUser : Discord.Id.Id Discord.Id.UserId -> LocalUser -> Maybe DiscordFrontendUser
+getDiscordUser userId localUser =
+    case SeqDict.get userId localUser.linkedDiscordUsers of
+        Just user ->
+            User.discordCurrentUserToFrontend user |> Just
+
+        Nothing ->
+            SeqDict.get userId localUser.otherDiscordUsers
 
 
 createThreadMessageBackend :
@@ -653,7 +665,7 @@ mergeMessages message previousMessage =
             Nothing
 
 
-createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild (Id ChannelId)
+createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild
 createGuild time userId guildName =
     { createdAt = time
     , createdBy = userId
@@ -683,7 +695,7 @@ defaultChannelName =
     Unsafe.channelName "general"
 
 
-createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild (Id ChannelId) -> BackendGuild (Id ChannelId)
+createChannel : Time.Posix -> Id UserId -> ChannelName -> BackendGuild -> BackendGuild
 createChannel time userId channelName guild =
     let
         channelId : Id ChannelId
@@ -706,7 +718,7 @@ createChannel time userId channelName guild =
     }
 
 
-createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild (Id ChannelId) -> FrontendGuild (Id ChannelId)
+createChannelFrontend : Time.Posix -> Id UserId -> ChannelName -> FrontendGuild -> FrontendGuild
 createChannelFrontend time userId channelName guild =
     { guild
         | channels =
@@ -734,7 +746,7 @@ editChannel channelName channelId guild =
     updateChannel (\channel -> { channel | name = channelName }) channelId guild
 
 
-deleteChannel : Time.Posix -> Id UserId -> Id ChannelId -> BackendGuild (Id ChannelId) -> BackendGuild (Id ChannelId)
+deleteChannel : Time.Posix -> Id UserId -> Id ChannelId -> BackendGuild -> BackendGuild
 deleteChannel time userId channelId guild =
     updateChannel
         (\channel -> { channel | status = ChannelDeleted { deletedAt = time, deletedBy = userId } })
@@ -742,7 +754,7 @@ deleteChannel time userId channelId guild =
         guild
 
 
-deleteChannelFrontend : Id ChannelId -> FrontendGuild (Id ChannelId) -> FrontendGuild (Id ChannelId)
+deleteChannelFrontend : Id ChannelId -> FrontendGuild -> FrontendGuild
 deleteChannelFrontend channelId guild =
     { guild | channels = SeqDict.remove channelId guild.channels }
 
@@ -998,7 +1010,7 @@ addInvite inviteId userId time guild =
     { guild | invites = SeqDict.insert inviteId { createdBy = userId, createdAt = time } guild.invites }
 
 
-addMember : Time.Posix -> Id UserId -> BackendGuild (Id ChannelId) -> Result () (BackendGuild (Id ChannelId))
+addMember : Time.Posix -> Id UserId -> BackendGuild -> Result () BackendGuild
 addMember time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
         Err ()
@@ -1015,7 +1027,7 @@ addMember time userId guild =
             |> Ok
 
 
-addMemberFrontend : Time.Posix -> Id UserId -> FrontendGuild (Id ChannelId) -> Result () (FrontendGuild (Id ChannelId))
+addMemberFrontend : Time.Posix -> Id UserId -> FrontendGuild -> Result () FrontendGuild
 addMemberFrontend time userId guild =
     if guild.owner == userId || SeqDict.member userId guild.members then
         Err ()
@@ -1390,7 +1402,7 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
             }
 
 
-currentDiscordUser : LocalState -> Discord.Id.Id Discord.Id.UserId
+currentDiscordUser : LocalUser -> Discord.Id.Id Discord.Id.UserId
 currentDiscordUser local =
     Debug.todo ""
 
@@ -1614,7 +1626,7 @@ deleteMessageFrontendHelper userId threadRoute channel =
                     channel
 
 
-getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild (Id ChannelId), FrontendChannel )
+getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )
 getGuildAndChannel guildId channelId local =
     case SeqDict.get guildId local.guilds of
         Just guild ->

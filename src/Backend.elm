@@ -10,7 +10,6 @@ module Backend exposing
 import AiChat
 import Array exposing (Array)
 import Broadcast
-import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -29,10 +28,8 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
-import GuildName
 import Hex
 import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -60,8 +57,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import Url
-import User exposing (BackendUser, EmailStatus(..))
+import User exposing (BackendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -96,14 +92,14 @@ adminUser =
     User.init
         (Time.millisToPosix 0)
         (Unsafe.personName "AT")
-        (Unsafe.emailAddress Env.adminEmail |> RegisteredDirectly)
+        (Unsafe.emailAddress Env.adminEmail)
         True
 
 
 init : ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 init =
     let
-        guild : BackendGuild (Id ChannelId)
+        guild : BackendGuild
         guild =
             { createdAt = Time.millisToPosix 0
             , createdBy = Broadcast.adminUserId
@@ -908,6 +904,53 @@ getLoginData :
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
+    let
+        ( otherDiscordUsers, linkedDiscordUsers ) =
+            SeqDict.foldl
+                (\discordUserId userData ( otherDiscordUsers2, linkedDiscordUsers2 ) ->
+                    case userData of
+                        FullData data ->
+                            if data.linkedTo == session.userId then
+                                ( otherDiscordUsers2
+                                , SeqDict.insert
+                                    discordUserId
+                                    { name = PersonName.fromStringLossy data.data.username
+                                    , icon = data.icon
+                                    , email =
+                                        case data.data.email of
+                                            Included maybeText ->
+                                                case maybeText of
+                                                    Just text ->
+                                                        EmailAddress.fromString text
+
+                                                    Nothing ->
+                                                        Nothing
+
+                                            Missing ->
+                                                Nothing
+                                    }
+                                    linkedDiscordUsers2
+                                )
+
+                            else
+                                ( SeqDict.insert
+                                    discordUserId
+                                    { name = PersonName.fromStringLossy data.data.username, icon = data.icon }
+                                    otherDiscordUsers2
+                                , linkedDiscordUsers2
+                                )
+
+                        BasicData data ->
+                            ( SeqDict.insert
+                                discordUserId
+                                { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
+                                otherDiscordUsers2
+                            , linkedDiscordUsers2
+                            )
+                )
+                ( SeqDict.empty, SeqDict.empty )
+                model.discordUsers
+    in
     { session = session
     , adminData =
         if user.isAdmin then
@@ -982,17 +1025,8 @@ getLoginData sessionId session user requestMessagesFor model =
                         Just ( otherUserId, User.backendToFrontendForUser otherUser )
                 )
             |> SeqDict.fromList
-    , otherDiscordUsers =
-        SeqDict.filterMap
-            (\discordUserId userData ->
-                case userData of
-                    FullData data ->
-                        { name = PersonName.fromStringLossy data.data.username, icon = data.icon } |> Just
-
-                    BasicData data ->
-                        { name = PersonName.fromStringLossy data.user.username, icon = data.icon } |> Just
-            )
-            model.discordUsers
+    , otherDiscordUsers = otherDiscordUsers
+    , linkedDiscordUsers = linkedDiscordUsers
     , otherSessions =
         SeqDict.remove sessionId model.sessions
             |> SeqDict.toList
@@ -1067,7 +1101,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Just (WaitingForUserDataForSignup pendingLogin) ->
                     if
                         NonemptyDict.values model2.users
-                            |> List.Nonempty.any (\a -> a.email == RegisteredDirectly pendingLogin.emailAddress)
+                            |> List.Nonempty.any (\a -> a.email == pendingLogin.emailAddress)
                     then
                         -- It's maybe possible to end up here if a user initiates two account creations for the same email address and then completes both. We'll just silently fail in that case, not worth the effort to give a good error message.
                         ( model2, Command.none )
@@ -1084,11 +1118,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             newUser : BackendUser
                             newUser =
-                                User.init
-                                    time
-                                    personName
-                                    (RegisteredDirectly pendingLogin.emailAddress)
-                                    False
+                                User.init time personName pendingLogin.emailAddress False
 
                             model3 : BackendModel
                             model3 =
@@ -1193,7 +1223,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             in
             case
                 ( NonemptyDict.toList model3.users
-                    |> List.Extra.find (\( _, user ) -> user.email == RegisteredDirectly email)
+                    |> List.Extra.find (\( _, user ) -> user.email == email)
                 , result
                 )
             of
@@ -1434,7 +1464,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId =
                                     Id.nextId model2.guilds
 
-                                newGuild : BackendGuild (Id ChannelId)
+                                newGuild : BackendGuild
                                 newGuild =
                                     LocalState.createGuild time userId guildName
                             in
@@ -2043,6 +2073,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
+                        ViewDiscordDm otherUserId _ ->
+                            Debug.todo ""
+
+                        ViewDiscordDmThread otherUserId threadId _ ->
+                            Debug.todo ""
+
                         ViewChannel guildId channelId _ ->
                             asGuildMember
                                 model2
@@ -2134,10 +2170,40 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        ViewDiscordChannel guildId channelId _ ->
-                            Debug.todo ""
+                        ViewDiscordChannel guildId channelId currentDiscordUserId _ ->
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                currentDiscordUserId
+                                (\session discordData user guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            ( { model2
+                                                | users =
+                                                    NonemptyDict.insert
+                                                        session.userId
+                                                        (User.setLastDiscordChannelViewed guildId channelId NoThread user)
+                                                        model2.users
+                                                , sessions =
+                                                    SeqDict.insert sessionId (updateSession session) model2.sessions
+                                              }
+                                            , Command.batch
+                                                [ ViewDiscordChannel guildId channelId currentDiscordUserId (loadMessagesHelper channel)
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
+                                            )
 
-                        ViewDiscordChannelThread guildId channelId threadId _ ->
+                                        Nothing ->
+                                            ( model2
+                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            )
+                                )
+
+                        ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId _ ->
                             Debug.todo ""
 
                 Local_SetName name ->
@@ -2490,7 +2556,7 @@ sendEditMessage :
     -> ThreadRouteWithMessage
     -> BackendModel
     -> Id UserId
-    -> BackendGuild (Id ChannelId)
+    -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendEditMessage clientId changeId time newContent attachedFiles2 guildId channelId threadRoute model2 userId guild =
     case SeqDict.get channelId guild.channels of
@@ -2669,34 +2735,26 @@ twoFactorAuthenticationUpdateFromFrontend clientId time toBackend model session 
                 ( model2, secret ) =
                     SecretId.getUniqueId time model
             in
-            case user.email of
-                RegisteredDirectly email ->
-                    case TwoFactorAuthentication.getConfig (EmailAddress.toString email) secret of
-                        Ok key ->
-                            ( { model2
-                                | twoFactorAuthenticationSetup =
-                                    SeqDict.insert
-                                        session.userId
-                                        { startedAt = time, secret = secret }
-                                        model2.twoFactorAuthenticationSetup
-                              }
-                            , TwoFactorAuthentication.EnableTwoFactorAuthenticationResponse
-                                { qrCodeUrl =
-                                    TOTP.Key.toString key
-                                        -- https://github.com/choonkeat/elm-totp/issues/3
-                                        |> String.replace "%3D" ""
-                                }
-                                |> TwoFactorAuthenticationToFrontend
-                                |> Lamdera.sendToFrontend clientId
-                            )
+            case TwoFactorAuthentication.getConfig (EmailAddress.toString user.email) secret of
+                Ok key ->
+                    ( { model2
+                        | twoFactorAuthenticationSetup =
+                            SeqDict.insert
+                                session.userId
+                                { startedAt = time, secret = secret }
+                                model2.twoFactorAuthenticationSetup
+                      }
+                    , TwoFactorAuthentication.EnableTwoFactorAuthenticationResponse
+                        { qrCodeUrl =
+                            TOTP.Key.toString key
+                                -- https://github.com/choonkeat/elm-totp/issues/3
+                                |> String.replace "%3D" ""
+                        }
+                        |> TwoFactorAuthenticationToFrontend
+                        |> Lamdera.sendToFrontend clientId
+                    )
 
-                        Err _ ->
-                            ( model2, Command.none )
-
-                RegisteredFromDiscord ->
-                    ( model2, Command.none )
-
-                RegisteredFromSlack ->
+                Err _ ->
                     ( model2, Command.none )
 
         TwoFactorAuthentication.ConfirmTwoFactorAuthenticationRequest code ->
@@ -2985,7 +3043,7 @@ sendGuildMessage :
     -> SeqDict (Id FileId) FileData
     -> UserSession
     -> BackendUser
-    -> BackendGuild (Id ChannelId)
+    -> BackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 sendGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles session user guild =
     case SeqDict.get channelId guild.channels of
@@ -3327,7 +3385,7 @@ asGuildMember :
     BackendModel
     -> SessionId
     -> Id GuildId
-    -> (UserSession -> BackendUser -> BackendGuild (Id ChannelId) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (UserSession -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildMember model sessionId guildId func =
     case SeqDict.get sessionId model.sessions of
@@ -3373,7 +3431,7 @@ asGuildOwner :
     BackendModel
     -> SessionId
     -> Id GuildId
-    -> (Id UserId -> BackendUser -> BackendGuild (Id ChannelId) -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> (Id UserId -> BackendUser -> BackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 asGuildOwner model sessionId guildId func =
     asGuildMember model

@@ -1,9 +1,9 @@
 module User exposing
     ( AdminUiSection(..)
     , BackendUser
+    , DiscordFrontendCurrentUser
     , DiscordFrontendUser
     , EmailNotifications(..)
-    , EmailStatus(..)
     , FrontendCurrentUser
     , FrontendUser
     , NotificationLevel(..)
@@ -11,6 +11,7 @@ module User exposing
     , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
+    , discordCurrentUserToFrontend
     , init
     , linkDiscordDataCodec
     , profileImage
@@ -47,7 +48,7 @@ import Ui exposing (Element)
 type alias BackendUser =
     { name : PersonName
     , isAdmin : Bool
-    , email : EmailStatus
+    , email : EmailAddress
     , recentLoginEmails : List Time.Posix
     , lastLogPageViewed : Int
     , expandedSections : SeqSet AdminUiSection
@@ -105,7 +106,7 @@ type NotificationLevel
     | NotifyOnMention
 
 
-init : Time.Posix -> PersonName -> EmailStatus -> Bool -> BackendUser
+init : Time.Posix -> PersonName -> EmailAddress -> Bool -> BackendUser
 init createdAt name email userIsAdmin =
     { name = name
     , isAdmin = userIsAdmin
@@ -262,12 +263,6 @@ setName name user =
     { user | name = name }
 
 
-type EmailStatus
-    = RegisteredFromDiscord
-    | RegisteredFromSlack
-    | RegisteredDirectly EmailAddress
-
-
 type EmailNotifications
     = CheckEvery5Minutes
 
@@ -300,6 +295,20 @@ type alias FrontendUser =
 type alias DiscordFrontendUser =
     { name : PersonName
     , icon : Maybe FileHash
+    }
+
+
+type alias DiscordFrontendCurrentUser =
+    { name : PersonName
+    , icon : Maybe FileHash
+    , email : Maybe EmailAddress
+    }
+
+
+discordCurrentUserToFrontend : DiscordFrontendCurrentUser -> DiscordFrontendUser
+discordCurrentUserToFrontend user =
+    { name = user.name
+    , icon = user.icon
     }
 
 

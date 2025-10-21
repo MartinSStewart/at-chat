@@ -451,6 +451,7 @@ loginDataToLocalState userAgent timezone loginData =
         , user = loginData.user
         , otherUsers = loginData.otherUsers
         , otherDiscordUsers = loginData.otherDiscordUsers
+        , linkedDiscordUsers = loginData.linkedDiscordUsers
         , timezone = timezone
         , userAgent = userAgent
         }
@@ -4712,6 +4713,12 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
+                        ViewDiscordDm otherUserId messagesLoaded ->
+                            Debug.todo ""
+
+                        ViewDiscordDmThread otherUserId threadId messagesLoaded ->
+                            Debug.todo ""
+
                         ViewChannel guildId channelId messagesLoaded ->
                             { local
                                 | localUser =
@@ -4755,7 +4762,7 @@ changeUpdate localMsg local =
                         StopViewingChannel ->
                             { local | localUser = { localUser | session = session } }
 
-                        ViewDiscordChannel guildId channelId messagesLoaded ->
+                        ViewDiscordChannel guildId channelId currentDiscordUserId messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -4774,7 +4781,7 @@ changeUpdate localMsg local =
                                         local.discordGuilds
                             }
 
-                        ViewDiscordChannelThread guildId channelId threadId messagesLoaded ->
+                        ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -5919,7 +5926,7 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId _ ->
+                                ViewDiscordChannel guildId channelId _ _ ->
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
@@ -5931,10 +5938,34 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId threadId _ ->
+                                ViewDiscordChannelThread guildId channelId _ threadId _ ->
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                                scrollToBottomOfChannel
+
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
+
+                                ViewDiscordDm otherUserId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
+                                            if otherUserId == otherUserIdRoute then
+                                                scrollToBottomOfChannel
+
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
+
+                                ViewDiscordDmThread otherUserId threadId _ ->
+                                    case routeToGuildOrDmId model.route of
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
+                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
                                             else
@@ -6691,9 +6722,9 @@ view model =
                     DiscordGuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.discordGuildView loaded guildId maybeChannelId)
 
-                    DmRoute userId thread ->
+                    DmRoute otherUserId thread ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (Just ( userId, thread )) loaded)
+                            (Pages.Guild.homePageLoggedInView (Just ( otherUserId, thread )) loaded)
 
                     SlackOAuthRedirect result ->
                         layout
@@ -6716,6 +6747,10 @@ view model =
                                     local.textEditor
                                     |> Ui.map TextEditorMsg
                             )
+
+                    DiscordDmRoute otherUserId thread ->
+                        requiresLogin
+                            (Pages.Guild.homePageLoggedInView (Debug.todo "") loaded)
         ]
     }
 

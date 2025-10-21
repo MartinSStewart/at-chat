@@ -54,7 +54,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser, EmailStatus(..))
+import User exposing (AdminUiSection(..), BackendUser)
 
 
 type Msg
@@ -728,16 +728,7 @@ previousUserColumn column =
 userToEditUser : BackendUser -> EditedBackendUser
 userToEditUser user =
     { name = PersonName.toString user.name
-    , email =
-        case user.email of
-            RegisteredDirectly email ->
-                EmailAddress.toString email
-
-            RegisteredFromDiscord ->
-                ""
-
-            RegisteredFromSlack ->
-                ""
+    , email = EmailAddress.toString user.email
     , isAdmin = user.isAdmin
     , createdAt = user.createdAt
     }
@@ -1442,7 +1433,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             in
                             SeqDict.insert
                                 (getId (SeqDict.size dict + NonemptyDict.size users))
-                                (User.init time name (RegisteredDirectly email) a.isAdmin)
+                                (User.init time name email a.isAdmin)
                                 dict
                                 |> Ok
 
@@ -1472,18 +1463,7 @@ applyChangesToBackendUsers changedBy { time, changedUsers, newUsers, deletedUser
                             emailAddresses : Set String
                             emailAddresses =
                                 SeqDict.values allUsers
-                                    |> List.map
-                                        (\user ->
-                                            case user.email of
-                                                RegisteredDirectly email ->
-                                                    EmailAddress.toString email
-
-                                                RegisteredFromDiscord ->
-                                                    ""
-
-                                                RegisteredFromSlack ->
-                                                    ""
-                                        )
+                                    |> List.map (\user -> EmailAddress.toString user.email)
                                     |> Set.fromList
                         in
                         case ( NonemptyDict.fromSeqDict allUsers, Set.size emailAddresses == SeqDict.size allUsers ) of
@@ -1514,19 +1494,7 @@ applyChangeToBackendUser :
     -> BackendUser
     -> Result () BackendUser
 applyChangeToBackendUser change user =
-    let
-        emailStatus =
-            if change.email == "" then
-                Just RegisteredFromDiscord
-
-            else
-                EmailAddress.fromString change.email |> Maybe.map RegisteredDirectly
-    in
-    case
-        T2
-            (PersonName.fromString change.name)
-            emailStatus
-    of
+    case T2 (PersonName.fromString change.name) (EmailAddress.fromString change.email) of
         T2 (Ok name) (Just email) ->
             { user
                 | name = name

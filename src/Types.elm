@@ -96,7 +96,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
@@ -281,7 +281,7 @@ type alias BackendModel =
     , -- This could be part of BackendUser but having it separate reduces the chances of leaking 2FA secrets to other users. We could also just derive a secret key from `Env.secretKey ++ Id.toString userId` but this would cause problems if we ever changed Env.secretKey for some reason.
       twoFactorAuthentication : SeqDict (Id UserId) TwoFactorAuthentication
     , twoFactorAuthenticationSetup : SeqDict (Id UserId) TwoFactorAuthenticationSetup
-    , guilds : SeqDict (Id GuildId) (BackendGuild (Id ChannelId))
+    , guilds : SeqDict (Id GuildId) BackendGuild
     , backendInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
@@ -580,12 +580,13 @@ type alias LoginData =
     { session : UserSession
     , adminData : AdminStatusLoginData
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
-    , guilds : SeqDict (Id GuildId) (FrontendGuild (Id ChannelId))
+    , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser
     , otherDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+    , linkedDiscordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
@@ -613,7 +614,7 @@ type ServerChange
         (Result
             JoinGuildError
             { guildId : Id GuildId
-            , guild : FrontendGuild (Id ChannelId)
+            , guild : FrontendGuild
             , owner : FrontendUser
             , members : SeqDict (Id UserId) FrontendUser
             }

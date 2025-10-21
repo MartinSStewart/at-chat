@@ -25,6 +25,7 @@ module Id exposing
     )
 
 import Discord.Id
+import DiscordDmChannelId exposing (DiscordDmChannelId)
 import List.Extra
 import SeqDict exposing (SeqDict)
 
@@ -40,7 +41,7 @@ type GuildOrDmIdNoThread
 
 type DiscordGuildOrDmIdNoThread
     = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | DiscordGuildOrDmId_Dm (Discord.Id.Id Discord.Id.UserId)
+    | DiscordGuildOrDmId_Dm DiscordDmChannelId
 
 
 type AnyGuildOrDmIdNoThread
