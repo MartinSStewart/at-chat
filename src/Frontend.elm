@@ -62,7 +62,7 @@ import String.Nonempty
 import TextEditor
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -365,7 +365,7 @@ loadedInitHelper time timezone userAgent loginData loading =
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
             , newGuildForm = Nothing
-            , channelNameHover = Nothing
+            , channelNameHover = NoChannelNameHover
             , typingDebouncer = True
             , pingUser = Nothing
             , messageHover = NoMessageHover
@@ -526,7 +526,7 @@ routeViewingLocalChange local route =
     let
         localChange : SetViewing
         localChange =
-            UserSession.routeToViewing route
+            UserSession.routeToViewing (LocalState.currentDiscordUser local.localUser) route
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -668,7 +668,7 @@ routeRequest previousRoute newRoute model =
                         )
                         model3
 
-                InviteLinkCreatorRoute ->
+                GuildSettingsRoute ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
@@ -793,6 +793,19 @@ routeRequest previousRoute newRoute model =
                         model3
 
                 DiscordChannel_EditChannelRoute _ ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( if sameGuild || previousRoute == Nothing then
+                                startOpeningChannelSidebar loggedIn
+
+                              else
+                                loggedIn
+                            , viewCmd
+                            )
+                        )
+                        model3
+
+                DiscordChannel_GuildSettingsRoute ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( if sameGuild || previousRoute == Nothing then
@@ -1268,6 +1281,12 @@ isPressMsg msg =
         TypedBookmarkletData string ->
             False
 
+        MouseEnteredDiscordChannelName id _ threadRoute ->
+            False
+
+        MouseExitedDiscordChannelName id _ threadRoute ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -1538,7 +1557,8 @@ updateLoaded msg model =
                                                 Nothing ->
                                                     SeqDict.empty
                                             )
-                                            |> Local_DiscordChange (LocalState.currentDiscordUser local)
+                                            |> Local_DiscordChange (Debug.todo "")
+                                  --(LocalState.currentDiscordUser local)
                                  )
                                     |> Just
                                 )
@@ -1637,7 +1657,7 @@ updateLoaded msg model =
         MouseEnteredChannelName guildId channelId threadRoute ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn | channelNameHover = Just ( guildId, channelId, threadRoute ) }, Command.none )
+                    ( { loggedIn | channelNameHover = GuildChannelNameHover guildId channelId threadRoute }, Command.none )
                 )
                 model
 
@@ -1646,8 +1666,31 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | channelNameHover =
-                            if loggedIn.channelNameHover == Just ( guildId, channelId, threadRoute ) then
-                                Nothing
+                            if loggedIn.channelNameHover == GuildChannelNameHover guildId channelId threadRoute then
+                                NoChannelNameHover
+
+                            else
+                                loggedIn.channelNameHover
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        MouseEnteredDiscordChannelName guildId channelId threadRoute ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn | channelNameHover = DiscordGuildChannelNameHover guildId channelId threadRoute }, Command.none )
+                )
+                model
+
+        MouseExitedDiscordChannelName guildId channelId threadRoute ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | channelNameHover =
+                            if loggedIn.channelNameHover == DiscordGuildChannelNameHover guildId channelId threadRoute then
+                                NoChannelNameHover
 
                             else
                                 loggedIn.channelNameHover
@@ -2232,7 +2275,8 @@ updateLoaded msg model =
                                                         )
                                                         richText
                                                         (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                        |> Local_DiscordChange (LocalState.currentDiscordUser local)
+                                                        |> Local_DiscordChange (Debug.todo "")
+                                                        --(LocalState.currentDiscordUser local)
                                                         |> Just
 
                                             _ ->
@@ -3586,7 +3630,12 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (if hasFocus then
-                            Local_CurrentlyViewing (UserSession.routeToViewing model.route) |> Just
+                            Local_CurrentlyViewing
+                                (UserSession.routeToViewing
+                                    (LocalState.currentDiscordUser (Local.model loggedIn.localState).localUser)
+                                    model.route
+                                )
+                                |> Just
 
                          else
                             Local_CurrentlyViewing StopViewingChannel |> Just

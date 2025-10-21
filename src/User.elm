@@ -62,6 +62,7 @@ type alias BackendUser =
     , lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
     , notifyOnAllMessages : SeqSet (Id GuildId)
+    , discordNotifyOnAllMessages : SeqSet (Discord.Id.Id Discord.Id.GuildId)
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
@@ -124,6 +125,7 @@ init createdAt name email userIsAdmin =
     , lastDiscordChannelViewed = SeqDict.empty
     , icon = Nothing
     , notifyOnAllMessages = SeqSet.empty
+    , discordNotifyOnAllMessages = SeqSet.empty
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
@@ -330,6 +332,7 @@ backendToFrontendCurrent user =
     , lastDiscordChannelViewed = user.lastDiscordChannelViewed
     , icon = user.icon
     , notifyOnAllMessages = user.notifyOnAllMessages
+    , discordNotifyOnAllMessages = user.discordNotifyOnAllMessages
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
     , lastPushNotification = user.lastPushNotification
@@ -360,7 +363,7 @@ backendToFrontendForUser user =
     }
 
 
-toString : Id UserId -> SeqDict (Id UserId) FrontendUser -> String
+toString : userId -> SeqDict userId { a | name : PersonName } -> String
 toString userId allUsers =
     case SeqDict.get userId allUsers of
         Just user ->

@@ -37,7 +37,7 @@ type ChannelRoute
     = ChannelRoute (Id ChannelId) ThreadRouteWithFriends
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
-    | InviteLinkCreatorRoute
+    | GuildSettingsRoute
     | JoinRoute (SecretId InviteLinkId)
 
 
@@ -45,6 +45,7 @@ type DiscordChannelRoute
     = DiscordChannel_ChannelRoute (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithFriends
     | DiscordChannel_NewChannelRoute
     | DiscordChannel_EditChannelRoute (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordChannel_GuildSettingsRoute
 
 
 type ThreadRouteWithFriends
@@ -139,8 +140,8 @@ decode url =
                         [ "new" ] ->
                             GuildRoute guildId2 NewChannelRoute
 
-                        [ "invite" ] ->
-                            GuildRoute guildId2 InviteLinkCreatorRoute
+                        [ "settings" ] ->
+                            GuildRoute guildId2 GuildSettingsRoute
 
                         [ "join", inviteLinkId ] ->
                             GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId))
@@ -197,6 +198,9 @@ decode url =
 
                         [ "new" ] ->
                             DiscordGuildRoute guildId2 DiscordChannel_NewChannelRoute
+
+                        [ "settings" ] ->
+                            DiscordGuildRoute guildId2 DiscordChannel_GuildSettingsRoute
 
                         _ ->
                             HomePageRoute
@@ -316,7 +320,7 @@ encode route =
                         NewChannelRoute ->
                             ( [ "g", Id.toString guildId, "new" ], [] )
 
-                        InviteLinkCreatorRoute ->
+                        GuildSettingsRoute ->
                             ( [ "g", Id.toString guildId, "invite" ], [] )
 
                         JoinRoute inviteLinkId ->
@@ -327,7 +331,7 @@ encode route =
                         DiscordChannel_ChannelRoute channelId thread ->
                             case thread of
                                 ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
-                                    ( [ "g"
+                                    ( [ "dg"
                                       , Discord.Id.toString guildId
                                       , "c"
                                       , Discord.Id.toString channelId
@@ -339,16 +343,19 @@ encode route =
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
-                                    ( [ "g", Discord.Id.toString guildId, "c", Discord.Id.toString channelId ]
+                                    ( [ "dg", Discord.Id.toString guildId, "c", Discord.Id.toString channelId ]
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers
                                     )
 
                         DiscordChannel_EditChannelRoute channelId ->
-                            ( [ "g", Discord.Id.toString guildId, "c", Discord.Id.toString channelId, "edit" ], [] )
+                            ( [ "dg", Discord.Id.toString guildId, "c", Discord.Id.toString channelId, "edit" ], [] )
 
                         DiscordChannel_NewChannelRoute ->
-                            ( [ "g", Discord.Id.toString guildId, "new" ], [] )
+                            ( [ "dg", Discord.Id.toString guildId, "new" ], [] )
+
+                        DiscordChannel_GuildSettingsRoute ->
+                            ( [ "dg", Discord.Id.toString guildId, "invite" ], [] )
 
                 DmRoute userId thread ->
                     case thread of

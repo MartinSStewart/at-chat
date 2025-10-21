@@ -126,7 +126,7 @@ removeAttachedFile fileId list =
         |> List.Nonempty.fromList
 
 
-toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty (RichText (Id UserId)) -> String
+toString : SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
 toString users nonempty =
     List.Nonempty.map
         (\richText ->

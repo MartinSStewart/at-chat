@@ -13,6 +13,7 @@ module Types exposing
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelAndMessageId
+    , GuildChannelNameHover(..)
     , LastRequest(..)
     , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
@@ -159,6 +160,12 @@ type LoginStatus
     | NotLoggedIn { loginForm : Maybe LoginForm, useInviteAfterLoggedIn : Maybe (SecretId InviteLinkId) }
 
 
+type GuildChannelNameHover
+    = NoChannelNameHover
+    | GuildChannelNameHover (Id GuildId) (Id ChannelId) ThreadRoute
+    | DiscordGuildChannelNameHover (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
+
+
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
@@ -166,7 +173,7 @@ type alias LoggedIn2 =
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
-    , channelNameHover : Maybe ( Id GuildId, Id ChannelId, ThreadRoute )
+    , channelNameHover : GuildChannelNameHover
     , typingDebouncer : Bool
     , pingUser : Maybe MentionUserDropdown
     , messageHover : MessageHover
@@ -377,6 +384,8 @@ type FrontendMsg
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
     | MouseEnteredChannelName (Id GuildId) (Id ChannelId) ThreadRoute
     | MouseExitedChannelName (Id GuildId) (Id ChannelId) ThreadRoute
+    | MouseEnteredDiscordChannelName (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
+    | MouseExitedDiscordChannelName (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
     | EditChannelFormChanged (Id GuildId) (Id ChannelId) NewChannelForm
     | PressedCancelEditChannelChanges (Id GuildId) (Id ChannelId)
     | PressedSubmitEditChannelChanges (Id GuildId) (Id ChannelId) NewChannelForm

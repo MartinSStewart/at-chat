@@ -21,6 +21,7 @@ module LocalState exposing
     , addMemberFrontend
     , addReactionEmoji
     , addReactionEmojiFrontend
+    , allDiscordUsers2
     , allUsers
     , allUsers2
     , announcementChannel
@@ -1069,6 +1070,13 @@ allUsers2 localUser =
         localUser.otherUsers
 
 
+allDiscordUsers2 : LocalUser -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+allDiscordUsers2 localUser =
+    SeqDict.union
+        (SeqDict.map (\_ user -> User.discordCurrentUserToFrontend user) localUser.linkedDiscordUsers)
+        localUser.otherDiscordUsers
+
+
 addReactionEmoji :
     Emoji
     -> Id UserId
@@ -1402,7 +1410,7 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
             }
 
 
-currentDiscordUser : LocalUser -> Discord.Id.Id Discord.Id.UserId
+currentDiscordUser : LocalUser -> Maybe (Discord.Id.Id Discord.Id.UserId)
 currentDiscordUser local =
     Debug.todo ""
 

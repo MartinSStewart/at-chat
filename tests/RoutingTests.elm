@@ -74,7 +74,7 @@ channelRouteFuzzer =
         [ Fuzz.map2 ChannelRoute idFuzzer threadRouteFuzzer
         , Fuzz.constant NewChannelRoute
         , Fuzz.map EditChannelRoute idFuzzer
-        , Fuzz.constant InviteLinkCreatorRoute
+        , Fuzz.constant GuildSettingsRoute
         , Fuzz.map JoinRoute secretIdFuzzer
         ]
 

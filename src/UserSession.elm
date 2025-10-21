@@ -164,7 +164,7 @@ routeToViewing currentDiscordUserId route =
                 EditChannelRoute _ ->
                     StopViewingChannel
 
-                InviteLinkCreatorRoute ->
+                GuildSettingsRoute ->
                     StopViewingChannel
 
                 JoinRoute _ ->
@@ -189,6 +189,9 @@ routeToViewing currentDiscordUserId route =
                 DiscordChannel_EditChannelRoute _ ->
                     StopViewingChannel
 
+                DiscordChannel_GuildSettingsRoute ->
+                    StopViewingChannel
+
         DmRoute otherUserId threadRoute ->
             case threadRoute of
                 NoThreadWithFriends _ _ ->
@@ -197,13 +200,13 @@ routeToViewing currentDiscordUserId route =
                 ViewThreadWithFriends threadId _ _ ->
                     ViewDmThread otherUserId threadId EmptyPlaceholder
 
-        DiscordDmRoute otherUserId threadRoute ->
+        DiscordDmRoute dmChannelId threadRoute ->
             case threadRoute of
                 NoThreadWithFriends _ _ ->
-                    ViewDiscordDm otherUserId EmptyPlaceholder
+                    ViewDiscordDm dmChannelId EmptyPlaceholder
 
                 ViewThreadWithFriends threadId _ _ ->
-                    ViewDiscordDmThread otherUserId threadId EmptyPlaceholder
+                    ViewDiscordDmThread dmChannelId threadId EmptyPlaceholder
 
         AiChatRoute ->
             StopViewingChannel
