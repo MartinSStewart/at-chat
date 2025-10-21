@@ -17,7 +17,7 @@ import Discord.Id
 import DiscordDmChannelId exposing (DiscordDmChannelId)
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
@@ -75,10 +75,10 @@ setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmIdNoThread, Thr
 setViewingToCurrentlyViewing viewing =
     case viewing of
         ViewDm otherUserId _ ->
-            Just ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId, NoThread )
+            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, NoThread )
 
         ViewDmThread otherUserId threadId _ ->
-            Just ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId, ViewThread threadId )
+            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, ViewThread threadId )
 
         ViewDiscordDm otherUserId _ ->
             Just ( DiscordGuildOrDmId_Dm otherUserId |> DiscordGuildOrDmId, NoThread )
@@ -87,10 +87,10 @@ setViewingToCurrentlyViewing viewing =
             Just ( DiscordGuildOrDmId_Dm otherUserId |> DiscordGuildOrDmId, ViewThread threadId )
 
         ViewChannel guildId channelId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId, NoThread )
+            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, NoThread )
 
         ViewChannelThread guildId channelId threadId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId, ViewThread threadId )
+            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, ViewThread threadId )
 
         ViewDiscordChannel guildId channelId discordUserId _ ->
             Just ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId, NoThread )

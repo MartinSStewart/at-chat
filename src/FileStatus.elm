@@ -45,7 +45,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmIdNoThread(..), GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..))
+import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -365,12 +365,12 @@ upload onResult sessionId guildOrDmId fileId file2 =
 uploadTrackerId : ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             Id.toString otherUserId
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->

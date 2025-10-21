@@ -32,7 +32,7 @@ import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
-import Id exposing (AnyGuildOrDmIdNoThread, ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread, Id, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmIdNoThread, ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)

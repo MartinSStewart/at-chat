@@ -73,7 +73,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -1426,7 +1426,7 @@ markAllChannelsAsViewed guildId guild user =
             SeqDict.foldl
                 (\channelId channel state ->
                     SeqDict.insert
-                        (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                        (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
                         (DmChannel.latestMessageId channel)
                         state
                 )

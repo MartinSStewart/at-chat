@@ -19,7 +19,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmIdNoThread(..), GuildOrDmIdNoThread(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
@@ -365,7 +365,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
         maybeData : Maybe ( Bool, String )
         maybeData =
             case guildOrDmId of
-                NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                     case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
@@ -383,7 +383,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of

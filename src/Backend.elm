@@ -29,7 +29,7 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildId, GuildOrDmIdNoThread(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -965,7 +965,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\guildId guild ->
                 LocalState.guildToFrontendForUser
                     (case requestMessagesFor of
-                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdB channelId), threadRoute ) ->
+                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdB channelId), threadRoute ) ->
                             if guildId == guildIdB then
                                 Just ( channelId, threadRoute )
 
@@ -994,7 +994,7 @@ getLoginData sessionId session user requestMessagesFor model =
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
                                 (case requestMessagesFor of
-                                    Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdB), threadRoute ) ->
+                                    Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdB), threadRoute ) ->
                                         if otherUserId == otherUserIdB then
                                             Just threadRoute
 
@@ -1487,7 +1487,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_MemberTyping _ ( guildOrDmId, threadRoute ) ->
                     case guildOrDmId of
-                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1517,7 +1517,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1544,7 +1544,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Server_MemberTyping
                                                 time
                                                 userId
-                                                ( NormalGuildOrDmId (GuildOrDmId_Dm userId), threadRoute )
+                                                ( GuildOrDmId (GuildOrDmId_Dm userId), threadRoute )
                                                 |> ServerChange
                                             )
                                             model2
@@ -1557,7 +1557,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
-                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1580,7 +1580,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1605,7 +1605,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_AddReactionEmoji
                                                     userId
-                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                     threadRoute
                                                     emoji
                                             )
@@ -1619,7 +1619,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
-                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1651,7 +1651,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1677,7 +1677,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_RemoveReactionEmoji
                                                     userId
-                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                     threadRoute
                                                     emoji
                                             )
@@ -1782,7 +1782,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->
                     case guildOrDmId of
-                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1818,7 +1818,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1905,7 +1905,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_DeleteMessage guildOrDmId threadRoute ->
                     case guildOrDmId of
-                        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                             asGuildMember
                                 model2
                                 sessionId
@@ -1934,7 +1934,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                             asUser
                                 model2
                                 sessionId
@@ -1960,7 +1960,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (\otherUserId2 ->
                                                                 Server_DeleteMessage
                                                                     userId
-                                                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                                     threadRoute
                                                             )
                                                             model2
@@ -2950,7 +2950,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         { user
                             | lastViewedThreads =
                                 SeqDict.insert
-                                    ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
+                                    ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
                                     (DmChannel.latestThreadMessageId thread)
                                     user.lastViewedThreads
                         }
@@ -3001,7 +3001,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
                         { user
                             | lastViewed =
                                 SeqDict.insert
-                                    (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId))
                                     messageIndex
                                     user.lastViewed
                         }
@@ -3081,7 +3081,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 )
                                 channel
 
-                guildOrDmId : GuildOrDmIdNoThread
+                guildOrDmId : GuildOrDmId
                 guildOrDmId =
                     GuildOrDmId_Guild guildId channelId
 
@@ -3110,7 +3110,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 isViewing =
                                     List.any
                                         (\( _, userSession ) ->
-                                            userSession.currentlyViewing == Just ( NormalGuildOrDmId guildOrDmId, threadRouteNoReply )
+                                            userSession.currentlyViewing == Just ( GuildOrDmId guildOrDmId, threadRouteNoReply )
                                         )
                                         (Broadcast.userGetAllSessions userId2 model)
                             in
@@ -3140,7 +3140,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 { user
                                     | lastViewedThreads =
                                         SeqDict.insert
-                                            ( NormalGuildOrDmId guildOrDmId, threadMessageIndex )
+                                            ( GuildOrDmId guildOrDmId, threadMessageIndex )
                                             (SeqDict.get threadMessageIndex channel2.threads
                                                 |> Maybe.withDefault DmChannel.threadInit
                                                 |> DmChannel.latestThreadMessageId
@@ -3152,7 +3152,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                 { user
                                     | lastViewed =
                                         SeqDict.insert
-                                            (NormalGuildOrDmId guildOrDmId)
+                                            (GuildOrDmId guildOrDmId)
                                             (DmChannel.latestMessageId channel2)
                                             user.lastViewed
                                 }

@@ -33,7 +33,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmIdNoThread(..), GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), AnyGuildOrDmIdNoThread_WithCurrentUserId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -1512,7 +1512,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 ((case guildOrDmId of
-                                    NormalGuildOrDmId guildOrDmId2 ->
+                                    GuildOrDmId guildOrDmId2 ->
                                         Local_SendMessage
                                             model.time
                                             guildOrDmId2
@@ -1793,7 +1793,7 @@ updateLoaded msg model =
                                 { loggedIn
                                     | drafts =
                                         SeqDict.remove
-                                            ( NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThread )
+                                            ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThread )
                                             loggedIn.drafts
                                     , editChannelForm =
                                         SeqDict.remove ( guildId, channelId ) loggedIn.editChannelForm
@@ -1891,7 +1891,7 @@ updateLoaded msg model =
                             let
                                 ( pingUser, text2, cmd ) =
                                     case guildOrDmId of
-                                        NormalGuildOrDmId guildOrDmId2 ->
+                                        GuildOrDmId guildOrDmId2 ->
                                             MessageInput.pressedPingUser
                                                 SetFocus
                                                 guildOrDmId2
@@ -1928,7 +1928,7 @@ updateLoaded msg model =
                     ( { loggedIn
                         | pingUser =
                             case guildOrDmId of
-                                NormalGuildOrDmId guildOrDmId2 ->
+                                GuildOrDmId guildOrDmId2 ->
                                     MessageInput.pressedArrowInDropdown
                                         guildOrDmId2
                                         index
@@ -1995,9 +1995,9 @@ updateLoaded msg model =
                                                          of
                                                             Just messages ->
                                                                 case guildOrDmId of
-                                                                    NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                                                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                                                                         Local_SetLastViewed
-                                                                            (NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId))
+                                                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
                                                                             (case threadRoute of
                                                                                 ViewThread threadId ->
                                                                                     ViewThreadWithMessage
@@ -2010,9 +2010,9 @@ updateLoaded msg model =
                                                                             )
                                                                             |> Just
 
-                                                                    NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                                                                    GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                                                                         Local_SetLastViewed
-                                                                            (NormalGuildOrDmId (GuildOrDmId_Dm otherUserId))
+                                                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
                                                                             (case threadRoute of
                                                                                 ViewThread threadId ->
                                                                                     ViewThreadWithMessage
@@ -2208,7 +2208,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (case guildOrDmId of
-                                    NormalGuildOrDmId guildOrDmId2 ->
+                                    GuildOrDmId guildOrDmId2 ->
                                         case
                                             ( String.Nonempty.fromString edit.text
                                             , guildOrDmIdToMessage guildOrDmId2 (Id.threadRouteWithMessage edit.messageIndex threadRoute) local
@@ -2303,7 +2303,7 @@ updateLoaded msg model =
                     ( { loggedIn
                         | pingUser =
                             case guildOrDmId of
-                                NormalGuildOrDmId guildOrDmId2 ->
+                                GuildOrDmId guildOrDmId2 ->
                                     MessageInput.pressedArrowInDropdown
                                         guildOrDmId2
                                         index
@@ -2328,7 +2328,7 @@ updateLoaded msg model =
                                     let
                                         ( pingUser, text2, cmd ) =
                                             case guildOrDmId of
-                                                NormalGuildOrDmId guildOrDmId2 ->
+                                                GuildOrDmId guildOrDmId2 ->
                                                     MessageInput.pressedPingUser
                                                         SetFocus
                                                         guildOrDmId2
@@ -2364,7 +2364,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case guildOrDmId of
-                        NormalGuildOrDmId guildOrDmId2 ->
+                        GuildOrDmId guildOrDmId2 ->
                             let
                                 local : LocalState
                                 local =
@@ -2749,7 +2749,7 @@ updateLoaded msg model =
                             handleLocalChange
                                 model.time
                                 (case guildOrDmId of
-                                    NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                                         case LocalState.getGuildAndChannel guildId channelId local of
                                             Just ( _, channel ) ->
                                                 (case threadRoute of
@@ -2775,7 +2775,7 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
 
-                                    NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                                    GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                                         let
                                             dmChannel : FrontendDmChannel
                                             dmChannel =
@@ -3378,7 +3378,7 @@ updateLoaded msg model =
                     case model.loginStatus of
                         LoggedIn loggedIn ->
                             case guildOrDmId of
-                                NormalGuildOrDmId guildOrDmId2 ->
+                                GuildOrDmId guildOrDmId2 ->
                                     case guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
@@ -3501,7 +3501,7 @@ updateLoaded msg model =
 
                 MessageView.MessageView_PressedViewThreadLink ->
                     case ( guildOrDmId, threadRoute ) of
-                        ( NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThreadWithMessage messageId ) ->
+                        ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), NoThreadWithMessage messageId ) ->
                             routePush
                                 model
                                 (GuildRoute
@@ -3509,7 +3509,7 @@ updateLoaded msg model =
                                     (ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
                                 )
 
-                        ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
+                        ( GuildOrDmId (GuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
                             routePush
                                 model
                                 (DmRoute otherUserId (ViewThreadWithFriends messageId Nothing HideMembersTab))
@@ -3886,7 +3886,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                 maybeContentAndFiles : Maybe ( String, SeqDict (Id FileId) FileData )
                 maybeContentAndFiles =
                     case guildOrDmId of
-                        NormalGuildOrDmId guildOrDmId2 ->
+                        GuildOrDmId guildOrDmId2 ->
                             case guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
                                     ( RichText.toString (LocalState.allUsers local) message.content
@@ -4532,7 +4532,7 @@ changeUpdate localMsg local =
                                                     { user
                                                         | lastViewed =
                                                             SeqDict.insert
-                                                                (NormalGuildOrDmId guildOrDmId)
+                                                                (GuildOrDmId guildOrDmId)
                                                                 (Array.length channel.messages |> Id.fromInt)
                                                                 user.lastViewed
                                                     }
@@ -4595,7 +4595,7 @@ changeUpdate localMsg local =
                                             { user
                                                 | lastViewed =
                                                     SeqDict.insert
-                                                        (NormalGuildOrDmId guildOrDmId)
+                                                        (GuildOrDmId guildOrDmId)
                                                         (DmChannel.latestMessageId dmChannel2)
                                                         user.lastViewed
                                             }
@@ -5006,7 +5006,7 @@ changeUpdate localMsg local =
                                         isNotViewing : Bool
                                         isNotViewing =
                                             isViewing
-                                                (NormalGuildOrDmId guildOrDmId)
+                                                (GuildOrDmId guildOrDmId)
                                                 (case threadRouteWithRepliedTo of
                                                     ViewThreadWithMaybeMessage threadId _ ->
                                                         ViewThread threadId
@@ -5065,7 +5065,7 @@ changeUpdate localMsg local =
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
-                                                                    (NormalGuildOrDmId guildOrDmId)
+                                                                    (GuildOrDmId guildOrDmId)
                                                                     (Array.length channel.messages |> Id.fromInt)
                                                                     user.lastViewed
                                                         }
@@ -5154,7 +5154,7 @@ changeUpdate localMsg local =
                                                 { user
                                                     | lastViewed =
                                                         SeqDict.insert
-                                                            (NormalGuildOrDmId guildOrDmId)
+                                                            (GuildOrDmId guildOrDmId)
                                                             (DmChannel.latestMessageId dmChannel2)
                                                             user.lastViewed
                                                 }
@@ -5403,7 +5403,7 @@ changeUpdate localMsg local =
 memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5412,7 +5412,7 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.guilds
             }
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5437,7 +5437,7 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
 addReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5449,7 +5449,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.guilds
             }
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5477,7 +5477,7 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
 removeReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 removeReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5489,7 +5489,7 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.guilds
             }
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5517,7 +5517,7 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
 memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5529,7 +5529,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                         local.guilds
             }
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5560,7 +5560,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
 editMessage :
     Time.Posix
     -> Id UserId
-    -> GuildOrDmIdNoThread
+    -> GuildOrDmId
     -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> ThreadRouteWithMessage
@@ -5611,7 +5611,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
 deleteMessage : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
 deleteMessage userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -5620,7 +5620,7 @@ deleteMessage userId guildOrDmId threadRoute local =
                         local.guilds
             }
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -5926,7 +5926,7 @@ updateLoadedFromBackend msg model =
                             case viewing of
                                 ViewChannel guildId channelId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
+                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5938,7 +5938,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewDm otherUserId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
+                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5950,7 +5950,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewChannelThread guildId channelId threadId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( NormalGuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
+                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -5962,7 +5962,7 @@ updateLoadedFromBackend msg model =
 
                                 ViewDmThread otherUserId threadId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( NormalGuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
+                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
                                             if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
@@ -6242,7 +6242,7 @@ isViewing guildOrDmId threadRoute local =
 
 playNotificationSound :
     Id UserId
-    -> GuildOrDmIdNoThread
+    -> GuildOrDmId
     -> ThreadRouteWithMaybeMessage
     -> FrontendChannel
     -> LocalState
@@ -6468,7 +6468,7 @@ layout model attributes child =
                         case loggedIn.pingUser of
                             Just pingUser ->
                                 (case guildOrDmId of
-                                    NormalGuildOrDmId guildOrDmId2 ->
+                                    GuildOrDmId guildOrDmId2 ->
                                         MessageInput.pingDropdownView
                                             (case pingUser.target of
                                                 MessageInput.NewMessage ->
@@ -6805,7 +6805,7 @@ view model =
 
 
 guildOrDmIdToMessage :
-    GuildOrDmIdNoThread
+    GuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
     -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
@@ -6874,7 +6874,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
 
 
 discordGuildOrDmIdToMessage :
-    DiscordGuildOrDmIdNoThread
+    DiscordGuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
     -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
@@ -6937,7 +6937,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
             Debug.todo ""
 
 
-guildOrDmIdToMessages : GuildOrDmId -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
+guildOrDmIdToMessages : ( GuildOrDmId, ThreadRoute ) -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
 guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
     let
         helper channel =
@@ -7029,7 +7029,7 @@ guildOrDmIdNoThreadToMessagesCount :
     -> Maybe Int
 guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
     case guildOrDmId of
-        NormalGuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             case LocalState.getGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -7046,7 +7046,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        NormalGuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     case threadRoute of
@@ -7088,7 +7088,7 @@ routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
 routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->
-            ( GuildOrDmId_Guild guildId channelId |> NormalGuildOrDmId
+            ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId
@@ -7099,7 +7099,7 @@ routeToGuildOrDmId route =
                 |> Just
 
         DmRoute otherUserId threadRoute ->
-            ( GuildOrDmId_Dm otherUserId |> NormalGuildOrDmId
+            ( GuildOrDmId_Dm otherUserId |> GuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId

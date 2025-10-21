@@ -27,7 +27,7 @@ import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileId)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
@@ -270,7 +270,7 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                         List.any
                             (\( _, userSession ) ->
                                 case userSession.currentlyViewing of
-                                    Just ( NormalGuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), viewingThreadRoute ) ->
+                                    Just ( GuildOrDmId (GuildOrDmId_Guild viewingGuildId viewingChannelId), viewingThreadRoute ) ->
                                         viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
 
                                     _ ->

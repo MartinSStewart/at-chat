@@ -1,11 +1,12 @@
 module Id exposing
     ( AnyGuildOrDmIdNoThread(..)
+    , AnyGuildOrDmIdNoThread_WithCurrentUserId(..)
     , ChannelId(..)
     , ChannelMessageId(..)
-    , DiscordGuildOrDmIdNoThread(..)
+    , DiscordGuildOrDmId(..)
+    , DiscordGuildOrDmId_WithCurrentUserId(..)
     , GuildId(..)
-    , GuildOrDmId
-    , GuildOrDmIdNoThread(..)
+    , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
     , ThreadMessageId(..)
@@ -22,6 +23,7 @@ module Id exposing
     , threadRouteWithoutMessage
     , toInt
     , toString
+    , withoutCurrentUserId
     )
 
 import Discord.Id
@@ -30,23 +32,39 @@ import List.Extra
 import SeqDict exposing (SeqDict)
 
 
-type alias GuildOrDmId =
-    ( GuildOrDmIdNoThread, ThreadRoute )
-
-
-type GuildOrDmIdNoThread
+type GuildOrDmId
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
     | GuildOrDmId_Dm (Id UserId)
 
 
-type DiscordGuildOrDmIdNoThread
+type DiscordGuildOrDmId
     = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | DiscordGuildOrDmId_Dm DiscordDmChannelId
 
 
+type DiscordGuildOrDmId_WithCurrentUserId
+    = DiscordGuildOrDmId_Guild_WithCurrentUserId (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordGuildOrDmId_Dm_WithCurrentUserId DiscordDmChannelId
+
+
+withoutCurrentUserId : DiscordGuildOrDmId_WithCurrentUserId -> DiscordGuildOrDmId
+withoutCurrentUserId a =
+    case a of
+        DiscordGuildOrDmId_Guild_WithCurrentUserId id guildId channelId ->
+            DiscordGuildOrDmId_Guild guildId channelId
+
+        DiscordGuildOrDmId_Dm_WithCurrentUserId discordDmChannelId ->
+            DiscordGuildOrDmId_Dm discordDmChannelId
+
+
 type AnyGuildOrDmIdNoThread
-    = NormalGuildOrDmId GuildOrDmIdNoThread
-    | DiscordGuildOrDmId DiscordGuildOrDmIdNoThread
+    = GuildOrDmId GuildOrDmId
+    | DiscordGuildOrDmId DiscordGuildOrDmId
+
+
+type AnyGuildOrDmIdNoThread_WithCurrentUserId
+    = GuildOrDmId_WithCurrentUserId GuildOrDmId
+    | DiscordGuildOrDmId_WithCurrentUserId DiscordGuildOrDmId
 
 
 type ThreadRoute
