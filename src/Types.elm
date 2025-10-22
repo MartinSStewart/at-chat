@@ -169,7 +169,7 @@ type GuildChannelNameHover
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
     , admin : Maybe Pages.Admin.Model
-    , drafts : SeqDict ( AnyGuildOrDmIdNoThread (), ThreadRoute ) NonemptyString
+    , drafts : SeqDict ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm
     , newGuildForm : Maybe NewGuildForm
@@ -178,13 +178,13 @@ type alias LoggedIn2 =
     , pingUser : Maybe MentionUserDropdown
     , messageHover : MessageHover
     , showEmojiSelector : EmojiSelector
-    , editMessage : SeqDict ( AnyGuildOrDmIdNoThread (), ThreadRoute ) EditMessage
-    , replyTo : SeqDict ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id ChannelMessageId)
+    , editMessage : SeqDict ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) EditMessage
+    , replyTo : SeqDict ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id ChannelMessageId)
     , revealedSpoilers : Maybe RevealedSpoilers
     , sidebarMode : ChannelSidebarMode
     , userOptions : Maybe UserOptionsModel
     , twoFactor : TwoFactorState
-    , filesToUpload : SeqDict ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (NonemptyDict (Id FileId) FileStatus)
+    , filesToUpload : SeqDict ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (NonemptyDict (Id FileId) FileStatus)
     , showFileToUploadInfo : Maybe FileDataWithImage
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
@@ -219,13 +219,13 @@ type ChannelSidebarMode
 
 type MessageHover
     = NoMessageHover
-    | MessageHover (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
+    | MessageHover (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
     | MessageMenu MessageMenuExtraOptions
 
 
 type alias MessageMenuExtraOptions =
     { position : Coord CssPixels
-    , guildOrDmId : AnyGuildOrDmIdNoThread ()
+    , guildOrDmId : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
     , isThreadStarter : Bool
     , threadRoute : ThreadRouteWithMessage
     , mobileMode : MessageHoverMobileMode
@@ -260,7 +260,7 @@ messageMenuMobileOffset mobileMode =
 
 
 type alias RevealedSpoilers =
-    { guildOrDmId : ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    { guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     , messages : SeqDict (Id ChannelMessageId) (NonemptySet Int)
     , threadMessages : SeqDict (Id ChannelMessageId) (SeqDict (Id ThreadMessageId) (NonemptySet Int))
     }
@@ -376,9 +376,9 @@ type FrontendMsg
     | ScrolledToLogSection
     | PressedLink Route
     | PressedTextInput
-    | TypedMessage ( AnyGuildOrDmIdNoThread (), ThreadRoute ) String
-    | PressedSendMessage (AnyGuildOrDmIdNoThread ()) ThreadRoute
-    | PressedAttachFiles ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    | TypedMessage ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) String
+    | PressedSendMessage (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRoute
+    | PressedAttachFiles ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     | SelectedFilesToAttach ( AnyGuildOrDmIdNoThread (), ThreadRoute ) File (List File)
     | NewChannelFormChanged (Id GuildId) NewChannelForm
     | PressedSubmitNewChannel (Id GuildId) NewChannelForm
@@ -399,10 +399,10 @@ type FrontendMsg
     | PressedCancelNewGuild
     | DebouncedTyping
     | GotPingUserPosition (Result Dom.Error MentionUserDropdown)
-    | PressedPingUser ( AnyGuildOrDmIdNoThread (), ThreadRoute ) Int
+    | PressedPingUser ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) Int
     | SetFocus
     | RemoveFocus
-    | PressedArrowInDropdown (AnyGuildOrDmIdNoThread ()) Int
+    | PressedArrowInDropdown (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) Int
     | TextInputGotFocus HtmlId
     | TextInputLostFocus HtmlId
     | KeyDown String
@@ -414,10 +414,10 @@ type FrontendMsg
     | PressedSendEditMessage ( AnyGuildOrDmIdNoThread (), ThreadRoute )
     | PressedArrowInDropdownForEditMessage (AnyGuildOrDmIdNoThread ()) Int
     | PressedPingUserForEditMessage ( AnyGuildOrDmIdNoThread (), ThreadRoute ) Int
-    | PressedArrowUpInEmptyInput ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    | PressedArrowUpInEmptyInput ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     | MessageMenu_PressedReply ThreadRouteWithMessage
     | MessageMenu_PressedOpenThread (Id ChannelMessageId)
-    | PressedCloseReplyTo ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    | PressedCloseReplyTo ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
@@ -430,14 +430,14 @@ type FrontendMsg
     | SetScrollToBottom
     | PressedChannelHeaderBackButton
     | PressedShowMembers
-    | UserScrolled (AnyGuildOrDmIdNoThread ()) ThreadRoute ScrollPosition
+    | UserScrolled (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
     | MessageMenu_PressedDeleteMessage (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
-    | PressedCancelMessageEdit ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    | PressedCancelMessageEdit ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     | PressedPingDropdownContainer
     | PressedEditMessagePingDropdownContainer
     | CheckMessageAltPress Time.Posix (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage Bool
@@ -452,17 +452,17 @@ type FrontendMsg
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
-    | PressedDeleteAttachedFile ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId)
-    | PressedViewAttachedFileInfo ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId)
-    | EditMessage_PressedDeleteAttachedFile ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId)
-    | EditMessage_PressedViewAttachedFileInfo ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId)
+    | PressedDeleteAttachedFile ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id FileId)
+    | PressedViewAttachedFileInfo ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id FileId)
+    | EditMessage_PressedDeleteAttachedFile ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id FileId)
+    | EditMessage_PressedViewAttachedFileInfo ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id FileId)
     | EditMessage_PressedAttachFiles ( AnyGuildOrDmIdNoThread (), ThreadRoute )
     | EditMessage_SelectedFilesToAttach ( AnyGuildOrDmIdNoThread (), ThreadRoute ) File (List File)
     | EditMessage_GotFileHashName ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id ChannelMessageId) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | EditMessage_PastedFiles ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Nonempty File)
-    | PastedFiles ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Nonempty File)
-    | FileUploadProgress ( AnyGuildOrDmIdNoThread (), ThreadRoute ) (Id FileId) Http.Progress
-    | MessageViewMsg (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage MessageView.MessageViewMsg
+    | PastedFiles ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Nonempty File)
+    | FileUploadProgress ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) (Id FileId) Http.Progress
+    | MessageViewMsg (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage MessageView.MessageViewMsg
     | GotRegisterPushSubscription (Result String SubscribeData)
     | SelectedNotificationMode NotificationMode
     | PressedGuildNotificationLevel (Id GuildId) NotificationLevel
@@ -502,15 +502,15 @@ type alias GuildChannelAndMessageId =
 
 type ToBackend
     = CheckLoginRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute ))
-    | LoginWithTokenRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute )) Int UserAgent
-    | LoginWithTwoFactorRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute )) Int UserAgent
+    | LoginWithTokenRequest (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )) Int UserAgent
+    | LoginWithTwoFactorRequest (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )) Int UserAgent
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute )) PersonName UserAgent
+    | FinishUserCreationRequest (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
@@ -642,7 +642,7 @@ type ServerChange
     | Server_PushNotificationFailed Http.Error
     | Server_NewSession SessionIdHash FrontendUserSession
     | Server_LoggedOut SessionIdHash
-    | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute ))
+    | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) String
     | Server_DiscordChange (Discord.Id.Id Discord.Id.UserId) ServerDiscordChange
@@ -669,7 +669,7 @@ type LocalChange
     | Local_DeleteChannel (Id GuildId) (Id ChannelId)
     | Local_NewInviteLink Time.Posix (Id GuildId) (ToBeFilledInByBackend (SecretId InviteLinkId))
     | Local_NewGuild Time.Posix GuildName (ToBeFilledInByBackend (Id GuildId))
-    | Local_MemberTyping Time.Posix ( AnyGuildOrDmIdNoThread (), ThreadRoute )
+    | Local_MemberTyping Time.Posix ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     | Local_AddReactionEmoji (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
@@ -688,7 +688,7 @@ type LocalChange
 
 
 type LocalDiscordChange
-    = Local_Discord_SendMessage Time.Posix (DiscordGuildOrDmId ()) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    = Local_Discord_SendMessage Time.Posix (DiscordGuildOrDmId (Discord.Id.Id Discord.Id.UserId)) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Local_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
     | Local_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Local_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)

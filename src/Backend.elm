@@ -1987,7 +1987,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                         viewingChannel =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -2394,7 +2394,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     case discordChange of
                         Local_Discord_SendMessage _ guildOrDmId text threadRoute attachedFiles ->
                             case guildOrDmId of
-                                DiscordGuildOrDmId_Guild guildId channelId ->
+                                DiscordGuildOrDmId_Guild _ guildId channelId ->
                                     asDiscordGuildMember
                                         model2
                                         sessionId
@@ -3560,7 +3560,7 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
-    -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

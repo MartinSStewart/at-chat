@@ -33,7 +33,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmIdNoThread(..), AnyGuildOrDmIdNoThread_WithCurrentUserId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -1498,7 +1498,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+                        guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                         guildOrDmIdWithThread =
                             ( guildOrDmId, threadRoute )
                     in
@@ -3855,7 +3855,7 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
-pressedReply : AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply : AnyGuildOrDmIdNoThread a -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedReply guildOrDmId threadRoute model =
     updateLoggedIn
         (\loggedIn ->
@@ -3874,7 +3874,7 @@ pressedReply guildOrDmId threadRoute model =
         model
 
 
-pressedEditMessage : AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage : AnyGuildOrDmIdNoThread a -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedEditMessage guildOrDmId threadRoute model =
     updateLoggedIn
         (\loggedIn ->
