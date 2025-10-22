@@ -55,8 +55,8 @@ type alias BackendUser =
     , createdAt : Time.Posix
     , emailNotifications : EmailNotifications
     , lastEmailNotification : Time.Posix
-    , lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId)
-    , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread, Id ChannelMessageId ) (Id ThreadMessageId)
+    , lastViewed : SeqDict (AnyGuildOrDmIdNoThread ()) (Id ChannelMessageId)
+    , lastViewedThreads : SeqDict ( AnyGuildOrDmIdNoThread (), Id ChannelMessageId ) (Id ThreadMessageId)
     , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )

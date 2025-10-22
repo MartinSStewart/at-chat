@@ -67,13 +67,14 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
+import DiscordDmChannelId
 import DmChannel exposing (DiscordFrontendThread, DiscordThread, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, LastTypedAt, Thread)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -1412,14 +1413,38 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 
 currentDiscordUser : LocalUser -> Maybe (Discord.Id.Id Discord.Id.UserId)
 currentDiscordUser local =
-    Debug.todo ""
+    case local.session.currentlyViewing of
+        Just ( DiscordGuildOrDmId viewing, _ ) ->
+            case viewing of
+                DiscordGuildOrDmId_Guild currentDiscordUserId _ _ ->
+                    Just currentDiscordUserId
+
+                DiscordGuildOrDmId_Dm dmChannelId ->
+                    let
+                        ( userIdA, userIdB ) =
+                            DiscordDmChannelId.toUserIds dmChannelId
+                    in
+                    case SeqDict.get userIdA local.linkedDiscordUsers of
+                        Just userA ->
+                            Just userIdA
+
+                        Nothing ->
+                            case SeqDict.get userIdA local.linkedDiscordUsers of
+                                Just userB ->
+                                    Just userIdB
+
+                                Nothing ->
+                                    Nothing
+
+        _ ->
+            Nothing
 
 
 markAllChannelsAsViewed :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
-    -> { d | lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId) }
-    -> { d | lastViewed : SeqDict AnyGuildOrDmIdNoThread (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict (AnyGuildOrDmIdNoThread f) (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict (AnyGuildOrDmIdNoThread f) (Id ChannelMessageId) }
 markAllChannelsAsViewed guildId guild user =
     { user
         | lastViewed =

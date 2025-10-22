@@ -900,7 +900,7 @@ getLoginData :
     SessionId
     -> UserSession
     -> BackendUser
-    -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
@@ -1987,7 +1987,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
                         viewingChannel =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -3560,7 +3560,7 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
-    -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

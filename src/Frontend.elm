@@ -1368,7 +1368,7 @@ updateLoaded msg model =
 
                 NotLoggedIn notLoggedIn ->
                     let
-                        requestMessagesFor : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+                        requestMessagesFor : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
                         requestMessagesFor =
                             routeToGuildOrDmId model.route
                     in
@@ -1498,7 +1498,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
-                        guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+                        guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
                         guildOrDmIdWithThread =
                             ( guildOrDmId, threadRoute )
                     in
@@ -3219,7 +3219,7 @@ updateLoaded msg model =
 
         MessageViewMsg guildOrDmId threadRoute messageViewMsg ->
             let
-                guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+                guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
                 guildOrDmIdWithThread =
                     ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
             in
@@ -3762,7 +3762,7 @@ setShowMembers showMembers model =
 
 
 viewImageInfo :
-    ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> Id FileId
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3980,7 +3980,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 
 touchStart :
-    Maybe ( AnyGuildOrDmIdNoThread, ThreadRouteWithMessage, Bool )
+    Maybe ( AnyGuildOrDmIdNoThread a, ThreadRouteWithMessage, Bool )
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
@@ -4023,7 +4023,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
             ( model, Command.none )
 
 
-gotFiles : ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles : ( AnyGuildOrDmIdNoThread a, ThreadRoute ) -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 gotFiles guildOrDmId files model =
     updateLoggedIn
         (\loggedIn ->
@@ -4131,7 +4131,7 @@ gotFiles guildOrDmId files model =
 
 
 editMessage_gotFiles :
-    ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> Nonempty File
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -5400,7 +5400,7 @@ changeUpdate localMsg local =
                     Debug.todo ""
 
 
-memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> LocalState -> LocalState
+memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread a, ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -6447,7 +6447,7 @@ layout model attributes child =
                     local =
                         Local.model loggedIn.localState
 
-                    maybeMessageId : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+                    maybeMessageId : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
                     maybeMessageId =
                         routeToGuildOrDmId model.route
                 in
@@ -7084,7 +7084,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
             Debug.todo ""
 
 
-routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
 routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->

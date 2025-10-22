@@ -30,7 +30,7 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     }
@@ -38,7 +38,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -71,7 +71,7 @@ type SetViewing
     | StopViewingChannel
 
 
-setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
+setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
 setViewingToCurrentlyViewing viewing =
     case viewing of
         ViewDm otherUserId _ ->
@@ -93,10 +93,10 @@ setViewingToCurrentlyViewing viewing =
             Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, ViewThread threadId )
 
         ViewDiscordChannel guildId channelId discordUserId _ ->
-            Just ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId, NoThread )
+            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, NoThread )
 
         ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
-            Just ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId, ViewThread threadId )
+            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, ViewThread threadId )
 
         StopViewingChannel ->
             Nothing
@@ -107,7 +107,7 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
+init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> UserAgent -> UserSession
 init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
@@ -119,9 +119,9 @@ init sessionId userId currentlyViewing userAgent =
 
 
 setCurrentlyViewing :
-    Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread, ThreadRoute ) }
+    Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute ) }
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute ) }
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 

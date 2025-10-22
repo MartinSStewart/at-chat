@@ -2,6 +2,7 @@ module DiscordDmChannelId exposing
     ( DiscordDmChannelId
     , fromUserIds
     , toPath
+    , toUserIds
     )
 
 {-| OpaqueVariants
@@ -40,6 +41,11 @@ fromUserIds userIdA userIdB =
     DiscordDmChannelId
         (minUInt64 (Discord.Id.toUInt64 userIdA) (Discord.Id.toUInt64 userIdB) |> Discord.Id.Id)
         (maxUInt64 (Discord.Id.toUInt64 userIdA) (Discord.Id.toUInt64 userIdB) |> Discord.Id.Id)
+
+
+toUserIds : DiscordDmChannelId -> ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
+toUserIds (DiscordDmChannelId userIdA userIdB) =
+    ( userIdA, userIdB )
 
 
 toPath : DiscordDmChannelId -> List String

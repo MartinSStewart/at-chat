@@ -1557,7 +1557,7 @@ conversationViewHelper :
     -> List ( String, Element FrontendMsg )
 conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -1865,7 +1865,7 @@ threadConversationViewHelper :
     -> List ( String, Element FrontendMsg )
 threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, ViewThread threadId )
 
@@ -2266,7 +2266,7 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-messageInputConfig : ( AnyGuildOrDmIdNoThread, ThreadRoute ) -> MsgConfig FrontendMsg
+messageInputConfig : ( AnyGuildOrDmIdNoThread a, ThreadRoute ) -> MsgConfig FrontendMsg
 messageInputConfig ( guildOrDmId, threadRoute ) =
     { gotPingUserPosition = GotPingUserPosition
     , textInputGotFocus = TextInputGotFocus
@@ -2341,7 +2341,7 @@ conversationView :
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -2620,7 +2620,7 @@ threadConversationView :
     -> Element FrontendMsg
 threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, ViewThread threadId )
 
@@ -2849,7 +2849,7 @@ threadStarterMessage :
     -> Element FrontendMsg
 threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread, ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -3014,7 +3014,7 @@ reactionEmojiView currentUserId reactions =
 
 messageEditingView :
     Bool
-    -> ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    -> ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> ThreadRouteWithMessage
     -> Message ChannelMessageId (Id UserId)
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
@@ -3138,7 +3138,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
 
 threadMessageEditingView :
     Bool
-    -> ( AnyGuildOrDmIdNoThread, ThreadRoute )
+    -> ( AnyGuildOrDmIdNoThread a, ThreadRoute )
     -> Id ChannelMessageId
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)
