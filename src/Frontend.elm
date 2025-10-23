@@ -526,7 +526,7 @@ routeViewingLocalChange local route =
     let
         localChange : SetViewing
         localChange =
-            UserSession.routeToViewing (LocalState.currentDiscordUser local.localUser) route
+            UserSession.routeToViewing route
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -717,7 +717,7 @@ routeRequest previousRoute newRoute model =
                                 ]
                             )
 
-        DiscordGuildRoute guildId channelRoute ->
+        DiscordGuildRoute userId guildId channelRoute ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -733,9 +733,9 @@ routeRequest previousRoute newRoute model =
 
                 ( sameGuild, _ ) =
                     case previousRoute of
-                        Just (DiscordGuildRoute previousGuildId previousChannelRoute) ->
-                            ( guildId == previousGuildId
-                            , guildId == previousGuildId && channelRoute == previousChannelRoute
+                        Just (DiscordGuildRoute previousUserId previousGuildId previousChannelRoute) ->
+                            ( userId == previousUserId && guildId == previousGuildId
+                            , userId == previousUserId && guildId == previousGuildId && channelRoute == previousChannelRoute
                             )
 
                         _ ->
@@ -929,7 +929,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DiscordGuildRoute _ _ ->
+        DiscordGuildRoute _ _ _ ->
             True
 
         DmRoute _ _ ->
@@ -1368,7 +1368,7 @@ updateLoaded msg model =
 
                 NotLoggedIn notLoggedIn ->
                     let
-                        requestMessagesFor : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+                        requestMessagesFor : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                         requestMessagesFor =
                             routeToGuildOrDmId model.route
                     in
@@ -1994,54 +1994,19 @@ updateLoaded msg model =
                                                                 (Local.model loggedIn2.localState)
                                                          of
                                                             Just messages ->
-                                                                case guildOrDmId of
-                                                                    GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-                                                                        Local_SetLastViewed
-                                                                            (GuildOrDmId (GuildOrDmId_Guild guildId channelId))
-                                                                            (case threadRoute of
-                                                                                ViewThread threadId ->
-                                                                                    ViewThreadWithMessage
-                                                                                        threadId
-                                                                                        (messages - 1 |> Id.fromInt)
+                                                                Local_SetLastViewed
+                                                                    (Id.mapAnyGuildOrDmId (\_ -> ()) guildOrDmId)
+                                                                    (case threadRoute of
+                                                                        ViewThread threadId ->
+                                                                            ViewThreadWithMessage
+                                                                                threadId
+                                                                                (messages - 1 |> Id.fromInt)
 
-                                                                                NoThread ->
-                                                                                    NoThreadWithMessage
-                                                                                        (messages - 1 |> Id.fromInt)
-                                                                            )
-                                                                            |> Just
-
-                                                                    GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-                                                                        Local_SetLastViewed
-                                                                            (GuildOrDmId (GuildOrDmId_Dm otherUserId))
-                                                                            (case threadRoute of
-                                                                                ViewThread threadId ->
-                                                                                    ViewThreadWithMessage
-                                                                                        threadId
-                                                                                        (messages - 1 |> Id.fromInt)
-
-                                                                                NoThread ->
-                                                                                    NoThreadWithMessage
-                                                                                        (messages - 1 |> Id.fromInt)
-                                                                            )
-                                                                            |> Just
-
-                                                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
-                                                                        Local_SetLastViewed
-                                                                            (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId))
-                                                                            (case threadRoute of
-                                                                                ViewThread threadId ->
-                                                                                    ViewThreadWithMessage
-                                                                                        threadId
-                                                                                        (messages - 1 |> Id.fromInt)
-
-                                                                                NoThread ->
-                                                                                    NoThreadWithMessage
-                                                                                        (messages - 1 |> Id.fromInt)
-                                                                            )
-                                                                            |> Just
-
-                                                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
-                                                                        Debug.todo ""
+                                                                        NoThread ->
+                                                                            NoThreadWithMessage
+                                                                                (messages - 1 |> Id.fromInt)
+                                                                    )
+                                                                    |> Just
 
                                                             Nothing ->
                                                                 Nothing
@@ -3219,7 +3184,7 @@ updateLoaded msg model =
 
         MessageViewMsg guildOrDmId threadRoute messageViewMsg ->
             let
-                guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+                guildOrDmIdWithThread : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                 guildOrDmIdWithThread =
                     ( guildOrDmId, Id.threadRouteWithoutMessage threadRoute )
             in
@@ -3410,10 +3375,12 @@ updateLoaded msg model =
                                     case discordGuildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
-                                                ( DiscordGuildOrDmId_Guild guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
+                                                ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     routePush
                                                         model
-                                                        (DiscordGuildRoute guildId
+                                                        (DiscordGuildRoute
+                                                            currentDiscordUserId
+                                                            guildId
                                                             (DiscordChannel_ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
@@ -3514,10 +3481,11 @@ updateLoaded msg model =
                                 model
                                 (DmRoute otherUserId (ViewThreadWithFriends messageId Nothing HideMembersTab))
 
-                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId), NoThreadWithMessage messageId ) ->
+                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId), NoThreadWithMessage messageId ) ->
                             routePush
                                 model
                                 (DiscordGuildRoute
+                                    currentDiscordUserId
                                     guildId
                                     (DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
                                 )
@@ -3630,12 +3598,7 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (if hasFocus then
-                            Local_CurrentlyViewing
-                                (UserSession.routeToViewing
-                                    (LocalState.currentDiscordUser (Local.model loggedIn.localState).localUser)
-                                    model.route
-                                )
-                                |> Just
+                            Local_CurrentlyViewing (UserSession.routeToViewing model.route) |> Just
 
                          else
                             Local_CurrentlyViewing StopViewingChannel |> Just
@@ -3762,7 +3725,7 @@ setShowMembers showMembers model =
 
 
 viewImageInfo :
-    ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+    ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> Id FileId
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3855,7 +3818,7 @@ handleEditable editableMsg setter acceptEdit model =
         model
 
 
-pressedReply : AnyGuildOrDmIdNoThread a -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedReply : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedReply guildOrDmId threadRoute model =
     updateLoggedIn
         (\loggedIn ->
@@ -3874,7 +3837,7 @@ pressedReply guildOrDmId threadRoute model =
         model
 
 
-pressedEditMessage : AnyGuildOrDmIdNoThread a -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+pressedEditMessage : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 pressedEditMessage guildOrDmId threadRoute model =
     updateLoggedIn
         (\loggedIn ->
@@ -3947,7 +3910,7 @@ pressedEditMessage guildOrDmId threadRoute model =
         model
 
 
-showReactionEmojiSelector : AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+showReactionEmojiSelector : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 showReactionEmojiSelector guildOrDmId messageIndex model =
     updateLoggedIn
         (\loggedIn ->
@@ -3980,7 +3943,7 @@ showReactionEmojiSelector guildOrDmId messageIndex model =
 
 
 touchStart :
-    Maybe ( AnyGuildOrDmIdNoThread a, ThreadRouteWithMessage, Bool )
+    Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMessage, Bool )
     -> Time.Posix
     -> NonemptyDict Int Touch
     -> LoadedFrontend
@@ -4023,7 +3986,7 @@ touchStart maybeGuildOrDmIdAndMessageIndex time touches model =
             ( model, Command.none )
 
 
-gotFiles : ( AnyGuildOrDmIdNoThread a, ThreadRoute ) -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+gotFiles : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> Nonempty File -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 gotFiles guildOrDmId files model =
     updateLoggedIn
         (\loggedIn ->
@@ -4131,7 +4094,7 @@ gotFiles guildOrDmId files model =
 
 
 editMessage_gotFiles :
-    ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+    ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> Nonempty File
     -> LoadedFrontend
     -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -4194,7 +4157,7 @@ editMessage_gotFiles guildOrDmId files model =
         model
 
 
-handleAltPressedMessage : AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
+handleAltPressedMessage : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LoggedIn2 -> LocalState -> LoadedFrontend -> LoggedIn2
 handleAltPressedMessage guildOrDmId threadRoute isThreadStarter clickedAt loggedIn local model =
     { loggedIn
         | messageHover =
@@ -5421,12 +5384,15 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
                         guildId
-                        (LocalState.updateChannel (LocalState.memberIsTyping (Debug.todo "") time threadRoute) channelId)
+                        (LocalState.updateChannel
+                            (LocalState.memberIsTyping currentDiscordUserId time threadRoute)
+                            channelId
+                        )
                         local.discordGuilds
             }
 
@@ -5434,7 +5400,7 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
             Debug.todo ""
 
 
-addReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+addReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
 addReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -7084,7 +7050,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
             Debug.todo ""
 
 
-routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
 routeToGuildOrDmId route =
     case route of
         GuildRoute guildId (ChannelRoute channelId threadRoute) ->
@@ -7109,8 +7075,8 @@ routeToGuildOrDmId route =
             )
                 |> Just
 
-        DiscordGuildRoute guildId (DiscordChannel_ChannelRoute channelId threadRoute) ->
-            ( DiscordGuildOrDmId_Guild guildId channelId |> DiscordGuildOrDmId
+        DiscordGuildRoute currentDiscordUserId guildId (DiscordChannel_ChannelRoute channelId threadRoute) ->
+            ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId |> DiscordGuildOrDmId
             , case threadRoute of
                 ViewThreadWithFriends threadMessageId _ _ ->
                     ViewThread threadMessageId

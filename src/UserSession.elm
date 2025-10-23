@@ -139,8 +139,8 @@ toFrontend currentUserId userSession =
         Nothing
 
 
-routeToViewing : Maybe (Discord.Id.Id Discord.Id.UserId) -> Route -> SetViewing
-routeToViewing currentDiscordUserId route =
+routeToViewing : Route -> SetViewing
+routeToViewing route =
     case route of
         HomePageRoute ->
             StopViewingChannel
@@ -170,15 +170,15 @@ routeToViewing currentDiscordUserId route =
                 JoinRoute _ ->
                     StopViewingChannel
 
-        DiscordGuildRoute guildId channelRoute ->
+        DiscordGuildRoute currentDiscordUserId guildId channelRoute ->
             case channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute ->
-                    case ( threadRoute, currentDiscordUserId ) of
-                        ( NoThreadWithFriends _ _, Just discordUserId ) ->
-                            ViewDiscordChannel guildId channelId discordUserId EmptyPlaceholder
+                    case threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder
 
-                        ( ViewThreadWithFriends threadId _ _, Just discordUserId ) ->
-                            ViewDiscordChannelThread guildId channelId discordUserId threadId EmptyPlaceholder
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
 
                         _ ->
                             StopViewingChannel
