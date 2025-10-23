@@ -32,7 +32,6 @@ module LocalState exposing
     , createGuild
     , createThreadMessageBackend
     , createThreadMessageFrontend
-    , currentDiscordUser
     , deleteChannel
     , deleteChannelFrontend
     , deleteMessageBackend
@@ -1411,33 +1410,36 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
             }
 
 
-currentDiscordUser : LocalUser -> Maybe (Discord.Id.Id Discord.Id.UserId)
-currentDiscordUser local =
-    case local.session.currentlyViewing of
-        Just ( DiscordGuildOrDmId viewing, _ ) ->
-            case viewing of
-                DiscordGuildOrDmId_Guild currentDiscordUserId _ _ ->
-                    Just currentDiscordUserId
 
-                DiscordGuildOrDmId_Dm dmChannelId ->
-                    let
-                        ( userIdA, userIdB ) =
-                            DiscordDmChannelId.toUserIds dmChannelId
-                    in
-                    case SeqDict.get userIdA local.linkedDiscordUsers of
-                        Just userA ->
-                            Just userIdA
-
-                        Nothing ->
-                            case SeqDict.get userIdA local.linkedDiscordUsers of
-                                Just userB ->
-                                    Just userIdB
-
-                                Nothing ->
-                                    Nothing
-
-        _ ->
-            Nothing
+--
+--currentDiscordUser : LocalUser -> Maybe (Discord.Id.Id Discord.Id.UserId)
+--currentDiscordUser local =
+--    case local.session.currentlyViewing of
+--        Just ( DiscordGuildOrDmId viewing, _ ) ->
+--            case viewing of
+--                DiscordGuildOrDmId_Guild currentDiscordUserId _ _ ->
+--                    Just currentDiscordUserId
+--
+--                DiscordGuildOrDmId_Dm dmChannelId ->
+--                    let
+--                        ( userIdA, userIdB ) =
+--                            DiscordDmChannelId.toUserIds dmChannelId
+--                    in
+--                    case SeqDict.get userIdA local.linkedDiscordUsers of
+--                        Just userA ->
+--                            Just userIdA
+--
+--                        Nothing ->
+--                            case SeqDict.get userIdA local.linkedDiscordUsers of
+--                                Just userB ->
+--                                    Just userIdB
+--
+--                                Nothing ->
+--                                    Nothing
+--
+--        _ ->
+--            Nothing
+--
 
 
 markAllChannelsAsViewed :

@@ -1995,7 +1995,7 @@ updateLoaded msg model =
                                                          of
                                                             Just messages ->
                                                                 Local_SetLastViewed
-                                                                    (Id.mapAnyGuildOrDmId (\_ -> ()) guildOrDmId)
+                                                                    guildOrDmId
                                                                     (case threadRoute of
                                                                         ViewThread threadId ->
                                                                             ViewThreadWithMessage
@@ -5424,13 +5424,13 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
                         guildId
                         (LocalState.updateChannel
-                            (LocalState.addReactionEmojiFrontend emoji (Debug.todo "") threadRoute)
+                            (LocalState.addReactionEmojiFrontend emoji currentDiscordUserId threadRoute)
                             channelId
                         )
                         local.discordGuilds
@@ -5440,7 +5440,13 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
             Debug.todo ""
 
 
-removeReactionEmoji : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState
+removeReactionEmoji :
+    Id UserId
+    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> ThreadRouteWithMessage
+    -> Emoji
+    -> LocalState
+    -> LocalState
 removeReactionEmoji userId guildOrDmId threadRoute emoji local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -5464,13 +5470,13 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
                         guildId
                         (LocalState.updateChannel
-                            (LocalState.removeReactionEmojiFrontend emoji (Debug.todo "") threadRoute)
+                            (LocalState.removeReactionEmojiFrontend emoji currentDiscordUserId threadRoute)
                             channelId
                         )
                         local.discordGuilds
@@ -5480,7 +5486,7 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
             Debug.todo ""
 
 
-memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
+memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LocalState -> LocalState
 memberEditTyping time userId guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -5507,7 +5513,7 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
@@ -5574,7 +5580,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
             }
 
 
-deleteMessage : Id UserId -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> LocalState -> LocalState
+deleteMessage : Id UserId -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LocalState -> LocalState
 deleteMessage userId guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -5595,7 +5601,7 @@ deleteMessage userId guildOrDmId threadRoute local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
@@ -5941,10 +5947,10 @@ updateLoadedFromBackend msg model =
                                 StopViewingChannel ->
                                     Command.none
 
-                                ViewDiscordChannel guildId channelId _ _ ->
+                                ViewDiscordChannel guildId channelId userId2 _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
+                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
                                                 scrollToBottomOfChannel
 
                                             else
@@ -5953,10 +5959,10 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordChannelThread guildId channelId _ threadId _ ->
+                                ViewDiscordChannelThread guildId channelId userId2 threadId _ ->
                                     case routeToGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
+                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
                                                 scrollToBottomOfChannel
 
                                             else
@@ -6194,7 +6200,7 @@ smoothScrollToBottomOfChannelHelper startY endY count =
         Task.succeed ()
 
 
-isViewing : AnyGuildOrDmIdNoThread -> ThreadRoute -> LocalState -> Bool
+isViewing : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> LocalState -> Bool
 isViewing guildOrDmId threadRoute local =
     let
         a =
@@ -6413,7 +6419,7 @@ layout model attributes child =
                     local =
                         Local.model loggedIn.localState
 
-                    maybeMessageId : Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+                    maybeMessageId : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                     maybeMessageId =
                         routeToGuildOrDmId model.route
                 in
@@ -6734,8 +6740,8 @@ view model =
                     GuildRoute guildId maybeChannelId ->
                         requiresLogin (Pages.Guild.guildView loaded guildId maybeChannelId)
 
-                    DiscordGuildRoute guildId maybeChannelId ->
-                        requiresLogin (Pages.Guild.discordGuildView loaded guildId maybeChannelId)
+                    DiscordGuildRoute data ->
+                        requiresLogin (Pages.Guild.discordGuildView loaded data)
 
                     DmRoute otherUserId thread ->
                         requiresLogin
@@ -6840,7 +6846,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
 
 
 discordGuildOrDmIdToMessage :
-    DiscordGuildOrDmId
+    DiscordGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> ThreadRouteWithMessage
     -> LocalState
     -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )

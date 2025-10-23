@@ -170,7 +170,7 @@ routeToViewing route =
                 JoinRoute _ ->
                     StopViewingChannel
 
-        DiscordGuildRoute currentDiscordUserId guildId channelRoute ->
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
             case channelRoute of
                 DiscordChannel_ChannelRoute channelId threadRoute ->
                     case threadRoute of
@@ -179,9 +179,6 @@ routeToViewing route =
 
                         ViewThreadWithFriends threadId _ _ ->
                             ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
-
-                        _ ->
-                            StopViewingChannel
 
                 DiscordChannel_NewChannelRoute ->
                     StopViewingChannel

@@ -53,7 +53,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -804,21 +804,20 @@ guildView model guildId channelRoute loggedIn local =
 
 discordGuildView :
     LoadedFrontend
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> DiscordChannelRoute
+    -> DiscordGuildRouteData
     -> LoggedIn2
     -> LocalState
     -> Element FrontendMsg
-discordGuildView model guildId channelRoute loggedIn local =
-    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm, LocalState.currentDiscordUser local.localUser ) of
-        ( Just fileData, _, _ ) ->
+discordGuildView model routeData loggedIn local =
+    case ( loggedIn.showFileToUploadInfo, loggedIn.newGuildForm ) of
+        ( Just fileData, _ ) ->
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
-        ( Nothing, Just form, _ ) ->
+        ( Nothing, Just form ) ->
             newGuildFormView form
 
-        ( Nothing, Nothing, Just currentDiscordUser ) ->
-            case SeqDict.get guildId local.discordGuilds of
+        ( Nothing, Nothing ) ->
+            case SeqDict.get routeData.guildId local.discordGuilds of
                 Just guild ->
                     if MyUi.isMobile model then
                         let
@@ -827,7 +826,7 @@ discordGuildView model guildId channelRoute loggedIn local =
 
                             showMembers : ShowMembersTab
                             showMembers =
-                                case channelRoute of
+                                case routeData.channelRoute of
                                     DiscordChannel_ChannelRoute _ threadRoute ->
                                         case threadRoute of
                                             ViewThreadWithFriends _ _ showMembers2 ->
@@ -850,7 +849,7 @@ discordGuildView model guildId channelRoute loggedIn local =
                                         discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
-                                        currentDiscordUser
+                                        routeData.currentDiscordUserId
                                         guild.members
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -891,9 +890,8 @@ discordGuildView model guildId channelRoute loggedIn local =
                                         discordChannelColumnCannotScrollMobile
                                     )
                                     local.localUser
-                                    guildId
+                                    routeData
                                     guild
-                                    channelRoute
                                     loggedIn.channelNameHover
                                 ]
                             , loggedInAsView local
@@ -932,7 +930,7 @@ discordGuildView model guildId channelRoute loggedIn local =
                             --        [ Ui.height Ui.fill
                             --        , MyUi.htmlStyle "padding-top" MyUi.insetTop
                             --        ]
-                            , Ui.Lazy.lazy3 discordMemberColumnNotMobile local.localUser currentDiscordUser guild.members
+                            , Ui.Lazy.lazy3 discordMemberColumnNotMobile local.localUser currentDiscordUserId guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -978,9 +976,6 @@ discordGuildView model guildId channelRoute loggedIn local =
                                 ]
                             , pageMissing "Guild not found"
                             ]
-
-        ( Nothing, Nothing, Nothing ) ->
-            Ui.text "Error showing this Discord guild for the current Discord user"
 
 
 memberColumnWidth : number
@@ -4143,24 +4138,22 @@ channelColumnCannotScrollMobile localUser guildId guild channelRoute channelName
 
 discordChannelColumnCanScrollMobile :
     LocalUser
-    -> Discord.Id.Id Discord.Id.GuildId
+    -> DiscordGuildRouteData
     -> DiscordFrontendGuild
-    -> DiscordChannelRoute
     -> GuildChannelNameHover
     -> Element FrontendMsg
-discordChannelColumnCanScrollMobile localUser guildId guild channelRoute channelNameHover =
-    discordChannelColumn True localUser guildId guild channelRoute channelNameHover True
+discordChannelColumnCanScrollMobile localUser guildId guild channelNameHover =
+    discordChannelColumn True localUser guildId guild channelNameHover True
 
 
 discordChannelColumnCannotScrollMobile :
     LocalUser
-    -> Discord.Id.Id Discord.Id.GuildId
+    -> DiscordGuildRouteData
     -> DiscordFrontendGuild
-    -> DiscordChannelRoute
     -> GuildChannelNameHover
     -> Element FrontendMsg
-discordChannelColumnCannotScrollMobile localUser guildId guild channelRoute channelNameHover =
-    discordChannelColumn True localUser guildId guild channelRoute channelNameHover False
+discordChannelColumnCannotScrollMobile localUser guildId guild channelNameHover =
+    discordChannelColumn True localUser guildId guild channelNameHover False
 
 
 channelColumnContainer : List (Element msg) -> Element msg -> Element msg

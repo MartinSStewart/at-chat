@@ -421,7 +421,7 @@ type FrontendMsg
     | VisibilityChanged Visibility
     | CheckedNotificationPermission NotificationPermission
     | CheckedPwaStatus PwaStatus
-    | TouchStart (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
+    | TouchStart (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMessage, Bool )) Time.Posix (NonemptyDict Int Touch)
     | TouchMoved Time.Posix (NonemptyDict Int Touch)
     | TouchEnd Time.Posix
     | TouchCancel Time.Posix
@@ -512,7 +512,7 @@ type ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
     | FinishUserCreationRequest (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )) PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
-    | ReloadDataRequest (Maybe ( AnyGuildOrDmIdNoThread (), ThreadRoute ))
+    | ReloadDataRequest (Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
 
@@ -628,12 +628,12 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
-    | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmIdNoThread (), ThreadRoute )
-    | Server_AddReactionEmoji (Id UserId) (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage Emoji
-    | Server_RemoveReactionEmoji (Id UserId) (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage Emoji
+    | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    | Server_AddReactionEmoji (Id UserId) (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage Emoji
+    | Server_RemoveReactionEmoji (Id UserId) (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Server_MemberEditTyping Time.Posix (Id UserId) (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
-    | Server_DeleteMessage (Id UserId) (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
+    | Server_MemberEditTyping Time.Posix (Id UserId) (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
+    | Server_DeleteMessage (Id UserId) (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
     | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty (RichText (Id UserId))) (Maybe (Id ChannelMessageId))
