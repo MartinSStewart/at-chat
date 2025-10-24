@@ -48,6 +48,7 @@ import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
+import OneToOne exposing (OneToOne)
 import Pages.Admin
 import Pages.Guild
 import Pages.Home
@@ -4791,7 +4792,7 @@ changeUpdate localMsg local =
                                 , discordGuilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.updateChannel (Debug.todo "") channelId)
+                                        (LocalState.updateChannel (loadDiscordMessages messagesLoaded) channelId)
                                         local.discordGuilds
                             }
 
@@ -5644,6 +5645,41 @@ loadMessages :
     -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
     -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            { channel
+                | messages =
+                    SeqDict.foldl
+                        (\messageId message messages ->
+                            DmChannel.setArray
+                                messageId
+                                (MessageLoaded message)
+                                messages
+                        )
+                        channel.messages
+                        messagesLoaded2
+                , visibleMessages = VisibleMessages.firstLoad channel
+            }
+
+        EmptyPlaceholder ->
+            channel
+
+
+loadDiscordMessages :
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
+    ->
+        { a
+            | messages : Array (MessageState messageId (Id UserId))
+            , visibleMessages : VisibleMessages messageId
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+        }
+    ->
+        { a
+            | messages : Array (MessageState messageId (Id UserId))
+            , visibleMessages : VisibleMessages messageId
+            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+        }
+loadDiscordMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel

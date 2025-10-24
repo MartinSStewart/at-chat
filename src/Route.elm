@@ -361,19 +361,36 @@ encode route =
                                     )
 
                                 NoThreadWithFriends maybeMessageId showMembers ->
-                                    ( [ "dg", Discord.Id.toString guildId, "c", Discord.Id.toString channelId ]
+                                    ( [ "dg"
+                                      , Discord.Id.toString currentDiscordUserId
+                                      , Discord.Id.toString guildId
+                                      , "c"
+                                      , Discord.Id.toString channelId
+                                      ]
                                         ++ maybeMessageIdToString maybeMessageId
                                     , encodeShowMembers showMembers
                                     )
 
                         DiscordChannel_EditChannelRoute channelId ->
-                            ( [ "dg", Discord.Id.toString guildId, "c", Discord.Id.toString channelId, "edit" ], [] )
+                            ( [ "dg"
+                              , Discord.Id.toString currentDiscordUserId
+                              , Discord.Id.toString guildId
+                              , "c"
+                              , Discord.Id.toString channelId
+                              , "edit"
+                              ]
+                            , []
+                            )
 
                         DiscordChannel_NewChannelRoute ->
-                            ( [ "dg", Discord.Id.toString guildId, "new" ], [] )
+                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "new" ]
+                            , []
+                            )
 
                         DiscordChannel_GuildSettingsRoute ->
-                            ( [ "dg", Discord.Id.toString guildId, "invite" ], [] )
+                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "invite" ]
+                            , []
+                            )
 
                 DmRoute userId thread ->
                     case thread of

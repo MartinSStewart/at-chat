@@ -358,7 +358,8 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                         let
                             maybeDiscordUserId : Maybe ( Discord.Id.Id Discord.Id.UserId, User.DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
-                                SeqDict.filter (\linkedUserId _ -> SeqDict.member linkedUserId guild.members) localUser.linkedDiscordUsers
+                                --SeqDict.filter (\linkedUserId _ -> SeqDict.member linkedUserId guild.members) localUser.linkedDiscordUsers
+                                localUser.linkedDiscordUsers
                                     |> SeqDict.toList
                                     |> List.head
                         in

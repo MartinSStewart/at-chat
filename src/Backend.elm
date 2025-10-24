@@ -950,6 +950,7 @@ getLoginData sessionId session user requestMessagesFor model =
                 )
                 ( SeqDict.empty, SeqDict.empty )
                 model.discordUsers
+                |> Debug.log "linked"
     in
     { session = session
     , adminData =
@@ -985,7 +986,6 @@ getLoginData sessionId session user requestMessagesFor model =
                 LocalState.discordGuildToFrontendForUser Nothing guild
             )
             model.discordGuilds
-            |> Debug.log "discordGuilds"
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
