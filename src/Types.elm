@@ -433,7 +433,7 @@ type FrontendMsg
     | UserScrolled (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRoute ScrollPosition
     | PressedBody
     | PressedReactionEmojiContainer
-    | MessageMenu_PressedDeleteMessage (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
+    | MessageMenu_PressedDeleteMessage (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
     | ScrolledToMessage
     | MessageMenu_PressedClose
     | MessageMenu_PressedContainer
@@ -675,7 +675,7 @@ type LocalChange
     | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
     | Local_MemberEditTyping Time.Posix (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
     | Local_SetLastViewed (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
-    | Local_DeleteMessage (AnyGuildOrDmIdNoThread ()) ThreadRouteWithMessage
+    | Local_DeleteMessage (AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)) ThreadRouteWithMessage
     | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
     | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))

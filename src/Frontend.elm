@@ -717,7 +717,7 @@ routeRequest previousRoute newRoute model =
                                 ]
                             )
 
-        DiscordGuildRoute userId guildId channelRoute ->
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -733,9 +733,9 @@ routeRequest previousRoute newRoute model =
 
                 ( sameGuild, _ ) =
                     case previousRoute of
-                        Just (DiscordGuildRoute previousUserId previousGuildId previousChannelRoute) ->
-                            ( userId == previousUserId && guildId == previousGuildId
-                            , userId == previousUserId && guildId == previousGuildId && channelRoute == previousChannelRoute
+                        Just (DiscordGuildRoute a) ->
+                            ( currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId
+                            , currentDiscordUserId == a.currentDiscordUserId && guildId == a.guildId && channelRoute == a.channelRoute
                             )
 
                         _ ->
@@ -929,7 +929,7 @@ routeRequiresLogin route =
         GuildRoute _ _ ->
             True
 
-        DiscordGuildRoute _ _ _ ->
+        DiscordGuildRoute _ ->
             True
 
         DmRoute _ _ ->
@@ -3378,13 +3378,14 @@ updateLoaded msg model =
                                                 ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
                                                     routePush
                                                         model
-                                                        (DiscordGuildRoute
-                                                            currentDiscordUserId
-                                                            guildId
-                                                            (DiscordChannel_ChannelRoute
+                                                        ({ currentDiscordUserId = currentDiscordUserId
+                                                         , guildId = guildId
+                                                         , channelRoute =
+                                                            DiscordChannel_ChannelRoute
                                                                 channelId
                                                                 (ViewThreadWithFriends threadId (Just repliedTo) HideMembersTab)
-                                                            )
+                                                         }
+                                                            |> DiscordGuildRoute
                                                         )
 
                                                 ( DiscordGuildOrDmId_Dm otherUserId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
@@ -3484,10 +3485,11 @@ updateLoaded msg model =
                         ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId), NoThreadWithMessage messageId ) ->
                             routePush
                                 model
-                                (DiscordGuildRoute
-                                    currentDiscordUserId
-                                    guildId
-                                    (DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab))
+                                ({ currentDiscordUserId = currentDiscordUserId
+                                 , guildId = guildId
+                                 , channelRoute = DiscordChannel_ChannelRoute channelId (ViewThreadWithFriends messageId Nothing HideMembersTab)
+                                 }
+                                    |> DiscordGuildRoute
                                 )
 
                         ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId), NoThreadWithMessage messageId ) ->
@@ -5363,7 +5365,7 @@ changeUpdate localMsg local =
                     Debug.todo ""
 
 
-memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread a, ThreadRoute ) -> LocalState -> LocalState
+memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -6897,7 +6899,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                             Nothing
     in
     case guildOrDmId of
-        DiscordGuildOrDmId_Guild guildId channelId ->
+        DiscordGuildOrDmId_Guild _ guildId channelId ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     helper channel
@@ -6995,7 +6997,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
 
 
 guildOrDmIdNoThreadToMessagesCount :
-    AnyGuildOrDmIdNoThread
+    AnyGuildOrDmIdNoThread a
     -> ThreadRoute
     -> LocalState
     -> Maybe Int
@@ -7035,7 +7037,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
                     case threadRoute of
@@ -7081,16 +7083,21 @@ routeToGuildOrDmId route =
             )
                 |> Just
 
-        DiscordGuildRoute currentDiscordUserId guildId (DiscordChannel_ChannelRoute channelId threadRoute) ->
-            ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId |> DiscordGuildOrDmId
-            , case threadRoute of
-                ViewThreadWithFriends threadMessageId _ _ ->
-                    ViewThread threadMessageId
+        DiscordGuildRoute data ->
+            case data.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    ( DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId
+                    , case threadRoute of
+                        ViewThreadWithFriends threadMessageId _ _ ->
+                            ViewThread threadMessageId
 
-                NoThreadWithFriends _ _ ->
-                    NoThread
-            )
-                |> Just
+                        NoThreadWithFriends _ _ ->
+                            NoThread
+                    )
+                        |> Just
+
+                _ ->
+                    Nothing
 
         _ ->
             Nothing

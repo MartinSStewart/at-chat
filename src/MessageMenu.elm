@@ -120,7 +120,7 @@ messageMenuSpeed =
 
 
 desktopMenuHeight :
-    { a | guildOrDmId : AnyGuildOrDmIdNoThread a, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
+    { a | guildOrDmId : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -402,7 +402,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild guildId channelId) ->
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
                     case LocalState.getDiscordGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
