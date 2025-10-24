@@ -353,57 +353,64 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                             )
                     )
                     (SeqDict.toList guilds)
-                ++ (case Debug.todo "" of
-                        Just currentDiscordUserId ->
-                            List.map
-                                (\( guildId, guild ) ->
-                                    elLinkButton
-                                        (Dom.id ("guild_openDiscordGuild_" ++ Discord.Id.toString guildId))
-                                        ({ currentDiscordUserId = currentDiscordUserId
-                                         , guildId = guildId
-                                         , channelRoute =
-                                            case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
-                                                Just ( channelId, threadRoute ) ->
-                                                    DiscordChannel_ChannelRoute
-                                                        channelId
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithFriends threadId Nothing HideMembersTab
+                ++ List.filterMap
+                    (\( guildId, guild ) ->
+                        let
+                            maybeDiscordUserId : Maybe ( Discord.Id.Id Discord.Id.UserId, User.DiscordFrontendCurrentUser )
+                            maybeDiscordUserId =
+                                SeqDict.filter (\linkedUserId _ -> SeqDict.member linkedUserId guild.members) localUser.linkedDiscordUsers
+                                    |> SeqDict.toList
+                                    |> List.head
+                        in
+                        case maybeDiscordUserId of
+                            Just ( discordUserId, _ ) ->
+                                elLinkButton
+                                    (Dom.id ("guild_openDiscordGuild_" ++ Discord.Id.toString guildId))
+                                    ({ currentDiscordUserId = discordUserId
+                                     , guildId = guildId
+                                     , channelRoute =
+                                        case SeqDict.get guildId localUser.user.lastDiscordChannelViewed of
+                                            Just ( channelId, threadRoute ) ->
+                                                DiscordChannel_ChannelRoute
+                                                    channelId
+                                                    (case threadRoute of
+                                                        ViewThread threadId ->
+                                                            ViewThreadWithFriends threadId Nothing HideMembersTab
 
-                                                            NoThread ->
-                                                                NoThreadWithFriends Nothing HideMembersTab
-                                                        )
+                                                        NoThread ->
+                                                            NoThreadWithFriends Nothing HideMembersTab
+                                                    )
 
-                                                Nothing ->
-                                                    DiscordChannel_ChannelRoute
-                                                        (LocalState.discordAnnouncementChannel guild)
-                                                        (NoThreadWithFriends Nothing HideMembersTab)
-                                         }
-                                            |> DiscordGuildRoute
+                                            Nothing ->
+                                                DiscordChannel_ChannelRoute
+                                                    (LocalState.discordAnnouncementChannel guild)
+                                                    (NoThreadWithFriends Nothing HideMembersTab)
+                                     }
+                                        |> DiscordGuildRoute
+                                    )
+                                    []
+                                    (GuildIcon.view
+                                        localUser.userAgent
+                                        (case route of
+                                            DiscordGuildRoute data ->
+                                                if data.guildId == guildId then
+                                                    GuildIcon.IsSelected
+
+                                                else
+                                                    discordGuildHasNotifications discordUserId localUser.user guildId guild
+                                                        |> GuildIcon.Normal
+
+                                            _ ->
+                                                discordGuildHasNotifications discordUserId localUser.user guildId guild |> GuildIcon.Normal
                                         )
-                                        []
-                                        (GuildIcon.view
-                                            localUser.userAgent
-                                            (case route of
-                                                DiscordGuildRoute data ->
-                                                    if data.guildId == guildId then
-                                                        GuildIcon.IsSelected
+                                        guild
+                                    )
+                                    |> Just
 
-                                                    else
-                                                        discordGuildHasNotifications currentDiscordUserId localUser.user guildId guild
-                                                            |> GuildIcon.Normal
-
-                                                _ ->
-                                                    discordGuildHasNotifications currentDiscordUserId localUser.user guildId guild |> GuildIcon.Normal
-                                            )
-                                            guild
-                                        )
-                                )
-                                (SeqDict.toList discordGuilds)
-
-                        Nothing ->
-                            []
-                   )
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqDict.toList discordGuilds)
                 ++ [ GuildIcon.addGuildButton (Dom.id "guild_createGuild") False PressedCreateGuild ]
             )
         )
