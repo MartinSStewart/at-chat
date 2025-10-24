@@ -20,7 +20,7 @@ import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (AnyGuildOrDmIdNoThread(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
@@ -100,7 +100,7 @@ mobileMenuMaxHeightHelper itemCount =
 
 
 mobileMenuOpeningOffset :
-    AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> ThreadRouteWithMessage
     -> LocalState
     -> LoadedFrontend
@@ -120,7 +120,7 @@ messageMenuSpeed =
 
 
 desktopMenuHeight :
-    { a | guildOrDmId : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
+    { a | guildOrDmId : AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -311,7 +311,7 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> MsgConfig FrontendMsg
+editMessageTextInputConfig : AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> MsgConfig FrontendMsg
 editMessageTextInputConfig guildOrDmId threadRoute =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
@@ -334,7 +334,7 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )

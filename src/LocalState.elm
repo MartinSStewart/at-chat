@@ -73,7 +73,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -1445,8 +1445,8 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 markAllChannelsAsViewed :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
-    -> { d | lastViewed : SeqDict (AnyGuildOrDmIdNoThread f) (Id ChannelMessageId) }
-    -> { d | lastViewed : SeqDict (AnyGuildOrDmIdNoThread f) (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict (AnyGuildOrDmId f) (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict (AnyGuildOrDmId f) (Id ChannelMessageId) }
 markAllChannelsAsViewed guildId guild user =
     { user
         | lastViewed =

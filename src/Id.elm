@@ -1,5 +1,5 @@
 module Id exposing
-    ( AnyGuildOrDmIdNoThread(..)
+    ( AnyGuildOrDmId(..)
     , ChannelId(..)
     , ChannelMessageId(..)
     , DiscordGuildOrDmId(..)
@@ -41,7 +41,7 @@ type DiscordGuildOrDmId a
     | DiscordGuildOrDmId_Dm DiscordDmChannelId
 
 
-type AnyGuildOrDmIdNoThread a
+type AnyGuildOrDmId a
     = GuildOrDmId GuildOrDmId
     | DiscordGuildOrDmId (DiscordGuildOrDmId a)
 
@@ -61,7 +61,7 @@ mapGuildOrDmId mapFunc discordGuildOrDmId =
             DiscordGuildOrDmId_Dm discordDmChannelId
 
 
-mapAnyGuildOrDmId : (a -> b) -> AnyGuildOrDmIdNoThread a -> AnyGuildOrDmIdNoThread b
+mapAnyGuildOrDmId : (a -> b) -> AnyGuildOrDmId a -> AnyGuildOrDmId b
 mapAnyGuildOrDmId mapFunc discordGuildOrDmId =
     case discordGuildOrDmId of
         GuildOrDmId a ->

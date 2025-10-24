@@ -29,7 +29,7 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -900,7 +900,7 @@ getLoginData :
     SessionId
     -> UserSession
     -> BackendUser
-    -> Maybe ( AnyGuildOrDmIdNoThread a, ThreadRoute )
+    -> Maybe ( AnyGuildOrDmId a, ThreadRoute )
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
@@ -1987,7 +1987,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                 Local_CurrentlyViewing viewing ->
                     let
-                        viewingChannel : Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+                        viewingChannel : Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
                         viewingChannel =
                             UserSession.setViewingToCurrentlyViewing viewing
 
@@ -3560,7 +3560,7 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
-    -> Maybe ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    -> Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

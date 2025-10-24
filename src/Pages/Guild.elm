@@ -36,7 +36,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
@@ -117,7 +117,7 @@ newMessageCount maybeLastViewed channel =
 
 
 channelNewMessageCount :
-    AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> FrontendCurrentUser
     ->
         { b
@@ -1518,7 +1518,7 @@ emojiSelector =
         |> Ui.el [ Ui.alignBottom, Ui.paddingXY 8 0, Ui.width Ui.shrink ]
 
 
-messageHover : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
+messageHover : AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> LoggedIn2 -> IsHovered
 messageHover guildOrDmId threadRoute loggedIn =
     case loggedIn.messageHover of
         MessageMenu messageMenu ->
@@ -1545,7 +1545,7 @@ messageHover guildOrDmId threadRoute loggedIn =
 
 conversationViewHelper :
     Id ChannelMessageId
-    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> Maybe (Id ChannelMessageId)
     ->
         { a
@@ -1560,7 +1560,7 @@ conversationViewHelper :
     -> List ( String, Element FrontendMsg )
 conversationViewHelper lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId channel loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -1858,7 +1858,7 @@ newMessageLine maybeLastDate date lastViewedIndex index messageId =
 
 threadConversationViewHelper :
     Id ThreadMessageId
-    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> Id ChannelMessageId
     -> Maybe (Id ThreadMessageId)
     -> FrontendThread
@@ -1868,7 +1868,7 @@ threadConversationViewHelper :
     -> List ( String, Element FrontendMsg )
 threadConversationViewHelper lastViewedIndex guildOrDmIdNoThread threadId maybeUrlMessageId thread loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, ViewThread threadId )
 
@@ -2269,7 +2269,7 @@ conversationContainerId =
     Dom.id "conversationContainer"
 
 
-messageInputConfig : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> MsgConfig FrontendMsg
+messageInputConfig : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> MsgConfig FrontendMsg
 messageInputConfig ( guildOrDmId, threadRoute ) =
     { gotPingUserPosition = GotPingUserPosition
     , textInputGotFocus = TextInputGotFocus
@@ -2287,7 +2287,7 @@ messageInputConfig ( guildOrDmId, threadRoute ) =
     }
 
 
-scrollToBottomDecoder : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
+scrollToBottomDecoder : AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> ScrollPosition -> Json.Decode.Decoder FrontendMsg
 scrollToBottomDecoder guildOrDmId threadRoute currentScrollPosition =
     Json.Decode.map3
         (\scrollTop scrollHeight clientHeight ->
@@ -2328,7 +2328,7 @@ showFilesButton =
 
 conversationView :
     Id ChannelMessageId
-    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> Maybe (Id ChannelMessageId)
     -> LoggedIn2
     -> LoadedFrontend
@@ -2344,7 +2344,7 @@ conversationView :
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -2612,7 +2612,7 @@ peopleAreTypingView allUsers channel local model =
 
 threadConversationView :
     Id ThreadMessageId
-    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> Maybe (Id ThreadMessageId)
     -> Id ChannelMessageId
     -> LoggedIn2
@@ -2623,7 +2623,7 @@ threadConversationView :
     -> Element FrontendMsg
 threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId threadId loggedIn model local name channel =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, ViewThread threadId )
 
@@ -2843,7 +2843,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
 
 threadStarterMessage :
     Bool
-    -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
+    -> AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId)
     -> Id ChannelMessageId
     -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)) }
     -> LoggedIn2
@@ -2852,7 +2852,7 @@ threadStarterMessage :
     -> Element FrontendMsg
 threadStarterMessage isMobile guildOrDmIdNoThread threadMessageIndex channel loggedIn local model =
     let
-        guildOrDmId : ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+        guildOrDmId : ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
         guildOrDmId =
             ( guildOrDmIdNoThread, NoThread )
 
@@ -3017,7 +3017,7 @@ reactionEmojiView currentUserId reactions =
 
 messageEditingView :
     Bool
-    -> ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    -> ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> ThreadRouteWithMessage
     -> Message ChannelMessageId (Id UserId)
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId (Id UserId) )
@@ -3141,7 +3141,7 @@ messageEditingView isMobile guildOrDmId threadRouteWithMessage message maybeRepl
 
 threadMessageEditingView :
     Bool
-    -> ( AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    -> ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
     -> Id ChannelMessageId
     -> Id ThreadMessageId
     -> Message ThreadMessageId (Id UserId)

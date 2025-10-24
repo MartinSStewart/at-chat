@@ -27,7 +27,7 @@ import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileId)
-import Id exposing (AnyGuildOrDmIdNoThread(..), ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
