@@ -14,6 +14,7 @@ module MessageMenu exposing
 import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord.Id
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -99,7 +100,7 @@ mobileMenuMaxHeightHelper itemCount =
 
 
 mobileMenuOpeningOffset :
-    AnyGuildOrDmIdNoThread
+    AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId)
     -> ThreadRouteWithMessage
     -> LocalState
     -> LoadedFrontend
@@ -310,7 +311,7 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : AnyGuildOrDmIdNoThread -> ThreadRoute -> MsgConfig FrontendMsg
+editMessageTextInputConfig : AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRoute -> MsgConfig FrontendMsg
 editMessageTextInputConfig guildOrDmId threadRoute =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
@@ -333,7 +334,7 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> AnyGuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> AnyGuildOrDmIdNoThread (Discord.Id.Id Discord.Id.UserId) -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
         helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )
