@@ -15,8 +15,6 @@ module Id exposing
     , changeType
     , fromInt
     , fromString
-    , mapAnyGuildOrDmId
-    , mapGuildOrDmId
     , nextId
     , threadRouteToMessageId
     , threadRouteWithMessage
@@ -36,39 +34,19 @@ type GuildOrDmId
     | GuildOrDmId_Dm (Id UserId)
 
 
-type DiscordGuildOrDmId a
-    = DiscordGuildOrDmId_Guild a (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+type DiscordGuildOrDmId
+    = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | DiscordGuildOrDmId_Dm DiscordDmChannelId
 
 
-type AnyGuildOrDmId a
+type AnyGuildOrDmId
     = GuildOrDmId GuildOrDmId
-    | DiscordGuildOrDmId (DiscordGuildOrDmId a)
+    | DiscordGuildOrDmId DiscordGuildOrDmId
 
 
 type ThreadRoute
     = NoThread
     | ViewThread (Id ChannelMessageId)
-
-
-mapGuildOrDmId : (a -> b) -> DiscordGuildOrDmId a -> DiscordGuildOrDmId b
-mapGuildOrDmId mapFunc discordGuildOrDmId =
-    case discordGuildOrDmId of
-        DiscordGuildOrDmId_Guild a guildId channelId ->
-            DiscordGuildOrDmId_Guild (mapFunc a) guildId channelId
-
-        DiscordGuildOrDmId_Dm discordDmChannelId ->
-            DiscordGuildOrDmId_Dm discordDmChannelId
-
-
-mapAnyGuildOrDmId : (a -> b) -> AnyGuildOrDmId a -> AnyGuildOrDmId b
-mapAnyGuildOrDmId mapFunc discordGuildOrDmId =
-    case discordGuildOrDmId of
-        GuildOrDmId a ->
-            GuildOrDmId a
-
-        DiscordGuildOrDmId a ->
-            mapGuildOrDmId mapFunc a |> DiscordGuildOrDmId
 
 
 threadRouteWithoutMessage : ThreadRouteWithMessage -> ThreadRoute

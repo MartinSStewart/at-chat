@@ -40,7 +40,7 @@ viewConnectedDevice :
     ->
         { a
             | notificationMode : NotificationMode
-            , currentlyViewing : Maybe ( AnyGuildOrDmId a, ThreadRoute )
+            , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
             , userAgent : UserAgent
         }
     -> Element FrontendMsg

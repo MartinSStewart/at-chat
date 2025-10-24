@@ -30,7 +30,7 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     }
@@ -38,7 +38,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -71,7 +71,7 @@ type SetViewing
     | StopViewingChannel
 
 
-setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute )
+setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 setViewingToCurrentlyViewing viewing =
     case viewing of
         ViewDm otherUserId _ ->
@@ -107,7 +107,7 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId (Discord.Id.Id Discord.Id.UserId), ThreadRoute ) -> UserAgent -> UserSession
+init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
 init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
@@ -119,9 +119,9 @@ init sessionId userId currentlyViewing userAgent =
 
 
 setCurrentlyViewing :
-    Maybe ( AnyGuildOrDmId a, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId a, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId a, ThreadRoute ) }
+    Maybe ( AnyGuildOrDmId, ThreadRoute )
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 

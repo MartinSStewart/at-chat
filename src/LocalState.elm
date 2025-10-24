@@ -1445,8 +1445,8 @@ removeReactionEmojiFrontend emoji userId threadRoute channel =
 markAllChannelsAsViewed :
     Id GuildId
     -> { a | channels : SeqDict (Id ChannelId) { b | messages : Array c } }
-    -> { d | lastViewed : SeqDict (AnyGuildOrDmId f) (Id ChannelMessageId) }
-    -> { d | lastViewed : SeqDict (AnyGuildOrDmId f) (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
+    -> { d | lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId) }
 markAllChannelsAsViewed guildId guild user =
     { user
         | lastViewed =

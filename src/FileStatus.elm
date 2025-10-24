@@ -346,7 +346,7 @@ type alias ExposureTime =
 upload :
     (Result Http.Error UploadResponse -> msg)
     -> SessionIdHash
-    -> ( AnyGuildOrDmId a, ThreadRoute )
+    -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> File
     -> Command restriction toFrontend msg
@@ -362,7 +362,7 @@ upload onResult sessionId guildOrDmId fileId file2 =
         }
 
 
-uploadTrackerId : ( AnyGuildOrDmId a, ThreadRoute ) -> Id FileId -> String
+uploadTrackerId : ( AnyGuildOrDmId, ThreadRoute ) -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
