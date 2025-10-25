@@ -77,7 +77,6 @@ type alias FrontendThread =
 type alias DiscordFrontendThread =
     { messages : Array (MessageState ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ThreadMessageId
-    , linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
     }
 
@@ -120,7 +119,6 @@ discordFrontendThreadInit =
     { messages = Array.empty
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
-    , linkedMessages = OneToOne.empty
     }
 
 

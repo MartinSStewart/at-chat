@@ -4792,7 +4792,7 @@ changeUpdate localMsg local =
                                 , discordGuilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.updateChannel (loadDiscordMessages messagesLoaded) channelId)
+                                        (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
                                         local.discordGuilds
                             }
 
@@ -4817,7 +4817,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (Debug.todo "")
+                                                            (loadMessages messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
@@ -5641,45 +5641,10 @@ loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
 
 
 loadMessages :
-    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
-    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
 loadMessages messagesLoaded channel =
-    case messagesLoaded of
-        FilledInByBackend messagesLoaded2 ->
-            { channel
-                | messages =
-                    SeqDict.foldl
-                        (\messageId message messages ->
-                            DmChannel.setArray
-                                messageId
-                                (MessageLoaded message)
-                                messages
-                        )
-                        channel.messages
-                        messagesLoaded2
-                , visibleMessages = VisibleMessages.firstLoad channel
-            }
-
-        EmptyPlaceholder ->
-            channel
-
-
-loadDiscordMessages :
-    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
-    ->
-        { a
-            | messages : Array (MessageState messageId (Id UserId))
-            , visibleMessages : VisibleMessages messageId
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-        }
-    ->
-        { a
-            | messages : Array (MessageState messageId (Id UserId))
-            , visibleMessages : VisibleMessages messageId
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-        }
-loadDiscordMessages messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
             { channel

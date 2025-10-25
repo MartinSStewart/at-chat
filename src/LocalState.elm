@@ -302,7 +302,6 @@ type alias DiscordFrontendChannel =
     , messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     }
 
@@ -346,7 +345,6 @@ discordChannelToFrontend threadRoute channel =
                     { name = channel.name
                     , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
                     , visibleMessages = VisibleMessages.init preloadMessages channel
-                    , linkedMessageIds = channel.linkedMessageIds
                     , lastTypedAt = channel.lastTypedAt
                     , threads = SeqDict.empty
 
