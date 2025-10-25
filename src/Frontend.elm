@@ -2768,8 +2768,58 @@ updateLoaded msg model =
                                         )
                                             |> Just
 
-                                    DiscordGuildOrDmId _ ->
-                                        Debug.todo ""
+                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
+                                        case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                            Just ( _, channel ) ->
+                                                (case threadRoute of
+                                                    NoThread ->
+                                                        Local_LoadChannelMessages
+                                                            (GuildOrDmId_Guild guildId channelId)
+                                                            channel.visibleMessages.oldest
+                                                            EmptyPlaceholder
+
+                                                    ViewThread threadId ->
+                                                        Local_LoadThreadMessages
+                                                            (GuildOrDmId_Guild guildId channelId)
+                                                            threadId
+                                                            (SeqDict.get threadId channel.threads
+                                                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                                |> .visibleMessages
+                                                                |> .oldest
+                                                            )
+                                                            EmptyPlaceholder
+                                                )
+                                                    |> Just
+
+                                            Nothing ->
+                                                Nothing
+
+                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+                                        let
+                                            dmChannel : FrontendDmChannel
+                                            dmChannel =
+                                                SeqDict.get otherUserId local.dmChannels
+                                                    |> Maybe.withDefault DmChannel.frontendInit
+                                        in
+                                        (case threadRoute of
+                                            NoThread ->
+                                                Local_LoadChannelMessages
+                                                    (GuildOrDmId_Dm otherUserId)
+                                                    dmChannel.visibleMessages.oldest
+                                                    EmptyPlaceholder
+
+                                            ViewThread threadId ->
+                                                Local_LoadThreadMessages
+                                                    (GuildOrDmId_Dm otherUserId)
+                                                    threadId
+                                                    (SeqDict.get threadId dmChannel.threads
+                                                        |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                        |> .visibleMessages
+                                                        |> .oldest
+                                                    )
+                                                    EmptyPlaceholder
+                                        )
+                                            |> Just
                                 )
                                 { loggedIn | channelScrollPosition = scrollPosition }
                                 Command.none

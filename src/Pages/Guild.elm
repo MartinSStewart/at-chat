@@ -925,19 +925,18 @@ discordGuildView model routeData loggedIn local =
                                     ]
                                 , loggedInAsView local
                                 ]
-
-                            --, channelView channelRoute guildId guild loggedIn local model
-                            --    |> Ui.el
-                            --        [ Ui.height Ui.fill
-                            --        , Ui.background MyUi.background3
-                            --        , Ui.heightMin 0
-                            --        , Ui.borderColor MyUi.border1
-                            --        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
-                            --        ]
-                            --    |> Ui.el
-                            --        [ Ui.height Ui.fill
-                            --        , MyUi.htmlStyle "padding-top" MyUi.insetTop
-                            --        ]
+                            , discordChannelView routeData guild loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
                             , Ui.Lazy.lazy3 discordMemberColumnNotMobile local.localUser routeData.currentDiscordUserId guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
