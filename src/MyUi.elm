@@ -818,7 +818,7 @@ heightAttr height =
     Html.Attributes.style "height" (String.fromInt height ++ "px")
 
 
-userLabelHtml : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Html msg
+userLabelHtml : userId -> SeqDict userId { a | name : PersonName } -> Html msg
 userLabelHtml userId allUsers =
     case SeqDict.get userId allUsers of
         Just user ->

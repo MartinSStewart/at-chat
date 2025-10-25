@@ -703,9 +703,9 @@ view :
     -> Int
     -> (Int -> msg)
     -> SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
@@ -722,9 +722,9 @@ view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedF
 
 preview :
     SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 preview revealedSpoilers users attachedFiles nonempty =
     viewHelper
@@ -758,9 +758,9 @@ viewHelper :
     -> Int
     -> RichTextState
     -> SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Id UserId))
+    -> Nonempty (RichText userId)
     -> ( Int, List (Html msg) )
 viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl

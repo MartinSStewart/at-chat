@@ -1,5 +1,6 @@
 module DiscordDmChannelId exposing
     ( DiscordDmChannelId
+    , chattingWithYourself
     , fromUserIds
     , toPath
     , toUserIds
@@ -51,3 +52,8 @@ toUserIds (DiscordDmChannelId userIdA userIdB) =
 toPath : DiscordDmChannelId -> List String
 toPath (DiscordDmChannelId userIdA userIdB) =
     [ Discord.Id.toString userIdA, Discord.Id.toString userIdB ]
+
+
+chattingWithYourself : DiscordDmChannelId -> Bool
+chattingWithYourself (DiscordDmChannelId userIdA userIdB) =
+    userIdA == userIdB
