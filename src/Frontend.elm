@@ -2768,22 +2768,22 @@ updateLoaded msg model =
                                         )
                                             |> Just
 
-                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
+                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) as guildOrDmId2) ->
                                         case LocalState.getDiscordGuildAndChannel guildId channelId local of
                                             Just ( _, channel ) ->
                                                 (case threadRoute of
                                                     NoThread ->
-                                                        Local_LoadChannelMessages
-                                                            (GuildOrDmId_Guild guildId channelId)
+                                                        Local_Discord_LoadChannelMessages
+                                                            guildOrDmId2
                                                             channel.visibleMessages.oldest
                                                             EmptyPlaceholder
 
                                                     ViewThread threadId ->
-                                                        Local_LoadThreadMessages
-                                                            (GuildOrDmId_Guild guildId channelId)
+                                                        Local_Discord_LoadThreadMessages
+                                                            guildOrDmId2
                                                             threadId
                                                             (SeqDict.get threadId channel.threads
-                                                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
                                                                 |> .visibleMessages
                                                                 |> .oldest
                                                             )
@@ -2794,7 +2794,7 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
 
-                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm otherUserId) as guildOrDmId2) ->
                                         let
                                             dmChannel : FrontendDmChannel
                                             dmChannel =
@@ -2803,14 +2803,14 @@ updateLoaded msg model =
                                         in
                                         (case threadRoute of
                                             NoThread ->
-                                                Local_LoadChannelMessages
-                                                    (GuildOrDmId_Dm otherUserId)
+                                                Local_Discord_LoadChannelMessages
+                                                    guildOrDmId2
                                                     dmChannel.visibleMessages.oldest
                                                     EmptyPlaceholder
 
                                             ViewThread threadId ->
-                                                Local_LoadThreadMessages
-                                                    (GuildOrDmId_Dm otherUserId)
+                                                Local_Discord_LoadThreadMessages
+                                                    guildOrDmId2
                                                     threadId
                                                     (SeqDict.get threadId dmChannel.threads
                                                         |> Maybe.withDefault DmChannel.frontendThreadInit
@@ -4951,6 +4951,75 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
+                Local_Discord_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
+                    case guildOrDmId of
+                        GuildOrDmId_Guild guildId channelId ->
+                            { local
+                                | guilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            channelId
+                                        )
+                                        local.guilds
+                            }
+
+                        DiscordGuildOrDmId_Dm otherUserId ->
+                            --{ local
+                            --    | dmChannels =
+                            --        SeqDict.updateIfExists
+                            --            otherUserId
+                            --            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                            --            local.dmChannels
+                            --}
+
+                Local_Discord_LoadThreadMessages guildOrDmId previousOldestVisibleMessage threadId messagesLoaded ->
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild _ guildId channelId ->
+                            { local
+                                | discordGuilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel
+                                            (\channel ->
+                                                { channel
+                                                    | threads =
+                                                        SeqDict.updateIfExists
+                                                            threadId
+                                                            (loadOlderMessages
+                                                                previousOldestVisibleMessage
+                                                                messagesLoaded
+                                                            )
+                                                            channel.threads
+                                                }
+                                            )
+                                            channelId
+                                        )
+                                        local.discordGuilds
+                            }
+
+                        DiscordGuildOrDmId_Dm dmChannelId ->
+                            Debug.todo ""
+
+                --{ local
+                --    | dmChannels =
+                --        SeqDict.updateIfExists
+                --            otherUserId
+                --            (\dmChannel ->
+                --                { dmChannel
+                --                    | threads =
+                --                        SeqDict.updateIfExists
+                --                            threadId
+                --                            (loadOlderMessages
+                --                                previousOldestVisibleMessage
+                --                                messagesLoaded
+                --                            )
+                --                            dmChannel.threads
+                --                }
+                --            )
+                --            local.dmChannels
+                --}
                 Local_SetGuildNotificationLevel guildId notificationLevel ->
                     let
                         localUser =
