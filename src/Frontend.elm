@@ -2795,31 +2795,32 @@ updateLoaded msg model =
                                                 Nothing
 
                                     DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm otherUserId) as guildOrDmId2) ->
-                                        let
-                                            dmChannel : FrontendDmChannel
-                                            dmChannel =
-                                                SeqDict.get otherUserId local.dmChannels
-                                                    |> Maybe.withDefault DmChannel.frontendInit
-                                        in
-                                        (case threadRoute of
-                                            NoThread ->
-                                                Local_Discord_LoadChannelMessages
-                                                    guildOrDmId2
-                                                    dmChannel.visibleMessages.oldest
-                                                    EmptyPlaceholder
-
-                                            ViewThread threadId ->
-                                                Local_Discord_LoadThreadMessages
-                                                    guildOrDmId2
-                                                    threadId
-                                                    (SeqDict.get threadId dmChannel.threads
-                                                        |> Maybe.withDefault DmChannel.frontendThreadInit
-                                                        |> .visibleMessages
-                                                        |> .oldest
-                                                    )
-                                                    EmptyPlaceholder
-                                        )
-                                            |> Just
+                                        Debug.todo ""
+                                 --let
+                                 --    dmChannel : FrontendDmChannel
+                                 --    dmChannel =
+                                 --        SeqDict.get otherUserId local.dmChannels
+                                 --            |> Maybe.withDefault DmChannel.discordFrontendInit
+                                 --in
+                                 --(case threadRoute of
+                                 --    NoThread ->
+                                 --        Local_Discord_LoadChannelMessages
+                                 --            guildOrDmId2
+                                 --            dmChannel.visibleMessages.oldest
+                                 --            EmptyPlaceholder
+                                 --
+                                 --    ViewThread threadId ->
+                                 --        Local_Discord_LoadThreadMessages
+                                 --            guildOrDmId2
+                                 --            threadId
+                                 --            (SeqDict.get threadId dmChannel.threads
+                                 --                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                 --                |> .visibleMessages
+                                 --                |> .oldest
+                                 --            )
+                                 --            EmptyPlaceholder
+                                 --)
+                                 --    |> Just
                                 )
                                 { loggedIn | channelScrollPosition = scrollPosition }
                                 Command.none
@@ -4953,28 +4954,29 @@ changeUpdate localMsg local =
 
                 Local_Discord_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
-                        GuildOrDmId_Guild guildId channelId ->
+                        DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
                             { local
-                                | guilds =
+                                | discordGuilds =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
                                             (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
                                             channelId
                                         )
-                                        local.guilds
+                                        local.discordGuilds
                             }
 
                         DiscordGuildOrDmId_Dm otherUserId ->
-                            --{ local
-                            --    | dmChannels =
-                            --        SeqDict.updateIfExists
-                            --            otherUserId
-                            --            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
-                            --            local.dmChannels
-                            --}
+                            Debug.todo ""
 
-                Local_Discord_LoadThreadMessages guildOrDmId previousOldestVisibleMessage threadId messagesLoaded ->
+                --{ local
+                --    | dmChannels =
+                --        SeqDict.updateIfExists
+                --            otherUserId
+                --            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                --            local.dmChannels
+                --}
+                Local_Discord_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild _ guildId channelId ->
                             { local
@@ -5738,9 +5740,9 @@ deleteMessage userId guildOrDmId threadRoute local =
 
 loadOlderMessages :
     Id messageId
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId (Id UserId)))
-    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId (Id UserId)), visibleMessages : VisibleMessages messageId }
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
 loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
     case messagesLoaded of
         FilledInByBackend messagesLoaded2 ->
@@ -6475,6 +6477,12 @@ pendingChangesText localChange =
         Local_LoadThreadMessages _ _ _ _ ->
             "Load thread messages"
 
+        Local_Discord_LoadChannelMessages _ _ _ ->
+            "Load channel messages"
+
+        Local_Discord_LoadThreadMessages _ _ _ _ ->
+            "Load thread messages"
+
         Local_SetGuildNotificationLevel _ notificationLevel ->
             case notificationLevel of
                 NotifyOnEveryMessage ->
@@ -6511,12 +6519,6 @@ pendingChangesText localChange =
 
                 Local_Discord_SetName personName ->
                     "Set display name"
-
-                Local_Discord_LoadChannelMessages discordGuildOrDmIdNoThread id toBeFilledInByBackend ->
-                    "Load channel messages"
-
-                Local_Discord_LoadThreadMessages discordGuildOrDmIdNoThread id _ toBeFilledInByBackend ->
-                    "Load thread messages"
 
                 Local_Discord_SetGuildNotificationLevel id notificationLevel ->
                     case notificationLevel of
