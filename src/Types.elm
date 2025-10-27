@@ -524,7 +524,7 @@ type BackendMsg
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
-    | SentGuildMessageToDiscord ChangeId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError Discord.Message)
+    | SentGuildMessageToDiscord Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg

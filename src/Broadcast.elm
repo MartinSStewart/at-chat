@@ -368,7 +368,7 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
                                 Nothing ->
                                     False
 
-                        Nothing ->
+                        _ ->
                             False
                 )
                 members
@@ -387,26 +387,26 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
         |> SeqSet.remove sender
         |> SeqSet.foldl
             (\userId2 cmds ->
-                let
-                    isViewing : Bool
-                    isViewing =
-                        List.any
-                            (\( _, userSession ) ->
-                                case userSession.currentlyViewing of
-                                    Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ viewingGuildId viewingChannelId), viewingThreadRoute ) ->
-                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
+                case SeqDict.get userId2 model.discordUsers of
+                    Just (FullData discordUser) ->
+                        let
+                            isViewing : Bool
+                            isViewing =
+                                List.any
+                                    (\( _, userSession ) ->
+                                        case userSession.currentlyViewing of
+                                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ viewingGuildId viewingChannelId), viewingThreadRoute ) ->
+                                                viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
 
-                                    _ ->
-                                        False
-                            )
-                            (userGetAllSessions userId2 model)
-                in
-                if isViewing then
-                    cmds
+                                            _ ->
+                                                False
+                                    )
+                                    (userGetAllSessions discordUser.linkedTo model)
+                        in
+                        if isViewing then
+                            cmds
 
-                else
-                    case SeqDict.get sender model.discordUsers of
-                        Just (FullData discordUser) ->
+                        else
                             case NonemptyDict.get discordUser.linkedTo model.users of
                                 Just user2 ->
                                     notification
@@ -414,15 +414,21 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
                                         discordUser.linkedTo
                                         user2
                                         plainText
-                                        (DiscordGuildRoute guildId (DiscordChannel_ChannelRoute channelId threadRouteWithFriends) |> Just)
+                                        (DiscordGuildRoute
+                                            { currentDiscordUserId = userId2
+                                            , guildId = guildId
+                                            , channelRoute = DiscordChannel_ChannelRoute channelId threadRouteWithFriends
+                                            }
+                                            |> Just
+                                        )
                                         model
                                         :: cmds
 
                                 Nothing ->
                                     cmds
 
-                        _ ->
-                            cmds
+                    _ ->
+                        cmds
             )
             []
         |> Command.batch
