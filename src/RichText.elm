@@ -188,7 +188,7 @@ append first second =
     List.Nonempty.append first second |> normalize
 
 
-fromNonemptyString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty (RichText (Id UserId))
+fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
 fromNonemptyString users string =
     case Parser.run (parser users []) (String.Nonempty.toString string) of
         Ok ok ->
@@ -320,7 +320,7 @@ type alias LoopState userId =
     { current : Array String, rest : Array (RichText userId) }
 
 
-parser : SeqDict (Id UserId) { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText (Id UserId)))
+parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
 parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
@@ -530,7 +530,7 @@ codeBlockParser =
             )
 
 
-bailOut : LoopState (Id UserId) -> List Modifiers -> Step state (Array (RichText (Id UserId)))
+bailOut : LoopState userId -> List Modifiers -> Step state (Array (RichText userId))
 bailOut state modifiers =
     Array.append
         (case modifiers of
@@ -556,13 +556,13 @@ getRemainingText =
 
 
 modifierHelper :
-    SeqDict (Id UserId) { a | name : PersonName }
+    SeqDict userId { a | name : PersonName }
     -> Bool
     -> Modifiers
-    -> (Nonempty (RichText (Id UserId)) -> RichText (Id UserId))
-    -> LoopState (Id UserId)
+    -> (Nonempty (RichText userId) -> RichText userId)
+    -> LoopState userId
     -> List Modifiers
-    -> Parser (Step (LoopState (Id UserId)) (Array (RichText (Id UserId))))
+    -> Parser (Step (LoopState userId) (Array (RichText userId)))
 modifierHelper users noTrailingWhitespace modifier container state modifiers =
     let
         symbol : NonemptyString

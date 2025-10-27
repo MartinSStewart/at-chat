@@ -106,7 +106,7 @@ threadInit =
     }
 
 
-frontendThreadInit : FrontendThread
+frontendThreadInit : GenericThread userId
 frontendThreadInit =
     { messages = Array.empty
     , visibleMessages = VisibleMessages.empty

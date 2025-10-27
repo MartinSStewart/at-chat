@@ -2,12 +2,14 @@ module Broadcast exposing
     ( PushNotification
     , adminUserId
     , broadcastDm
+    , discordMessageNotification
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
     , notification
     , pushNotification
     , pushNotificationCodec
+    , toDiscordGuildExcludingOne
     , toDmChannel
     , toEveryone
     , toEveryoneWhoCanSeeUser
@@ -20,6 +22,7 @@ module Broadcast exposing
     )
 
 import Codec exposing (Codec)
+import Discord.Id
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -27,18 +30,18 @@ import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
 import Effect.Time as Time
 import Env
 import FileStatus exposing (FileData, FileId)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import NonemptyDict
 import PersonName
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import Url
 import User exposing (BackendUser)
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SubscribeData, UserSession)
@@ -51,6 +54,27 @@ adminUserId =
 
 toGuildExcludingOne : ClientId -> Id GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toGuildExcludingOne clientToSkip _ msg model =
+    List.concatMap
+        (\( _, otherClientIds ) ->
+            NonemptyDict.keys otherClientIds
+                |> List.Nonempty.toList
+                |> List.filterMap
+                    (\otherClientId ->
+                        if clientToSkip == otherClientId then
+                            Nothing
+
+                        else
+                            ChangeBroadcast msg
+                                |> Lamdera.sendToFrontend otherClientId
+                                |> Just
+                    )
+        )
+        (SeqDict.toList model.connections)
+        |> Command.batch
+
+
+toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordGuildExcludingOne clientToSkip _ msg model =
     List.concatMap
         (\( _, otherClientIds ) ->
             NonemptyDict.keys otherClientIds
@@ -294,6 +318,110 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
                                 :: cmds
 
                         Nothing ->
+                            cmds
+            )
+            []
+        |> Command.batch
+
+
+discordMessageNotification :
+    SeqSet (Discord.Id.Id Discord.Id.UserId)
+    -> Time.Posix
+    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> ThreadRoute
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> List (Discord.Id.Id Discord.Id.UserId)
+    -> BackendModel
+    -> Command restriction toMsg BackendMsg
+discordMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
+    let
+        plainText : String
+        plainText =
+            RichText.toString
+                (SeqDict.map
+                    (\userId user ->
+                        { name =
+                            case user of
+                                BasicData data ->
+                                    PersonName.fromStringLossy data.user.username
+
+                                FullData data ->
+                                    PersonName.fromStringLossy data.data.username
+                        }
+                    )
+                    model.discordUsers
+                )
+                content
+
+        alwaysNotify : SeqSet (Discord.Id.Id Discord.Id.UserId)
+        alwaysNotify =
+            List.filter
+                (\userId ->
+                    case SeqDict.get userId model.discordUsers of
+                        Just (FullData discordUser) ->
+                            case NonemptyDict.get discordUser.linkedTo model.users of
+                                Just user ->
+                                    SeqSet.member guildId user.discordNotifyOnAllMessages
+
+                                Nothing ->
+                                    False
+
+                        Nothing ->
+                            False
+                )
+                members
+                |> SeqSet.fromList
+
+        threadRouteWithFriends : ThreadRouteWithFriends
+        threadRouteWithFriends =
+            case threadRoute of
+                NoThread ->
+                    NoThreadWithFriends Nothing HideMembersTab
+
+                ViewThread threadId ->
+                    ViewThreadWithFriends threadId Nothing HideMembersTab
+    in
+    SeqSet.union alwaysNotify usersMentioned
+        |> SeqSet.remove sender
+        |> SeqSet.foldl
+            (\userId2 cmds ->
+                let
+                    isViewing : Bool
+                    isViewing =
+                        List.any
+                            (\( _, userSession ) ->
+                                case userSession.currentlyViewing of
+                                    Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ viewingGuildId viewingChannelId), viewingThreadRoute ) ->
+                                        viewingGuildId == guildId && viewingChannelId == channelId && viewingThreadRoute == threadRoute
+
+                                    _ ->
+                                        False
+                            )
+                            (userGetAllSessions userId2 model)
+                in
+                if isViewing then
+                    cmds
+
+                else
+                    case SeqDict.get sender model.discordUsers of
+                        Just (FullData discordUser) ->
+                            case NonemptyDict.get discordUser.linkedTo model.users of
+                                Just user2 ->
+                                    notification
+                                        time
+                                        discordUser.linkedTo
+                                        user2
+                                        plainText
+                                        (DiscordGuildRoute guildId (DiscordChannel_ChannelRoute channelId threadRouteWithFriends) |> Just)
+                                        model
+                                        :: cmds
+
+                                Nothing ->
+                                    cmds
+
+                        _ ->
                             cmds
             )
             []

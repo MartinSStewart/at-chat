@@ -8,6 +8,7 @@ module User exposing
     , FrontendUser
     , NotificationLevel(..)
     , addDirectMention
+    , addDiscordDirectMention
     , backendToFrontend
     , backendToFrontendCurrent
     , backendToFrontendForUser
@@ -139,31 +140,47 @@ addDirectMention :
     -> { a | directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater) }
     -> { a | directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater) }
 addDirectMention guildId channelId threadRoute user =
-    { user
-        | directMentions =
-            SeqDict.update
-                guildId
-                (\maybeDict ->
-                    case maybeDict of
-                        Just dict ->
-                            NonemptyDict.updateOrInsert
-                                ( channelId, threadRoute )
-                                (\maybeCount ->
-                                    case maybeCount of
-                                        Just count ->
-                                            OneOrGreater.increment count
+    { user | directMentions = addDirectMentionHelper guildId channelId threadRoute user.directMentions }
 
-                                        Nothing ->
-                                            OneOrGreater.one
-                                )
-                                dict
-                                |> Just
 
-                        Nothing ->
-                            NonemptyDict.singleton ( channelId, threadRoute ) OneOrGreater.one |> Just
-                )
-                user.directMentions
-    }
+addDiscordDirectMention :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> ThreadRoute
+    -> { a | discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater) }
+    -> { a | discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater) }
+addDiscordDirectMention guildId channelId threadRoute user =
+    { user | discordDirectMentions = addDirectMentionHelper guildId channelId threadRoute user.discordDirectMentions }
+
+
+addDirectMentionHelper :
+    guildId
+    -> channelId
+    -> ThreadRoute
+    -> SeqDict guildId (NonemptyDict ( channelId, ThreadRoute ) OneOrGreater)
+    -> SeqDict guildId (NonemptyDict ( channelId, ThreadRoute ) OneOrGreater)
+addDirectMentionHelper guildId channelId threadRoute =
+    SeqDict.update
+        guildId
+        (\maybeDict ->
+            case maybeDict of
+                Just dict ->
+                    NonemptyDict.updateOrInsert
+                        ( channelId, threadRoute )
+                        (\maybeCount ->
+                            case maybeCount of
+                                Just count ->
+                                    OneOrGreater.increment count
+
+                                Nothing ->
+                                    OneOrGreater.one
+                        )
+                        dict
+                        |> Just
+
+                Nothing ->
+                    NonemptyDict.singleton ( channelId, threadRoute ) OneOrGreater.one |> Just
+        )
 
 
 setGuildNotificationLevel :
