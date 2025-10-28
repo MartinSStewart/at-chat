@@ -504,7 +504,7 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
                     )
 
-        LinkDiscordUserStep2 discordUserId result ->
+        HandleReadyDataStep2 discordUserId result ->
             case Debug.log "discordGuildsReuslt" result of
                 Ok data ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList data) model
@@ -912,7 +912,6 @@ getLoginData sessionId session user requestMessagesFor model =
                 )
                 ( SeqDict.empty, SeqDict.empty )
                 model.discordUsers
-                |> Debug.log "linked"
     in
     { session = session
     , adminData =

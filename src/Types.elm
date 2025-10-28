@@ -545,7 +545,7 @@ type BackendMsg
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
-    | LinkDiscordUserStep2
+    | HandleReadyDataStep2
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError

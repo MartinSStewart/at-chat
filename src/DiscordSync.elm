@@ -295,7 +295,7 @@ addDiscordChannel :
     SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
     -> Discord.Channel
     -> List Discord.Message
-    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel )
+    -> Maybe DiscordBackendChannel
 addDiscordChannel threads discordChannel messages =
     let
         isTextChannel : Bool
@@ -349,53 +349,51 @@ addDiscordChannel threads discordChannel messages =
             linkedMessages =
                 List.map Tuple.first channelMessagesAndLinks |> OneToOne.fromList
         in
-        ( discordChannel.id
-        , { name =
-                case discordChannel.name of
-                    Included name ->
-                        ChannelName.fromStringLossy name
+        { name =
+            case discordChannel.name of
+                Included name ->
+                    ChannelName.fromStringLossy name
 
-                    Missing ->
-                        ChannelName.fromStringLossy "Missing"
-          , messages = List.map Tuple.second channelMessagesAndLinks |> Array.fromList
-          , status = ChannelActive
-          , lastTypedAt = SeqDict.empty
-          , linkedMessageIds = linkedMessages
-          , threads =
-                case SeqDict.get discordChannel.id threads of
-                    Just threads2 ->
-                        List.filterMap
-                            (\( threadChannel, threadMessages ) ->
-                                case OneToOne.second (Discord.Id.toUInt64 threadChannel.id |> Discord.Id.fromUInt64) linkedMessages of
-                                    Just channelMessageIndex ->
-                                        let
-                                            threadMessagesAndLinks :
-                                                List
-                                                    ( ( Discord.Id.Id Discord.Id.MessageId, Id ThreadMessageId )
-                                                    , Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
-                                                    )
-                                            threadMessagesAndLinks =
-                                                messagesAndLinks threadMessages
-                                        in
-                                        ( channelMessageIndex
-                                        , { messages = List.map Tuple.second threadMessagesAndLinks |> Array.fromList
-                                          , lastTypedAt = SeqDict.empty
-                                          , linkedMessages = List.map Tuple.first threadMessagesAndLinks |> OneToOne.fromList
-                                          }
-                                        )
-                                            |> Just
+                Missing ->
+                    ChannelName.fromStringLossy "Missing"
+        , messages = List.map Tuple.second channelMessagesAndLinks |> Array.fromList
+        , status = ChannelActive
+        , lastTypedAt = SeqDict.empty
+        , linkedMessageIds = linkedMessages
+        , threads =
+            case SeqDict.get discordChannel.id threads of
+                Just threads2 ->
+                    List.filterMap
+                        (\( threadChannel, threadMessages ) ->
+                            case OneToOne.second (Discord.Id.toUInt64 threadChannel.id |> Discord.Id.fromUInt64) linkedMessages of
+                                Just channelMessageIndex ->
+                                    let
+                                        threadMessagesAndLinks :
+                                            List
+                                                ( ( Discord.Id.Id Discord.Id.MessageId, Id ThreadMessageId )
+                                                , Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
+                                                )
+                                        threadMessagesAndLinks =
+                                            messagesAndLinks threadMessages
+                                    in
+                                    ( channelMessageIndex
+                                    , { messages = List.map Tuple.second threadMessagesAndLinks |> Array.fromList
+                                      , lastTypedAt = SeqDict.empty
+                                      , linkedMessages = List.map Tuple.first threadMessagesAndLinks |> OneToOne.fromList
+                                      }
+                                    )
+                                        |> Just
 
-                                    Nothing ->
-                                        Nothing
-                            )
-                            threads2
-                            |> SeqDict.fromList
+                                Nothing ->
+                                    Nothing
+                        )
+                        threads2
+                        |> SeqDict.fromList
 
-                    -- threads2
-                    Nothing ->
-                        SeqDict.empty
-          }
-        )
+                -- threads2
+                Nothing ->
+                    SeqDict.empty
+        }
             |> Just
 
     else
@@ -570,52 +568,58 @@ addDiscordGuilds guilds model =
         | discordGuilds =
             SeqDict.foldl
                 (\guildId data discordGuilds ->
-                    SeqDict.update
+                    SeqDict.updateIfExists
                         guildId
-                        (\maybe ->
-                            case maybe of
-                                Just _ ->
-                                    maybe
+                        (\guild ->
+                            let
+                                threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+                                threads =
+                                    SeqDict.empty
 
-                                Nothing ->
-                                    let
-                                        threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
-                                        threads =
-                                            SeqDict.empty
+                                --List.foldl
+                                --    (\( channel, messages ) dict ->
+                                --        case (Tuple.first channel).parentId of
+                                --            Included (Just parentId) ->
+                                --                SeqDict.update
+                                --                    parentId
+                                --                    (\maybe2 ->
+                                --                        case maybe2 of
+                                --                            Just list ->
+                                --                                Just (( channel, messages ) :: list)
+                                --
+                                --                            Nothing ->
+                                --                                Just [ ( channel, messages ) ]
+                                --                    )
+                                --                    dict
+                                --
+                                --            _ ->
+                                --                dict
+                                --    )
+                                --    SeqDict.empty
+                                --    data.channels
+                            in
+                            { name = GuildName.fromStringLossy data.guild.properties.name
+                            , icon = Maybe.map .fileHash data.icon
+                            , channels =
+                                List.foldl
+                                    (\( channel, messages ) channels ->
+                                        SeqDict.update
+                                            channel.id
+                                            (\maybe ->
+                                                case maybe of
+                                                    Just _ ->
+                                                        maybe
 
-                                        --List.foldl
-                                        --    (\( channel, messages ) dict ->
-                                        --        case (Tuple.first channel).parentId of
-                                        --            Included (Just parentId) ->
-                                        --                SeqDict.update
-                                        --                    parentId
-                                        --                    (\maybe2 ->
-                                        --                        case maybe2 of
-                                        --                            Just list ->
-                                        --                                Just (( channel, messages ) :: list)
-                                        --
-                                        --                            Nothing ->
-                                        --                                Just [ ( channel, messages ) ]
-                                        --                    )
-                                        --                    dict
-                                        --
-                                        --            _ ->
-                                        --                dict
-                                        --    )
-                                        --    SeqDict.empty
-                                        --    data.channels
-                                    in
-                                    { name = GuildName.fromStringLossy data.guild.properties.name
-                                    , icon = Maybe.map .fileHash data.icon
-                                    , channels =
-                                        List.filterMap
-                                            (\( channel, messages ) -> addDiscordChannel threads channel messages)
-                                            data.channels
-                                            |> SeqDict.fromList
-                                    , members = SeqDict.empty -- Gets filled in via the websocket connection
-                                    , owner = data.guild.properties.ownerId
-                                    }
-                                        |> Just
+                                                    Nothing ->
+                                                        addDiscordChannel threads channel messages
+                                            )
+                                            channels
+                                    )
+                                    guild.channels
+                                    data.channels
+                            , members = guild.members
+                            , owner = data.guild.properties.ownerId
+                            }
                         )
                         discordGuilds
                 )
@@ -1385,7 +1389,7 @@ handleReadyData userAuth readyData model =
             --        readyData.guilds
             --)
             |> Task.sequence
-            |> Task.attempt (LinkDiscordUserStep2 readyData.user.id)
+            |> Task.attempt (HandleReadyDataStep2 readyData.user.id)
         ]
     )
 

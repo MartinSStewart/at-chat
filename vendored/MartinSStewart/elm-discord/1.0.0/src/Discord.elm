@@ -5120,7 +5120,7 @@ handleUserGateway authToken intents response model =
                             )
 
                         DispatchUser_ReadySupplementalEvent readySupplementalEvent ->
-                            ( model, [] )
+                            ( model, [ UserOutMsg_SupplementalInitialData readySupplementalEvent ] )
 
                         DispatchUser_ResumedEvent ->
                             ( model, [] )
