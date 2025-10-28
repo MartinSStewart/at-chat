@@ -791,261 +791,253 @@ handleDiscordCreateMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordCreateMessage message model =
-    Debug.todo ""
+    case message.type_ of
+        Discord.ThreadCreated ->
+            ( model, Command.none )
 
+        Discord.ThreadStarterMessage ->
+            ( model, Command.none )
 
+        _ ->
+            case message.guildId of
+                Missing ->
+                    Debug.todo ""
 
---case message.type_ of
---    Discord.ThreadCreated ->
---        ( model, Command.none )
---
---    Discord.ThreadStarterMessage ->
---        ( model, Command.none )
---
---    _ ->
---        case ( SeqDict.get message.author.id model.linkedDiscordUsers, message.guildId ) of
---            ( Just userId, Missing ) ->
---                let
---                    richText : Nonempty (RichText (Id UserId))
---                    richText =
---                        RichText.fromDiscord model.linkedDiscordUsers message.content
---
---                    dmChannelId : DmChannelId
---                    dmChannelId =
---                        DmChannel.channelIdFromUserIds userId Broadcast.adminUserId
---
---                    dmChannel : DmChannel
---                    dmChannel =
---                        Maybe.withDefault DmChannel.init (SeqDict.get dmChannelId model.dmChannels)
---
---                    replyTo : Maybe (Id ChannelMessageId)
---                    replyTo =
---                        case message.referencedMessage of
---                            Discord.Referenced referenced ->
---                                OneToOne.second (DiscordMessageId referenced.id) dmChannel.linkedMessageIds
---
---                            Discord.ReferenceDeleted ->
---                                Nothing
---
---                            Discord.NoReference ->
---                                Nothing
---                in
---                ( { model
---                    | dmChannels =
---                        SeqDict.insert
---                            dmChannelId
---                            (LocalState.createChannelMessageBackend
---                                (Just (DiscordMessageId message.id))
---                                (UserTextMessage
---                                    { createdAt = message.timestamp
---                                    , createdBy = userId
---                                    , content = richText
---                                    , reactions = SeqDict.empty
---                                    , editedAt = Nothing
---                                    , repliedTo =
---                                        case message.referencedMessage of
---                                            Discord.Referenced referenced ->
---                                                OneToOne.second
---                                                    (DiscordMessageId referenced.id)
---                                                    dmChannel.linkedMessageIds
---
---                                            Discord.ReferenceDeleted ->
---                                                Nothing
---
---                                            Discord.NoReference ->
---                                                Nothing
---                                    , attachedFiles = SeqDict.empty
---                                    }
---                                )
---                                dmChannel
---                            )
---                            model.dmChannels
---                    , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
---                  }
---                , Command.batch
---                    [ Broadcast.toUser
---                        Nothing
---                        Nothing
---                        Broadcast.adminUserId
---                        (Server_DiscordDirectMessage message.timestamp userId richText replyTo
---                            |> ServerChange
---                        )
---                        model
---                    , case NonemptyDict.get userId model.users of
---                        Just user ->
---                            Broadcast.notification
---                                message.timestamp
---                                Broadcast.adminUserId
---                                user
---                                (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
---                                (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
---                                model
---
---                        Nothing ->
---                            Command.none
---                    ]
---                )
---
---            ( Just userId, Included discordGuildId ) ->
---                handleDiscordCreateGuildMessage userId discordGuildId message model
---
---            _ ->
---                let
---                    _ =
---                        Debug.log "user id not found for message" message
---                in
---                ( model, Command.none )
+                --let
+                --    richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                --    richText =
+                --        RichText.fromDiscord model.linkedDiscordUsers message.content
+                --
+                --    dmChannelId : DmChannelId
+                --    dmChannelId =
+                --        DmChannel.channelIdFromUserIds userId Broadcast.adminUserId
+                --
+                --    dmChannel : DmChannel
+                --    dmChannel =
+                --        Maybe.withDefault DmChannel.init (SeqDict.get dmChannelId model.dmChannels)
+                --
+                --    replyTo : Maybe (Id ChannelMessageId)
+                --    replyTo =
+                --        case message.referencedMessage of
+                --            Discord.Referenced referenced ->
+                --                OneToOne.second (DiscordMessageId referenced.id) dmChannel.linkedMessageIds
+                --
+                --            Discord.ReferenceDeleted ->
+                --                Nothing
+                --
+                --            Discord.NoReference ->
+                --                Nothing
+                --in
+                --( { model
+                --    | dmChannels =
+                --        SeqDict.insert
+                --            dmChannelId
+                --            (LocalState.createChannelMessageBackend
+                --                (Just (DiscordMessageId message.id))
+                --                (UserTextMessage
+                --                    { createdAt = message.timestamp
+                --                    , createdBy = userId
+                --                    , content = richText
+                --                    , reactions = SeqDict.empty
+                --                    , editedAt = Nothing
+                --                    , repliedTo =
+                --                        case message.referencedMessage of
+                --                            Discord.Referenced referenced ->
+                --                                OneToOne.second
+                --                                    (DiscordMessageId referenced.id)
+                --                                    dmChannel.linkedMessageIds
+                --
+                --                            Discord.ReferenceDeleted ->
+                --                                Nothing
+                --
+                --                            Discord.NoReference ->
+                --                                Nothing
+                --                    , attachedFiles = SeqDict.empty
+                --                    }
+                --                )
+                --                dmChannel
+                --            )
+                --            model.dmChannels
+                --    , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
+                --  }
+                --, Command.batch
+                --    [ Broadcast.toUser
+                --        Nothing
+                --        Nothing
+                --        Broadcast.adminUserId
+                --        (Server_DiscordDirectMessage message.timestamp userId richText replyTo
+                --            |> ServerChange
+                --        )
+                --        model
+                --    , case NonemptyDict.get userId model.users of
+                --        Just user ->
+                --            Broadcast.notification
+                --                message.timestamp
+                --                Broadcast.adminUserId
+                --                user
+                --                (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
+                --                (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
+                --                model
+                --
+                --        Nothing ->
+                --            Command.none
+                --    ]
+                --)
+                Included discordGuildId ->
+                    handleDiscordCreateGuildMessage discordGuildId message model
 
 
 handleDiscordCreateGuildMessage :
-    Id UserId
-    -> Discord.Id.Id Discord.Id.GuildId
+    Discord.Id.Id Discord.Id.GuildId
     -> Discord.Message
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage userId discordGuildId message model =
-    Debug.todo ""
+handleDiscordCreateGuildMessage discordGuildId message model =
+    let
+        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+        richText =
+            RichText.fromDiscord message.content
 
+        maybeData :
+            Maybe
+                { guildId : Discord.Id.Id Discord.Id.GuildId
+                , guild : BackendGuild
+                , channelId : Discord.Id.Id Discord.Id.ChannelId
+                , channel : BackendChannel
+                , threadRoute : ThreadRouteWithMaybeMessage
+                }
+        maybeData =
+            case discordGuildIdToGuild discordGuildId model of
+                Just ( guildId, guild ) ->
+                    case LocalState.linkedChannel (DiscordChannelId message.channelId) guild of
+                        Just ( channelId, channel ) ->
+                            Just
+                                { guildId = guildId
+                                , guild = guild
+                                , channelId = channelId
+                                , channel = channel
+                                , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
+                                }
 
+                        Nothing ->
+                            List.Extra.findMap
+                                (\( channelId, channel ) ->
+                                    case
+                                        OneToOne.second
+                                            (Discord.Id.toUInt64 message.channelId
+                                                |> Discord.Id.fromUInt64
+                                                |> DiscordMessageId
+                                            )
+                                            channel.linkedMessageIds
+                                    of
+                                        Just messageIndex ->
+                                            { guildId = guildId
+                                            , guild = guild
+                                            , channelId = channelId
+                                            , channel = channel
+                                            , threadRoute =
+                                                ViewThreadWithMaybeMessage
+                                                    messageIndex
+                                                    (discordReplyTo message channel |> Maybe.map Id.changeType)
+                                            }
+                                                |> Just
 
---let
---    richText : Nonempty RichText
---    richText =
---        RichText.fromDiscord model.linkedDiscordUsers message.content
---
---    maybeData : Maybe { guildId : Id GuildId, guild : BackendGuild, channelId : Id ChannelId, channel : BackendChannel, threadRoute : ThreadRouteWithMaybeMessage }
---    maybeData =
---        case discordGuildIdToGuild discordGuildId model of
---            Just ( guildId, guild ) ->
---                case LocalState.linkedChannel (DiscordChannelId message.channelId) guild of
---                    Just ( channelId, channel ) ->
---                        Just
---                            { guildId = guildId
---                            , guild = guild
---                            , channelId = channelId
---                            , channel = channel
---                            , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
---                            }
---
---                    Nothing ->
---                        List.Extra.findMap
---                            (\( channelId, channel ) ->
---                                case
---                                    OneToOne.second
---                                        (Discord.Id.toUInt64 message.channelId
---                                            |> Discord.Id.fromUInt64
---                                            |> DiscordMessageId
---                                        )
---                                        channel.linkedMessageIds
---                                of
---                                    Just messageIndex ->
---                                        { guildId = guildId
---                                        , guild = guild
---                                        , channelId = channelId
---                                        , channel = channel
---                                        , threadRoute =
---                                            ViewThreadWithMaybeMessage
---                                                messageIndex
---                                                (discordReplyTo message channel |> Maybe.map Id.changeType)
---                                        }
---                                            |> Just
---
---                                    _ ->
---                                        Nothing
---                            )
---                            (SeqDict.toList guild.channels)
---
---            Nothing ->
---                Nothing
---in
---case maybeData of
---    Just { guildId, guild, channelId, channel, threadRoute } ->
---        let
---            threadRouteNoReply : ThreadRoute
---            threadRouteNoReply =
---                case threadRoute of
---                    ViewThreadWithMaybeMessage threadId _ ->
---                        ViewThread threadId
---
---                    NoThreadWithMaybeMessage _ ->
---                        NoThread
---
---            usersMentioned : SeqSet (Id UserId)
---            usersMentioned =
---                LocalState.usersMentionedOrRepliedToBackend
---                    threadRoute
---                    richText
---                    (guild.owner :: SeqDict.keys guild.members)
---                    channel
---
---            guildOrDmId =
---                GuildOrDmId_Guild guildId channelId
---        in
---        ( { model
---            | guilds =
---                SeqDict.insert
---                    guildId
---                    { guild
---                        | channels =
---                            SeqDict.insert
---                                channelId
---                                (handleDiscordCreateGuildMessageHelper
---                                    message.id
---                                    message.channelId
---                                    threadRoute
---                                    userId
---                                    richText
---                                    message
---                                    channel
---                                )
---                                guild.channels
---                    }
---                    model.guilds
---            , users =
---                SeqSet.foldl
---                    (\userId2 users ->
---                        let
---                            isViewing =
---                                Broadcast.userGetAllSessions userId2 model
---                                    |> List.any
---                                        (\( _, userSession ) ->
---                                            userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
---                                        )
---                        in
---                        if isViewing then
---                            users
---
---                        else
---                            NonemptyDict.updateIfExists
---                                userId2
---                                (User.addDirectMention guildId channelId threadRouteNoReply)
---                                users
---                    )
---                    model.users
---                    usersMentioned
---          }
---        , Command.batch
---            [ Broadcast.toGuild
---                guildId
---                (Server_SendMessage userId message.timestamp guildOrDmId richText threadRoute SeqDict.empty
---                    |> ServerChange
---                )
---                model
---            , Broadcast.messageNotification
---                usersMentioned
---                message.timestamp
---                userId
---                guildId
---                channelId
---                threadRouteNoReply
---                richText
---                (guild.owner :: SeqDict.keys guild.members)
---                model
---            ]
---        )
---
---    _ ->
---        ( model, Command.none )
+                                        _ ->
+                                            Nothing
+                                )
+                                (SeqDict.toList guild.channels)
+
+                Nothing ->
+                    Nothing
+    in
+    case maybeData of
+        Just { guildId, guild, channelId, channel, threadRoute } ->
+            let
+                threadRouteNoReply : ThreadRoute
+                threadRouteNoReply =
+                    case threadRoute of
+                        ViewThreadWithMaybeMessage threadId _ ->
+                            ViewThread threadId
+
+                        NoThreadWithMaybeMessage _ ->
+                            NoThread
+
+                usersMentioned : SeqSet (Id UserId)
+                usersMentioned =
+                    LocalState.usersMentionedOrRepliedToBackend
+                        threadRoute
+                        richText
+                        (guild.owner :: SeqDict.keys guild.members)
+                        channel
+
+                guildOrDmId =
+                    GuildOrDmId_Guild guildId channelId
+            in
+            ( { model
+                | guilds =
+                    SeqDict.insert
+                        guildId
+                        { guild
+                            | channels =
+                                SeqDict.insert
+                                    channelId
+                                    (handleDiscordCreateGuildMessageHelper
+                                        message.id
+                                        message.channelId
+                                        threadRoute
+                                        userId
+                                        richText
+                                        message
+                                        channel
+                                    )
+                                    guild.channels
+                        }
+                        model.guilds
+                , users =
+                    SeqSet.foldl
+                        (\userId2 users ->
+                            let
+                                isViewing =
+                                    Broadcast.userGetAllSessions userId2 model
+                                        |> List.any
+                                            (\( _, userSession ) ->
+                                                userSession.currentlyViewing == Just ( guildOrDmId, threadRouteNoReply )
+                                            )
+                            in
+                            if isViewing then
+                                users
+
+                            else
+                                NonemptyDict.updateIfExists
+                                    userId2
+                                    (User.addDirectMention guildId channelId threadRouteNoReply)
+                                    users
+                        )
+                        model.users
+                        usersMentioned
+              }
+            , Command.batch
+                [ Broadcast.toGuild
+                    guildId
+                    (Server_SendMessage userId message.timestamp guildOrDmId richText threadRoute SeqDict.empty
+                        |> ServerChange
+                    )
+                    model
+                , Broadcast.messageNotification
+                    usersMentioned
+                    message.timestamp
+                    userId
+                    guildId
+                    channelId
+                    threadRouteNoReply
+                    richText
+                    (guild.owner :: SeqDict.keys guild.members)
+                    model
+                ]
+            )
+
+        _ ->
+            ( model, Command.none )
 
 
 handleDiscordCreateGuildMessageHelper :
