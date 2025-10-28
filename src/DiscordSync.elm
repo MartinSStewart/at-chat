@@ -1284,63 +1284,32 @@ handleReadyData userAuth readyData model =
         auth =
             Discord.userToken userAuth
     in
-    ( model
-      --{ model
-      --    | discordGuilds =
-      --        SeqDict.foldl
-      --            (\guildId data discordGuilds ->
-      --                SeqDict.update
-      --                    guildId
-      --                    (\maybe ->
-      --                        case maybe of
-      --                            Just _ ->
-      --                                maybe
-      --
-      --                            Nothing ->
-      --                                let
-      --                                    threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
-      --                                    threads =
-      --                                        SeqDict.empty
-      --
-      --                                    --List.foldl
-      --                                    --    (\( channel, messages ) dict ->
-      --                                    --        case (Tuple.first channel).parentId of
-      --                                    --            Included (Just parentId) ->
-      --                                    --                SeqDict.update
-      --                                    --                    parentId
-      --                                    --                    (\maybe2 ->
-      --                                    --                        case maybe2 of
-      --                                    --                            Just list ->
-      --                                    --                                Just (( channel, messages ) :: list)
-      --                                    --
-      --                                    --                            Nothing ->
-      --                                    --                                Just [ ( channel, messages ) ]
-      --                                    --                    )
-      --                                    --                    dict
-      --                                    --
-      --                                    --            _ ->
-      --                                    --                dict
-      --                                    --    )
-      --                                    --    SeqDict.empty
-      --                                    --    data.channels
-      --                                in
-      --                                { name = GuildName.fromStringLossy data.properties.name
-      --                                , icon = Nothing
-      --                                , channels =
-      --                                    List.filterMap
-      --                                        (\( channel, messages ) -> addDiscordChannel threads channel messages)
-      --                                        data.channels
-      --                                        |> SeqDict.fromList
-      --                                , members = SeqDict.empty -- Gets filled in via the websocket connection
-      --                                , owner = data.properties.ownerId
-      --                                }
-      --                                    |> Just
-      --                    )
-      --                    discordGuilds
-      --            )
-      --            model.discordGuilds
-      --            readyData.guilds
-      --  }
+    ( { model
+        | discordGuilds =
+            List.foldl
+                (\data discordGuilds ->
+                    SeqDict.update
+                        data.properties.id
+                        (\maybe ->
+                            case maybe of
+                                Just _ ->
+                                    maybe
+
+                                Nothing ->
+                                    { name = GuildName.fromStringLossy data.properties.name
+                                    , icon = Nothing
+                                    , channels = SeqDict.empty -- Gets filled after LinkDiscordUserStep2 is triggered
+                                    , members = SeqDict.empty -- Gets filled in via the websocket connection
+                                    , owner = data.properties.ownerId
+                                    }
+                                        |> Just
+                        )
+                        discordGuilds
+                )
+                model.discordGuilds
+                readyData.guilds
+        , discordUsers = List.foldl addDiscordUserData model.discordUsers readyData.users
+      }
     , Command.batch
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
         , List.map
@@ -1421,6 +1390,41 @@ handleReadyData userAuth readyData model =
     )
 
 
+addDiscordUserData :
+    Discord.PartialUser
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+addDiscordUserData user discordUsers =
+    SeqDict.update
+        user.id
+        (\maybe ->
+            (case maybe of
+                Just (FullData data) ->
+                    let
+                        fullUser =
+                            data.user
+                    in
+                    FullData
+                        { data
+                            | user =
+                                { fullUser
+                                    | username = user.username
+                                    , avatar = user.avatar
+                                    , discriminator = user.discriminator
+                                }
+                        }
+
+                Just (BasicData data) ->
+                    BasicData { data | user = user }
+
+                Nothing ->
+                    BasicData { user = user, icon = Nothing }
+            )
+                |> Just
+        )
+        discordUsers
+
+
 handleListGuildMembersResponse :
     Discord.GuildMembersChunkData
     -> BackendModel
@@ -1430,21 +1434,12 @@ handleListGuildMembersResponse chunkData model =
         | discordUsers =
             List.foldl
                 (\member discordUsers ->
-                    SeqDict.update
-                        member.user.id
-                        (\maybe ->
-                            (case maybe of
-                                Just (FullData data) ->
-                                    FullData { data | data = member.user }
-
-                                Just (BasicData data) ->
-                                    BasicData { data | user = member.user }
-
-                                Nothing ->
-                                    BasicData { user = member.user, icon = Nothing }
-                            )
-                                |> Just
-                        )
+                    addDiscordUserData
+                        { id = member.user.id
+                        , username = member.user.username
+                        , avatar = member.user.avatar
+                        , discriminator = member.user.discriminator
+                        }
                         discordUsers
                 )
                 model.discordUsers

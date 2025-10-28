@@ -302,7 +302,7 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        SentGuildMessageToDiscord time changeId sessionId clientId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId result ->
+        SentDiscordGuildMessage time changeId sessionId clientId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId result ->
             case result of
                 Ok message ->
                     asDiscordGuildMember
@@ -310,7 +310,7 @@ update msg model =
                         sessionId
                         guildId
                         discordUserId
-                        (sendGuildMessageStep2
+                        (sentDiscordGuildMessage
                             model
                             time
                             clientId
@@ -479,7 +479,7 @@ update msg model =
                                 discordUser.id
                                 (FullData
                                     { auth = auth
-                                    , data = discordUser
+                                    , user = discordUser
                                     , connection = Discord.init
                                     , linkedTo = userId
                                     , icon = Nothing
@@ -876,10 +876,10 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    { name = PersonName.fromStringLossy data.data.username
+                                    { name = PersonName.fromStringLossy data.user.username
                                     , icon = data.icon
                                     , email =
-                                        case data.data.email of
+                                        case data.user.email of
                                             Included maybeText ->
                                                 case maybeText of
                                                     Just text ->
@@ -897,7 +897,7 @@ getLoginData sessionId session user requestMessagesFor model =
                             else
                                 ( SeqDict.insert
                                     discordUserId
-                                    { name = PersonName.fromStringLossy data.data.username, icon = data.icon }
+                                    { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
                                     otherDiscordUsers2
                                 , linkedDiscordUsers2
                                 )
@@ -1342,7 +1342,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         }
                                                         |> DiscordSync.http
                                                         |> Task.attempt
-                                                            (SentGuildMessageToDiscord
+                                                            (SentDiscordGuildMessage
                                                                 time
                                                                 changeId
                                                                 sessionId
@@ -3453,7 +3453,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
             )
 
 
-sendGuildMessageStep2 :
+sentDiscordGuildMessage :
     BackendModel
     -> Time.Posix
     -> ClientId
@@ -3470,7 +3470,7 @@ sendGuildMessageStep2 :
     -> BackendUser
     -> DiscordBackendGuild
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-sendGuildMessageStep2 model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId discordMessage session discordUser user guild =
+sentDiscordGuildMessage model time clientId changeId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId discordMessage session discordUser user guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let

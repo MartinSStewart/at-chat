@@ -348,7 +348,7 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
                                     PersonName.fromStringLossy data.user.username
 
                                 FullData data ->
-                                    PersonName.fromStringLossy data.data.username
+                                    PersonName.fromStringLossy data.user.username
                         }
                     )
                     model.discordUsers

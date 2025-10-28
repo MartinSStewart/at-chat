@@ -315,7 +315,7 @@ type DiscordUserData
 
 type alias DiscordFullUserData =
     { auth : Discord.UserAuth
-    , data : Discord.User
+    , user : Discord.User
     , connection : Discord.Model Websocket.Connection
     , linkedTo : Id UserId
     , icon : Maybe FileHash
@@ -323,7 +323,7 @@ type alias DiscordFullUserData =
 
 
 type alias DiscordBasicUserData =
-    { user : Discord.User, icon : Maybe FileHash }
+    { user : Discord.PartialUser, icon : Maybe FileHash }
 
 
 type alias BackendFileData =
@@ -524,7 +524,7 @@ type BackendMsg
     | BackendGotTime SessionId ClientId ToBackend Time.Posix
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
-    | SentGuildMessageToDiscord Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
+    | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
