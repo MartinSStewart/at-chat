@@ -64,7 +64,7 @@ type alias Thread =
 type alias DiscordThread =
     { messages : Array (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
-    , linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     }
 
 
@@ -118,7 +118,7 @@ discordThreadInit : DiscordThread
 discordThreadInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
-    , linkedMessages = OneToOne.empty
+    , linkedMessageIds = OneToOne.empty
     }
 
 

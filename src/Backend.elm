@@ -34,7 +34,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -3368,7 +3368,7 @@ sentDiscordGuildMessage model time clientId changeId guildId channelId threadRou
     case SeqDict.get channelId guild.channels of
         Just channel ->
             let
-                channel2 : DiscordBackendChannel
+                channel2 : Result DiscordMessageAlreadyExists DiscordBackendChannel
                 channel2 =
                     case threadRouteWithMaybeReplyTo of
                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
@@ -3405,110 +3405,121 @@ sentDiscordGuildMessage model time clientId changeId guildId channelId threadRou
                 guildOrDmId : DiscordGuildOrDmId
                 guildOrDmId =
                     DiscordGuildOrDmId_Guild discordUserId guildId channelId
-
-                threadRouteNoReply : ThreadRoute
-                threadRouteNoReply =
-                    case threadRouteWithMaybeReplyTo of
-                        ViewThreadWithMaybeMessage threadId _ ->
-                            ViewThread threadId
-
-                        NoThreadWithMaybeMessage _ ->
-                            NoThread
-
-                usersMentioned : SeqSet (Discord.Id.Id Discord.Id.UserId)
-                usersMentioned =
-                    LocalState.usersMentionedOrRepliedToBackend
-                        threadRouteWithMaybeReplyTo
-                        text
-                        (guild.owner :: SeqDict.keys guild.members)
-                        channel2
-
-                users2 : NonemptyDict (Id UserId) BackendUser
-                users2 =
-                    SeqSet.foldl
-                        (\userId2 users ->
-                            case SeqDict.get userId2 model.discordUsers of
-                                Just (FullData data) ->
-                                    let
-                                        isViewing =
-                                            List.any
-                                                (\( _, userSession ) ->
-                                                    userSession.currentlyViewing == Just ( DiscordGuildOrDmId guildOrDmId, threadRouteNoReply )
-                                                )
-                                                (Broadcast.userGetAllSessions data.linkedTo model)
-                                    in
-                                    if isViewing then
-                                        users
-
-                                    else
-                                        NonemptyDict.updateIfExists
-                                            data.linkedTo
-                                            (User.addDiscordDirectMention guildId channelId threadRouteNoReply)
-                                            users
-
-                                _ ->
-                                    users
-                        )
-                        model.users
-                        usersMentioned
             in
-            ( { model
-                | discordGuilds =
-                    SeqDict.insert
-                        guildId
-                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
-                        model.discordGuilds
-                , users =
-                    NonemptyDict.insert
-                        session.userId
-                        (case threadRouteWithMaybeReplyTo of
-                            ViewThreadWithMaybeMessage threadMessageIndex _ ->
-                                { user
-                                    | lastViewedThreads =
-                                        SeqDict.insert
-                                            ( DiscordGuildOrDmId guildOrDmId, threadMessageIndex )
-                                            (SeqDict.get threadMessageIndex channel2.threads
-                                                |> Maybe.withDefault DmChannel.discordThreadInit
-                                                |> DmChannel.latestThreadMessageId
-                                            )
-                                            user.lastViewedThreads
-                                }
+            case channel2 of
+                Ok channel3 ->
+                    let
+                        threadRouteNoReply : ThreadRoute
+                        threadRouteNoReply =
+                            case threadRouteWithMaybeReplyTo of
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    ViewThread threadId
 
-                            NoThreadWithMaybeMessage _ ->
-                                { user
-                                    | lastViewed =
-                                        SeqDict.insert
-                                            (DiscordGuildOrDmId guildOrDmId)
-                                            (DmChannel.latestMessageId channel2)
-                                            user.lastViewed
-                                }
-                        )
-                        users2
-              }
-            , Command.batch
-                [ LocalChangeResponse
-                    changeId
-                    (Local_Discord_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
-                    |> Lamdera.sendToFrontend clientId
-                , Broadcast.toDiscordGuildExcludingOne
-                    clientId
-                    guildId
-                    (Server_Discord_SendMessage session.userId time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
-                        |> ServerChange
+                                NoThreadWithMaybeMessage _ ->
+                                    NoThread
+
+                        usersMentioned : SeqSet (Discord.Id.Id Discord.Id.UserId)
+                        usersMentioned =
+                            LocalState.usersMentionedOrRepliedToBackend
+                                threadRouteWithMaybeReplyTo
+                                text
+                                (guild.owner :: SeqDict.keys guild.members)
+                                channel3
+
+                        users2 : NonemptyDict (Id UserId) BackendUser
+                        users2 =
+                            SeqSet.foldl
+                                (\userId2 users ->
+                                    case SeqDict.get userId2 model.discordUsers of
+                                        Just (FullData data) ->
+                                            let
+                                                isViewing =
+                                                    List.any
+                                                        (\( _, userSession ) ->
+                                                            userSession.currentlyViewing == Just ( DiscordGuildOrDmId guildOrDmId, threadRouteNoReply )
+                                                        )
+                                                        (Broadcast.userGetAllSessions data.linkedTo model)
+                                            in
+                                            if isViewing then
+                                                users
+
+                                            else
+                                                NonemptyDict.updateIfExists
+                                                    data.linkedTo
+                                                    (User.addDiscordDirectMention guildId channelId threadRouteNoReply)
+                                                    users
+
+                                        _ ->
+                                            users
+                                )
+                                model.users
+                                usersMentioned
+                    in
+                    ( { model
+                        | discordGuilds =
+                            SeqDict.insert
+                                guildId
+                                { guild | channels = SeqDict.insert channelId channel3 guild.channels }
+                                model.discordGuilds
+                        , users =
+                            NonemptyDict.insert
+                                session.userId
+                                (case threadRouteWithMaybeReplyTo of
+                                    ViewThreadWithMaybeMessage threadMessageIndex _ ->
+                                        { user
+                                            | lastViewedThreads =
+                                                SeqDict.insert
+                                                    ( DiscordGuildOrDmId guildOrDmId, threadMessageIndex )
+                                                    (SeqDict.get threadMessageIndex channel3.threads
+                                                        |> Maybe.withDefault DmChannel.discordThreadInit
+                                                        |> DmChannel.latestThreadMessageId
+                                                    )
+                                                    user.lastViewedThreads
+                                        }
+
+                                    NoThreadWithMaybeMessage _ ->
+                                        { user
+                                            | lastViewed =
+                                                SeqDict.insert
+                                                    (DiscordGuildOrDmId guildOrDmId)
+                                                    (DmChannel.latestMessageId channel3)
+                                                    user.lastViewed
+                                        }
+                                )
+                                users2
+                      }
+                    , Command.batch
+                        [ LocalChangeResponse
+                            changeId
+                            (Local_Discord_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toDiscordGuildExcludingOne
+                            clientId
+                            guildId
+                            (Server_Discord_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles
+                                |> ServerChange
+                            )
+                            model
+                        , Broadcast.discordMessageNotification
+                            usersMentioned
+                            time
+                            discordUserId
+                            guildId
+                            channelId
+                            threadRouteNoReply
+                            text
+                            (guild.owner :: SeqDict.keys guild.members)
+                            model
+                        ]
                     )
-                    model
-                , Broadcast.discordMessageNotification
-                    usersMentioned
-                    time
-                    discordUserId
-                    guildId
-                    channelId
-                    threadRouteNoReply
-                    text
-                    (guild.owner :: SeqDict.keys guild.members)
-                    model
-                ]
-            )
+
+                Err DiscordMessageAlreadyExists ->
+                    ( model
+                    , LocalChangeResponse
+                        changeId
+                        (Local_Discord_SendMessage time guildOrDmId text threadRouteWithMaybeReplyTo attachedFiles)
+                        |> Lamdera.sendToFrontend clientId
+                    )
 
         Nothing ->
             ( model

@@ -9,6 +9,7 @@ module LocalState exposing
     , DiscordBackendGuild
     , DiscordFrontendChannel
     , DiscordFrontendGuild
+    , DiscordMessageAlreadyExists(..)
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
@@ -31,6 +32,7 @@ module LocalState exposing
     , createChannelMessageFrontend
     , createDiscordChannelMessageBackend
     , createDiscordMessageBackend
+    , createDiscordThreadMessageBackend
     , createGuild
     , createThreadMessageBackend
     , createThreadMessageFrontend
@@ -533,23 +535,37 @@ createMessageBackend message channel =
     }
 
 
+type DiscordMessageAlreadyExists
+    = DiscordMessageAlreadyExists
+
+
 createDiscordChannelMessageBackend :
     Discord.Id.Id Discord.Id.MessageId
     -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
-    ->
-        { d
-            | messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-        }
-    ->
-        { d
-            | messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-        }
+    -> DiscordBackendChannel
+    -> Result DiscordMessageAlreadyExists DiscordBackendChannel
 createDiscordChannelMessageBackend messageId message channel =
     createDiscordMessageBackend messageId message channel
+
+
+createDiscordThreadMessageBackend :
+    Discord.Id.Id Discord.Id.MessageId
+    -> Id ChannelMessageId
+    -> Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> DiscordBackendChannel
+    -> Result DiscordMessageAlreadyExists DiscordBackendChannel
+createDiscordThreadMessageBackend messageId threadId message channel =
+    let
+        thread : DiscordThread
+        thread =
+            SeqDict.get threadId channel.threads |> Maybe.withDefault DmChannel.discordThreadInit
+    in
+    case createDiscordMessageBackend messageId message thread of
+        Ok thread2 ->
+            Ok { channel | threads = SeqDict.insert threadId thread2 channel.threads }
+
+        Err err ->
+            Err err
 
 
 createDiscordMessageBackend :
@@ -562,42 +578,49 @@ createDiscordMessageBackend :
             , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
         }
     ->
-        { d
-            | messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
-            , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt messageId)
-            , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
-        }
+        Result
+            DiscordMessageAlreadyExists
+            { d
+                | messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
+                , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt messageId)
+                , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+            }
 createDiscordMessageBackend messageId message channel =
-    let
-        previousIndex : Id messageId
-        previousIndex =
-            Array.length channel.messages - 1 |> Id.fromInt
-    in
-    { channel
-        | messages =
-            case DmChannel.getArray previousIndex channel.messages of
-                Just previousMessage ->
-                    case mergeMessages message previousMessage of
-                        Just mergedMessage ->
-                            DmChannel.setArray previousIndex mergedMessage channel.messages
+    if OneToOne.memberFirst messageId channel.linkedMessageIds then
+        Err DiscordMessageAlreadyExists
 
-                        Nothing ->
-                            Array.push message channel.messages
+    else
+        let
+            previousIndex : Id messageId
+            previousIndex =
+                Array.length channel.messages - 1 |> Id.fromInt
+        in
+        { channel
+            | messages =
+                case DmChannel.getArray previousIndex channel.messages of
+                    Just previousMessage ->
+                        case mergeMessages message previousMessage of
+                            Just mergedMessage ->
+                                DmChannel.setArray previousIndex mergedMessage channel.messages
 
-                Nothing ->
-                    Array.push message channel.messages
-        , lastTypedAt =
-            case message of
-                UserTextMessage { createdBy } ->
-                    SeqDict.remove createdBy channel.lastTypedAt
+                            Nothing ->
+                                Array.push message channel.messages
 
-                UserJoinedMessage _ _ _ ->
-                    channel.lastTypedAt
+                    Nothing ->
+                        Array.push message channel.messages
+            , lastTypedAt =
+                case message of
+                    UserTextMessage { createdBy } ->
+                        SeqDict.remove createdBy channel.lastTypedAt
 
-                DeletedMessage _ ->
-                    channel.lastTypedAt
-        , linkedMessageIds = OneToOne.insert messageId previousIndex channel.linkedMessageIds
-    }
+                    UserJoinedMessage _ _ _ ->
+                        channel.lastTypedAt
+
+                    DeletedMessage _ ->
+                        channel.lastTypedAt
+            , linkedMessageIds = OneToOne.insert messageId previousIndex channel.linkedMessageIds
+        }
+            |> Ok
 
 
 createThreadMessageFrontend :

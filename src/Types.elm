@@ -614,7 +614,7 @@ type LocalMsg
 
 type ServerChange
     = Server_SendMessage (Id UserId) Time.Posix GuildOrDmId (Nonempty (RichText (Id UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
-    | Server_Discord_SendMessage (Id UserId) Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
+    | Server_Discord_SendMessage Time.Posix DiscordGuildOrDmId (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) ThreadRouteWithMaybeMessage (SeqDict (Id FileId) FileData)
     | Server_NewChannel Time.Posix (Id GuildId) ChannelName
     | Server_EditChannel (Id GuildId) (Id ChannelId) ChannelName
     | Server_DeleteChannel (Id GuildId) (Id ChannelId)

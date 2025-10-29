@@ -5379,7 +5379,7 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Server_Discord_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
+                Server_Discord_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild discordUserId guildId channelId ->
                             case LocalState.getDiscordGuildAndChannel guildId channelId local of
@@ -5451,7 +5451,7 @@ changeUpdate localMsg local =
                                         , localUser =
                                             { localUser
                                                 | user =
-                                                    if userId == localUser.session.userId then
+                                                    if SeqDict.member discordUserId localUser.linkedDiscordUsers then
                                                         { user
                                                             | lastViewed =
                                                                 SeqDict.insert
