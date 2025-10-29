@@ -1743,7 +1743,11 @@ getGuildAndChannel guildId channelId local =
             Nothing
 
 
-getDiscordGuildAndChannel : Discord.Id.Id Discord.Id.GuildId -> Discord.Id.Id Discord.Id.ChannelId -> LocalState -> Maybe ( DiscordFrontendGuild, DiscordFrontendChannel )
+getDiscordGuildAndChannel :
+    Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> LocalState
+    -> Maybe ( DiscordFrontendGuild, DiscordFrontendChannel )
 getDiscordGuildAndChannel guildId channelId local =
     case SeqDict.get guildId local.discordGuilds of
         Just guild ->
