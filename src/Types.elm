@@ -79,6 +79,7 @@ import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
+import OneOrGreater exposing (OneOrGreater)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import PersonName exposing (PersonName)
@@ -305,6 +306,7 @@ type alias BackendModel =
     , openRouterKey : Maybe String
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     }
 
 

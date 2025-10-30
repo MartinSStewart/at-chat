@@ -14,6 +14,7 @@ import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), Extern
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
+import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Time as Time
@@ -35,7 +36,7 @@ import RichText exposing (RichText)
 import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalMsg(..), ServerChange(..), ToFrontend)
+import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import UInt64
 import User exposing (BackendUser)
 
@@ -1072,19 +1073,38 @@ handleDiscordCreateGuildMessage discordGuildId message model =
                                         )
                                         model.users
                                         usersMentioned
+                                , pendingDiscordCreateMessages =
+                                    SeqDict.remove ( message.author.id, channelId ) model.pendingDiscordCreateMessages
                               }
                             , Command.batch
-                                [ Broadcast.toDiscordGuild
-                                    discordGuildId
-                                    (Server_Discord_SendMessage
-                                        message.timestamp
-                                        guildOrDmId
-                                        richText
-                                        threadRoute
-                                        SeqDict.empty
-                                        |> ServerChange
-                                    )
-                                    model
+                                [ case SeqDict.get ( message.author.id, channelId ) model.pendingDiscordCreateMessages of
+                                    Just ( clientId, changeId ) ->
+                                        Command.batch
+                                            [ LocalChangeResponse
+                                                changeId
+                                                (Local_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute SeqDict.empty)
+                                                |> Lamdera.sendToFrontend clientId
+                                            , Broadcast.toDiscordGuildExcludingOne
+                                                clientId
+                                                discordGuildId
+                                                (Server_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute SeqDict.empty
+                                                    |> ServerChange
+                                                )
+                                                model
+                                            ]
+
+                                    Nothing ->
+                                        Broadcast.toDiscordGuild
+                                            discordGuildId
+                                            (Server_Discord_SendMessage
+                                                message.timestamp
+                                                guildOrDmId
+                                                richText
+                                                threadRoute
+                                                SeqDict.empty
+                                                |> ServerChange
+                                            )
+                                            model
 
                                 --, Broadcast.messageNotification
                                 --    usersMentioned

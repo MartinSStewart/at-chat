@@ -39,7 +39,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), DiscordFrontendChannel, FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -6506,6 +6506,41 @@ updateLoadedFromBackend msg model =
                                 GuildOrDmId_Dm _ ->
                                     Command.none
 
+                        ServerChange (Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _) ->
+                            case guildOrDmId of
+                                DiscordGuildOrDmId_Guild senderId guildId channelId ->
+                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                        Just ( _, channel ) ->
+                                            Command.batch
+                                                [ playNotificationSoundForDiscordMessage
+                                                    senderId
+                                                    guildOrDmId
+                                                    maybeRepliedTo
+                                                    channel
+                                                    local
+                                                    content
+                                                    model
+                                                , case loggedIn.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        if MyUi.isMobile model then
+                                                            smoothScrollToBottomOfChannel
+
+                                                        else
+                                                            scrollToBottomOfChannel
+
+                                                    ScrolledToMiddle ->
+                                                        Command.none
+
+                                                    ScrolledToTop ->
+                                                        Command.none
+                                                ]
+
+                                        Nothing ->
+                                            Command.none
+
+                                DiscordGuildOrDmId_Dm _ ->
+                                    Command.none
+
                         _ ->
                             Command.none
                     )
@@ -6678,6 +6713,61 @@ playNotificationSound senderId guildOrDmId threadRouteWithRepliedTo channel loca
                             Ports.showNotification
                                 (User.toString senderId (LocalState.allUsers local))
                                 (RichText.toString (LocalState.allUsers local) content)
+
+                        _ ->
+                            Command.none
+                    ]
+
+            else
+                Command.none
+
+        PushNotifications ->
+            Command.none
+
+
+playNotificationSoundForDiscordMessage :
+    Discord.Id.Id Discord.Id.UserId
+    -> DiscordGuildOrDmId
+    -> ThreadRouteWithMaybeMessage
+    -> DiscordFrontendChannel
+    -> LocalState
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> LoadedFrontend
+    -> Command FrontendOnly toMsg msg
+playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepliedTo channel local content model =
+    case local.localUser.session.notificationMode of
+        NoNotifications ->
+            Command.none
+
+        NotifyWhenRunning ->
+            let
+                alwaysNotify : Bool
+                alwaysNotify =
+                    case guildOrDmId of
+                        DiscordGuildOrDmId_Guild _ guildId _ ->
+                            SeqSet.member guildId local.localUser.user.discordNotifyOnAllMessages
+
+                        DiscordGuildOrDmId_Dm _ ->
+                            False
+
+                isMentionedOrRepliedTo =
+                    LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
+                        |> SeqSet.intersect (SeqDict.keys local.localUser.linkedDiscordUsers |> SeqSet.fromList)
+                        |> SeqSet.isEmpty
+                        |> not
+
+                allUsers =
+                    LocalState.allDiscordUsers2 local.localUser
+            in
+            if not model.pageHasFocus && (alwaysNotify || isMentionedOrRepliedTo) then
+                Command.batch
+                    [ Ports.playSound "pop"
+                    , Ports.setFavicon "/favicon-red.ico"
+                    , case model.notificationPermission of
+                        Ports.Granted ->
+                            Ports.showNotification
+                                (User.toString senderId allUsers)
+                                (RichText.toString allUsers content)
 
                         _ ->
                             Command.none
