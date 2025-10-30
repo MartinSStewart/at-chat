@@ -150,7 +150,7 @@ init =
       , backendInitialized = True
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
-      , discordDms = OneToOne.empty
+      , discordDmChannels = SeqDict.empty
       , slackWorkspaces = OneToOne.empty
       , slackUsers = OneToOne.empty
       , slackServers = OneToOne.empty
@@ -515,8 +515,9 @@ update msg model =
 
         HandleReadyDataStep2 discordUserId result ->
             case Debug.log "discordGuildsReuslt" result of
-                Ok data ->
-                    ( DiscordSync.addDiscordGuilds (SeqDict.fromList data) model
+                Ok ( dmData, guildData ) ->
+                    ( DiscordSync.addDiscordGuilds (SeqDict.fromList guildData) model
+                        |> DiscordSync.addDiscordDms dmData
                     , Command.none
                       --, case SeqDict.get discordUserId model.discordUsers of
                       --    Just (FullData user) ->

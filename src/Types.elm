@@ -52,7 +52,8 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (CaptchaChallengeData)
 import Discord.Id
-import DmChannel exposing (DmChannel, DmChannelId, FrontendDmChannel)
+import DiscordDmChannelId exposing (DiscordDmChannelId)
+import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -293,7 +294,7 @@ type alias BackendModel =
     , backendInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
-    , discordDms : OneToOne (Discord.Id.Id Discord.Id.ChannelId) DmChannelId
+    , discordDmChannels : SeqDict DiscordDmChannelId DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
@@ -551,7 +552,8 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            (List
+            ( List ( DiscordDmChannelId, List Discord.Message )
+            , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
                   , channels : List ( Discord.Channel, List Discord.Message )

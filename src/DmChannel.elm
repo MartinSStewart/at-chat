@@ -1,5 +1,6 @@
 module DmChannel exposing
-    ( DiscordFrontendThread
+    ( DiscordDmChannel
+    , DiscordFrontendThread
     , DiscordThread
     , DmChannel
     , DmChannelId(..)
@@ -12,6 +13,7 @@ module DmChannel exposing
     , Thread
     , channelIdFromUserIds
     , discordFrontendThreadInit
+    , discordInit
     , discordThreadInit
     , frontendInit
     , frontendThreadInit
@@ -44,6 +46,13 @@ type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) Thread
+    }
+
+
+type alias DiscordDmChannel =
+    { messages : Array (Message ChannelMessageId (Id UserId))
+    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
     }
 
 
@@ -145,6 +154,15 @@ init =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
+    }
+
+
+discordInit : DiscordDmChannel
+discordInit =
+    { messages = Array.empty
+    , lastTypedAt = SeqDict.empty
+    , threads = SeqDict.empty
+    , linkedMessageIds = OneToOne.empty
     }
 
 

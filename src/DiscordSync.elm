@@ -1,5 +1,6 @@
 module DiscordSync exposing
-    ( addDiscordGuilds
+    ( addDiscordDms
+    , addDiscordGuilds
     , discordUserWebsocketMsg
     , http
     , loadImage
@@ -10,6 +11,7 @@ import Broadcast
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
+import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..))
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -553,6 +555,31 @@ addDiscordMessages threadRoute messages model channel =
 --    )
 --    channel
 --    messages
+
+
+addDiscordDms : List ( DiscordDmChannelId, List Discord.Message ) -> BackendModel -> BackendModel
+addDiscordDms dmChannels model =
+    { model
+        | discordDmChannels =
+            List.foldl
+                (\( dmChannelId, messages ) dmChannels ->
+                    SeqDict.update
+                        dmChannelId
+                        (\maybe ->
+                            case maybe of
+                                Just _ ->
+                                    maybe
+
+                                Nothing ->
+                                    { messages = messages
+                                    , lastTypedAt = SeqDict.empty
+                                    , linkedMessageIds = OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+                                    }
+                        )
+                )
+                model.discordDmChannels
+                dmChannels
+    }
 
 
 addDiscordGuilds :
@@ -1321,6 +1348,22 @@ handleReadyData userAuth readyData model =
         auth : Discord.Authentication
         auth =
             Discord.userToken userAuth
+
+        discordDmChannels =
+            case readyData.relationships of
+                Included relationships ->
+                    List.foldl
+                        (\dmChannel dmChannels ->
+                            SeqDict.insert
+                                (DiscordDmChannelId.fromUserIds dmChannel.id readyData.user.id)
+                                DmChannel.discordInit
+                                dmChannels
+                        )
+                        model.discordDmChannels
+                        relationships
+
+                Missing ->
+                    model.discordDmChannels
     in
     ( { model
         | discordGuilds =
@@ -1350,79 +1393,112 @@ handleReadyData userAuth readyData model =
       }
     , Command.batch
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
-        , List.map
-            (\gatewayGuild ->
-                Task.map2
-                    (\channels maybeIcon ->
-                        ( gatewayGuild.properties.id
-                        , { guild = gatewayGuild
-                          , channels = channels
-                          , icon = maybeIcon
-                          }
-                        )
-                    )
-                    (List.map
-                        (\channel ->
-                            Discord.getMessagesPayload
-                                auth
-                                { channelId = channel.id
-                                , limit = 100
-                                , relativeTo = Discord.MostRecent
-                                }
-                                |> http
-                                |> Task.onError (\_ -> Task.succeed [])
-                                |> Task.map (Tuple.pair channel)
-                        )
-                        gatewayGuild.channels
-                        |> Task.sequence
-                    )
-                    (case gatewayGuild.properties.icon of
-                        Just icon ->
-                            loadImage
-                                (Discord.guildIconUrl
-                                    { size = Discord.DefaultImageSize
-                                    , imageType = Discord.Choice1 Discord.Png
-                                    }
-                                    gatewayGuild.properties.id
-                                    icon
-                                )
+        , Task.map2
+            Tuple.pair
+            (case readyData.relationships of
+                Included relationships ->
+                    List.filterMap
+                        (\dmChannel ->
+                            let
+                                dmChannelId =
+                                    DiscordDmChannelId.fromUserIds readyData.user.id dmChannel.id
+                            in
+                            if SeqDict.member dmChannelId model.discordDmChannels then
+                                Nothing
 
-                        Nothing ->
-                            Task.succeed Nothing
-                    )
-             --(Discord.listActiveThreadsPayload auth partialGuild.id
-             --    |> http
-             --    |> Task.andThen
-             --        (\activeThreads ->
-             --            List.map
-             --                (\thread ->
-             --                    Discord.getMessagesPayload
-             --                        auth
-             --                        { channelId = thread.id
-             --                        , limit = 100
-             --                        , relativeTo = Discord.MostRecent
-             --                        }
-             --                        |> http
-             --                        |> Task.onError (\_ -> Task.succeed [])
-             --                        |> Task.map (Tuple.pair thread)
-             --                )
-             --                activeThreads.threads
-             --                |> Task.sequence
-             --        )
-             --)
+                            else
+                                (Discord.getDirectMessagesPayload
+                                    userAuth
+                                    { otherUserId = readyData.user.id
+                                    , limit = 100
+                                    , relativeTo = Discord.MostRecent
+                                    }
+                                    |> http
+                                    |> Task.onError (\_ -> Task.succeed [])
+                                    |> Task.map (Tuple.pair dmChannelId)
+                                )
+                                    |> Just
+                        )
+                        relationships
+                        |> Task.sequence
+
+                Missing ->
+                    Task.succeed []
             )
-            readyData.guilds
-            --(if Env.isProduction then
-            --    readyData.guilds
-            --
-            -- else
-            --    List.filter
-            --        (\guild ->
-            --            Just guild.properties.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
-            --        )
-            --        readyData.guilds
-            --)
-            |> Task.sequence
+            (List.map
+                (\gatewayGuild ->
+                    Task.map2
+                        (\channels maybeIcon ->
+                            ( gatewayGuild.properties.id
+                            , { guild = gatewayGuild
+                              , channels = channels
+                              , icon = maybeIcon
+                              }
+                            )
+                        )
+                        (List.map
+                            (\channel ->
+                                Discord.getMessagesPayload
+                                    auth
+                                    { channelId = channel.id
+                                    , limit = 100
+                                    , relativeTo = Discord.MostRecent
+                                    }
+                                    |> http
+                                    |> Task.onError (\_ -> Task.succeed [])
+                                    |> Task.map (Tuple.pair channel)
+                            )
+                            gatewayGuild.channels
+                            |> Task.sequence
+                        )
+                        (case gatewayGuild.properties.icon of
+                            Just icon ->
+                                loadImage
+                                    (Discord.guildIconUrl
+                                        { size = Discord.DefaultImageSize
+                                        , imageType = Discord.Choice1 Discord.Png
+                                        }
+                                        gatewayGuild.properties.id
+                                        icon
+                                    )
+
+                            Nothing ->
+                                Task.succeed Nothing
+                        )
+                 --(Discord.listActiveThreadsPayload auth partialGuild.id
+                 --    |> http
+                 --    |> Task.andThen
+                 --        (\activeThreads ->
+                 --            List.map
+                 --                (\thread ->
+                 --                    Discord.getMessagesPayload
+                 --                        auth
+                 --                        { channelId = thread.id
+                 --                        , limit = 100
+                 --                        , relativeTo = Discord.MostRecent
+                 --                        }
+                 --                        |> http
+                 --                        |> Task.onError (\_ -> Task.succeed [])
+                 --                        |> Task.map (Tuple.pair thread)
+                 --                )
+                 --                activeThreads.threads
+                 --                |> Task.sequence
+                 --        )
+                 --)
+                )
+                readyData.guilds
+                --(if Env.isProduction then
+                --    readyData.guilds
+                --
+                -- else
+                --    List.filter
+                --        (\guild ->
+                --            Just guild.properties.id == Maybe.map Discord.Id.fromUInt64 (UInt64.fromString "705745250815311942")
+                --        )
+                --        readyData.guilds
+                --)
+                |> Task.sequence
+            )
             |> Task.attempt (HandleReadyDataStep2 readyData.user.id)
         ]
     )
