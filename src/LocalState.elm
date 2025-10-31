@@ -329,7 +329,7 @@ channelToFrontend threadRoute channel =
             , lastTypedAt = channel.lastTypedAt
             , threads =
                 SeqDict.map
-                    (\threadId thread -> DmChannel.threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                    (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
                     channel.threads
             }
                 |> Just
@@ -352,11 +352,10 @@ discordChannelToFrontend threadRoute channel =
                     , messages = DmChannel.toDiscordFrontendHelper preloadMessages channel
                     , visibleMessages = VisibleMessages.init preloadMessages channel
                     , lastTypedAt = channel.lastTypedAt
-                    , threads = SeqDict.empty
-
-                    --SeqDict.map
-                    --    (\threadId thread -> DmChannel.threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
-                    --    channel.threads
+                    , threads =
+                        SeqDict.map
+                            (\threadId thread -> Thread.discordToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+                            channel.threads
                     }
             in
             channel2

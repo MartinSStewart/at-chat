@@ -12,10 +12,8 @@ module DmChannel exposing
     , init
     , latestMessageId
     , latestThreadMessageId
-    , loadMessages
     , otherUserId
     , setArray
-    , threadToFrontend
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -102,16 +100,8 @@ toFrontend threadRoute dmChannel =
     , lastTypedAt = dmChannel.lastTypedAt
     , threads =
         SeqDict.map
-            (\threadId thread -> threadToFrontend (Just (ViewThread threadId) == threadRoute) thread)
+            (\threadId thread -> Thread.toFrontend (Just (ViewThread threadId) == threadRoute) thread)
             dmChannel.threads
-    }
-
-
-threadToFrontend : Bool -> BackendThread -> FrontendThread
-threadToFrontend preloadMessages thread =
-    { messages = loadMessages preloadMessages thread.messages
-    , visibleMessages = VisibleMessages.init preloadMessages thread
-    , lastTypedAt = thread.lastTypedAt
     }
 
 
@@ -123,43 +113,6 @@ latestMessageId channel =
 latestThreadMessageId : { a | messages : Array b } -> Id ThreadMessageId
 latestThreadMessageId thread =
     Array.length thread.messages - 1 |> Id.fromInt
-
-
-loadMessages : Bool -> Array (Message messageId userId) -> Array (MessageState messageId userId)
-loadMessages preloadMessages messages =
-    let
-        messageCount : Int
-        messageCount =
-            Array.length messages
-    in
-    if preloadMessages then
-        Array.initialize
-            messageCount
-            (\index ->
-                if messageCount - index <= VisibleMessages.pageSize then
-                    case Array.get index messages of
-                        Just message ->
-                            MessageLoaded message
-
-                        Nothing ->
-                            MessageUnloaded
-
-                else
-                    MessageUnloaded
-            )
-
-    else
-        -- Load the latest message for each channel/thread in case it's needed for a preview somewhere
-        Array.repeat messageCount MessageUnloaded
-            |> Array.set
-                (messageCount - 1)
-                (case Array.get (messageCount - 1) messages of
-                    Just message ->
-                        MessageLoaded message
-
-                    Nothing ->
-                        MessageUnloaded
-                )
 
 
 toFrontendHelper :
@@ -180,7 +133,7 @@ toFrontendHelper preloadMessages channel =
                 )
                 messages
         )
-        (loadMessages preloadMessages channel.messages)
+        (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
 
 
@@ -210,7 +163,7 @@ toDiscordFrontendHelper preloadMessages channel =
                 )
                 messages
         )
-        (loadMessages preloadMessages channel.messages)
+        (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
 
 
