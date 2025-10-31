@@ -24,7 +24,7 @@ import Coord
 import Date exposing (Date)
 import Discord.Id
 import DiscordDmChannelId
-import DmChannel exposing (DiscordFrontendThread, FrontendDmChannel, FrontendThread, GenericThread, LastTypedAt)
+import DmChannel exposing (FrontendDmChannel)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -57,6 +57,7 @@ import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordGuildRo
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
+import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
 import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
@@ -574,7 +575,7 @@ dmChannelView otherUserId threadRoute loggedIn local model =
             case threadRoute of
                 ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                     SeqDict.get threadMessageIndex dmChannel.threads
-                        |> Maybe.withDefault DmChannel.frontendThreadInit
+                        |> Maybe.withDefault Thread.frontendInit
                         |> threadConversationView
                             (SeqDict.get
                                 ( GuildOrDmId (GuildOrDmId_Dm otherUserId), threadMessageIndex )
@@ -1304,7 +1305,7 @@ channelView channelRoute guildId guild loggedIn local model =
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                |> Maybe.withDefault Thread.frontendInit
                                 |> threadConversationView
                                     (SeqDict.get
                                         ( GuildOrDmId (GuildOrDmId_Guild guildId channelId), threadMessageIndex )
@@ -1379,7 +1380,7 @@ discordChannelView routeData guild loggedIn local model =
                     case threadRoute of
                         ViewThreadWithFriends threadMessageIndex maybeUrlMessageId _ ->
                             SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                |> Maybe.withDefault Thread.discordFrontendInit
                                 |> discordThreadConversationView
                                     (SeqDict.get
                                         ( DiscordGuildOrDmId
@@ -4046,7 +4047,7 @@ messageEditingView :
     -> ThreadRouteWithMessage
     -> Message ChannelMessageId userId
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
-    -> Maybe (GenericThread userId)
+    -> Maybe (FrontendGenericThread userId)
     -> SeqDict (Id ChannelMessageId) (NonemptySet Int)
     -> EditMessage
     -> Maybe MentionUserDropdown
@@ -4496,7 +4497,7 @@ messageView :
     -> SeqDict userId { a | name : PersonName, icon : Maybe FileHash }
     -> LocalUser
     -> Maybe ( Id ChannelMessageId, Message ChannelMessageId userId )
-    -> Maybe (GenericThread userId)
+    -> Maybe (FrontendGenericThread userId)
     -> Id ChannelMessageId
     -> Message ChannelMessageId userId
     -> Element MessageViewMsg
@@ -4903,7 +4904,7 @@ messageContainer :
     -> Bool
     -> userId
     -> SeqDict Emoji (NonemptySet userId)
-    -> Maybe (GenericThread userId)
+    -> Maybe (FrontendGenericThread userId)
     -> IsHovered
     -> Element MessageViewMsg
     -> Element MessageViewMsg
@@ -5122,7 +5123,7 @@ previewThreadLastMessage :
     Time.Zone
     -> SeqDict userId { a | name : PersonName }
     -> Id ChannelMessageId
-    -> GenericThread userId
+    -> FrontendGenericThread userId
     -> Element MessageViewMsg
 previewThreadLastMessage timezone allUsers messageId thread =
     let
@@ -5374,7 +5375,7 @@ channelColumn isMobile localUser guildId guild channelRoute channelNameHover can
                             (case channelRoute of
                                 ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) ->
                                     if channelIdB == channelId then
-                                        SeqDict.insert threadMessageIndex DmChannel.frontendThreadInit channel.threads
+                                        SeqDict.insert threadMessageIndex Thread.frontendInit channel.threads
 
                                     else
                                         channel.threads
@@ -5481,7 +5482,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                             (case routeData.channelRoute of
                                 DiscordChannel_ChannelRoute channelIdB (ViewThreadWithFriends threadMessageIndex _ _) ->
                                     if channelIdB == channelId then
-                                        SeqDict.insert threadMessageIndex DmChannel.discordFrontendThreadInit channel.threads
+                                        SeqDict.insert threadMessageIndex Thread.discordFrontendInit channel.threads
 
                                     else
                                         channel.threads

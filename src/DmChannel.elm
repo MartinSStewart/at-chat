@@ -1,22 +1,13 @@
 module DmChannel exposing
     ( DiscordDmChannel
-    , DiscordFrontendThread
-    , DiscordThread
     , DmChannel
     , DmChannelId(..)
-    , ExternalChannelId(..)
-    , ExternalMessageId(..)
+    , FrontendDiscordDmChannel
     , FrontendDmChannel
-    , FrontendThread
-    , GenericThread
-    , LastTypedAt
-    , Thread
     , channelIdFromUserIds
-    , discordFrontendThreadInit
+    , discordDmChannelToFrontend
     , discordInit
-    , discordThreadInit
     , frontendInit
-    , frontendThreadInit
     , getArray
     , init
     , latestMessageId
@@ -24,7 +15,6 @@ module DmChannel exposing
     , loadMessages
     , otherUserId
     , setArray
-    , threadInit
     , threadToFrontend
     , toDiscordFrontendHelper
     , toFrontend
@@ -37,15 +27,14 @@ import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), 
 import Message exposing (Message, MessageState(..))
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
-import Slack
-import Time
+import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import VisibleMessages exposing (VisibleMessages)
 
 
 type alias DmChannel =
     { messages : Array (Message ChannelMessageId (Id UserId))
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) Thread
+    , threads : SeqDict (Id ChannelMessageId) BackendThread
     }
 
 
@@ -57,7 +46,8 @@ type alias DiscordDmChannel =
 
 
 type alias FrontendDiscordDmChannel =
-    { messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    { messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     }
 
@@ -70,89 +60,10 @@ type alias FrontendDmChannel =
     }
 
 
-type alias Thread =
-    { messages : Array (Message ThreadMessageId (Id UserId))
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    }
-
-
-type alias DiscordThread =
-    { messages : Array (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
-    }
-
-
-type alias GenericThread userId =
-    { messages : Array (MessageState ThreadMessageId userId)
-    , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
-    }
-
-
-type alias FrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Id UserId))
-    , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ThreadMessageId)
-    }
-
-
-type alias DiscordFrontendThread =
-    { messages : Array (MessageState ThreadMessageId (Discord.Id.Id Discord.Id.UserId))
-    , visibleMessages : VisibleMessages ThreadMessageId
-    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ThreadMessageId)
-    }
-
-
-type ExternalChannelId
-    = DiscordChannelId (Discord.Id.Id Discord.Id.ChannelId)
-    | SlackChannelId (Slack.Id Slack.ChannelId)
-
-
-type ExternalMessageId
-    = DiscordMessageId (Discord.Id.Id Discord.Id.MessageId)
-    | SlackMessageId (Slack.Id Slack.MessageId)
-
-
-threadInit : Thread
-threadInit =
-    { messages = Array.empty
-    , lastTypedAt = SeqDict.empty
-    }
-
-
-frontendThreadInit : GenericThread userId
-frontendThreadInit =
-    { messages = Array.empty
-    , visibleMessages = VisibleMessages.empty
-    , lastTypedAt = SeqDict.empty
-    }
-
-
-discordThreadInit : DiscordThread
-discordThreadInit =
-    { messages = Array.empty
-    , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
-    }
-
-
-discordFrontendThreadInit : DiscordFrontendThread
-discordFrontendThreadInit =
-    { messages = Array.empty
-    , visibleMessages = VisibleMessages.empty
-    , lastTypedAt = SeqDict.empty
-    }
-
-
 {-| OpaqueVariants
 -}
 type DmChannelId
     = DirectMessageChannelId (Id UserId) (Id UserId)
-
-
-type alias LastTypedAt messageId =
-    { time : Time.Posix, messageIndex : Maybe (Id messageId) }
 
 
 init : DmChannel
@@ -196,7 +107,7 @@ toFrontend threadRoute dmChannel =
     }
 
 
-threadToFrontend : Bool -> Thread -> FrontendThread
+threadToFrontend : Bool -> BackendThread -> FrontendThread
 threadToFrontend preloadMessages thread =
     { messages = loadMessages preloadMessages thread.messages
     , visibleMessages = VisibleMessages.init preloadMessages thread
@@ -253,7 +164,7 @@ loadMessages preloadMessages messages =
 
 toFrontendHelper :
     Bool
-    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) Thread }
+    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) BackendThread }
     -> Array (MessageState messageId userId)
 toFrontendHelper preloadMessages channel =
     SeqDict.foldl
@@ -273,9 +184,17 @@ toFrontendHelper preloadMessages channel =
         channel.threads
 
 
+discordDmChannelToFrontend : Bool -> DiscordDmChannel -> FrontendDiscordDmChannel
+discordDmChannelToFrontend preloadMessages dmChannel =
+    { messages = toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
+    , visibleMessages = VisibleMessages.init preloadMessages dmChannel
+    , lastTypedAt = dmChannel.lastTypedAt
+    }
+
+
 toDiscordFrontendHelper :
     Bool
-    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) DiscordThread }
+    -> { a | messages : Array (Message messageId userId), threads : SeqDict (Id messageId) DiscordBackendThread }
     -> Array (MessageState messageId userId)
 toDiscordFrontendHelper preloadMessages channel =
     SeqDict.foldl

@@ -70,8 +70,8 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DiscordDmChannelId
-import DmChannel exposing (DiscordFrontendThread, DiscordThread, ExternalChannelId, ExternalMessageId, FrontendDmChannel, FrontendThread, GenericThread, LastTypedAt, Thread)
+import DiscordDmChannelId exposing (DiscordDmChannelId)
+import DmChannel exposing (FrontendDiscordDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -92,6 +92,7 @@ import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import TextEditor
+import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import UInt64
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
@@ -105,6 +106,7 @@ type alias LocalState =
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
+    , discordDmChannels : SeqDict DiscordDmChannelId FrontendDiscordDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession
@@ -275,7 +277,7 @@ type alias BackendChannel =
     , messages : Array (Message ChannelMessageId (Id UserId))
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) Thread
+    , threads : SeqDict (Id ChannelMessageId) BackendThread
     }
 
 
@@ -285,7 +287,7 @@ type alias DiscordBackendChannel =
     , status : ChannelStatus
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-    , threads : SeqDict (Id ChannelMessageId) DiscordThread
+    , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
     }
 
 
@@ -467,7 +469,7 @@ createThreadMessageBackend threadId message channel =
             SeqDict.update
                 threadId
                 (\maybe ->
-                    Maybe.withDefault DmChannel.threadInit maybe
+                    Maybe.withDefault Thread.backendInit maybe
                         |> createMessageBackend message
                         |> Just
                 )
@@ -556,9 +558,9 @@ createDiscordThreadMessageBackend :
     -> Result DiscordMessageAlreadyExists DiscordBackendChannel
 createDiscordThreadMessageBackend messageId threadId message channel =
     let
-        thread : DiscordThread
+        thread : DiscordBackendThread
         thread =
-            SeqDict.get threadId channel.threads |> Maybe.withDefault DmChannel.discordThreadInit
+            SeqDict.get threadId channel.threads |> Maybe.withDefault Thread.discordBackendInit
     in
     case createDiscordMessageBackend messageId message thread of
         Ok thread2 ->
@@ -631,14 +633,14 @@ createThreadMessageFrontend :
             | messages : Array (MessageState ChannelMessageId userId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) (GenericThread userId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     ->
         { d
             | messages : Array (MessageState ChannelMessageId userId)
             , visibleMessages : VisibleMessages ChannelMessageId
             , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
-            , threads : SeqDict (Id ChannelMessageId) (GenericThread userId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
 createThreadMessageFrontend threadId message channel =
     { channel
@@ -646,7 +648,7 @@ createThreadMessageFrontend threadId message channel =
             SeqDict.update
                 threadId
                 (\maybe ->
-                    Maybe.withDefault DmChannel.frontendThreadInit maybe
+                    Maybe.withDefault Thread.frontendInit maybe
                         |> createMessageFrontend message
                         |> Just
                 )
@@ -903,7 +905,7 @@ memberIsEditTyping :
                     { e
                         | messages : Array (Message ChannelMessageId (Id UserId))
                         , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-                        , threads : SeqDict (Id ChannelMessageId) Thread
+                        , threads : SeqDict (Id ChannelMessageId) BackendThread
                     }
         }
     ->
@@ -916,7 +918,7 @@ memberIsEditTyping :
                         { e
                             | messages : Array (Message ChannelMessageId (Id UserId))
                             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-                            , threads : SeqDict (Id ChannelMessageId) Thread
+                            , threads : SeqDict (Id ChannelMessageId) BackendThread
                         }
             }
 memberIsEditTyping userId time channelId threadRoute guild =
@@ -985,8 +987,8 @@ memberIsEditTypingHelper :
     Time.Posix
     -> Id UserId
     -> ThreadRouteWithMessage
-    -> { a | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Result () { a | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> { a | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    -> Result () { a | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
 memberIsEditTypingHelper time userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageIndex ->
@@ -1171,8 +1173,8 @@ addReactionEmoji :
     Emoji
     -> Id UserId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
 addReactionEmoji emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
@@ -1271,8 +1273,8 @@ editMessageHelper :
     -> Nonempty (RichText (Id UserId))
     -> SeqDict (Id FileId) FileData
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> Result () { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    -> Result () { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
 editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageId ->
@@ -1413,8 +1415,8 @@ removeReactionEmoji :
     Emoji
     -> Id UserId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) Thread }
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) Thread }
+    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
 removeReactionEmoji emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageIndex ->
@@ -1563,7 +1565,7 @@ deleteMessageBackend :
                     (Id ChannelId)
                     { c
                         | messages : Array (Message ChannelMessageId (Id UserId))
-                        , threads : SeqDict (Id ChannelMessageId) Thread
+                        , threads : SeqDict (Id ChannelMessageId) BackendThread
                     }
         }
     ->
@@ -1575,7 +1577,7 @@ deleteMessageBackend :
                         (Id ChannelId)
                         { c
                             | messages : Array (Message ChannelMessageId (Id UserId))
-                            , threads : SeqDict (Id ChannelMessageId) Thread
+                            , threads : SeqDict (Id ChannelMessageId) BackendThread
                         }
             }
 deleteMessageBackend userId channelId threadRoute guild =
@@ -1598,14 +1600,14 @@ deleteMessageBackendHelper :
     ->
         { a
             | messages : Array (Message ChannelMessageId (Id UserId))
-            , threads : SeqDict (Id ChannelMessageId) Thread
+            , threads : SeqDict (Id ChannelMessageId) BackendThread
         }
     ->
         Result
             ()
             { a
                 | messages : Array (Message ChannelMessageId (Id UserId))
-                , threads : SeqDict (Id ChannelMessageId) Thread
+                , threads : SeqDict (Id ChannelMessageId) BackendThread
             }
 deleteMessageBackendHelper userId threadRoute channel =
     case threadRoute of
@@ -1845,7 +1847,7 @@ usersMentionedOrRepliedToFrontend :
     ->
         { a
             | messages : Array (MessageState ChannelMessageId userId)
-            , threads : SeqDict (Id ChannelMessageId) (GenericThread userId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     -> SeqSet userId
 usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel =

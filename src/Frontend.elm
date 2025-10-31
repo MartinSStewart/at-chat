@@ -10,7 +10,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
-import DmChannel exposing (DiscordFrontendThread, FrontendDmChannel, FrontendThread)
+import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -61,6 +61,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
 import TextEditor
+import Thread exposing (DiscordFrontendThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -446,6 +447,7 @@ loginDataToLocalState userAgent timezone loginData =
     , guilds = loginData.guilds
     , discordGuilds = loginData.discordGuilds
     , dmChannels = loginData.dmChannels
+    , discordDmChannels = loginData.discordDmChannels
     , joinGuildError = Nothing
     , localUser =
         { session = loginData.session
@@ -2728,7 +2730,7 @@ updateLoaded msg model =
                                                             (GuildOrDmId_Guild guildId channelId)
                                                             threadId
                                                             (SeqDict.get threadId channel.threads
-                                                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                                |> Maybe.withDefault Thread.frontendInit
                                                                 |> .visibleMessages
                                                                 |> .oldest
                                                             )
@@ -2758,7 +2760,7 @@ updateLoaded msg model =
                                                     (GuildOrDmId_Dm otherUserId)
                                                     threadId
                                                     (SeqDict.get threadId dmChannel.threads
-                                                        |> Maybe.withDefault DmChannel.frontendThreadInit
+                                                        |> Maybe.withDefault Thread.frontendInit
                                                         |> .visibleMessages
                                                         |> .oldest
                                                     )
@@ -2781,7 +2783,7 @@ updateLoaded msg model =
                                                             guildOrDmId2
                                                             threadId
                                                             (SeqDict.get threadId channel.threads
-                                                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                                                |> Maybe.withDefault Thread.discordFrontendInit
                                                                 |> .visibleMessages
                                                                 |> .oldest
                                                             )
@@ -7309,7 +7311,7 @@ guildOrDmIdToMessage guildOrDmId threadRoute local =
                 ViewThreadWithMessage threadId messageId ->
                     case
                         SeqDict.get threadId channel.threads
-                            |> Maybe.withDefault DmChannel.frontendThreadInit
+                            |> Maybe.withDefault Thread.frontendInit
                             |> .messages
                             |> DmChannel.getArray messageId
                     of
@@ -7378,7 +7380,7 @@ discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
                 ViewThreadWithMessage threadId messageId ->
                     case
                         SeqDict.get threadId channel.threads
-                            |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                            |> Maybe.withDefault Thread.discordFrontendInit
                             |> .messages
                             |> DmChannel.getArray messageId
                     of
@@ -7434,7 +7436,7 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
             case threadRoute of
                 ViewThread threadMessageIndex ->
                     SeqDict.get threadMessageIndex channel.threads
-                        |> Maybe.withDefault DmChannel.frontendThreadInit
+                        |> Maybe.withDefault Thread.frontendInit
                         |> .messages
                         |> Array.map
                             (\messageState ->
@@ -7521,7 +7523,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                     case threadRoute of
                         ViewThread threadMessageIndex ->
                             SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                |> Maybe.withDefault Thread.frontendInit
                                 |> .messages
                                 |> Array.length
                                 |> Just
@@ -7538,7 +7540,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                     case threadRoute of
                         ViewThread threadMessageIndex ->
                             SeqDict.get threadMessageIndex dmChannel.threads
-                                |> Maybe.withDefault DmChannel.frontendThreadInit
+                                |> Maybe.withDefault Thread.frontendInit
                                 |> .messages
                                 |> Array.length
                                 |> Just
@@ -7555,7 +7557,7 @@ guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
                     case threadRoute of
                         ViewThread threadMessageIndex ->
                             SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                |> Maybe.withDefault Thread.discordFrontendInit
                                 |> .messages
                                 |> Array.length
                                 |> Just

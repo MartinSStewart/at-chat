@@ -13,16 +13,14 @@ import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import DiscordDmChannelId exposing (DiscordDmChannelId)
-import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..))
+import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
-import Effect.Time as Time
 import Effect.Websocket as Websocket
-import Emoji exposing (Emoji)
 import Env
 import FileStatus
 import GuildName
@@ -34,13 +32,10 @@ import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), Dis
 import Message exposing (Message(..))
 import NonemptyDict
 import OneToOne exposing (OneToOne)
-import PersonName
 import RichText exposing (RichText)
-import Route exposing (Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
-import UInt64
 import User exposing (BackendUser)
 
 

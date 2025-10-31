@@ -13,8 +13,9 @@ import Broadcast
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
+import DiscordDmChannelId
 import DiscordSync
-import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..), LastTypedAt, Thread)
+import DmChannel exposing (DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -54,6 +55,7 @@ import Slack exposing (Channel(..))
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TextEditor
+import Thread exposing (BackendThread, LastTypedAt)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
@@ -793,13 +795,13 @@ addSlackMessages :
         { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
         }
     ->
         { d
             | messages : Array (Message ChannelMessageId (Id UserId))
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-            , linkedMessageIds : OneToOne ExternalMessageId (Id ChannelMessageId)
+            , linkedMessageIds : OneToOne (Slack.Id Slack.MessageId) (Id ChannelMessageId)
         }
 addSlackMessages _ messages model channel =
     List.foldr
@@ -815,7 +817,7 @@ addSlackMessages _ messages model channel =
                     channel2
 
                 ( Slack.UserMessage messageId data, Just userId ) ->
-                    case OneToOne.second (SlackMessageId messageId) channel2.linkedMessageIds of
+                    case OneToOne.second messageId channel2.linkedMessageIds of
                         Just _ ->
                             channel2
 
@@ -957,6 +959,29 @@ getLoginData sessionId session user requestMessagesFor model =
                 LocalState.discordGuildToFrontendForUser Nothing guild
             )
             model.discordGuilds
+    , discordDmChannels =
+        SeqDict.filterMap
+            (\dmChannelId dmChannel ->
+                let
+                    ( userIdA, userIdB ) =
+                        DiscordDmChannelId.toUserIds dmChannelId
+                in
+                if SeqDict.member userIdA linkedDiscordUsers || SeqDict.member userIdB linkedDiscordUsers then
+                    DmChannel.discordDmChannelToFrontend
+                        (case requestMessagesFor of
+                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId), threadRoute ) ->
+                                otherUserId == dmChannelId
+
+                            _ ->
+                                False
+                        )
+                        dmChannel
+                        |> Just
+
+                else
+                    Nothing
+            )
+            model.discordDmChannels
     , dmChannels =
         SeqDict.foldl
             (\dmChannelId dmChannel dict ->
@@ -2177,7 +2202,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     otherUserId
                                                     threadId
                                                     (SeqDict.get threadId dmChannel.threads
-                                                        |> Maybe.withDefault DmChannel.threadInit
+                                                        |> Maybe.withDefault Thread.backendInit
                                                         |> loadMessagesHelper
                                                     )
                                                     |> Local_CurrentlyViewing
@@ -2259,7 +2284,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     channelId
                                                     threadId
                                                     (SeqDict.get threadId channel.threads
-                                                        |> Maybe.withDefault DmChannel.threadInit
+                                                        |> Maybe.withDefault Thread.backendInit
                                                         |> loadMessagesHelper
                                                     )
                                                     |> Local_CurrentlyViewing
@@ -2394,7 +2419,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             SeqDict.get threadId channel.threads
-                                                |> Maybe.withDefault DmChannel.threadInit
+                                                |> Maybe.withDefault Thread.backendInit
                                                 |> handleMessagesRequest oldestVisibleMessage
                                                 |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
@@ -2416,7 +2441,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         |> Maybe.withDefault DmChannel.init
                                         |> .threads
                                         |> SeqDict.get threadId
-                                        |> Maybe.withDefault DmChannel.threadInit
+                                        |> Maybe.withDefault Thread.backendInit
                                         |> handleMessagesRequest oldestVisibleMessage
                                         |> Local_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
@@ -2476,7 +2501,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     , case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             SeqDict.get threadId channel.threads
-                                                |> Maybe.withDefault DmChannel.discordThreadInit
+                                                |> Maybe.withDefault Thread.discordBackendInit
                                                 |> handleMessagesRequest oldestVisibleMessage
                                                 |> Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage
                                                 |> LocalChangeResponse changeId
@@ -3111,9 +3136,9 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
     case threadRouteWithReplyTo of
         ViewThreadWithMaybeMessage threadMessageIndex _ ->
             let
-                thread : Thread
+                thread : BackendThread
                 thread =
-                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault DmChannel.threadInit
+                    SeqDict.get threadMessageIndex dmChannel.threads |> Maybe.withDefault Thread.backendInit
             in
             ( { model
                 | dmChannels = SeqDict.insert dmChannelId dmChannel model.dmChannels
@@ -3315,7 +3340,7 @@ sendGuildMessage model time clientId changeId guildId channelId threadRouteWithM
                                         SeqDict.insert
                                             ( GuildOrDmId guildOrDmId, threadMessageIndex )
                                             (SeqDict.get threadMessageIndex channel2.threads
-                                                |> Maybe.withDefault DmChannel.threadInit
+                                                |> Maybe.withDefault Thread.backendInit
                                                 |> DmChannel.latestThreadMessageId
                                             )
                                             user.lastViewedThreads
