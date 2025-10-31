@@ -4,15 +4,16 @@ module DiscordSync exposing
     , discordUserWebsocketMsg
     , http
     , loadImage
+    , messagesAndLinks
     )
 
-import Array
+import Array exposing (Array)
 import Broadcast
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import DiscordDmChannelId exposing (DiscordDmChannelId)
-import DmChannel exposing (DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..))
+import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId, ExternalChannelId(..), ExternalMessageId(..))
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -345,12 +346,8 @@ addDiscordChannel threads discordChannel messages =
     in
     if isTextChannel then
         let
-            channelMessagesAndLinks =
+            ( channelMessages, channelLinks ) =
                 messagesAndLinks messages
-
-            linkedMessages : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
-            linkedMessages =
-                List.map Tuple.first channelMessagesAndLinks |> OneToOne.fromList
         in
         { name =
             case discordChannel.name of
@@ -359,30 +356,25 @@ addDiscordChannel threads discordChannel messages =
 
                 Missing ->
                     ChannelName.fromStringLossy "Missing"
-        , messages = List.map Tuple.second channelMessagesAndLinks |> Array.fromList
+        , messages = channelMessages
         , status = ChannelActive
         , lastTypedAt = SeqDict.empty
-        , linkedMessageIds = linkedMessages
+        , linkedMessageIds = channelLinks
         , threads =
             case SeqDict.get discordChannel.id threads of
                 Just threads2 ->
                     List.filterMap
                         (\( threadChannel, threadMessages ) ->
-                            case OneToOne.second (Discord.Id.toUInt64 threadChannel.id |> Discord.Id.fromUInt64) linkedMessages of
+                            case OneToOne.second (Discord.Id.toUInt64 threadChannel.id |> Discord.Id.fromUInt64) channelLinks of
                                 Just channelMessageIndex ->
                                     let
-                                        threadMessagesAndLinks :
-                                            List
-                                                ( ( Discord.Id.Id Discord.Id.MessageId, Id ThreadMessageId )
-                                                , Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId)
-                                                )
-                                        threadMessagesAndLinks =
+                                        ( messages2, links ) =
                                             messagesAndLinks threadMessages
                                     in
                                     ( channelMessageIndex
-                                    , { messages = List.map Tuple.second threadMessagesAndLinks |> Array.fromList
+                                    , { messages = messages2
                                       , lastTypedAt = SeqDict.empty
-                                      , linkedMessageIds = List.map Tuple.first threadMessagesAndLinks |> OneToOne.fromList
+                                      , linkedMessageIds = links
                                       }
                                     )
                                         |> Just
@@ -406,15 +398,13 @@ addDiscordChannel threads discordChannel messages =
 messagesAndLinks :
     List Discord.Message
     ->
-        List
-            ( ( Discord.Id.Id Discord.Id.MessageId, Id messageId )
-            , Message messageId (Discord.Id.Id Discord.Id.UserId)
-            )
+        ( Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
+        , OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
+        )
 messagesAndLinks messages =
     List.indexedMap
         (\index message ->
-            ( ( message.id, Id.fromInt index )
-            , UserTextMessage
+            ( UserTextMessage
                 { createdAt = message.timestamp
                 , createdBy = message.author.id
                 , content = RichText.fromDiscord message.content
@@ -423,9 +413,15 @@ messagesAndLinks messages =
                 , repliedTo = Nothing
                 , attachedFiles = SeqDict.empty
                 }
+            , ( message.id, Id.fromInt index )
             )
         )
         messages
+        |> (\list ->
+                ( List.map Tuple.first list |> Array.fromList
+                , List.map Tuple.second list |> OneToOne.fromList
+                )
+           )
 
 
 
@@ -562,7 +558,7 @@ addDiscordDms dmChannels model =
     { model
         | discordDmChannels =
             List.foldl
-                (\( dmChannelId, messages ) dmChannels ->
+                (\( dmChannelId, messages ) dmChannels2 ->
                     SeqDict.update
                         dmChannelId
                         (\maybe ->
@@ -571,11 +567,17 @@ addDiscordDms dmChannels model =
                                     maybe
 
                                 Nothing ->
-                                    { messages = messages
+                                    let
+                                        ( messages2, links ) =
+                                            messagesAndLinks messages
+                                    in
+                                    { messages = messages2
                                     , lastTypedAt = SeqDict.empty
-                                    , linkedMessageIds = OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+                                    , linkedMessageIds = links
                                     }
+                                        |> Just
                         )
+                        dmChannels2
                 )
                 model.discordDmChannels
                 dmChannels

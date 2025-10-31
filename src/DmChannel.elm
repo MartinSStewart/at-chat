@@ -50,9 +50,15 @@ type alias DmChannel =
 
 
 type alias DiscordDmChannel =
-    { messages : Array (Message ChannelMessageId (Id UserId))
-    , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ThreadMessageId)
+    { messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+    , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    }
+
+
+type alias FrontendDiscordDmChannel =
+    { messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     }
 
 
@@ -161,7 +167,6 @@ discordInit : DiscordDmChannel
 discordInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
-    , threads = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
     }
 
