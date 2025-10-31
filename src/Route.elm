@@ -28,7 +28,7 @@ type Route
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute (Id UserId) ThreadRouteWithFriends
-    | DiscordDmRoute DiscordDmChannelId ThreadRouteWithFriends
+    | DiscordDmRoute DiscordDmChannelId (Maybe (Id ChannelMessageId)) ShowMembersTab
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
@@ -248,17 +248,11 @@ decode url =
             case ( Discord.Id.fromString userId, Discord.Id.fromString otherUserId ) of
                 ( Just userId2, Just otherUserId2 ) ->
                     case rest of
-                        [ "t", threadMessageIndex, "m", messageIndex ] ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (stringToThread showMembers threadMessageIndex messageIndex)
-
-                        [ "t", threadMessageIndex ] ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (stringToThread showMembers threadMessageIndex "")
-
                         [ "m", messageIndex ] ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (Id.fromString messageIndex) showMembers
 
                         _ ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (NoThreadWithFriends Nothing showMembers)
+                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) Nothing showMembers
 
                 _ ->
                     HomePageRoute
@@ -405,20 +399,10 @@ encode route =
                             , encodeShowMembers showMembers
                             )
 
-                DiscordDmRoute userId thread ->
-                    case thread of
-                        ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
-                            ( "dd"
-                                :: DiscordDmChannelId.toPath userId
-                                ++ [ "t", Id.toString threadMessageIndex ]
-                                ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers
-                            )
-
-                        NoThreadWithFriends maybeMessageId showMembers ->
-                            ( "dd" :: DiscordDmChannelId.toPath userId ++ maybeMessageIdToString maybeMessageId
-                            , encodeShowMembers showMembers
-                            )
+                DiscordDmRoute userId maybeMessageId showMembers ->
+                    ( "dd" :: DiscordDmChannelId.toPath userId ++ maybeMessageIdToString maybeMessageId
+                    , encodeShowMembers showMembers
+                    )
 
                 SlackOAuthRedirect _ ->
                     ( [ "slack-oauth" ]

@@ -50,7 +50,7 @@ import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
 import OneToOne exposing (OneToOne)
 import Pages.Admin
-import Pages.Guild
+import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
 import Ports exposing (PwaStatus(..))
@@ -846,7 +846,7 @@ routeRequest previousRoute newRoute model =
                 )
                 model3
 
-        DiscordDmRoute _ threadRoute ->
+        DiscordDmRoute _ viewMessage showFriendTab ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -863,7 +863,7 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds threadRoute model3 ]
+                    , Command.batch [ viewCmd, openChannelCmds (NoThreadWithFriends viewMessage showFriendTab) model3 ]
                     )
                 )
                 model3
@@ -944,7 +944,7 @@ routeRequiresLogin route =
         TextEditorRoute ->
             False
 
-        DiscordDmRoute id threadRouteWithFriends ->
+        DiscordDmRoute id _ _ ->
             True
 
 
@@ -4912,9 +4912,6 @@ changeUpdate localMsg local =
                         ViewDiscordDm otherUserId messagesLoaded ->
                             Debug.todo ""
 
-                        ViewDiscordDmThread otherUserId threadId messagesLoaded ->
-                            Debug.todo ""
-
                         ViewChannel guildId channelId messagesLoaded ->
                             { local
                                 | localUser =
@@ -6413,18 +6410,6 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordDmThread otherUserId threadId _ ->
-                                    case routeToGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
-                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
-                                                scrollToBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
                         _ ->
                             Command.none
                     )
@@ -7191,7 +7176,7 @@ view model =
                             (case loaded.loginStatus of
                                 LoggedIn loggedIn ->
                                     Pages.Guild.homePageLoggedInView
-                                        Nothing
+                                        NoDmChannelSelected
                                         loaded
                                         loggedIn
                                         (Local.model loggedIn.localState)

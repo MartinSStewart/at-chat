@@ -71,7 +71,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
 import DiscordDmChannelId exposing (DiscordDmChannelId)
-import DmChannel exposing (FrontendDiscordDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -106,7 +106,7 @@ type alias LocalState =
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , discordDmChannels : SeqDict DiscordDmChannelId FrontendDiscordDmChannel
+    , discordDmChannels : SeqDict DiscordDmChannelId DiscordFrontendDmChannel
     , joinGuildError : Maybe JoinGuildError
     , localUser : LocalUser
     , otherSessions : SeqDict SessionIdHash FrontendUserSession

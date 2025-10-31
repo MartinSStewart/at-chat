@@ -1,7 +1,9 @@
 module DiscordDmChannelId exposing
     ( DiscordDmChannelId
     , chattingWithYourself
+    , currentAndOtherUserId
     , fromUserIds
+    , toHtmlId
     , toPath
     , toUserIds
     )
@@ -10,6 +12,8 @@ module DiscordDmChannelId exposing
 -}
 
 import Discord.Id
+import Effect.Browser.Dom as Dom exposing (HtmlId)
+import SeqDict exposing (SeqDict)
 import UInt64 exposing (UInt64)
 
 
@@ -54,6 +58,23 @@ toPath (DiscordDmChannelId userIdA userIdB) =
     [ Discord.Id.toString userIdA, Discord.Id.toString userIdB ]
 
 
+toHtmlId : String -> DiscordDmChannelId -> HtmlId
+toHtmlId prefix (DiscordDmChannelId userIdA userIdB) =
+    prefix ++ "_" ++ Discord.Id.toString userIdA ++ "_" ++ Discord.Id.toString userIdB |> Dom.id
+
+
 chattingWithYourself : DiscordDmChannelId -> Bool
 chattingWithYourself (DiscordDmChannelId userIdA userIdB) =
     userIdA == userIdB
+
+
+currentAndOtherUserId :
+    DiscordDmChannelId
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) a
+    -> { currentUserId : Discord.Id.Id Discord.Id.UserId, otherUserId : Discord.Id.Id Discord.Id.UserId }
+currentAndOtherUserId (DiscordDmChannelId userIdA userIdB) linkedUserIds =
+    if SeqDict.member userIdA linkedUserIds then
+        { currentUserId = userIdA, otherUserId = userIdB }
+
+    else
+        { currentUserId = userIdB, otherUserId = userIdA }

@@ -53,7 +53,7 @@ import CssPixels exposing (CssPixels)
 import Discord exposing (CaptchaChallengeData)
 import Discord.Id
 import DiscordDmChannelId exposing (DiscordDmChannelId)
-import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId, FrontendDiscordDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -595,7 +595,7 @@ type alias LoginData =
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , discordDmChannels : SeqDict DiscordDmChannelId FrontendDiscordDmChannel
+    , discordDmChannels : SeqDict DiscordDmChannelId DiscordFrontendDmChannel
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser

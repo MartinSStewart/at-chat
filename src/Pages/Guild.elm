@@ -1,5 +1,6 @@
 module Pages.Guild exposing
-    ( HighlightMessage(..)
+    ( DmChannelSelection(..)
+    , HighlightMessage(..)
     , IsHovered(..)
     , channelHeaderHeight
     , channelMessageHtmlId
@@ -23,8 +24,8 @@ import ChannelName
 import Coord
 import Date exposing (Date)
 import Discord.Id
-import DiscordDmChannelId
-import DmChannel exposing (FrontendDmChannel)
+import DiscordDmChannelId exposing (DiscordDmChannelId)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -449,8 +450,14 @@ loggedInAsView local =
         ]
 
 
+type DmChannelSelection
+    = SelectedDmChannel (Id UserId) ThreadRouteWithFriends
+    | SelectedDiscordDmChannel DiscordDmChannelId (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | NoDmChannelSelected
+
+
 homePageLoggedInView :
-    Maybe ( Id UserId, ThreadRouteWithFriends )
+    DmChannelSelection
     -> LoadedFrontend
     -> LoggedIn2
     -> LocalState
@@ -472,7 +479,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                     [ Ui.column
                         [ Ui.height Ui.fill
                         , case maybeOtherUserId of
-                            Just ( otherUserId, threadRoute ) ->
+                            SelectedDmChannel otherUserId threadRoute ->
                                 dmChannelView otherUserId threadRoute loggedIn local model
                                     |> Ui.el
                                         [ Ui.height Ui.fill
@@ -485,7 +492,20 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         ]
                                     |> Ui.inFront
 
-                            Nothing ->
+                            SelectedDiscordDmChannel discordDmChannelId viewMessage showMembersTab ->
+                                discordDmChannelView discordDmChannelId viewMessage showMembersTab loggedIn local model
+                                    |> Ui.el
+                                        [ Ui.height Ui.fill
+                                        , Ui.background MyUi.background3
+                                        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 0 0")
+                                        , sidebarOffsetAttr loggedIn model
+                                        , Ui.heightMin 0
+                                        , Ui.borderColor MyUi.border1
+                                        , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                        ]
+                                    |> Ui.inFront
+
+                            NoDmChannelSelected ->
                                 Ui.noAttr
                         ]
                         [ Ui.row
@@ -512,7 +532,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         , loggedInAsView local
                         ]
                     , case maybeOtherUserId of
-                        Just ( otherUserId, threadRoute ) ->
+                        SelectedDmChannel otherUserId threadRoute ->
                             dmChannelView otherUserId threadRoute loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
@@ -526,7 +546,21 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
 
-                        Nothing ->
+                        SelectedDiscordDmChannel discordDmChannelId viewMessage showMembersTab ->
+                            discordDmChannelView discordDmChannelId viewMessage showMembersTab loggedIn local model
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , Ui.background MyUi.background3
+                                    , Ui.heightMin 0
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 0, top = 1, bottom = 0 }
+                                    ]
+                                |> Ui.el
+                                    [ Ui.height Ui.fill
+                                    , MyUi.htmlStyle "padding-top" MyUi.insetTop
+                                    ]
+
+                        NoDmChannelSelected ->
                             Ui.el [ Ui.Font.color MyUi.font1, Ui.contentCenterX ] Ui.none
                     ]
 
@@ -605,6 +639,49 @@ dmChannelView otherUserId threadRoute loggedIn local model =
                         local
                         (PersonName.toString otherUser.name)
                         dmChannel
+
+        Nothing ->
+            Ui.el
+                [ Ui.centerY
+                , Ui.Font.center
+                , Ui.Font.color MyUi.font1
+                , Ui.Font.size 20
+                ]
+                (Ui.text "User not found")
+
+
+discordDmChannelView : DiscordDmChannelId -> Maybe (Id ChannelMessageId) -> ShowMembersTab -> LoggedIn2 -> LocalState -> LoadedFrontend -> Element FrontendMsg
+discordDmChannelView dmChannelId maybeUrlMessageId showFriendTab loggedIn local model =
+    let
+        { currentUserId, otherUserId } =
+            DiscordDmChannelId.currentAndOtherUserId dmChannelId local.localUser.linkedDiscordUsers
+    in
+    case LocalState.getDiscordUser otherUserId local.localUser of
+        Just otherUser ->
+            let
+                dmChannel : DiscordFrontendDmChannel
+                dmChannel =
+                    SeqDict.get dmChannelId local.discordDmChannels
+                        |> Maybe.withDefault DmChannel.discordFrontendInit
+            in
+            discordConversationView
+                (SeqDict.get
+                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmChannelId))
+                    local.localUser.user.lastViewed
+                    |> Maybe.withDefault (Id.fromInt -1)
+                )
+                currentUserId
+                (DiscordGuildOrDmId_Dm dmChannelId)
+                maybeUrlMessageId
+                loggedIn
+                model
+                local
+                (PersonName.toString otherUser.name)
+                { messages = dmChannel.messages
+                , visibleMessages = dmChannel.visibleMessages
+                , lastTypedAt = dmChannel.lastTypedAt
+                , threads = SeqDict.empty
+                }
 
         Nothing ->
             Ui.el
@@ -1183,10 +1260,7 @@ discordMemberLabel :
 discordMemberLabel isMobile localUser currentUserId userId =
     rowLinkButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (DiscordDmRoute
-            (DiscordDmChannelId.fromUserIds currentUserId userId)
-            (NoThreadWithFriends Nothing HideMembersTab)
-        )
+        (DiscordDmRoute (DiscordDmChannelId.fromUserIds currentUserId userId) Nothing HideMembersTab)
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -5964,15 +6038,27 @@ discordChannelColumnRow isMobile channelNameHover directMentions routeData local
         ]
 
 
-friendsColumn : Bool -> Maybe ( Id UserId, ThreadRouteWithFriends ) -> LocalState -> Element FrontendMsg
+friendsColumn : Bool -> DmChannelSelection -> LocalState -> Element FrontendMsg
 friendsColumn isMobile openedOtherUserId local =
     let
-        dmChannelsWithCurrentUser : SeqDict (Id UserId) FrontendDmChannel
-        dmChannelsWithCurrentUser =
+        dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
+        dmChannelsIncludingCurrentUser =
             SeqDict.update
                 local.localUser.session.userId
                 (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
                 local.dmChannels
+
+        discordDmChannelsIncludingLinkedUsers : SeqDict DiscordDmChannelId DiscordFrontendDmChannel
+        discordDmChannelsIncludingLinkedUsers =
+            SeqDict.foldl
+                (\linkedUserId _ dict ->
+                    SeqDict.update
+                        (DiscordDmChannelId.fromUserIds linkedUserId linkedUserId)
+                        (\maybe -> Maybe.withDefault DmChannel.discordFrontendInit maybe |> Just)
+                        dict
+                )
+                local.discordDmChannels
+                local.localUser.linkedDiscordUsers
     in
     channelColumnContainer
         [ Ui.el
@@ -5993,10 +6079,10 @@ friendsColumn isMobile openedOtherUserId local =
                                 friendLabel
                                 isMobile
                                 (case openedOtherUserId of
-                                    Just ( a, _ ) ->
+                                    SelectedDmChannel a _ ->
                                         a == otherUserId
 
-                                    Nothing ->
+                                    _ ->
                                         False
                                 )
                                 otherUserId
@@ -6006,7 +6092,33 @@ friendsColumn isMobile openedOtherUserId local =
                         Nothing ->
                             Nothing
                 )
-                (SeqDict.toList dmChannelsWithCurrentUser)
+                (SeqDict.toList dmChannelsIncludingCurrentUser)
+                ++ List.filterMap
+                    (\( otherUserId, _ ) ->
+                        case
+                            LocalState.getDiscordUser
+                                (DiscordDmChannelId.currentAndOtherUserId otherUserId local.localUser.linkedDiscordUsers).otherUserId
+                                local.localUser
+                        of
+                            Just otherUser ->
+                                Ui.Lazy.lazy4
+                                    discordFriendLabel
+                                    isMobile
+                                    (case openedOtherUserId of
+                                        SelectedDiscordDmChannel a _ _ ->
+                                            a == otherUserId
+
+                                        _ ->
+                                            False
+                                    )
+                                    otherUserId
+                                    otherUser
+                                    |> Just
+
+                            Nothing ->
+                                Nothing
+                    )
+                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
             )
         )
 
@@ -6020,6 +6132,33 @@ friendLabel isMobile isSelected otherUserId otherUser =
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
         (Route.DmRoute otherUserId (NoThreadWithFriends Nothing HideMembersTab))
+        [ Ui.clipWithEllipsis
+        , Ui.spacing 8
+        , Ui.padding 4
+        , Ui.Font.color
+            (if isSelected then
+                MyUi.font1
+
+             else
+                MyUi.font3
+            )
+        , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
+        , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
+        ]
+        [ User.profileImage otherUser.icon
+        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+        ]
+
+
+discordFriendLabel : Bool -> Bool -> DiscordDmChannelId -> DiscordFrontendUser -> Element FrontendMsg
+discordFriendLabel isMobile isSelected dmChannelId otherUser =
+    let
+        _ =
+            Debug.log "rerender friendLabel" ()
+    in
+    rowLinkButton
+        (DiscordDmChannelId.toHtmlId "guild_discordFriendLabel" dmChannelId)
+        (Route.DiscordDmRoute dmChannelId Nothing HideMembersTab)
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4

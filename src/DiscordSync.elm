@@ -1353,7 +1353,7 @@ handleReadyData userAuth readyData model =
                         (\dmChannel dmChannels ->
                             SeqDict.insert
                                 (DiscordDmChannelId.fromUserIds dmChannel.id readyData.user.id)
-                                DmChannel.discordInit
+                                DmChannel.discordBackendInit
                                 dmChannels
                         )
                         model.discordDmChannels

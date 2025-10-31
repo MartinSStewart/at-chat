@@ -2221,9 +2221,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         ViewDiscordDm otherUserId _ ->
                             Debug.todo ""
 
-                        ViewDiscordDmThread otherUserId threadId _ ->
-                            Debug.todo ""
-
                         ViewChannel guildId channelId _ ->
                             asGuildMember
                                 model2
@@ -2399,7 +2396,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\{ userId } _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
-                                        |> Maybe.withDefault DmChannel.init
+                                        |> Maybe.withDefault DmChannel.backendInit
                                         |> handleMessagesRequest oldestVisibleMessage
                                         |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
                                         |> LocalChangeResponse changeId
@@ -2438,7 +2435,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\{ userId } _ ->
                                     ( model2
                                     , SeqDict.get (DmChannel.channelIdFromUserIds userId otherUserId) model2.dmChannels
-                                        |> Maybe.withDefault DmChannel.init
+                                        |> Maybe.withDefault DmChannel.backendInit
                                         |> .threads
                                         |> SeqDict.get threadId
                                         |> Maybe.withDefault Thread.backendInit
@@ -3131,7 +3128,7 @@ sendDirectMessage model time clientId changeId otherUserId threadRouteWithReplyT
         dmChannel : DmChannel
         dmChannel =
             SeqDict.get dmChannelId model.dmChannels
-                |> Maybe.withDefault DmChannel.init
+                |> Maybe.withDefault DmChannel.backendInit
     in
     case threadRouteWithReplyTo of
         ViewThreadWithMaybeMessage threadMessageIndex _ ->

@@ -1,15 +1,16 @@
 module DmChannel exposing
     ( DiscordDmChannel
+    , DiscordFrontendDmChannel
     , DmChannel
     , DmChannelId(..)
-    , FrontendDiscordDmChannel
     , FrontendDmChannel
+    , backendInit
     , channelIdFromUserIds
+    , discordBackendInit
     , discordDmChannelToFrontend
-    , discordInit
+    , discordFrontendInit
     , frontendInit
     , getArray
-    , init
     , latestMessageId
     , latestThreadMessageId
     , otherUserId
@@ -43,7 +44,7 @@ type alias DiscordDmChannel =
     }
 
 
-type alias FrontendDiscordDmChannel =
+type alias DiscordFrontendDmChannel =
     { messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
@@ -64,16 +65,16 @@ type DmChannelId
     = DirectMessageChannelId (Id UserId) (Id UserId)
 
 
-init : DmChannel
-init =
+backendInit : DmChannel
+backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
     }
 
 
-discordInit : DiscordDmChannel
-discordInit =
+discordBackendInit : DiscordDmChannel
+discordBackendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
@@ -86,6 +87,14 @@ frontendInit =
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
+    }
+
+
+discordFrontendInit : DiscordFrontendDmChannel
+discordFrontendInit =
+    { messages = Array.empty
+    , visibleMessages = VisibleMessages.empty
+    , lastTypedAt = SeqDict.empty
     }
 
 
@@ -137,7 +146,7 @@ toFrontendHelper preloadMessages channel =
         channel.threads
 
 
-discordDmChannelToFrontend : Bool -> DiscordDmChannel -> FrontendDiscordDmChannel
+discordDmChannelToFrontend : Bool -> DiscordDmChannel -> DiscordFrontendDmChannel
 discordDmChannelToFrontend preloadMessages dmChannel =
     { messages = toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
     , visibleMessages = VisibleMessages.init preloadMessages dmChannel
