@@ -6,6 +6,7 @@ module User exposing
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
+    , LastDmViewed(..)
     , NotificationLevel(..)
     , addDirectMention
     , addDiscordDirectMention
@@ -30,6 +31,7 @@ import Base64
 import Codec exposing (Codec)
 import Discord
 import Discord.Id
+import DiscordDmChannelId exposing (DiscordDmChannelId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
@@ -38,6 +40,7 @@ import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
+import Route exposing (ShowMembersTab)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -58,7 +61,7 @@ type alias BackendUser =
     , lastEmailNotification : Time.Posix
     , lastViewed : SeqDict AnyGuildOrDmId (Id ChannelMessageId)
     , lastViewedThreads : SeqDict ( AnyGuildOrDmId, Id ChannelMessageId ) (Id ThreadMessageId)
-    , lastDmViewed : Maybe ( Id UserId, ThreadRoute )
+    , lastDmViewed : LastDmViewed
     , lastChannelViewed : SeqDict (Id GuildId) ( Id ChannelId, ThreadRoute )
     , lastDiscordChannelViewed : SeqDict (Discord.Id.Id Discord.Id.GuildId) ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
     , icon : Maybe FileHash
@@ -68,6 +71,12 @@ type alias BackendUser =
     , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
     }
+
+
+type LastDmViewed
+    = DmChannelLastViewed (Id UserId) ThreadRoute
+    | DiscordDmChannelLastViewed DiscordDmChannelId (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | NoLastDmViewed
 
 
 type alias FrontendCurrentUser =
@@ -121,7 +130,7 @@ init createdAt name email userIsAdmin =
     , lastEmailNotification = createdAt
     , lastViewed = SeqDict.empty
     , lastViewedThreads = SeqDict.empty
-    , lastDmViewed = Nothing
+    , lastDmViewed = NoLastDmViewed
     , lastChannelViewed = SeqDict.empty
     , lastDiscordChannelViewed = SeqDict.empty
     , icon = Nothing
@@ -268,13 +277,9 @@ setLastDiscordChannelViewed guildId channelId threadRoute user =
     }
 
 
-setLastDmViewed :
-    Id UserId
-    -> ThreadRoute
-    -> { a | lastDmViewed : Maybe ( Id UserId, ThreadRoute ) }
-    -> { a | lastDmViewed : Maybe ( Id UserId, ThreadRoute ) }
-setLastDmViewed otherUserId threadRoute user =
-    { user | lastDmViewed = Just ( otherUserId, threadRoute ) }
+setLastDmViewed : LastDmViewed -> { a | lastDmViewed : LastDmViewed } -> { a | lastDmViewed : LastDmViewed }
+setLastDmViewed lastDmViewed user =
+    { user | lastDmViewed = lastDmViewed }
 
 
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }

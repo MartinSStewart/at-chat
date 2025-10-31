@@ -4910,7 +4910,18 @@ changeUpdate localMsg local =
                             }
 
                         ViewDiscordDm otherUserId messagesLoaded ->
-                            Debug.todo ""
+                            { local
+                                | localUser =
+                                    { localUser
+                                        | user = User.setLastDmViewed otherUserId NoThread localUser.user
+                                        , session = session
+                                    }
+                                , dmChannels =
+                                    SeqDict.updateIfExists
+                                        otherUserId
+                                        (loadMessages messagesLoaded)
+                                        local.dmChannels
+                            }
 
                         ViewChannel guildId channelId messagesLoaded ->
                             { local
@@ -7250,7 +7261,7 @@ view model =
 
                     DmRoute otherUserId thread ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (Just ( otherUserId, thread )) loaded)
+                            (Pages.Guild.homePageLoggedInView (SelectedDmChannel otherUserId thread) loaded)
 
                     SlackOAuthRedirect result ->
                         layout
@@ -7274,9 +7285,12 @@ view model =
                                     |> Ui.map TextEditorMsg
                             )
 
-                    DiscordDmRoute otherUserId thread ->
+                    DiscordDmRoute dmChannelId viewMessage showFriendTab ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView (Debug.todo "") loaded)
+                            (Pages.Guild.homePageLoggedInView
+                                (SelectedDiscordDmChannel dmChannelId viewMessage showFriendTab)
+                                loaded
+                            )
         ]
     }
 

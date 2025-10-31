@@ -60,7 +60,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser)
+import User exposing (BackendUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -2161,7 +2161,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
-                                                        (User.setLastDmViewed otherUserId NoThread user)
+                                                        (User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) user)
                                                         model2.users
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
@@ -2192,7 +2192,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 | users =
                                                     NonemptyDict.insert
                                                         session.userId
-                                                        (User.setLastDmViewed otherUserId (ViewThread threadId) user)
+                                                        (User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) user)
                                                         model2.users
                                                 , sessions =
                                                     SeqDict.insert sessionId (updateSession session) model2.sessions
@@ -2218,7 +2218,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        ViewDiscordDm otherUserId _ ->
+                        ViewDiscordDm dmChannelId _ ->
                             Debug.todo ""
 
                         ViewChannel guildId channelId _ ->
