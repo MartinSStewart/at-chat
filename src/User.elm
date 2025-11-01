@@ -75,7 +75,7 @@ type alias BackendUser =
 
 type LastDmViewed
     = DmChannelLastViewed (Id UserId) ThreadRoute
-    | DiscordDmChannelLastViewed DiscordDmChannelId (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | DiscordDmChannelLastViewed DiscordDmChannelId
     | NoLastDmViewed
 
 

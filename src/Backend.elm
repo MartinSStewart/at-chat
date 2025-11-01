@@ -13,9 +13,9 @@ import Broadcast
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
-import DiscordDmChannelId
+import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DiscordSync
-import DmChannel exposing (DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -1665,7 +1665,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmChannelId) ->
-                            Debug.todo ""
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                dmChannelId
+                                (\{ userId } _ { currentUserId, otherUserId } dmChannel ->
+                                    ( { model2
+                                        | discordDmChannels =
+                                            SeqDict.insert
+                                                dmChannelId
+                                                (LocalState.memberIsTyping userId time threadRoute dmChannel)
+                                                model2.discordDmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_MemberTyping time ( guildOrDmId, threadRoute )
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toUser
+                                            (Just clientId)
+                                            Nothing
+                                            otherUserId
+                                            (Server_MemberTyping
+                                                time
+                                                userId
+                                                ( GuildOrDmId (GuildOrDmId_Dm userId), threadRoute )
+                                                |> ServerChange
+                                            )
+                                            model2
+                                        ]
+                                    )
+                                )
 
                 --asUser
                 --    model2
@@ -2219,7 +2248,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordDm dmChannelId _ ->
-                            Debug.todo ""
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                dmChannelId
+                                (\session user dmChannel ->
+                                    ( { model2
+                                        | users =
+                                            NonemptyDict.insert
+                                                session.userId
+                                                (User.setLastDmViewed (DiscordDmChannelLastViewed dmChannelId) user)
+                                                model2.users
+                                        , sessions =
+                                            SeqDict.insert sessionId (updateSession session) model2.sessions
+                                      }
+                                    , Command.batch
+                                        [ ViewDiscordDm dmChannelId (loadMessagesHelper dmChannel)
+                                            |> Local_CurrentlyViewing
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , broadcastCmd session
+                                        ]
+                                    )
+                                )
 
                         ViewChannel guildId channelId _ ->
                             asGuildMember
@@ -3438,6 +3489,75 @@ asUser model sessionId func =
                     func session user
 
                 Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+asDiscordDmUser :
+    BackendModel
+    -> SessionId
+    -> DiscordDmChannelId
+    ->
+        (UserSession
+         -> BackendUser
+         -> { currentUserId : Discord.Id.Id Discord.Id.UserId, otherUserId : Discord.Id.Id Discord.Id.UserId }
+         -> DiscordDmChannel
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordDmUser model sessionId dmChannelId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            let
+                ( userIdA, userIdB ) =
+                    DiscordDmChannelId.toUserIds dmChannelId
+
+                currentAndOtherUserId :
+                    Maybe
+                        { currentUserId : Discord.Id.Id Discord.Id.UserId
+                        , otherUserId : Discord.Id.Id Discord.Id.UserId
+                        }
+                currentAndOtherUserId =
+                    case ( SeqDict.get userIdA model.discordUsers, SeqDict.get userIdB model.discordUsers ) of
+                        ( Just (FullData userA), Just (FullData userB) ) ->
+                            if userA.linkedTo == session.userId then
+                                Just { currentUserId = userIdA, otherUserId = userIdB }
+
+                            else if userB.linkedTo == session.userId then
+                                Just { currentUserId = userIdB, otherUserId = userIdA }
+
+                            else
+                                Nothing
+
+                        ( Just (FullData userA), _ ) ->
+                            if userA.linkedTo == session.userId then
+                                Just { currentUserId = userIdA, otherUserId = userIdB }
+
+                            else
+                                Nothing
+
+                        ( _, Just (FullData userB) ) ->
+                            if userB.linkedTo == session.userId then
+                                Just { currentUserId = userIdB, otherUserId = userIdA }
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+            in
+            case
+                ( NonemptyDict.get session.userId model.users
+                , currentAndOtherUserId
+                , SeqDict.get dmChannelId model.discordDmChannels
+                )
+            of
+                ( Just user, Just currentAndOtherUserId2, Just dmChannel ) ->
+                    func session user currentAndOtherUserId2 dmChannel
+
+                _ ->
                     ( model, Command.none )
 
         Nothing ->

@@ -1,5 +1,6 @@
 module Pages.Guild exposing
-    ( HighlightMessage(..)
+    ( DmChannelSelection(..)
+    , HighlightMessage(..)
     , IsHovered(..)
     , channelHeaderHeight
     , channelMessageHtmlId

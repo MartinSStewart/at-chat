@@ -10,6 +10,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
+import DiscordDmChannelId
 import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Ease
@@ -70,7 +71,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendCurrentUser, NotificationLevel(..))
+import User exposing (BackendUser, FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -4876,7 +4877,7 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed otherUserId NoThread localUser.user
+                                        | user = User.setLastDmViewed (DmChannelLastViewed otherUserId NoThread) localUser.user
                                         , session = session
                                     }
                                 , dmChannels =
@@ -4891,7 +4892,7 @@ changeUpdate localMsg local =
                                 | localUser =
                                     { localUser
                                         | user =
-                                            User.setLastDmViewed otherUserId (ViewThread threadId) localUser.user
+                                            User.setLastDmViewed (DmChannelLastViewed otherUserId (ViewThread threadId)) localUser.user
                                         , session = session
                                     }
                                 , dmChannels =
@@ -4913,14 +4914,14 @@ changeUpdate localMsg local =
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed otherUserId NoThread localUser.user
+                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed otherUserId) localUser.user
                                         , session = session
                                     }
-                                , dmChannels =
+                                , discordDmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
                                         (loadMessages messagesLoaded)
-                                        local.dmChannels
+                                        local.discordDmChannels
                             }
 
                         ViewChannel guildId channelId messagesLoaded ->
@@ -5834,8 +5835,18 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.discordGuilds
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
-            Debug.todo ""
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm dmChannelId) ->
+            let
+                usersIds =
+                    DiscordDmChannelId.currentAndOtherUserId dmChannelId local.localUser.linkedDiscordUsers
+            in
+            { local
+                | discordDmChannels =
+                    SeqDict.updateIfExists
+                        dmChannelId
+                        (LocalState.memberIsTypingHelper usersIds.currentUserId time)
+                        local.discordDmChannels
+            }
 
 
 addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState

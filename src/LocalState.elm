@@ -59,6 +59,7 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelper
     , memberIsEditTypingHelper
     , memberIsTyping
+    , memberIsTypingHelper
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , updateChannel
@@ -870,25 +871,23 @@ memberIsTyping userId time threadRoute channel =
         ViewThread threadMessageIndex ->
             { channel
                 | threads =
-                    SeqDict.updateIfExists
-                        threadMessageIndex
-                        (\thread ->
-                            { thread
-                                | lastTypedAt =
-                                    SeqDict.insert
-                                        userId
-                                        { time = time, messageIndex = Nothing }
-                                        thread.lastTypedAt
-                            }
-                        )
-                        channel.threads
+                    SeqDict.updateIfExists threadMessageIndex (memberIsTypingHelper userId time) channel.threads
             }
 
         NoThread ->
-            { channel
-                | lastTypedAt =
-                    SeqDict.insert userId { time = time, messageIndex = Nothing } channel.lastTypedAt
-            }
+            memberIsTypingHelper userId time channel
+
+
+memberIsTypingHelper :
+    userId
+    -> Time.Posix
+    -> { e | lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> { e | lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+memberIsTypingHelper userId time channel =
+    { channel
+        | lastTypedAt =
+            SeqDict.insert userId { time = time, messageIndex = Nothing } channel.lastTypedAt
+    }
 
 
 memberIsEditTyping :
