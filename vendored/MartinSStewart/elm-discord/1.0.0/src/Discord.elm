@@ -80,7 +80,7 @@ import Base64
 import Binary
 import Bitwise
 import Dict exposing (Dict)
-import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, RoleId, StickerId, StickerPackId, TeamId, UserId, WebhookId)
+import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, PrivateChannelId, RoleId, StickerId, StickerPackId, TeamId, UserId, WebhookId)
 import Discord.Markdown exposing (Markdown)
 import Duration exposing (Duration, Seconds)
 import Http
@@ -3408,6 +3408,33 @@ decodeChannel =
         |> JD.andMap (decodeOptionalData "last_pin_timestamp" Iso8601.decoder)
 
 
+type alias PrivateChannel =
+    { type_ : ChannelType
+    , recipientIds : List (Id UserId)
+    , recipientFlags : Int
+    , lastMessageId : Maybe (Id MessageId)
+    , isSpam : Bool
+    , isMessageRequestTimestamp : Maybe Time.Posix
+    , isMessageRequest : Bool
+    , id : Id PrivateChannelId
+    , flags : Int
+    }
+
+
+decodePrivateChannel : JD.Decoder PrivateChannel
+decodePrivateChannel =
+    JD.succeed PrivateChannel
+        |> JD.andMap (JD.field "type" decodeChannelType)
+        |> JD.andMap (JD.field "recipient_ids" (JD.list Discord.Id.decodeId))
+        |> JD.andMap (JD.field "recipient_flags" JD.int)
+        |> JD.andMap (JD.field "last_message_id" (JD.nullable Discord.Id.decodeId))
+        |> JD.andMap (JD.field "is_spam" JD.bool)
+        |> JD.andMap (JD.field "is_message_request_timestamp" (JD.nullable Iso8601.decoder))
+        |> JD.andMap (JD.field "is_message_request" JD.bool)
+        |> JD.andMap (JD.field "id" Discord.Id.decodeId)
+        |> JD.andMap (JD.field "flags" JD.int)
+
+
 decodeChannel2 : JD.Decoder Channel2
 decodeChannel2 =
     JD.succeed Channel2
@@ -3780,7 +3807,7 @@ formatTypeDecoder =
 type alias ReadySupplementalData =
     { guilds : List SupplementalGuild
     , mergedMembers : List (List MergedMember)
-    , lazyPrivateChannels : List Channel
+    , lazyPrivateChannels : List PrivateChannel
     , disclose : List String
     }
 
@@ -3790,7 +3817,7 @@ readySupplementalDecoder =
     JD.succeed ReadySupplementalData
         |> JD.andMap (JD.field "guilds" (JD.list supplementalGuildDecoder))
         |> JD.andMap (JD.field "merged_members" (JD.list (JD.list decodeMergedMember)))
-        |> JD.andMap (JD.field "lazy_private_channels" (JD.list decodeChannel))
+        |> JD.andMap (JD.field "lazy_private_channels" (JD.list decodePrivateChannel))
         |> JD.andMap (JD.field "disclose" (JD.list JD.string))
 
 
@@ -3848,7 +3875,7 @@ type alias ReadyData =
 
     --, gameRelationships : OptionalData (List GameRelationship)
     , friendSuggestionCount : OptionalData Int
-    , privateChannels : OptionalData (List Channel)
+    , privateChannels : OptionalData (List PrivateChannel)
 
     --, connectedAccounts : List Connection
     --, notes : OptionalData (Dict String String)
@@ -3916,7 +3943,7 @@ readyEventDecoder =
         |> JD.andMap (JD.field "guilds" (JD.list gatewayGuildDecoder))
         |> JD.andMap (decodeOptionalData "relationships" (JD.list relationshipDecoder))
         |> JD.andMap (decodeOptionalData "friend_suggestion_count" JD.int)
-        |> JD.andMap (decodeOptionalData "private_channels" (JD.list decodeChannel))
+        |> JD.andMap (decodeOptionalData "private_channels" (JD.list decodePrivateChannel))
         |> JD.andMap (decodeOptionalData "merged_members" (JD.list (JD.list decodeMergedMember)))
         |> JD.andMap (JD.field "users" (JD.list decodePartialUser))
         |> JD.andMap (decodeOptionalData "scopes" (JD.list JD.string))

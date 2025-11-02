@@ -8,6 +8,7 @@ module Discord.Id exposing
     , Id(..)
     , MessageId
     , OverwriteId
+    , PrivateChannelId
     , RoleId
     , StickerId
     , StickerPackId
@@ -48,6 +49,12 @@ type RoleId
 
 type ChannelId
     = ChannelId Never
+
+
+{-| Only for user tokens. Bots can't access private channels
+-}
+type PrivateChannelId
+    = PrivateChannelId Never
 
 
 type GuildId
