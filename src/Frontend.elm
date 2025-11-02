@@ -4689,8 +4689,55 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                        DiscordGuildOrDmId_Dm otherUserId ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId_Dm dmChannelId ->
+                            case SeqDict.get dmChannelId local.discordDmChannels of
+                                Just dmChannel ->
+                                    let
+                                        user =
+                                            local.localUser.user
+
+                                        localUser =
+                                            local.localUser
+                                    in
+                                    { local
+                                        | discordDmChannels =
+                                            SeqDict.insert
+                                                dmChannelId
+                                                (case threadRouteWithRepliedTo of
+                                                    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                                                        -- Not supported for a Discord DM channel
+                                                        dmChannel
+
+                                                    NoThreadWithMaybeMessage maybeReplyTo ->
+                                                        LocalState.createChannelMessageFrontend
+                                                            (UserTextMessage
+                                                                { createdAt = createdAt
+                                                                , createdBy = DiscordDmChannelId.currentAndOtherUserId dmChannelId local.localUser.linkedDiscordUsers |> .currentUserId
+                                                                , content = text
+                                                                , reactions = SeqDict.empty
+                                                                , editedAt = Nothing
+                                                                , repliedTo = maybeReplyTo
+                                                                , attachedFiles = attachedFiles
+                                                                }
+                                                            )
+                                                            dmChannel
+                                                )
+                                                local.discordDmChannels
+                                        , localUser =
+                                            { localUser
+                                                | user =
+                                                    { user
+                                                        | lastViewed =
+                                                            SeqDict.insert
+                                                                (DiscordGuildOrDmId guildOrDmId)
+                                                                (Array.length dmChannel.messages |> Id.fromInt)
+                                                                user.lastViewed
+                                                    }
+                                            }
+                                    }
+
+                                Nothing ->
+                                    local
 
                 --let
                 --    user =

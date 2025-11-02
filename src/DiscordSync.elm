@@ -826,7 +826,11 @@ handleDiscordCreateMessage message model =
         _ ->
             case message.guildId of
                 Missing ->
-                    Debug.todo ""
+                    let
+                        _ =
+                            Debug.log "DM message" message
+                    in
+                    ( model, Command.none )
 
                 --let
                 --    richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
@@ -837,9 +841,9 @@ handleDiscordCreateMessage message model =
                 --    dmChannelId =
                 --        DmChannel.channelIdFromUserIds userId Broadcast.adminUserId
                 --
-                --    dmChannel : DmChannel
+                --    dmChannel : DiscordDmChannel
                 --    dmChannel =
-                --        Maybe.withDefault DmChannel.init (SeqDict.get dmChannelId model.dmChannels)
+                --        Maybe.withDefault DmChannel.discordBackendInit (SeqDict.get dmChannelId model.discordDmChannels)
                 --
                 --    replyTo : Maybe (Id ChannelMessageId)
                 --    replyTo =
