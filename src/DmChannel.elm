@@ -21,11 +21,15 @@ module DmChannel exposing
     )
 
 import Array exposing (Array)
+import Discord
 import Discord.Id
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
+import List.Nonempty exposing (Nonempty(..))
 import Message exposing (Message, MessageState(..))
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
 import VisibleMessages exposing (VisibleMessages)
 
@@ -41,6 +45,7 @@ type alias DiscordDmChannel =
     { messages : Array (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
+    , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
     }
 
 
@@ -73,11 +78,12 @@ backendInit =
     }
 
 
-discordBackendInit : DiscordDmChannel
-discordBackendInit =
+discordBackendInit : Discord.Id.Id Discord.Id.UserId -> Discord.PrivateChannel -> DiscordDmChannel
+discordBackendInit currentUserId channel =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
+    , members = NonemptySet.fromNonemptyList (Nonempty currentUserId channel.recipientIds)
     }
 
 

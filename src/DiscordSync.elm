@@ -1283,14 +1283,14 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_InitialData readyData ->
+                        Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
                                     handleReadyData userData.auth readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_SupplementalInitialData readySupplementalData ->
+                        Discord.UserOutMsg_SupplementalReadyData readySupplementalData ->
                             ( handleReadySupplementalData readySupplementalData model2, cmds )
                 )
                 ( { model
@@ -1350,18 +1350,19 @@ handleReadyData userAuth readyData model =
         auth =
             Discord.userToken userAuth
 
+        discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
         discordDmChannels =
-            case readyData.relationships of
-                Included relationships ->
+            case readyData.privateChannels of
+                Included privateChannels ->
                     List.foldl
                         (\dmChannel dmChannels ->
                             SeqDict.insert
-                                (DiscordDmChannelId.fromUserIds dmChannel.id readyData.user.id)
-                                DmChannel.discordBackendInit
+                                dmChannel.id
+                                (DmChannel.discordBackendInit readyData.user.id dmChannel)
                                 dmChannels
                         )
                         model.discordDmChannels
-                        relationships
+                        privateChannels
 
                 Missing ->
                     model.discordDmChannels

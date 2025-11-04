@@ -294,7 +294,7 @@ type alias BackendModel =
     , backendInitialized : Bool
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
-    , discordDmChannels : SeqDict DiscordDmChannelId DiscordDmChannel
+    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
