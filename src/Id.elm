@@ -24,7 +24,6 @@ module Id exposing
     )
 
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import List.Extra
 import SeqDict exposing (SeqDict)
 

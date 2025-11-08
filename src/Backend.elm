@@ -13,7 +13,6 @@ import Broadcast
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DiscordSync
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
@@ -971,15 +970,11 @@ getLoginData sessionId session user requestMessagesFor model =
     , discordDmChannels =
         SeqDict.filterMap
             (\dmChannelId dmChannel ->
-                let
-                    ( userIdA, userIdB ) =
-                        DiscordDmChannelId.toUserIds dmChannelId
-                in
-                if SeqDict.member userIdA linkedDiscordUsers || SeqDict.member userIdB linkedDiscordUsers then
+                if List.any (\( linkedId, _ ) -> SeqDict.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
                     DmChannel.discordDmChannelToFrontend
                         (case requestMessagesFor of
-                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId), threadRoute ) ->
-                                otherUserId == dmChannelId
+                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId), threadRoute ) ->
+                                dmChannelId == channelId
 
                             _ ->
                                 False

@@ -52,7 +52,6 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord exposing (CaptchaChallengeData)
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
@@ -528,7 +527,7 @@ type BackendMsg
     | SentLogErrorEmail Time.Posix EmailAddress (Result Postmark.SendEmailError ())
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
-    | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId DiscordDmChannelId (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
+    | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.PrivateChannelId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
     | DeletedDiscordMessage
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
@@ -553,7 +552,7 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List ( DiscordDmChannelId, List Discord.Message )
+            ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, List Discord.Message )
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
@@ -596,7 +595,7 @@ type alias LoginData =
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
-    , discordDmChannels : SeqDict DiscordDmChannelId DiscordFrontendDmChannel
+    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
     , user : FrontendCurrentUser
     , otherUsers : SeqDict (Id UserId) FrontendUser

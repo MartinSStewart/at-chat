@@ -12,7 +12,6 @@ import Broadcast
 import ChannelName
 import Discord exposing (OptionalData(..))
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -31,6 +30,7 @@ import List.Nonempty exposing (Nonempty)
 import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
+import NonemptySet
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
@@ -548,12 +548,16 @@ addDiscordMessages threadRoute messages model channel =
 --    messages
 
 
-addDiscordDms : List ( DiscordDmChannelId, List Discord.Message ) -> BackendModel -> BackendModel
-addDiscordDms dmChannels model =
+addDiscordDms :
+    Discord.Id.Id Discord.Id.UserId
+    -> List ( Discord.Id.Id Discord.Id.PrivateChannelId, Discord.PrivateChannel, List Discord.Message )
+    -> BackendModel
+    -> BackendModel
+addDiscordDms currentUserId dmChannels model =
     { model
         | discordDmChannels =
             List.foldl
-                (\( dmChannelId, messages ) dmChannels2 ->
+                (\( dmChannelId, channel, messages ) dmChannels2 ->
                     SeqDict.update
                         dmChannelId
                         (\maybe ->
@@ -569,6 +573,7 @@ addDiscordDms dmChannels model =
                                     { messages = messages2
                                     , lastTypedAt = SeqDict.empty
                                     , linkedMessageIds = links
+                                    , members = NonemptySet.fromNonemptyList (Nonempty currentUserId channel.recipientIds)
                                     }
                                         |> Just
                         )
@@ -1397,35 +1402,26 @@ handleReadyData userAuth readyData model =
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
         , Task.map2
             Tuple.pair
-            (case readyData.relationships of
-                Included relationships ->
-                    List.filterMap
-                        (\dmChannel ->
-                            let
-                                dmChannelId =
-                                    DiscordDmChannelId.fromUserIds readyData.user.id dmChannel.id
-                            in
-                            if SeqDict.member dmChannelId model.discordDmChannels then
-                                Nothing
+            (List.filterMap
+                (\( dmChannelId, dmChannel ) ->
+                    if SeqDict.member dmChannelId model.discordDmChannels then
+                        Nothing
 
-                            else
-                                (Discord.getDirectMessagesPayload
-                                    userAuth
-                                    { otherUserId = readyData.user.id
-                                    , limit = 100
-                                    , relativeTo = Discord.MostRecent
-                                    }
-                                    |> http
-                                    |> Task.onError (\_ -> Task.succeed [])
-                                    |> Task.map (Tuple.pair dmChannelId)
-                                )
-                                    |> Just
+                    else
+                        (Discord.getDirectMessagesPayload
+                            userAuth
+                            { channelId = dmChannelId
+                            , limit = 100
+                            , relativeTo = Discord.MostRecent
+                            }
+                            |> http
+                            |> Task.onError (\_ -> Task.succeed [])
+                            |> Task.map (Tuple.pair dmChannelId)
                         )
-                        relationships
-                        |> Task.sequence
-
-                Missing ->
-                    Task.succeed []
+                            |> Just
+                )
+                (SeqDict.toList discordDmChannels)
+                |> Task.sequence
             )
             (List.map
                 (\gatewayGuild ->

@@ -198,17 +198,17 @@ getMessagesPayload authentication { channelId, limit, relativeTo } =
         )
 
 
-getDirectMessages : UserAuth -> { otherUserId : Id UserId, limit : Int, relativeTo : MessagesRelativeTo } -> Task HttpError (List Message)
+getDirectMessages : UserAuth -> { channelId : Id PrivateChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> Task HttpError (List Message)
 getDirectMessages authentication data =
     getDirectMessagesPayload authentication data |> toTask
 
 
-getDirectMessagesPayload : UserAuth -> { otherUserId : Id UserId, limit : Int, relativeTo : MessagesRelativeTo } -> HttpRequest (List Message)
-getDirectMessagesPayload authentication { otherUserId, limit, relativeTo } =
+getDirectMessagesPayload : UserAuth -> { channelId : Id PrivateChannelId, limit : Int, relativeTo : MessagesRelativeTo } -> HttpRequest (List Message)
+getDirectMessagesPayload authentication { channelId, limit, relativeTo } =
     httpGet
         (UserToken authentication)
         (JD.list decodeMessage)
-        [ "channels", Discord.Id.toString otherUserId, "messages" ]
+        [ "channels", Discord.Id.toString channelId, "messages" ]
         (Url.Builder.int "limit" limit
             :: (case relativeTo of
                     Around messageId ->

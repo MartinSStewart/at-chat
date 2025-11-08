@@ -34,7 +34,6 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
-import DiscordDmChannelId
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
@@ -379,8 +378,11 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
                 ++ ","
                 ++ Discord.Id.toString channelId
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
-            "dd" ++ String.join "," (DiscordDmChannelId.toPath otherUserId)
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+            "dd"
+                ++ Discord.Id.toString currentUserId
+                ++ ","
+                ++ Discord.Id.toString channelId
     )
         ++ (case threadRoute of
                 ViewThread threadMessageIndex ->

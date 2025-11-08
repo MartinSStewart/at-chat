@@ -24,7 +24,6 @@ import ChannelName
 import Coord
 import Date exposing (Date)
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
