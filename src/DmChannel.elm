@@ -8,7 +8,6 @@ module DmChannel exposing
     , channelIdFromUserIds
     , discordBackendInit
     , discordDmChannelToFrontend
-    , discordFrontendInit
     , frontendInit
     , getArray
     , latestMessageId
@@ -53,6 +52,7 @@ type alias DiscordFrontendDmChannel =
     { messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     , visibleMessages : VisibleMessages ChannelMessageId
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
+    , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
     }
 
 
@@ -93,14 +93,6 @@ frontendInit =
     , visibleMessages = VisibleMessages.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    }
-
-
-discordFrontendInit : DiscordFrontendDmChannel
-discordFrontendInit =
-    { messages = Array.empty
-    , visibleMessages = VisibleMessages.empty
-    , lastTypedAt = SeqDict.empty
     }
 
 

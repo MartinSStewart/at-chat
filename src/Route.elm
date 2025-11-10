@@ -1,6 +1,7 @@
 module Route exposing
     ( ChannelRoute(..)
     , DiscordChannelRoute(..)
+    , DiscordDmRouteData
     , DiscordGuildRouteData
     , Route(..)
     , ShowMembersTab(..)
@@ -12,7 +13,6 @@ module Route exposing
 import AppUrl
 import Dict
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
@@ -28,10 +28,18 @@ type Route
     | GuildRoute (Id GuildId) ChannelRoute
     | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute (Id UserId) ThreadRouteWithFriends
-    | DiscordDmRoute DiscordDmChannelId (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | DiscordDmRoute DiscordDmRouteData
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
+
+
+type alias DiscordDmRouteData =
+    { currentDiscordUserId : Discord.Id.Id Discord.Id.UserId
+    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    , viewingMessage : Maybe (Id ChannelMessageId)
+    , showMembersTab : ShowMembersTab
+    }
 
 
 type alias DiscordGuildRouteData =
@@ -247,12 +255,18 @@ decode url =
         "dd" :: userId :: otherUserId :: rest ->
             case ( Discord.Id.fromString userId, Discord.Id.fromString otherUserId ) of
                 ( Just userId2, Just otherUserId2 ) ->
-                    case rest of
-                        [ "m", messageIndex ] ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) (Id.fromString messageIndex) showMembers
+                    DiscordDmRoute
+                        { currentDiscordUserId = userId2
+                        , channelId = otherUserId2
+                        , viewingMessage =
+                            case rest of
+                                [ "m", messageIndex ] ->
+                                    Id.fromString messageIndex
 
-                        _ ->
-                            DiscordDmRoute (DiscordDmChannelId.fromUserIds userId2 otherUserId2) Nothing showMembers
+                                _ ->
+                                    Nothing
+                        , showMembersTab = showMembers
+                        }
 
                 _ ->
                     HomePageRoute
