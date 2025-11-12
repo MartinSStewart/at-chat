@@ -149,6 +149,7 @@ discordDmChannelToFrontend preloadMessages dmChannel =
     { messages = toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
     , visibleMessages = VisibleMessages.init preloadMessages dmChannel
     , lastTypedAt = dmChannel.lastTypedAt
+    , members = dmChannel.members
     }
 
 

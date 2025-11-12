@@ -31,7 +31,6 @@ import Base64
 import Codec exposing (Codec)
 import Discord
 import Discord.Id
-import DiscordDmChannelId exposing (DiscordDmChannelId)
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
@@ -75,7 +74,7 @@ type alias BackendUser =
 
 type LastDmViewed
     = DmChannelLastViewed (Id UserId) ThreadRoute
-    | DiscordDmChannelLastViewed DiscordDmChannelId
+    | DiscordDmChannelLastViewed (Discord.Id.Id Discord.Id.PrivateChannelId)
     | NoLastDmViewed
 
 
