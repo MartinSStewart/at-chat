@@ -420,7 +420,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId) ->
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ _) ->
                     Debug.todo ""
     in
     case maybeData of

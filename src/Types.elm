@@ -478,6 +478,7 @@ type FrontendMsg
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
     | TypedBookmarkletData String
+    | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
 
 
 type ScrollPosition
@@ -552,7 +553,7 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, List Discord.Message )
+            ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild

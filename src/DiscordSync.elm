@@ -550,7 +550,7 @@ addDiscordMessages threadRoute messages model channel =
 
 addDiscordDms :
     Discord.Id.Id Discord.Id.UserId
-    -> List ( Discord.Id.Id Discord.Id.PrivateChannelId, Discord.PrivateChannel, List Discord.Message )
+    -> List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
     -> BackendModel
     -> BackendModel
 addDiscordDms currentUserId dmChannels model =
@@ -573,7 +573,7 @@ addDiscordDms currentUserId dmChannels model =
                                     { messages = messages2
                                     , lastTypedAt = SeqDict.empty
                                     , linkedMessageIds = links
-                                    , members = NonemptySet.fromNonemptyList (Nonempty currentUserId channel.recipientIds)
+                                    , members = channel.members
                                     }
                                         |> Just
                         )
@@ -1416,7 +1416,7 @@ handleReadyData userAuth readyData model =
                             }
                             |> http
                             |> Task.onError (\_ -> Task.succeed [])
-                            |> Task.map (Tuple.pair dmChannelId)
+                            |> Task.map (\a -> ( dmChannelId, dmChannel, a ))
                         )
                             |> Just
                 )

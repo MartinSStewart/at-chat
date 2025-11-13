@@ -1255,9 +1255,9 @@ discordMemberLabel :
     -> Discord.Id.Id Discord.Id.UserId
     -> Element FrontendMsg
 discordMemberLabel isMobile localUser currentUserId userId =
-    rowLinkButton
+    MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (DiscordDmRoute currentUserId Nothing HideMembersTab)
+        (PressedDiscordGuildMemberLabel userId)
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -1274,6 +1274,56 @@ discordMemberLabel isMobile localUser currentUserId userId =
 
             Nothing ->
                 []
+        )
+
+
+abc :
+    Bool
+    -> LocalUser
+    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.PrivateChannelId
+    -> DiscordDmChannel
+    -> Element FrontendMsg
+abc isMobile localUser currentUserId channelId dmChannel =
+    rowLinkButton
+        (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString channelId))
+        (DiscordDmRoute
+            { currentDiscordUserId = currentUserId
+            , channelId = channelId
+            , viewingMessage = Nothing
+            , showMembersTab = HideMembersTab
+            }
+        )
+        [ Ui.spacing 8
+        , Ui.paddingXY 0 4
+        , MyUi.hover
+            isMobile
+            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
+            , Ui.Anim.fontColor MyUi.font1
+            ]
+        , Ui.Font.color MyUi.font3
+        , Ui.clipWithEllipsis
+        ]
+        (case NonemptySet.toSeqSet dmChannel.members |> SeqSet.remove currentUserId |> SeqSet.toList of
+            [ otherUserId ] ->
+                case LocalState.getDiscordUser otherUserId localUser of
+                    Just user ->
+                        [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+
+                    Nothing ->
+                        []
+
+            many ->
+                List.filterMap
+                    (\userId ->
+                        case LocalState.getDiscordUser userId localUser of
+                            Just user ->
+                                User.profileImage user.icon |> Just
+
+                            Nothing ->
+                                Nothing
+                    )
+                    many
         )
 
 
@@ -3240,7 +3290,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             isMobile
             True
             (case guildOrDmIdNoThread of
-                DiscordGuildOrDmId_Dm dmChannelId ->
+                DiscordGuildOrDmId_Dm currentUserId dmChannelId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if DiscordDmChannelId.chattingWithYourself dmChannelId then
