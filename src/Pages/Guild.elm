@@ -3247,6 +3247,11 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
 
 
+chattingWithYourself : DiscordFrontendDmChannel -> Bool
+chattingWithYourself dmChannel =
+    NonemptySet.size dmChannel.members == 1
+
+
 discordConversationView :
     Id ChannelMessageId
     -> Discord.Id.Id Discord.Id.UserId
@@ -3293,7 +3298,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 DiscordGuildOrDmId_Dm currentUserId dmChannelId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if DiscordDmChannelId.chattingWithYourself dmChannelId then
+                        (if chattingWithYourself dmChannel then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -3360,11 +3365,11 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                                     (Ui.text ("This is the start of #" ++ name))
 
-                            DiscordGuildOrDmId_Dm dmChannelId ->
+                            DiscordGuildOrDmId_Dm _ dmChannelId ->
                                 Ui.el
                                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                                     (Ui.text
-                                        (if DiscordDmChannelId.chattingWithYourself dmChannelId then
+                                        (if chattingWithYourself dmChannelId then
                                             "This is the start of a conversation with yourself"
 
                                          else
@@ -3432,9 +3437,9 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                     DiscordGuildOrDmId_Guild _ _ _ ->
                         "Write a message in #" ++ name
 
-                    DiscordGuildOrDmId_Dm otherUserId ->
+                    DiscordGuildOrDmId_Dm _ dmChannelId ->
                         "Write a message to "
-                            ++ (if DiscordDmChannelId.chattingWithYourself otherUserId then
+                            ++ (if chattingWithYourself dmChannelId then
                                     "yourself"
 
                                 else
@@ -3793,10 +3798,10 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
             isMobile
             True
             (case guildOrDmIdNoThread of
-                DiscordGuildOrDmId_Dm dmChannelId ->
+                DiscordGuildOrDmId_Dm _ dmChannelId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if DiscordDmChannelId.chattingWithYourself dmChannelId then
+                        (if chattingWithYourself dmChannelId then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -3879,7 +3884,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                                 --
                                 --    Nothing ->
                                 --        Ui.none
-                                DiscordGuildOrDmId_Dm otherUserId ->
+                                DiscordGuildOrDmId_Dm _ _ ->
                                     Debug.todo ""
 
                             --case SeqDict.get otherUserId local.dmChannels of
@@ -3958,7 +3963,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                     DiscordGuildOrDmId_Guild _ _ _ ->
                         "Write a message in this thread"
 
-                    DiscordGuildOrDmId_Dm _ ->
+                    DiscordGuildOrDmId_Dm _ _ ->
                         "Write a message in this thread"
                 )
                 (case SeqDict.get guildOrDmId loggedIn.drafts of
@@ -6095,17 +6100,9 @@ friendsColumn isMobile openedOtherUserId local =
                 (\maybe -> Maybe.withDefault DmChannel.frontendInit maybe |> Just)
                 local.dmChannels
 
-        discordDmChannelsIncludingLinkedUsers : SeqDict DiscordDmChannelId DiscordFrontendDmChannel
+        discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
-            SeqDict.foldl
-                (\linkedUserId _ dict ->
-                    SeqDict.update
-                        (DiscordDmChannelId.fromUserIds linkedUserId linkedUserId)
-                        (\maybe -> Maybe.withDefault DmChannel.discordFrontendInit maybe |> Just)
-                        dict
-                )
-                local.discordDmChannels
-                local.localUser.linkedDiscordUsers
+            local.discordDmChannels
     in
     channelColumnContainer
         [ Ui.el
@@ -6141,10 +6138,10 @@ friendsColumn isMobile openedOtherUserId local =
                 )
                 (SeqDict.toList dmChannelsIncludingCurrentUser)
                 ++ List.filterMap
-                    (\( otherUserId, _ ) ->
+                    (\( channelId, _ ) ->
                         case
                             LocalState.getDiscordUser
-                                (DiscordDmChannelId.currentAndOtherUserId otherUserId local.localUser.linkedDiscordUsers).otherUserId
+                                (DiscordDmChannelId.currentAndOtherUserId channelId local.localUser.linkedDiscordUsers).otherUserId
                                 local.localUser
                         of
                             Just otherUser ->
@@ -6152,13 +6149,13 @@ friendsColumn isMobile openedOtherUserId local =
                                     discordFriendLabel
                                     isMobile
                                     (case openedOtherUserId of
-                                        SelectedDiscordDmChannel a _ _ ->
-                                            a == otherUserId
+                                        SelectedDiscordDmChannel _ a _ _ ->
+                                            a == channelId
 
                                         _ ->
                                             False
                                     )
-                                    otherUserId
+                                    channelId
                                     otherUser
                                     |> Just
 
