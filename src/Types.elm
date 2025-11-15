@@ -479,6 +479,7 @@ type FrontendMsg
     | PressedLinkDiscord
     | TypedBookmarkletData String
     | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
+    | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
 
 
 type ScrollPosition

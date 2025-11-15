@@ -6138,29 +6138,20 @@ friendsColumn isMobile openedOtherUserId local =
                 )
                 (SeqDict.toList dmChannelsIncludingCurrentUser)
                 ++ List.filterMap
-                    (\( channelId, _ ) ->
-                        case
-                            LocalState.getDiscordUser
-                                (DiscordDmChannelId.currentAndOtherUserId channelId local.localUser.linkedDiscordUsers).otherUserId
-                                local.localUser
-                        of
-                            Just otherUser ->
-                                Ui.Lazy.lazy4
-                                    discordFriendLabel
-                                    isMobile
-                                    (case openedOtherUserId of
-                                        SelectedDiscordDmChannel _ a _ _ ->
-                                            a == channelId
+                    (\( channelId, dmChannel ) ->
+                        Ui.Lazy.lazy5
+                            discordFriendLabel
+                            isMobile
+                            (case openedOtherUserId of
+                                SelectedDiscordDmChannel _ a _ _ ->
+                                    a == channelId
 
-                                        _ ->
-                                            False
-                                    )
-                                    channelId
-                                    otherUser
-                                    |> Just
-
-                            Nothing ->
-                                Nothing
+                                _ ->
+                                    False
+                            )
+                            channelId
+                            dmChannel.members
+                            local.localUser
                     )
                     (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
             )
@@ -6194,15 +6185,25 @@ friendLabel isMobile isSelected otherUserId otherUser =
         ]
 
 
-discordFriendLabel : Bool -> Bool -> DiscordDmChannelId -> DiscordFrontendUser -> Element FrontendMsg
-discordFriendLabel isMobile isSelected dmChannelId otherUser =
+discordFriendLabel :
+    Bool
+    -> Bool
+    -> Discord.Id.Id Discord.Id.PrivateChannelId
+    -> NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    -> LocalUser
+    -> Element FrontendMsg
+discordFriendLabel isMobile isSelected dmChannelId members localUser =
     let
         _ =
             Debug.log "rerender friendLabel" ()
+
+        members2 : List (Discord.Id.Id Discord.Id.UserId)
+        members2 =
+            NonemptySet.toSeqSet members |> SeqSet.toList
     in
-    rowLinkButton
-        (DiscordDmChannelId.toHtmlId "guild_discordFriendLabel" dmChannelId)
-        (Route.DiscordDmRoute dmChannelId Nothing HideMembersTab)
+    MyUi.rowButton
+        ("guild_discordFriendLabel_" ++ Discord.Id.toString dmChannelId |> Dom.id)
+        (PressedDiscordFriendLabel dmChannelId)
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
@@ -6216,9 +6217,29 @@ discordFriendLabel isMobile isSelected dmChannelId otherUser =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        [ User.profileImage otherUser.icon
-        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
-        ]
+        (case members2 of
+            [ userId ] ->
+                case LocalState.getDiscordUser userId localUser of
+                    Just otherUser ->
+                        [ User.profileImage otherUser.icon
+                        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+                        ]
+
+                    Nothing ->
+                        []
+
+            many ->
+                List.filterMap
+                    (\userId ->
+                        case LocalState.getDiscordUser userId localUser of
+                            Just user ->
+                                User.profileImage user.icon |> Just
+
+                            Nothing ->
+                                Nothing
+                    )
+                    many
+        )
 
 
 newChannelFormInit : NewChannelForm
