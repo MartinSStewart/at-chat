@@ -846,7 +846,7 @@ routeRequest previousRoute newRoute model =
                 )
                 model3
 
-        DiscordDmRoute _ viewMessage showFriendTab ->
+        DiscordDmRoute routeData ->
             let
                 model3 : LoadedFrontend
                 model3 =
@@ -863,7 +863,7 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds (NoThreadWithFriends viewMessage showFriendTab) model3 ]
+                    , Command.batch [ viewCmd, openChannelCmds (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab) model3 ]
                     )
                 )
                 model3
@@ -944,7 +944,7 @@ routeRequiresLogin route =
         TextEditorRoute ->
             False
 
-        DiscordDmRoute id _ _ ->
+        DiscordDmRoute _ ->
             True
 
 
@@ -1289,6 +1289,12 @@ isPressMsg msg =
 
         MouseExitedDiscordChannelName id _ threadRoute ->
             False
+
+        PressedDiscordGuildMemberLabel id ->
+            True
+
+        PressedDiscordFriendLabel id ->
+            True
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3747,6 +3753,12 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedDiscordGuildMemberLabel id ->
+            Debug.todo ""
+
+        PressedDiscordFriendLabel id ->
+            Debug.todo ""
+
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =
@@ -4956,16 +4968,16 @@ changeUpdate localMsg local =
                                         local.dmChannels
                             }
 
-                        ViewDiscordDm otherUserId messagesLoaded ->
+                        ViewDiscordDm _ channelId messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
-                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed otherUserId) localUser.user
+                                        | user = User.setLastDmViewed (DiscordDmChannelLastViewed channelId) localUser.user
                                         , session = session
                                     }
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
-                                        otherUserId
+                                        channelId
                                         (loadMessages messagesLoaded)
                                         local.discordDmChannels
                             }
@@ -6462,7 +6474,7 @@ updateLoadedFromBackend msg model =
                                         _ ->
                                             Command.none
 
-                                ViewDiscordDm channelId _ ->
+                                ViewDiscordDm _ channelId _ ->
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelIdB), NoThread ) ->
                                             if channelId == channelIdB then
@@ -7338,12 +7350,9 @@ view model =
                                     |> Ui.map TextEditorMsg
                             )
 
-                    DiscordDmRoute dmChannelId viewMessage showFriendTab ->
+                    DiscordDmRoute routeData ->
                         requiresLogin
-                            (Pages.Guild.homePageLoggedInView
-                                (SelectedDiscordDmChannel dmChannelId viewMessage showFriendTab)
-                                loaded
-                            )
+                            (Pages.Guild.homePageLoggedInView (SelectedDiscordDmChannel routeData) loaded)
         ]
     }
 

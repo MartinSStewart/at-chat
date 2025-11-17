@@ -53,7 +53,7 @@ import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
 import Quantity
 import RichText
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), DiscordDmRouteData, DiscordGuildRouteData, Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import String.Nonempty
@@ -451,7 +451,7 @@ loggedInAsView local =
 
 type DmChannelSelection
     = SelectedDmChannel (Id UserId) ThreadRouteWithFriends
-    | SelectedDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Maybe (Id ChannelMessageId)) ShowMembersTab
+    | SelectedDiscordDmChannel DiscordDmRouteData
     | NoDmChannelSelected
 
 
@@ -491,8 +491,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                         ]
                                     |> Ui.inFront
 
-                            SelectedDiscordDmChannel currentUserId discordDmChannelId viewMessage showMembersTab ->
-                                discordDmChannelView currentUserId discordDmChannelId viewMessage showMembersTab loggedIn local model
+                            SelectedDiscordDmChannel routeData ->
+                                discordDmChannelView routeData loggedIn local model
                                     |> Ui.el
                                         [ Ui.height Ui.fill
                                         , Ui.background MyUi.background3
@@ -545,8 +545,8 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
 
-                        SelectedDiscordDmChannel currentUserId discordDmChannelId viewMessage showMembersTab ->
-                            discordDmChannelView currentUserId discordDmChannelId viewMessage showMembersTab loggedIn local model
+                        SelectedDiscordDmChannel routeData ->
+                            discordDmChannelView routeData loggedIn local model
                                 |> Ui.el
                                     [ Ui.height Ui.fill
                                     , Ui.background MyUi.background3
@@ -650,26 +650,23 @@ dmChannelView otherUserId threadRoute loggedIn local model =
 
 
 discordDmChannelView :
-    Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.PrivateChannelId
-    -> Maybe (Id ChannelMessageId)
-    -> ShowMembersTab
+    DiscordDmRouteData
     -> LoggedIn2
     -> LocalState
     -> LoadedFrontend
     -> Element FrontendMsg
-discordDmChannelView currentUserId dmChannelId maybeUrlMessageId showFriendTab loggedIn local model =
-    case SeqDict.get dmChannelId local.discordDmChannels of
+discordDmChannelView routeData loggedIn local model =
+    case SeqDict.get routeData.channelId local.discordDmChannels of
         Just dmChannel ->
             discordConversationView
                 (SeqDict.get
-                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId dmChannelId))
+                    (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm routeData.currentDiscordUserId routeData.channelId))
                     local.localUser.user.lastViewed
                     |> Maybe.withDefault (Id.fromInt -1)
                 )
-                currentUserId
-                (DiscordGuildOrDmId_Dm currentUserId dmChannelId)
-                maybeUrlMessageId
+                routeData.currentDiscordUserId
+                (DiscordGuildOrDmId_Dm routeData.currentDiscordUserId routeData.channelId)
+                routeData.viewingMessage
                 loggedIn
                 model
                 local
@@ -3247,9 +3244,13 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
 
 
-chattingWithYourself : DiscordFrontendDmChannel -> Bool
-chattingWithYourself dmChannel =
-    NonemptySet.size dmChannel.members == 1
+chattingWithYourself : Bool
+chattingWithYourself =
+    False
+
+
+
+--NonemptySet.size dmChannel.members == 1
 
 
 discordConversationView :
@@ -3298,7 +3299,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                 DiscordGuildOrDmId_Dm currentUserId dmChannelId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if chattingWithYourself dmChannel then
+                        (if chattingWithYourself then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -3369,7 +3370,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                 Ui.el
                                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                                     (Ui.text
-                                        (if chattingWithYourself dmChannelId then
+                                        (if chattingWithYourself then
                                             "This is the start of a conversation with yourself"
 
                                          else
@@ -3439,7 +3440,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
                     DiscordGuildOrDmId_Dm _ dmChannelId ->
                         "Write a message to "
-                            ++ (if chattingWithYourself dmChannelId then
+                            ++ (if chattingWithYourself then
                                     "yourself"
 
                                 else
@@ -3801,7 +3802,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 DiscordGuildOrDmId_Dm _ dmChannelId ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if chattingWithYourself dmChannelId then
+                        (if chattingWithYourself then
                             [ Ui.el
                                 [ Ui.Font.color MyUi.font3
                                 , Ui.width Ui.shrink
@@ -6137,14 +6138,14 @@ friendsColumn isMobile openedOtherUserId local =
                             Nothing
                 )
                 (SeqDict.toList dmChannelsIncludingCurrentUser)
-                ++ List.filterMap
+                ++ List.map
                     (\( channelId, dmChannel ) ->
                         Ui.Lazy.lazy5
                             discordFriendLabel
                             isMobile
                             (case openedOtherUserId of
-                                SelectedDiscordDmChannel _ a _ _ ->
-                                    a == channelId
+                                SelectedDiscordDmChannel routeData ->
+                                    routeData.channelId == channelId
 
                                 _ ->
                                     False
