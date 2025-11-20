@@ -10,7 +10,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
-import DmChannel exposing (FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Ease
 import Editable
@@ -2801,32 +2801,28 @@ updateLoaded msg model =
                                                 Nothing
 
                                     DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-                                        Debug.todo ""
-                                 --let
-                                 --    dmChannel : FrontendDmChannel
-                                 --    dmChannel =
-                                 --        SeqDict.get otherUserId local.dmChannels
-                                 --            |> Maybe.withDefault DmChannel.discordFrontendInit
-                                 --in
-                                 --(case threadRoute of
-                                 --    NoThread ->
-                                 --        Local_Discord_LoadChannelMessages
-                                 --            guildOrDmId2
-                                 --            dmChannel.visibleMessages.oldest
-                                 --            EmptyPlaceholder
-                                 --
-                                 --    ViewThread threadId ->
-                                 --        Local_Discord_LoadThreadMessages
-                                 --            guildOrDmId2
-                                 --            threadId
-                                 --            (SeqDict.get threadId dmChannel.threads
-                                 --                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
-                                 --                |> .visibleMessages
-                                 --                |> .oldest
-                                 --            )
-                                 --            EmptyPlaceholder
-                                 --)
-                                 --    |> Just
+                                        case SeqDict.get currentUserId local.dmDiscordChannels of
+                                            Just dmChannel ->
+                                                (case threadRoute of
+                                                    NoThread ->
+                                                        Local_Discord_LoadChannelMessages
+                                                            guildOrDmId2
+                                                            dmChannel.visibleMessages.oldest
+                                                            EmptyPlaceholder
+
+                                                    ViewThread threadId ->
+                                                        Local_Discord_LoadThreadMessages
+                                                            guildOrDmId2
+                                                            threadId
+                                                            (SeqDict.get threadId dmChannel.threads
+                                                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
+                                                                |> .visibleMessages
+                                                                |> .oldest
+                                                            )
+                                                            EmptyPlaceholder
+                                                )
+                                                    |> Just
+                                            Nothing ->
                                 )
                                 { loggedIn | channelScrollPosition = scrollPosition }
                                 Command.none
@@ -3756,8 +3752,49 @@ updateLoaded msg model =
         PressedDiscordGuildMemberLabel id ->
             Debug.todo ""
 
-        PressedDiscordFriendLabel id ->
-            Debug.todo ""
+        PressedDiscordFriendLabel channelId ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case SeqDict.get channelId local.discordDmChannels of
+                        Just channel ->
+                            let
+                                maybeCurrentDiscordUser : Maybe (Discord.Id.Id Discord.Id.UserId)
+                                maybeCurrentDiscordUser =
+                                    List.Extra.findMap
+                                        (\( userId, user ) ->
+                                            if NonemptySet.member userId channel.members then
+                                                Just userId
+
+                                            else
+                                                Nothing
+                                        )
+                                        (SeqDict.toList local.localUser.linkedDiscordUsers)
+                            in
+                            case maybeCurrentDiscordUser of
+                                Just currentUserId ->
+                                    routePush
+                                        model
+                                        (DiscordDmRoute
+                                            { currentDiscordUserId = currentUserId
+                                            , channelId = channelId
+                                            , viewingMessage = Nothing
+                                            , showMembersTab = HideMembersTab
+                                            }
+                                        )
+
+                                Nothing ->
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
