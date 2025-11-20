@@ -670,7 +670,20 @@ discordDmChannelView routeData loggedIn local model =
                 loggedIn
                 model
                 local
-                "Discord Conversation"
+                (NonemptySet.toSeqSet dmChannel.members
+                    |> SeqSet.remove routeData.currentDiscordUserId
+                    |> SeqSet.toList
+                    |> List.filterMap
+                        (\userId ->
+                            case LocalState.getDiscordUser userId local.localUser of
+                                Just user ->
+                                    PersonName.toString user.name |> Just
+
+                                Nothing ->
+                                    Nothing
+                        )
+                    |> String.join ", "
+                )
                 { messages = dmChannel.messages
                 , visibleMessages = dmChannel.visibleMessages
                 , lastTypedAt = dmChannel.lastTypedAt

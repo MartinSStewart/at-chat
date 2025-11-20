@@ -2715,6 +2715,7 @@ updateLoaded msg model =
                     case scrollPosition of
                         ScrolledToTop ->
                             let
+                                local : LocalState
                                 local =
                                     Local.model loggedIn.localState
                             in
@@ -2800,29 +2801,17 @@ updateLoaded msg model =
                                             Nothing ->
                                                 Nothing
 
-                                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-                                        case SeqDict.get currentUserId local.dmDiscordChannels of
+                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Dm _ channelId) as guildOrDmId2) ->
+                                        case SeqDict.get channelId local.discordDmChannels of
                                             Just dmChannel ->
-                                                (case threadRoute of
-                                                    NoThread ->
-                                                        Local_Discord_LoadChannelMessages
-                                                            guildOrDmId2
-                                                            dmChannel.visibleMessages.oldest
-                                                            EmptyPlaceholder
-
-                                                    ViewThread threadId ->
-                                                        Local_Discord_LoadThreadMessages
-                                                            guildOrDmId2
-                                                            threadId
-                                                            (SeqDict.get threadId dmChannel.threads
-                                                                |> Maybe.withDefault DmChannel.discordFrontendThreadInit
-                                                                |> .visibleMessages
-                                                                |> .oldest
-                                                            )
-                                                            EmptyPlaceholder
-                                                )
+                                                Local_Discord_LoadChannelMessages
+                                                    guildOrDmId2
+                                                    dmChannel.visibleMessages.oldest
+                                                    EmptyPlaceholder
                                                     |> Just
+
                                             Nothing ->
+                                                Nothing
                                 )
                                 { loggedIn | channelScrollPosition = scrollPosition }
                                 Command.none
@@ -5200,16 +5189,15 @@ changeUpdate localMsg local =
                                         local.discordGuilds
                             }
 
-                        DiscordGuildOrDmId_Dm currentUserId channelId ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId_Dm _ channelId ->
+                            { local
+                                | discordDmChannels =
+                                    SeqDict.updateIfExists
+                                        channelId
+                                        (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        local.discordDmChannels
+                            }
 
-                --{ local
-                --    | dmChannels =
-                --        SeqDict.updateIfExists
-                --            otherUserId
-                --            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
-                --            local.dmChannels
-                --}
                 Local_Discord_LoadThreadMessages guildOrDmId threadId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild _ guildId channelId ->

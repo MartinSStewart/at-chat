@@ -2581,7 +2581,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId_Dm currentUserId channelId ->
-                            Debug.todo ""
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                currentUserId
+                                channelId
+                                (\_ _ _ channel ->
+                                    ( model2
+                                    , handleMessagesRequest oldestVisibleMessage channel
+                                        |> Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage
+                                        |> LocalChangeResponse changeId
+                                        |> Lamdera.sendToFrontend clientId
+                                    )
+                                )
 
                 --asUser
                 --    model2
