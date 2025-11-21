@@ -5790,14 +5790,14 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordDirectMessage time sender richText replyTo ->
-                    { local
-                        | dmChannels =
-                            SeqDict.update
-                                sender
-                                (\maybe ->
-                                    Maybe.withDefault DmChannel.frontendInit maybe
-                                        |> LocalState.createChannelMessageFrontend
+                Server_DiscordDirectMessage time channelId sender richText replyTo ->
+                    case SeqDict.get channelId local.discordDmChannels of
+                        Just channel ->
+                            { local
+                                | discordDmChannels =
+                                    SeqDict.insert
+                                        channelId
+                                        (LocalState.createChannelMessageFrontend
                                             (UserTextMessage
                                                 { createdAt = time
                                                 , createdBy = sender
@@ -5808,10 +5808,13 @@ changeUpdate localMsg local =
                                                 , attachedFiles = SeqDict.empty
                                                 }
                                             )
-                                        |> Just
-                                )
-                                local.dmChannels
-                    }
+                                            channel
+                                        )
+                                        local.discordDmChannels
+                            }
+
+                        Nothing ->
+                            local
 
                 Server_PushNotificationsReset publicVapidKey ->
                     { local | publicVapidKey = publicVapidKey }

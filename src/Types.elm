@@ -307,6 +307,7 @@ type alias BackendModel =
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
+    , pendingDiscordCreateDmMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.PrivateChannelId ) ( ClientId, ChangeId )
     }
 
 
@@ -644,7 +645,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
-    | Server_DiscordDirectMessage Time.Posix (Id UserId) (Nonempty (RichText (Id UserId))) (Maybe (Id ChannelMessageId))
+    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error

@@ -9,6 +9,7 @@ module Broadcast exposing
     , notification
     , pushNotification
     , pushNotificationCodec
+    , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
     , toDiscordGuild
     , toDiscordGuildExcludingOne
@@ -111,6 +112,23 @@ toDiscordDmChannelExcludingOne clientToSkip _ msg model =
                             ChangeBroadcast msg
                                 |> Lamdera.sendToFrontend otherClientId
                                 |> Just
+                    )
+        )
+        (SeqDict.toList model.connections)
+        |> Command.batch
+
+
+toDiscordDmChannel : Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordDmChannel _ msg model =
+    List.concatMap
+        (\( _, otherClientIds ) ->
+            NonemptyDict.keys otherClientIds
+                |> List.Nonempty.toList
+                |> List.filterMap
+                    (\otherClientId ->
+                        ChangeBroadcast msg
+                            |> Lamdera.sendToFrontend otherClientId
+                            |> Just
                     )
         )
         (SeqDict.toList model.connections)

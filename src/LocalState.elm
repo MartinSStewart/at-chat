@@ -31,6 +31,7 @@ module LocalState exposing
     , createChannelMessageBackend
     , createChannelMessageFrontend
     , createDiscordChannelMessageBackend
+    , createDiscordDmChannelMessageBackend
     , createDiscordMessageBackend
     , createDiscordThreadMessageBackend
     , createGuild
@@ -71,7 +72,7 @@ import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
@@ -567,6 +568,15 @@ createDiscordThreadMessageBackend messageId threadId message channel =
 
         Err err ->
             Err err
+
+
+createDiscordDmChannelMessageBackend :
+    Discord.Id.Id Discord.Id.MessageId
+    -> Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
+    -> DiscordDmChannel
+    -> Result DiscordMessageAlreadyExists DiscordDmChannel
+createDiscordDmChannelMessageBackend messageId message channel =
+    createDiscordMessageBackend messageId message channel
 
 
 createDiscordMessageBackend :

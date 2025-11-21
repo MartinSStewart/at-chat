@@ -33,6 +33,7 @@ import NonemptyDict
 import NonemptySet
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
+import Route exposing (Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
@@ -832,91 +833,113 @@ handleDiscordCreateMessage message model =
             case message.guildId of
                 Missing ->
                     let
-                        _ =
-                            Debug.log "DM message" message
+                        dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                        dmChannelId =
+                            Discord.Id.toUInt64 message.channelId |> Discord.Id.fromUInt64
                     in
-                    ( model, Command.none )
+                    case SeqDict.get dmChannelId model.discordDmChannels of
+                        Just channel ->
+                            let
+                                richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                                richText =
+                                    RichText.fromDiscord message.content
 
-                --let
-                --    richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-                --    richText =
-                --        RichText.fromDiscord model.linkedDiscordUsers message.content
-                --
-                --    dmChannelId : DmChannelId
-                --    dmChannelId =
-                --        DmChannel.channelIdFromUserIds userId Broadcast.adminUserId
-                --
-                --    dmChannel : DiscordDmChannel
-                --    dmChannel =
-                --        Maybe.withDefault DmChannel.discordBackendInit (SeqDict.get dmChannelId model.discordDmChannels)
-                --
-                --    replyTo : Maybe (Id ChannelMessageId)
-                --    replyTo =
-                --        case message.referencedMessage of
-                --            Discord.Referenced referenced ->
-                --                OneToOne.second (DiscordMessageId referenced.id) dmChannel.linkedMessageIds
-                --
-                --            Discord.ReferenceDeleted ->
-                --                Nothing
-                --
-                --            Discord.NoReference ->
-                --                Nothing
-                --in
-                --( { model
-                --    | dmChannels =
-                --        SeqDict.insert
-                --            dmChannelId
-                --            (LocalState.createChannelMessageBackend
-                --                (Just (DiscordMessageId message.id))
-                --                (UserTextMessage
-                --                    { createdAt = message.timestamp
-                --                    , createdBy = userId
-                --                    , content = richText
-                --                    , reactions = SeqDict.empty
-                --                    , editedAt = Nothing
-                --                    , repliedTo =
-                --                        case message.referencedMessage of
-                --                            Discord.Referenced referenced ->
-                --                                OneToOne.second
-                --                                    (DiscordMessageId referenced.id)
-                --                                    dmChannel.linkedMessageIds
-                --
-                --                            Discord.ReferenceDeleted ->
-                --                                Nothing
-                --
-                --                            Discord.NoReference ->
-                --                                Nothing
-                --                    , attachedFiles = SeqDict.empty
-                --                    }
-                --                )
-                --                dmChannel
-                --            )
-                --            model.dmChannels
-                --    , discordDms = OneToOne.insert message.channelId dmChannelId model.discordDms
-                --  }
-                --, Command.batch
-                --    [ Broadcast.toUser
-                --        Nothing
-                --        Nothing
-                --        Broadcast.adminUserId
-                --        (Server_DiscordDirectMessage message.timestamp userId richText replyTo
-                --            |> ServerChange
-                --        )
-                --        model
-                --    , case NonemptyDict.get userId model.users of
-                --        Just user ->
-                --            Broadcast.notification
-                --                message.timestamp
-                --                Broadcast.adminUserId
-                --                user
-                --                (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
-                --                (DmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
-                --                model
-                --
-                --        Nothing ->
-                --            Command.none
-                --    ]
-                --)
+                                replyTo : Maybe (Id ChannelMessageId)
+                                replyTo =
+                                    case message.referencedMessage of
+                                        Discord.Referenced referenced ->
+                                            OneToOne.second referenced.id channel.linkedMessageIds
+
+                                        Discord.ReferenceDeleted ->
+                                            Nothing
+
+                                        Discord.NoReference ->
+                                            Nothing
+
+                                channel2Result =
+                                    LocalState.createDiscordDmChannelMessageBackend
+                                        message.id
+                                        (UserTextMessage
+                                            { createdAt = message.timestamp
+                                            , createdBy = message.author.id
+                                            , content = richText
+                                            , reactions = SeqDict.empty
+                                            , editedAt = Nothing
+                                            , repliedTo = replyTo
+                                            , attachedFiles = SeqDict.empty
+                                            }
+                                        )
+                                        channel
+
+                                guildOrDmId : DiscordGuildOrDmId
+                                guildOrDmId =
+                                    DiscordGuildOrDmId_Dm message.author.id dmChannelId
+                            in
+                            case channel2Result of
+                                Ok channel2 ->
+                                    ( { model
+                                        | discordDmChannels =
+                                            SeqDict.insert dmChannelId channel2 model.discordDmChannels
+                                      }
+                                    , case SeqDict.get ( message.author.id, dmChannelId ) model.pendingDiscordCreateDmMessages of
+                                        Just ( clientId, changeId ) ->
+                                            Command.batch
+                                                [ LocalChangeResponse
+                                                    changeId
+                                                    (Local_Discord_SendMessage
+                                                        message.timestamp
+                                                        guildOrDmId
+                                                        richText
+                                                        (NoThreadWithMaybeMessage replyTo)
+                                                        SeqDict.empty
+                                                    )
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordDmChannelExcludingOne
+                                                    clientId
+                                                    dmChannelId
+                                                    (Server_Discord_SendMessage
+                                                        message.timestamp
+                                                        guildOrDmId
+                                                        richText
+                                                        (NoThreadWithMaybeMessage replyTo)
+                                                        SeqDict.empty
+                                                        |> ServerChange
+                                                    )
+                                                    model
+                                                ]
+
+                                        Nothing ->
+                                            Broadcast.toDiscordDmChannel
+                                                dmChannelId
+                                                (Server_Discord_SendMessage
+                                                    message.timestamp
+                                                    guildOrDmId
+                                                    richText
+                                                    (NoThreadWithMaybeMessage replyTo)
+                                                    SeqDict.empty
+                                                    |> ServerChange
+                                                )
+                                                model
+                                      --, case NonemptyDict.get message.author.id model.discordUsers of
+                                      --    Just user ->
+                                      --        Broadcast.notification
+                                      --            message.timestamp
+                                      --            Broadcast.adminUserId
+                                      --            user
+                                      --            (RichText.toString (NonemptyDict.toSeqDict model.users) richText)
+                                      --            (DiscordDmRoute userId (NoThreadWithFriends Nothing HideMembersTab) |> Just)
+                                      --            model
+                                      --
+                                      --    Nothing ->
+                                      --        Command.none
+                                    )
+
+                                Err error ->
+                                    ( model, Command.none )
+
+                        Nothing ->
+                            ( model, Command.none )
+
                 Included discordGuildId ->
                     handleDiscordCreateGuildMessage discordGuildId message model
 
