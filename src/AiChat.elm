@@ -1372,6 +1372,9 @@ openRouterRequest openRouterKey aiModel message =
             Json.Encode.object
                 [ ( "model", Json.Encode.string aiModel )
                 , message
+                , ( "reasoning"
+                  , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
+                  )
                 ]
                 |> Http.jsonBody
         , resolver =
