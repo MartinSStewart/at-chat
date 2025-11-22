@@ -176,6 +176,7 @@ init =
       , textEditor = TextEditor.initLocalState
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
+      , pendingDiscordCreateDmMessages = SeqDict.empty
       }
     , Command.none
     )
