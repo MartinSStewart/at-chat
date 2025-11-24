@@ -526,7 +526,7 @@ update msg model =
                     )
 
         HandleReadyDataStep2 discordUserId result ->
-            case Debug.log "discordGuildsReuslt" result of
+            case result of
                 Ok ( dmData, guildData ) ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList guildData) model
                         |> DiscordSync.addDiscordDms discordUserId dmData
@@ -1427,23 +1427,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         attachedFiles2 =
                                             validateAttachedFiles model2.files attachedFiles
-
-                                        channelId2 : Discord.Id.Id Discord.Id.ChannelId
-                                        channelId2 =
-                                            Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64
                                     in
                                     case threadRouteWithMaybeReplyTo of
                                         NoThreadWithMaybeMessage maybeReplyTo ->
                                             ( { model2
-                                                | pendingDiscordCreateMessages =
+                                                | pendingDiscordCreateDmMessages =
                                                     SeqDict.insert
-                                                        ( currentUserId, channelId2 )
+                                                        ( currentUserId, channelId )
                                                         ( clientId, changeId )
-                                                        model2.pendingDiscordCreateMessages
+                                                        model2.pendingDiscordCreateDmMessages
                                               }
                                             , Discord.createMarkdownMessagePayload
                                                 (Discord.userToken discordUser.auth)
-                                                { channelId = channelId2
+                                                { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64
                                                 , content = RichText.toDiscord attachedFiles2 text
                                                 , replyTo =
                                                     case maybeReplyTo of
