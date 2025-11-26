@@ -1431,7 +1431,7 @@ handleReadyData userAuth readyData model =
                         Nothing
 
                     else
-                        (Discord.getDirectMessagesPayload
+                        Discord.getDirectMessagesPayload
                             userAuth
                             { channelId = dmChannelId
                             , limit = 100
@@ -1439,8 +1439,7 @@ handleReadyData userAuth readyData model =
                             }
                             |> http
                             |> Task.onError (\_ -> Task.succeed [])
-                            |> Task.map (\a -> ( dmChannelId, dmChannel, a ))
-                        )
+                            |> Task.map (\a -> ( dmChannelId, dmChannel, List.reverse a ))
                             |> Just
                 )
                 (SeqDict.toList discordDmChannels)
@@ -1467,7 +1466,7 @@ handleReadyData userAuth readyData model =
                                     }
                                     |> http
                                     |> Task.onError (\_ -> Task.succeed [])
-                                    |> Task.map (Tuple.pair channel)
+                                    |> Task.map (\a -> ( channel, List.reverse a ))
                             )
                             gatewayGuild.channels
                             |> Task.sequence
