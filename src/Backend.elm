@@ -1844,8 +1844,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId _ ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                currentUserId
+                                (\userSession discordUser user guild ->
+                                    Debug.todo ""
+                                )
+
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                currentUserId
+                                channelId
+                                (\userSession discordUser user channel ->
+                                    Debug.todo ""
+                                )
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
