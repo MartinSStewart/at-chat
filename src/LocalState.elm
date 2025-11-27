@@ -506,24 +506,8 @@ createMessageBackend :
             , lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId)
         }
 createMessageBackend message channel =
-    let
-        previousIndex : Id messageId
-        previousIndex =
-            Array.length channel.messages - 1 |> Id.fromInt
-    in
     { channel
-        | messages =
-            case DmChannel.getArray previousIndex channel.messages of
-                Just previousMessage ->
-                    case mergeMessages message previousMessage of
-                        Just mergedMessage ->
-                            DmChannel.setArray previousIndex mergedMessage channel.messages
-
-                        Nothing ->
-                            Array.push message channel.messages
-
-                Nothing ->
-                    Array.push message channel.messages
+        | messages = Array.push message channel.messages
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
@@ -607,18 +591,7 @@ createDiscordMessageBackend messageId message channel =
                 Array.length channel.messages - 1 |> Id.fromInt
         in
         { channel
-            | messages =
-                case DmChannel.getArray previousIndex channel.messages of
-                    Just previousMessage ->
-                        case mergeMessages message previousMessage of
-                            Just mergedMessage ->
-                                DmChannel.setArray previousIndex mergedMessage channel.messages
-
-                            Nothing ->
-                                Array.push message channel.messages
-
-                    Nothing ->
-                        Array.push message channel.messages
+            | messages = Array.push message channel.messages
             , lastTypedAt =
                 case message of
                     UserTextMessage { createdBy } ->
@@ -698,35 +671,9 @@ createMessageFrontend :
             , lastTypedAt : SeqDict userId (LastTypedAt messageId)
         }
 createMessageFrontend message channel =
-    let
-        previousIndex : Id messageId
-        previousIndex =
-            Array.length channel.messages - 1 |> Id.fromInt
-
-        mergeWithPrevious : Maybe (Message messageId userId)
-        mergeWithPrevious =
-            case DmChannel.getArray previousIndex channel.messages of
-                Just (MessageLoaded previousMessage) ->
-                    mergeMessages message previousMessage
-
-                _ ->
-                    Nothing
-    in
     { channel
-        | messages =
-            case mergeWithPrevious of
-                Just mergedMessage ->
-                    DmChannel.setArray previousIndex (MessageLoaded mergedMessage) channel.messages
-
-                Nothing ->
-                    Array.push (MessageLoaded message) channel.messages
-        , visibleMessages =
-            case mergeWithPrevious of
-                Nothing ->
-                    VisibleMessages.increment channel channel.visibleMessages
-
-                _ ->
-                    channel.visibleMessages
+        | messages = Array.push (MessageLoaded message) channel.messages
+        , visibleMessages = VisibleMessages.increment channel channel.visibleMessages
         , lastTypedAt =
             case message of
                 UserTextMessage { createdBy } ->
@@ -738,33 +685,6 @@ createMessageFrontend message channel =
                 DeletedMessage _ ->
                     channel.lastTypedAt
     }
-
-
-mergeMessages : Message messageId userId -> Message messageId userId -> Maybe (Message messageId userId)
-mergeMessages message previousMessage =
-    case ( message, previousMessage ) of
-        ( UserTextMessage data, UserTextMessage previous ) ->
-            if
-                (Duration.from previous.createdAt data.createdAt |> Quantity.lessThan (Duration.minutes 5))
-                    && (previous.editedAt == Nothing)
-                    && (previous.createdBy == data.createdBy)
-                    && not (SeqDict.isEmpty previous.reactions)
-                --&& not (OneToOne.memberSecond previousIndex channel.linkedMessageIds)
-            then
-                UserTextMessage
-                    { previous
-                        | content =
-                            RichText.append
-                                previous.content
-                                (List.Nonempty.cons (NormalText '\n' "") data.content)
-                    }
-                    |> Just
-
-            else
-                Nothing
-
-        _ ->
-            Nothing
 
 
 createGuild : Time.Posix -> Id UserId -> GuildName -> BackendGuild
