@@ -571,7 +571,7 @@ addDiscordDms currentUserId dmChannels model =
                                         ( messages2, links ) =
                                             messagesAndLinks messages
                                     in
-                                    { messages = messages2 |> Debug.log "messages"
+                                    { messages = messages2
                                     , lastTypedAt = SeqDict.empty
                                     , linkedMessageIds = links
                                     , members = channel.members
@@ -837,7 +837,7 @@ handleDiscordCreateMessage message model =
                         dmChannelId =
                             Discord.Id.toUInt64 message.channelId |> Discord.Id.fromUInt64
                     in
-                    case SeqDict.get dmChannelId model.discordDmChannels |> Debug.log "dmChannel" of
+                    case SeqDict.get dmChannelId model.discordDmChannels of
                         Just channel ->
                             let
                                 richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
@@ -875,13 +875,13 @@ handleDiscordCreateMessage message model =
                                 guildOrDmId =
                                     DiscordGuildOrDmId_Dm message.author.id dmChannelId
                             in
-                            case channel2Result |> Debug.log "dmChannel2" of
+                            case channel2Result of
                                 Ok channel2 ->
                                     ( { model
                                         | discordDmChannels =
                                             SeqDict.insert dmChannelId channel2 model.discordDmChannels
                                       }
-                                    , case SeqDict.get ( message.author.id, dmChannelId ) model.pendingDiscordCreateDmMessages |> Debug.log "dmChannel123" of
+                                    , case SeqDict.get ( message.author.id, dmChannelId ) model.pendingDiscordCreateDmMessages of
                                         Just ( clientId, changeId ) ->
                                             Command.batch
                                                 [ LocalChangeResponse

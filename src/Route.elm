@@ -346,7 +346,7 @@ encode route =
                             ( [ "g", Id.toString guildId, "new" ], [] )
 
                         GuildSettingsRoute ->
-                            ( [ "g", Id.toString guildId, "invite" ], [] )
+                            ( [ "g", Id.toString guildId, "settings" ], [] )
 
                         JoinRoute inviteLinkId ->
                             ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ], [] )
@@ -396,7 +396,7 @@ encode route =
                             )
 
                         DiscordChannel_GuildSettingsRoute ->
-                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "invite" ]
+                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "settings" ]
                             , []
                             )
 

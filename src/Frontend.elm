@@ -61,7 +61,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
 import TextEditor
-import Thread exposing (DiscordFrontendThread, FrontendThread)
+import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -6618,8 +6618,35 @@ updateLoadedFromBackend msg model =
                                         Nothing ->
                                             Command.none
 
-                                DiscordGuildOrDmId_Dm _ _ ->
-                                    Command.none
+                                DiscordGuildOrDmId_Dm senderId channelId ->
+                                    case SeqDict.get channelId local.discordDmChannels of
+                                        Just channel ->
+                                            Command.batch
+                                                [ playNotificationSoundForDiscordMessage
+                                                    senderId
+                                                    guildOrDmId
+                                                    maybeRepliedTo
+                                                    { messages = channel.messages, threads = SeqDict.empty }
+                                                    local
+                                                    content
+                                                    model
+                                                , case loggedIn.channelScrollPosition of
+                                                    ScrolledToBottom ->
+                                                        if MyUi.isMobile model then
+                                                            smoothScrollToBottomOfChannel
+
+                                                        else
+                                                            scrollToBottomOfChannel
+
+                                                    ScrolledToMiddle ->
+                                                        Command.none
+
+                                                    ScrolledToTop ->
+                                                        Command.none
+                                                ]
+
+                                        Nothing ->
+                                            Command.none
 
                         _ ->
                             Command.none
@@ -6809,7 +6836,11 @@ playNotificationSoundForDiscordMessage :
     Discord.Id.Id Discord.Id.UserId
     -> DiscordGuildOrDmId
     -> ThreadRouteWithMaybeMessage
-    -> DiscordFrontendChannel
+    ->
+        { a
+            | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread (Discord.Id.Id Discord.Id.UserId))
+        }
     -> LocalState
     -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> LoadedFrontend
@@ -6830,6 +6861,7 @@ playNotificationSoundForDiscordMessage senderId guildOrDmId threadRouteWithRepli
                         DiscordGuildOrDmId_Dm _ _ ->
                             False
 
+                isMentionedOrRepliedTo : Bool
                 isMentionedOrRepliedTo =
                     LocalState.usersMentionedOrRepliedToFrontend threadRouteWithRepliedTo content channel
                         |> SeqSet.intersect (SeqDict.keys local.localUser.linkedDiscordUsers |> SeqSet.fromList)
