@@ -863,7 +863,10 @@ routeRequest previousRoute newRoute model =
             updateLoggedIn
                 (\loggedIn ->
                     ( startOpeningChannelSidebar loggedIn
-                    , Command.batch [ viewCmd, openChannelCmds (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab) model3 ]
+                    , Command.batch
+                        [ viewCmd
+                        , openChannelCmds (NoThreadWithFriends routeData.viewingMessage routeData.showMembersTab) model3
+                        ]
                     )
                 )
                 model3
@@ -7722,6 +7725,12 @@ routeToGuildOrDmId route =
 
                 _ ->
                     Nothing
+
+        DiscordDmRoute data ->
+            ( DiscordGuildOrDmId_Dm data.currentDiscordUserId data.channelId |> DiscordGuildOrDmId
+            , NoThread
+            )
+                |> Just
 
         _ ->
             Nothing
