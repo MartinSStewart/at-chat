@@ -156,72 +156,134 @@ handleDiscordRemoveReactionForEmoji _ model =
 
 
 handleDiscordEditMessage :
-    Discord.MessageUpdate
+    Discord.UserMessageUpdate
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordEditMessage edit model =
-    Debug.todo ""
+    case edit.guildId of
+        Included guildId ->
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    handleDiscordGuildEditMessage guildId guild edit model
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Missing ->
+            handleDiscordDmEditMessage edit model
 
 
+handleDiscordDmEditMessage :
+    Discord.UserMessageUpdate
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordDmEditMessage edit model =
+    let
+        channelId =
+            Discord.Id.toUInt64 edit.channelId |> Discord.Id.fromUInt64
+    in
+    case SeqDict.get channelId model.discordDmChannels of
+        Just channel ->
+            case OneToOne.second edit.id channel.linkedMessageIds of
+                Just messageIndex ->
+                    let
+                        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                        richText =
+                            RichText.fromDiscord edit.content
+                    in
+                    case
+                        LocalState.editMessageHelper2
+                            edit.timestamp
+                            edit.author.id
+                            richText
+                            SeqDict.empty
+                            messageIndex
+                            channel
+                    of
+                        Ok channel2 ->
+                            ( { model
+                                | discordDmChannels =
+                                    SeqDict.insert channelId channel2 model.discordDmChannels
+                              }
+                            , Broadcast.toDiscordDmChannel
+                                channelId
+                                (Server_DiscordSendEditMessage
+                                    edit.timestamp
+                                    (DiscordGuildOrDmId_Dm edit.author.id channelId)
+                                    (NoThreadWithMessage messageIndex)
+                                    richText
+                                    SeqDict.empty
+                                    |> ServerChange
+                                )
+                                model
+                            )
 
---case getGuildFromDiscordId edit.guildId model of
---    Just ( guildId, guild ) ->
---        case LocalState.linkedChannel (DiscordChannelId edit.channelId) guild of
---            Just ( channelId, channel ) ->
---                case
---                    ( OneToOne.second (DiscordMessageId edit.id) channel.linkedMessageIds
---                    , SeqDict.get edit.author.id model.linkedDiscordUsers
---                    )
---                of
---                    ( Just messageIndex, Just userId ) ->
---                        let
---                            richText : Nonempty (RichText (Id UserId))
---                            richText =
---                                RichText.fromDiscord model.discordUser edit.content
---                        in
---                        case
---                            LocalState.editMessageHelper
---                                edit.timestamp
---                                userId
---                                richText
---                                SeqDict.empty
---                                (NoThreadWithMessage messageIndex)
---                                channel
---                        of
---                            Ok channel2 ->
---                                ( { model
---                                    | guilds =
---                                        SeqDict.updateIfExists
---                                            guildId
---                                            (LocalState.updateChannel (\_ -> channel2) channelId)
---                                            model.guilds
---                                  }
---                                , Broadcast.toGuild
---                                    guildId
---                                    (Server_SendEditMessage
---                                        edit.timestamp
---                                        userId
---                                        (GuildOrDmId_Guild guildId channelId)
---                                        (NoThreadWithMessage messageIndex)
---                                        richText
---                                        SeqDict.empty
---                                        |> ServerChange
---                                    )
---                                    model
---                                )
---
---                            Err _ ->
---                                ( model, Command.none )
---
---                    _ ->
---                        -- TODO handle edit thread messages
---                        ( model, Command.none )
---
---            Nothing ->
---                ( model, Command.none )
---
---    Nothing ->
---        ( model, Command.none )
+                        Err _ ->
+                            ( model, Command.none )
+
+                _ ->
+                    -- TODO handle edit thread messages
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+handleDiscordGuildEditMessage :
+    Discord.Id.Id Discord.Id.GuildId
+    -> DiscordBackendGuild
+    -> Discord.UserMessageUpdate
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordGuildEditMessage guildId guild edit model =
+    case SeqDict.get edit.channelId guild.channels of
+        Just channel ->
+            case OneToOne.second edit.id channel.linkedMessageIds of
+                Just messageIndex ->
+                    let
+                        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                        richText =
+                            RichText.fromDiscord edit.content
+                    in
+                    case
+                        LocalState.editMessageHelper
+                            edit.timestamp
+                            edit.author.id
+                            richText
+                            SeqDict.empty
+                            (NoThreadWithMessage messageIndex)
+                            channel
+                    of
+                        Ok channel2 ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel (\_ -> channel2) edit.channelId)
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                (Server_DiscordSendEditMessage
+                                    edit.timestamp
+                                    (DiscordGuildOrDmId_Guild edit.author.id guildId edit.channelId)
+                                    (NoThreadWithMessage messageIndex)
+                                    richText
+                                    SeqDict.empty
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Err _ ->
+                            ( model, Command.none )
+
+                _ ->
+                    -- TODO handle edit thread messages
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 handleDiscordDeleteMessage :

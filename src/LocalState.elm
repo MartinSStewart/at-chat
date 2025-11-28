@@ -47,7 +47,9 @@ module LocalState exposing
     , discordGuildToFrontendForUser
     , editChannel
     , editMessageFrontendHelper
+    , editMessageFrontendHelper2
     , editMessageHelper
+    , editMessageHelper2
     , getDiscordGuildAndChannel
     , getDiscordUser
     , getGuildAndChannel
@@ -1196,12 +1198,36 @@ updateChannel updateFunc channelId guild =
 
 editMessageHelper :
     Time.Posix
-    -> Id UserId
-    -> Nonempty (RichText (Id UserId))
+    -> userId
+    -> Nonempty (RichText userId)
     -> SeqDict (Id FileId) FileData
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
-    -> Result () { b | messages : Array (Message ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads :
+                SeqDict
+                    (Id ChannelMessageId)
+                    { c
+                        | messages : Array (Message ThreadMessageId userId)
+                        , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                    }
+        }
+    ->
+        Result
+            ()
+            { b
+                | messages : Array (Message ChannelMessageId userId)
+                , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                , threads :
+                    SeqDict
+                        (Id ChannelMessageId)
+                        { c
+                            | messages : Array (Message ThreadMessageId userId)
+                            , lastTypedAt : SeqDict userId (LastTypedAt ThreadMessageId)
+                        }
+            }
 editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageId ->
@@ -1223,18 +1249,18 @@ editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
 
 editMessageHelper2 :
     Time.Posix
-    -> Id UserId
-    -> Nonempty (RichText (Id UserId))
+    -> userId
+    -> Nonempty (RichText userId)
     -> SeqDict (Id FileId) FileData
     -> Id messageId
-    -> { b | messages : Array (Message messageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
-    -> Result () { b | messages : Array (Message messageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
+    -> { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
 editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
     case DmChannel.getArray messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy && data.content /= newContent then
                 let
-                    data2 : UserTextMessageData messageId (Id UserId)
+                    data2 : UserTextMessageData messageId userId
                     data2 =
                         { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
                 in
@@ -1268,12 +1294,12 @@ editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
 
 editMessageFrontendHelper :
     Time.Posix
-    -> Id UserId
-    -> Nonempty (RichText (Id UserId))
+    -> userId
+    -> Nonempty (RichText userId)
     -> SeqDict (Id FileId) FileData
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (MessageState ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-    -> Result () { b | messages : Array (MessageState ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    -> { b | messages : Array (MessageState ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
+    -> Result () { b | messages : Array (MessageState ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
 editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageId ->
@@ -1295,18 +1321,18 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
 
 editMessageFrontendHelper2 :
     Time.Posix
-    -> Id UserId
-    -> Nonempty (RichText (Id UserId))
+    -> userId
+    -> Nonempty (RichText userId)
     -> SeqDict (Id FileId) FileData
     -> Id messageId
-    -> { b | messages : Array (MessageState messageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
-    -> Result () { b | messages : Array (MessageState messageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt messageId) }
+    -> { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
+    -> Result () { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
 editMessageFrontendHelper2 time editedBy newContent attachedFiles messageIndex channel =
     case DmChannel.getArray messageIndex channel.messages of
         Just (MessageLoaded (UserTextMessage data)) ->
             if data.createdBy == editedBy && data.content /= newContent then
                 let
-                    data2 : UserTextMessageData messageId (Id UserId)
+                    data2 : UserTextMessageData messageId userId
                     data2 =
                         { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
                 in

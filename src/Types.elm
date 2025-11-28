@@ -641,6 +641,7 @@ type ServerChange
     | Server_AddReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
+    | Server_DiscordSendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
@@ -661,7 +662,6 @@ type ServerDiscordChange
     = Server_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
     | Server_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | Server_Discord_SendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Server_Discord_SetName PersonName
     | Server_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
     | Server_Discord_LoadThreadMessages DiscordGuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))
