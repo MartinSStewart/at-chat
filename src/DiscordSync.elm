@@ -155,24 +155,6 @@ handleDiscordRemoveReactionForEmoji _ model =
     ( model, Command.none )
 
 
-handleDiscordEditMessage :
-    Discord.UserMessageUpdate
-    -> BackendModel
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordEditMessage edit model =
-    case edit.guildId of
-        Included guildId ->
-            case SeqDict.get guildId model.discordGuilds of
-                Just guild ->
-                    handleDiscordGuildEditMessage guildId guild edit model
-
-                Nothing ->
-                    ( model, Command.none )
-
-        Missing ->
-            handleDiscordDmEditMessage edit model
-
-
 handleDiscordDmEditMessage :
     Discord.UserMessageUpdate
     -> BackendModel
@@ -222,7 +204,6 @@ handleDiscordDmEditMessage edit model =
                             ( model, Command.none )
 
                 _ ->
-                    -- TODO handle edit thread messages
                     ( model, Command.none )
 
         Nothing ->
@@ -1321,10 +1302,20 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_UserEditedMessage messageUpdate ->
+                        Discord.UserOutMsg_UserEditedMessage edit ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDiscordEditMessage messageUpdate model2
+                                    case edit.guildId of
+                                        Included guildId ->
+                                            case SeqDict.get guildId model2.discordGuilds of
+                                                Just guild ->
+                                                    handleDiscordGuildEditMessage guildId guild edit model2
+
+                                                Nothing ->
+                                                    ( model2, Command.none )
+
+                                        Missing ->
+                                            handleDiscordDmEditMessage edit model2
                             in
                             ( model3, cmd2 :: cmds )
 
