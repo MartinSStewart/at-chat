@@ -1998,7 +1998,7 @@ updateLoaded msg model =
                                                     handleLocalChange
                                                         model.time
                                                         (case
-                                                            guildOrDmIdNoThreadToMessagesCount
+                                                            guildOrDmIdToMessagesCount
                                                                 guildOrDmId
                                                                 threadRoute
                                                                 (Local.model loggedIn2.localState)
@@ -3864,7 +3864,7 @@ setLastViewedToLatestMessage model loggedIn =
         model.time
         (case routeToGuildOrDmId model.route of
             Just ( guildOrDmId, threadRoute ) ->
-                case guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                case guildOrDmIdToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
                     Just messages ->
                         Local_SetLastViewed
                             guildOrDmId
@@ -7685,8 +7685,8 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
                     Nothing
 
 
-guildOrDmIdNoThreadToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
-guildOrDmIdNoThreadToMessagesCount guildOrDmId threadRoute local =
+guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
+guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             case LocalState.getGuildAndChannel guildId channelId local of

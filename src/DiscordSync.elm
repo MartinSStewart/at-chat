@@ -36,6 +36,7 @@ import RichText exposing (RichText)
 import Route exposing (Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
+import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User exposing (BackendUser)
 
@@ -217,15 +218,15 @@ handleDiscordGuildEditMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordGuildEditMessage guildId guild edit model =
+    let
+        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+        richText =
+            RichText.fromDiscord edit.content
+    in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
             case OneToOne.second edit.id channel.linkedMessageIds of
                 Just messageIndex ->
-                    let
-                        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-                        richText =
-                            RichText.fromDiscord edit.content
-                    in
                     case
                         LocalState.editMessageHelper
                             edit.timestamp
@@ -260,11 +261,71 @@ handleDiscordGuildEditMessage guildId guild edit model =
                             ( model, Command.none )
 
                 _ ->
-                    -- TODO handle edit thread messages
                     ( model, Command.none )
 
         Nothing ->
-            ( model, Command.none )
+            let
+                maybeThread : Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ( Id ChannelMessageId, Id ThreadMessageId ) )
+                maybeThread =
+                    List.Extra.findMap
+                        (\( channelId, channel ) ->
+                            case
+                                List.Extra.findMap
+                                    (\( threadId, thread ) ->
+                                        case OneToOne.second edit.id thread.linkedMessageIds of
+                                            Just messageIndex ->
+                                                Just ( threadId, messageIndex )
+
+                                            Nothing ->
+                                                Nothing
+                                    )
+                                    (SeqDict.toList channel.threads)
+                            of
+                                Just ( threadId, messageIndex ) ->
+                                    Just ( channelId, channel, ( threadId, messageIndex ) )
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        (SeqDict.toList guild.channels)
+            in
+            case maybeThread of
+                Just ( channelId, channel, ( threadId, messageIndex ) ) ->
+                    case
+                        LocalState.editMessageHelper
+                            edit.timestamp
+                            edit.author.id
+                            richText
+                            SeqDict.empty
+                            (ViewThreadWithMessage threadId messageIndex)
+                            channel
+                    of
+                        Ok channel2 ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.updateIfExists
+                                        guildId
+                                        (LocalState.updateChannel (\_ -> channel2) channelId)
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                (Server_DiscordSendEditMessage
+                                    edit.timestamp
+                                    (DiscordGuildOrDmId_Guild edit.author.id guildId channelId)
+                                    (ViewThreadWithMessage threadId messageIndex)
+                                    richText
+                                    SeqDict.empty
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Err _ ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 handleDiscordDeleteMessage :
