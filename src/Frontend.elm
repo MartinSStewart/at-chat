@@ -7739,8 +7739,13 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
                 Nothing ->
                     Nothing
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ _) ->
-            Debug.todo ""
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId) ->
+            case SeqDict.get channelId local.discordDmChannels of
+                Just dmChannel ->
+                    Just (Array.length dmChannel.messages)
+
+                Nothing ->
+                    Nothing
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )

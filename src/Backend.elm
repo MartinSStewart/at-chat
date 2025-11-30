@@ -966,7 +966,19 @@ getLoginData sessionId session user requestMessagesFor model =
     , discordGuilds =
         SeqDict.filterMap
             (\guildId guild ->
-                LocalState.discordGuildToFrontendForUser Nothing guild
+                LocalState.discordGuildToFrontendForUser
+                    (case requestMessagesFor of
+                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId), threadRoute ) ->
+                            if requestedGuildId == guildId then
+                                Just ( requestChannelId, threadRoute )
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    guild
             )
             model.discordGuilds
     , discordDmChannels =
