@@ -1185,7 +1185,7 @@ isPressMsg msg =
         PressedChangeProfilePicture ->
             True
 
-        SelectedProfilePicture _ _ ->
+        SelectedProfilePicture _ ->
             False
 
         GotProfilePictureUpload _ ->
@@ -3619,9 +3619,9 @@ updateLoaded msg model =
                 model
 
         PressedChangeProfilePicture ->
-            ( model, Effect.File.Select.files [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
+            ( model, Effect.File.Select.file [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
 
-        SelectedProfilePicture file files ->
+        SelectedProfilePicture file ->
             Debug.todo "Handle profile picture upload"
 
         GotProfilePictureUpload result ->
