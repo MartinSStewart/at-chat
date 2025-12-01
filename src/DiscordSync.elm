@@ -1537,6 +1537,7 @@ handleReadyData userAuth readyData model =
       }
     , Command.batch
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
+        , getUserAvatars readyData.users
         , Task.map2
             Tuple.pair
             (List.filterMap
@@ -1719,18 +1720,26 @@ handleListGuildMembersResponse chunkData model =
                 )
                 model.discordGuilds
       }
-    , List.map
-        (\guildMember ->
+    , List.map .user chunkData.members |> getUserAvatars
+    )
+
+
+getUserAvatars :
+    List { a | id : Discord.Id.Id Discord.Id.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
+    -> Command restriction toMsg BackendMsg
+getUserAvatars users =
+    List.map
+        (\user ->
             Task.map
-                (\maybeAvatar -> ( guildMember.user.id, maybeAvatar ))
-                (case guildMember.user.avatar of
+                (\maybeAvatar -> ( user.id, maybeAvatar ))
+                (case user.avatar of
                     Just avatar ->
                         loadImage
                             (Discord.userAvatarUrl
                                 { size = Discord.DefaultImageSize
                                 , imageType = Discord.Choice1 Discord.Png
                                 }
-                                guildMember.user.id
+                                user.id
                                 avatar
                             )
 
@@ -1738,10 +1747,9 @@ handleListGuildMembersResponse chunkData model =
                         Task.succeed Nothing
                 )
         )
-        chunkData.members
+        users
         |> Task.sequence
         |> Task.attempt GotDiscordUserAvatars
-    )
 
 
 loadImage : String -> Task restriction x (Maybe FileStatus.UploadResponse)
