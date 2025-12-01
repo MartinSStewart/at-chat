@@ -3628,8 +3628,8 @@ updateLoaded msg model =
             ( model, Effect.File.Select.file [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
 
         SelectedProfilePicture file ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
+            updateLoggedIn
+                (\loggedIn ->
                     let
                         ( imageEditor, _, cmd ) =
                             ImageEditor.update
@@ -3637,19 +3637,18 @@ updateLoaded msg model =
                                 (ImageEditor.SelectedImage file)
                                 ImageEditor.init
                     in
-                    ( { model | loginStatus = LoggedIn { loggedIn | profilePictureEditor = Just imageEditor } }
-                    , Command.none  -- TODO: Handle ImageEditor commands properly
+                    ( { loggedIn | profilePictureEditor = Just imageEditor }
+                    , Command.map identity ProfilePictureEditorMsg cmd
                     )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+                )
+                model
 
         GotProfilePictureUpload result ->
             Debug.todo "Handle profile picture upload response"
 
         ProfilePictureEditorMsg imageEditorMsg ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
+            updateLoggedIn
+                (\loggedIn ->
                     case loggedIn.profilePictureEditor of
                         Just imageEditor ->
                             let
@@ -3658,25 +3657,18 @@ updateLoaded msg model =
                                         model.windowSize
                                         imageEditorMsg
                                         imageEditor
-
-                                newLoggedIn =
-                                    case maybeImage of
-                                        Just image ->
-                                            -- Image was cropped, TODO: upload it and update user's profile picture
-                                            { loggedIn | profilePictureEditor = Nothing }
-
-                                        Nothing ->
-                                            { loggedIn | profilePictureEditor = Just newImageEditor }
                             in
-                            ( { model | loginStatus = LoggedIn newLoggedIn }
-                            , Command.none  -- TODO: Handle ImageEditor commands properly
-                            )
+                            case maybeImage of
+                                Just image ->
+                                    ( { loggedIn | profilePictureEditor = Nothing }, Command.none )
+
+                                Nothing ->
+                                    ( { loggedIn | profilePictureEditor = Just newImageEditor }, Command.none )
 
                         Nothing ->
-                            ( model, Command.none )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
+                            ( loggedIn, Command.none )
+                )
+                model
 
         PressedGuildNotificationLevel guildId notificationLevel ->
             updateLoggedIn
