@@ -1182,6 +1182,15 @@ isPressMsg msg =
         PublicVapidKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
+        PressedChangeProfilePicture ->
+            True
+
+        SelectedProfilePicture _ _ ->
+            False
+
+        GotProfilePictureUpload _ ->
+            False
+
         OneFrameAfterDragEnd ->
             False
 
@@ -3608,6 +3617,15 @@ updateLoaded msg model =
                         Command.none
                 )
                 model
+
+        PressedChangeProfilePicture ->
+            ( model, Effect.File.Select.files [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
+
+        SelectedProfilePicture file files ->
+            Debug.todo "Handle profile picture upload"
+
+        GotProfilePictureUpload result ->
+            Debug.todo "Handle profile picture upload response"
 
         PressedGuildNotificationLevel guildId notificationLevel ->
             updateLoggedIn
