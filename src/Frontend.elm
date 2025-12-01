@@ -3628,8 +3628,8 @@ updateLoaded msg model =
             ( model, Effect.File.Select.file [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
 
         SelectedProfilePicture file ->
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     let
                         ( imageEditor, _, cmd ) =
                             ImageEditor.update
@@ -3637,11 +3637,12 @@ updateLoaded msg model =
                                 (ImageEditor.SelectedImage file)
                                 ImageEditor.init
                     in
-                    ( { loggedIn | profilePictureEditor = Just imageEditor }
-                    , Command.map (\_ -> FrontendNoOp) ProfilePictureEditorMsg cmd
+                    ( { model | loginStatus = LoggedIn { loggedIn | profilePictureEditor = Just imageEditor } }
+                    , Command.none  -- TODO: Handle ImageEditor commands properly
                     )
-                )
-                model
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         GotProfilePictureUpload result ->
             Debug.todo "Handle profile picture upload response"
@@ -3668,7 +3669,7 @@ updateLoaded msg model =
                                             { loggedIn | profilePictureEditor = Just newImageEditor }
                             in
                             ( { model | loginStatus = LoggedIn newLoggedIn }
-                            , Command.map (\_ -> FrontendNoOp) ProfilePictureEditorMsg cmd
+                            , Command.none  -- TODO: Handle ImageEditor commands properly
                             )
 
                         Nothing ->
