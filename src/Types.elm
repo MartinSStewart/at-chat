@@ -192,7 +192,7 @@ type alias LoggedIn2 =
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
     , textEditor : TextEditor.Model
-    , profilePictureEditor : Maybe ImageEditor.Model
+    , profilePictureEditor : ImageEditor.Model
     }
 
 
@@ -456,9 +456,6 @@ type FrontendMsg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
-    | PressedChangeProfilePicture
-    | SelectedProfilePicture File
-    | GotProfilePictureUpload (Result Http.Error FileStatus.UploadResponse)
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)

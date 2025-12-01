@@ -1,4 +1,4 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg(..), init, subscriptions, update, view)
+module ImageEditor exposing (DragPart, DragState, Model, Msg(..), init, isPressMsg, subscriptions, update, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -61,6 +61,43 @@ type alias Model =
     , dragState : Maybe DragState
     , imageSize : Maybe ( Int, Int )
     }
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        PressedProfileImage ->
+            True
+
+        SelectedImage _ ->
+            False
+
+        GotImageUrl _ ->
+            False
+
+        MouseDownImageEditor _ _ ->
+            False
+
+        MouseUpImageEditor ->
+            False
+
+        MovedImageEditor _ _ ->
+            False
+
+        TouchEndImageEditor ->
+            False
+
+        PressedConfirmImage ->
+            False
+
+        GotImageSize _ ->
+            False
+
+        CroppedImage _ ->
+            False
+
+        PressedCancel ->
+            True
 
 
 init : Model

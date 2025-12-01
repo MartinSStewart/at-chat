@@ -5,6 +5,7 @@ import Effect.Browser.Dom as Dom
 import Env
 import Icons
 import Id exposing (AnyGuildOrDmId, GuildOrDmId, ThreadRoute)
+import ImageEditor
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
@@ -272,10 +273,10 @@ view isMobile time local loggedIn loaded model =
                     , Ui.row
                         [ Ui.spacing 12, Ui.alignLeft ]
                         [ User.profileImage local.localUser.user.icon
-                        , MyUi.simpleButton
-                            (Dom.id "userOptions_changeProfilePicture")
-                            PressedChangeProfilePicture
-                            (Ui.text "Change profile picture")
+                        , ImageEditor.view
+                            loaded.windowSize
+                            loggedIn.profilePictureEditor
+                            |> Ui.map ProfilePictureEditorMsg
                         ]
                     ]
                 , Ui.column

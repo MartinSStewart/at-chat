@@ -201,12 +201,7 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
-                                , case loggedIn.profilePictureEditor of
-                                    Just _ ->
-                                        ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
-
-                                    Nothing ->
-                                        Subscription.none
+                                , ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
                                 ]
 
                         NotLoggedIn _ ->
@@ -398,7 +393,7 @@ loadedInitHelper time timezone userAgent loginData loading =
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
             , textEditor = TextEditor.init
-            , profilePictureEditor = Nothing
+            , profilePictureEditor = ImageEditor.init
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -1192,17 +1187,8 @@ isPressMsg msg =
         PublicVapidKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
-        PressedChangeProfilePicture ->
-            True
-
-        SelectedProfilePicture _ ->
-            False
-
-        GotProfilePictureUpload _ ->
-            False
-
-        ProfilePictureEditorMsg _ ->
-            False
+        ProfilePictureEditorMsg imageEditorMsg ->
+            ImageEditor.isPressMsg imageEditorMsg
 
         OneFrameAfterDragEnd ->
             False
@@ -3631,81 +3617,44 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedChangeProfilePicture ->
-            ( model, Effect.File.Select.file [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
-
-        SelectedProfilePicture file ->
-            updateLoggedIn
-                (\loggedIn ->
-                    let
-                        ( imageEditor, _, cmd ) =
-                            ImageEditor.update
-                                model.windowSize
-                                (ImageEditor.SelectedImage file)
-                                ImageEditor.init
-                    in
-                    ( { loggedIn | profilePictureEditor = Just imageEditor }
-                    , Command.map identity ProfilePictureEditorMsg cmd
-                    )
-                )
-                model
-
-        GotProfilePictureUpload result ->
-            case result of
-                Ok uploadResponse ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            handleLocalChange
-                                model.time
-                                (Just (Local_SetProfilePicture uploadResponse.fileHash))
-                                loggedIn
-                                Command.none
-                        )
-                        model
-
-                Err _ ->
-                    -- Upload failed, just ignore it for now
-                    ( model, Command.none )
-
         ProfilePictureEditorMsg imageEditorMsg ->
             updateLoggedIn
                 (\loggedIn ->
-                    case loggedIn.profilePictureEditor of
-                        Just imageEditor ->
-                            let
-                                ( newImageEditor, maybeImage, cmd ) =
-                                    ImageEditor.update
-                                        model.windowSize
-                                        imageEditorMsg
-                                        imageEditor
-                            in
-                            case maybeImage of
-                                Just image ->
-                                    -- Image was cropped successfully, upload to get file hash
-                                    case Image.toBytes image of
-                                        Ok bytes ->
-                                            ( { loggedIn | profilePictureEditor = Nothing }
-                                            , Command.batch
-                                                [ Command.map identity ProfilePictureEditorMsg cmd
-                                                , FileStatus.uploadBytes
-                                                    (SessionIdHash.toString loggedIn.sessionIdHash)
-                                                    bytes
-                                                    |> Task.attempt GotProfilePictureUpload
-                                                ]
-                                            )
+                    let
+                        local =
+                            Local.model loggedIn.localState
 
-                                        Err _ ->
-                                            ( { loggedIn | profilePictureEditor = Nothing }
-                                            , Command.map identity ProfilePictureEditorMsg cmd
-                                            )
+                        ( newImageEditor, maybeImage, cmd ) =
+                            ImageEditor.update
+                                model.windowSize
+                                imageEditorMsg
+                                loggedIn.profilePictureEditor
+                    in
+                    case maybeImage of
+                        Just image ->
+                            -- Image was cropped successfully, upload to get file hash
+                            case Image.toBytes image of
+                                Ok bytes ->
+                                    ( { loggedIn | profilePictureEditor = newImageEditor }
+                                    , Command.batch
+                                        [ Command.map identity ProfilePictureEditorMsg cmd
 
-                                Nothing ->
-                                    ( { loggedIn | profilePictureEditor = Just newImageEditor }
+                                        --, FileStatus.uploadBytes
+                                        --    (SessionIdHash.toString local.localUser.session.sessionIdHash)
+                                        --    bytes
+                                        --    |> Task.attempt GotProfilePictureUpload
+                                        ]
+                                    )
+
+                                Err _ ->
+                                    ( { loggedIn | profilePictureEditor = newImageEditor }
                                     , Command.map identity ProfilePictureEditorMsg cmd
                                     )
 
                         Nothing ->
-                            ( loggedIn, Command.none )
+                            ( { loggedIn | profilePictureEditor = newImageEditor }
+                            , Command.map identity ProfilePictureEditorMsg cmd
+                            )
                 )
                 model
 
@@ -7424,30 +7373,6 @@ view model =
                                                 loggedIn
                                                 loaded
                                                 userOptions
-                                                |> Ui.inFront
-
-                                        Nothing ->
-                                            Ui.noAttr
-                                    , case loggedIn.profilePictureEditor of
-                                        Just imageEditor ->
-                                            Ui.el
-                                                [ Ui.width Ui.fill
-                                                , Ui.height Ui.fill
-                                                , Ui.background (Ui.rgba 0 0 0 0.5)
-                                                ]
-                                                (Ui.el
-                                                    [ Ui.centerX
-                                                    , Ui.centerY
-                                                    , Ui.background MyUi.background1
-                                                    , Ui.padding 16
-                                                    , Ui.rounded 8
-                                                    ]
-                                                    (ImageEditor.view
-                                                        loaded.windowSize
-                                                        imageEditor
-                                                        |> Ui.map ProfilePictureEditorMsg
-                                                    )
-                                                )
                                                 |> Ui.inFront
 
                                         Nothing ->
