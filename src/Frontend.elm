@@ -34,6 +34,8 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Image
+import ImageEditor
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -389,6 +391,7 @@ loadedInitHelper time timezone userAgent loginData loading =
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
             , textEditor = TextEditor.init
+            , profilePictureEditor = Nothing
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -1189,6 +1192,9 @@ isPressMsg msg =
             False
 
         GotProfilePictureUpload _ ->
+            False
+
+        ProfilePictureEditorMsg _ ->
             False
 
         OneFrameAfterDragEnd ->
@@ -3622,10 +3628,54 @@ updateLoaded msg model =
             ( model, Effect.File.Select.file [ "image/png", "image/jpeg", "image/jpg" ] SelectedProfilePicture )
 
         SelectedProfilePicture file ->
-            Debug.todo "Handle profile picture upload"
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        ( imageEditor, _, cmd ) =
+                            ImageEditor.update
+                                model.windowSize
+                                (ImageEditor.SelectedImage file)
+                                ImageEditor.init
+                    in
+                    ( { loggedIn | profilePictureEditor = Just imageEditor }
+                    , Command.map (\_ -> FrontendNoOp) ProfilePictureEditorMsg cmd
+                    )
+                )
+                model
 
         GotProfilePictureUpload result ->
             Debug.todo "Handle profile picture upload response"
+
+        ProfilePictureEditorMsg imageEditorMsg ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    case loggedIn.profilePictureEditor of
+                        Just imageEditor ->
+                            let
+                                ( newImageEditor, maybeImage, cmd ) =
+                                    ImageEditor.update
+                                        model.windowSize
+                                        imageEditorMsg
+                                        imageEditor
+
+                                newLoggedIn =
+                                    case maybeImage of
+                                        Just image ->
+                                            -- Image was cropped, TODO: upload it and update user's profile picture
+                                            { loggedIn | profilePictureEditor = Nothing }
+
+                                        Nothing ->
+                                            { loggedIn | profilePictureEditor = Just newImageEditor }
+                            in
+                            ( { model | loginStatus = LoggedIn newLoggedIn }
+                            , Command.map (\_ -> FrontendNoOp) ProfilePictureEditorMsg cmd
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         PressedGuildNotificationLevel guildId notificationLevel ->
             updateLoggedIn
@@ -7315,6 +7365,30 @@ view model =
                                                 loggedIn
                                                 loaded
                                                 userOptions
+                                                |> Ui.inFront
+
+                                        Nothing ->
+                                            Ui.noAttr
+                                    , case loggedIn.profilePictureEditor of
+                                        Just imageEditor ->
+                                            Ui.el
+                                                [ Ui.width Ui.fill
+                                                , Ui.height Ui.fill
+                                                , Ui.background (Ui.rgba 0 0 0 0.5)
+                                                ]
+                                                (Ui.el
+                                                    [ Ui.centerX
+                                                    , Ui.centerY
+                                                    , Ui.background MyUi.background1
+                                                    , Ui.padding 16
+                                                    , Ui.rounded 8
+                                                    ]
+                                                    (ImageEditor.view
+                                                        loaded.windowSize
+                                                        imageEditor
+                                                        |> Ui.map ProfilePictureEditorMsg
+                                                    )
+                                                )
                                                 |> Ui.inFront
 
                                         Nothing ->

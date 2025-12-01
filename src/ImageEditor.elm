@@ -1,4 +1,4 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg, init, subscriptions, update, view)
+module ImageEditor exposing (DragPart, DragState, Model, Msg(..), init, subscriptions, update, view)
 
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -370,7 +370,7 @@ view : Coord CssPixels -> Model -> Element Msg
 view windowSize model =
     case model.imageUrl of
         Nothing ->
-            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") [] PressedProfileImage "Select image"
+            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
 
         Just imageUrl ->
             let
@@ -389,7 +389,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -406,7 +406,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -423,7 +423,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -440,7 +440,7 @@ view windowSize model =
 
                         Nothing ->
                             Ui.el
-                                [ MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                                [ MyUi.htmlStyle "pointer-events" "none"
                                 ]
                                 (Ui.html
                                     (Html.img
@@ -464,17 +464,17 @@ view windowSize model =
                         (Json.Decode.field "offsetX" Json.Decode.float)
                         (Json.Decode.field "offsetY" Json.Decode.float)
                         |> Html.Events.preventDefaultOn "mousedown"
-                        |> MyUi.htmlStyle
+                        |> Ui.htmlAttribute
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
 
                       else
                         Json.Decode.map2 (\x_ y_ -> ( MovedImageEditor x_ y_, True ))
                             (Json.Decode.field "offsetX" Json.Decode.float)
                             (Json.Decode.field "offsetY" Json.Decode.float)
                             |> Html.Events.preventDefaultOn "mousemove"
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
                     , Html.Events.Extra.Touch.onStart
                         (\event ->
                             case List.reverse event.touches |> List.head of
@@ -484,11 +484,11 @@ view windowSize model =
                                 Nothing ->
                                     MouseDownImageEditor 0 0
                         )
-                        |> MyUi.htmlStyle
-                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> MyUi.htmlStyle
+                        |> Ui.htmlAttribute
+                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> Ui.htmlAttribute
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
 
                       else
                         Html.Events.Extra.Touch.onMove
@@ -500,7 +500,7 @@ view windowSize model =
                                     Nothing ->
                                         MovedImageEditor 0 0
                             )
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
                     , drawNode x y
                     , drawNode (x + size) y
                     , drawNode x (y + size)
@@ -516,7 +516,7 @@ view windowSize model =
                     }
                 , Ui.row
                     [ Ui.spacing 16 ]
-                    [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") [] PressedCancel "Cancel"
+                    [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
                     , MyUi.primaryButton (Dom.id "imageEditor_confirm") PressedConfirmImage "Confirm"
                     ]
                 ]

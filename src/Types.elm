@@ -68,6 +68,7 @@ import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
@@ -190,6 +191,7 @@ type alias LoggedIn2 =
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
     , textEditor : TextEditor.Model
+    , profilePictureEditor : Maybe ImageEditor.Model
     }
 
 
@@ -456,6 +458,7 @@ type FrontendMsg
     | PressedChangeProfilePicture
     | SelectedProfilePicture File
     | GotProfilePictureUpload (Result Http.Error FileStatus.UploadResponse)
+    | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
