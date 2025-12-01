@@ -200,6 +200,12 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
+                                , case loggedIn.profilePictureEditor of
+                                    Just _ ->
+                                        ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
+
+                                    Nothing ->
+                                        Subscription.none
                                 ]
 
                         NotLoggedIn _ ->
@@ -3660,10 +3666,15 @@ updateLoaded msg model =
                             in
                             case maybeImage of
                                 Just image ->
-                                    ( { loggedIn | profilePictureEditor = Nothing }, Command.none )
+                                    -- Image was cropped successfully, TODO: upload it
+                                    ( { loggedIn | profilePictureEditor = Nothing }
+                                    , Command.map identity ProfilePictureEditorMsg cmd
+                                    )
 
                                 Nothing ->
-                                    ( { loggedIn | profilePictureEditor = Just newImageEditor }, Command.none )
+                                    ( { loggedIn | profilePictureEditor = Just newImageEditor }
+                                    , Command.map identity ProfilePictureEditorMsg cmd
+                                    )
 
                         Nothing ->
                             ( loggedIn, Command.none )
