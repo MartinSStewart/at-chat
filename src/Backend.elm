@@ -2504,6 +2504,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_SetProfilePicture fileHash ->
+                    asUser
+                        model2
+                        sessionId
+                        (\{ userId } user ->
+                            let
+                                updatedModel =
+                                    { model2
+                                        | users = NonemptyDict.insert userId { user | icon = Just fileHash } model2.users
+                                    }
+                            in
+                            ( updatedModel
+                            , Command.batch
+                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                , Broadcast.toEveryoneWhoCanSeeUser
+                                    clientId
+                                    userId
+                                    (ServerChange (Server_SetIcon userId (Just fileHash)))
+                                    updatedModel
+                                ]
+                            )
+                        )
+
                 Local_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->

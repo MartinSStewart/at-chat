@@ -61,6 +61,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
+import SessionIdHash
 import String.Nonempty
 import TextEditor
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
@@ -3650,7 +3651,21 @@ updateLoaded msg model =
                 model
 
         GotProfilePictureUpload result ->
-            Debug.todo "Handle profile picture upload response"
+            case result of
+                Ok uploadResponse ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            handleLocalChange
+                                model.time
+                                (Just (Local_SetProfilePicture uploadResponse.fileHash))
+                                loggedIn
+                                Command.none
+                        )
+                        model
+
+                Err _ ->
+                    -- Upload failed, just ignore it for now
+                    ( model, Command.none )
 
         ProfilePictureEditorMsg imageEditorMsg ->
             updateLoggedIn
@@ -3666,10 +3681,23 @@ updateLoaded msg model =
                             in
                             case maybeImage of
                                 Just image ->
-                                    -- Image was cropped successfully, TODO: upload it
-                                    ( { loggedIn | profilePictureEditor = Nothing }
-                                    , Command.map identity ProfilePictureEditorMsg cmd
-                                    )
+                                    -- Image was cropped successfully, upload to get file hash
+                                    case Image.toBytes image of
+                                        Ok bytes ->
+                                            ( { loggedIn | profilePictureEditor = Nothing }
+                                            , Command.batch
+                                                [ Command.map identity ProfilePictureEditorMsg cmd
+                                                , FileStatus.uploadBytes
+                                                    (SessionIdHash.toString loggedIn.sessionIdHash)
+                                                    bytes
+                                                    |> Task.attempt GotProfilePictureUpload
+                                                ]
+                                            )
+
+                                        Err _ ->
+                                            ( { loggedIn | profilePictureEditor = Nothing }
+                                            , Command.map identity ProfilePictureEditorMsg cmd
+                                            )
 
                                 Nothing ->
                                     ( { loggedIn | profilePictureEditor = Just newImageEditor }
@@ -5182,6 +5210,10 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setName name localUser.user } }
 
+                Local_SetProfilePicture _ ->
+                    -- Profile picture update will come through Server_SetIcon
+                    local
+
                 Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
@@ -5854,6 +5886,26 @@ changeUpdate localMsg local =
                             { localUser
                                 | otherUsers =
                                     SeqDict.updateIfExists userId (User.setName name) localUser.otherUsers
+                            }
+                    }
+
+                Server_SetIcon userId icon ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user =
+                                    if localUser.session.userId == userId then
+                                        User.setIcon icon localUser.user
+
+                                    else
+                                        localUser.user
+                                , otherUsers =
+                                    SeqDict.updateIfExists userId (User.setIcon icon) localUser.otherUsers
                             }
                     }
 
@@ -7112,6 +7164,9 @@ pendingChangesText localChange =
 
         Local_SetName _ ->
             "Set display name"
+
+        Local_SetProfilePicture _ ->
+            "Set profile picture"
 
         Local_LoadChannelMessages _ _ _ ->
             "Load channel messages"

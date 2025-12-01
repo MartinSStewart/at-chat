@@ -68,6 +68,7 @@ import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Image
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
@@ -653,6 +654,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
+    | Server_SetIcon (Id UserId) (Maybe FileHash)
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
@@ -694,6 +696,7 @@ type LocalChange
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Local_CurrentlyViewing SetViewing
     | Local_SetName PersonName
+    | Local_SetProfilePicture FileHash
     | Local_LoadChannelMessages GuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
     | Local_LoadThreadMessages GuildOrDmId (Id ChannelMessageId) (Id ThreadMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
     | Local_Discord_LoadChannelMessages DiscordGuildOrDmId (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
