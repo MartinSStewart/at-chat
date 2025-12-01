@@ -19,6 +19,7 @@ import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadedFront
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -265,6 +266,18 @@ view isMobile time local loggedIn loaded model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
+                , Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color (Ui.rgb 128 128 128) ] (Ui.text "Profile Picture")
+                    , Ui.row
+                        [ Ui.spacing 12, Ui.alignLeft ]
+                        [ User.profileImage local.localUser.user.icon
+                        , MyUi.simpleButton
+                            (Dom.id "userOptions_changeProfilePicture")
+                            PressedChangeProfilePicture
+                            (Ui.text "Change profile picture")
+                        ]
+                    ]
                 , Ui.column
                     [ Ui.spacing 8 ]
                     [ MyUi.radioColumn
