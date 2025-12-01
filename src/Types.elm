@@ -561,6 +561,7 @@ type BackendMsg
                 , { guild : Discord.GatewayGuild
                   , channels : List ( Discord.Channel, List Discord.Message )
                   , icon : Maybe FileStatus.UploadResponse
+                  , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
                   }
                 )
             )

@@ -695,6 +695,7 @@ addDiscordGuilds :
         { guild : Discord.GatewayGuild
         , channels : List ( Discord.Channel, List Discord.Message )
         , icon : Maybe FileStatus.UploadResponse
+        , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
         }
     -> BackendModel
     -> BackendModel
@@ -709,29 +710,22 @@ addDiscordGuilds guilds model =
                             let
                                 threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
                                 threads =
-                                    SeqDict.empty
+                                    List.foldl
+                                        (\( parentId, channel, messages ) dict ->
+                                            SeqDict.update
+                                                parentId
+                                                (\maybe2 ->
+                                                    case maybe2 of
+                                                        Just list ->
+                                                            Just (( channel, messages ) :: list)
 
-                                --List.foldl
-                                --    (\( channel, messages ) dict ->
-                                --        case (Tuple.first channel).parentId of
-                                --            Included (Just parentId) ->
-                                --                SeqDict.update
-                                --                    parentId
-                                --                    (\maybe2 ->
-                                --                        case maybe2 of
-                                --                            Just list ->
-                                --                                Just (( channel, messages ) :: list)
-                                --
-                                --                            Nothing ->
-                                --                                Just [ ( channel, messages ) ]
-                                --                    )
-                                --                    dict
-                                --
-                                --            _ ->
-                                --                dict
-                                --    )
-                                --    SeqDict.empty
-                                --    data.channels
+                                                        Nothing ->
+                                                            Just [ ( channel, messages ) ]
+                                                )
+                                                dict
+                                        )
+                                        SeqDict.empty
+                                        data.threads
                             in
                             { name = GuildName.fromStringLossy data.guild.properties.name
                             , icon = Maybe.map .fileHash data.icon
@@ -1562,12 +1556,13 @@ handleReadyData userAuth readyData model =
             )
             (List.map
                 (\gatewayGuild ->
-                    Task.map2
-                        (\channels maybeIcon ->
+                    Task.map3
+                        (\channels maybeIcon threads ->
                             ( gatewayGuild.properties.id
                             , { guild = gatewayGuild
                               , channels = channels
                               , icon = maybeIcon
+                              , threads = threads
                               }
                             )
                         )
@@ -1600,26 +1595,27 @@ handleReadyData userAuth readyData model =
                             Nothing ->
                                 Task.succeed Nothing
                         )
-                 --(Discord.listActiveThreadsPayload auth partialGuild.id
-                 --    |> http
-                 --    |> Task.andThen
-                 --        (\activeThreads ->
-                 --            List.map
-                 --                (\thread ->
-                 --                    Discord.getMessagesPayload
-                 --                        auth
-                 --                        { channelId = thread.id
-                 --                        , limit = 100
-                 --                        , relativeTo = Discord.MostRecent
-                 --                        }
-                 --                        |> http
-                 --                        |> Task.onError (\_ -> Task.succeed [])
-                 --                        |> Task.map (Tuple.pair thread)
-                 --                )
-                 --                activeThreads.threads
-                 --                |> Task.sequence
-                 --        )
-                 --)
+                        (List.filterMap
+                            (\thread ->
+                                case thread.parentId of
+                                    Included (Just parentId) ->
+                                        Discord.getMessagesPayload
+                                            auth
+                                            { channelId = thread.id
+                                            , limit = 100
+                                            , relativeTo = Discord.MostRecent
+                                            }
+                                            |> http
+                                            |> Task.onError (\_ -> Task.succeed [])
+                                            |> Task.map (\a -> ( parentId, thread, List.reverse a ))
+                                            |> Just
+
+                                    _ ->
+                                        Nothing
+                            )
+                            gatewayGuild.threads
+                            |> Task.sequence
+                        )
                 )
                 readyData.guilds
                 --(if Env.isProduction then
