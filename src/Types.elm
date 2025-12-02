@@ -68,6 +68,8 @@ import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Image
+import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
 import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
@@ -190,6 +192,7 @@ type alias LoggedIn2 =
     , isReloading : Bool
     , channelScrollPosition : ScrollPosition
     , textEditor : TextEditor.Model
+    , profilePictureEditor : ImageEditor.Model
     }
 
 
@@ -453,6 +456,7 @@ type FrontendMsg
     | PublicVapidKeyEditableMsg (Editable.Msg String)
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)
     | PressedDeleteAttachedFile ( AnyGuildOrDmId, ThreadRoute ) (Id FileId)
@@ -520,6 +524,7 @@ type ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
+    | ProfilePictureEditorToBackend ImageEditor.ToBackend
 
 
 type BackendMsg
@@ -591,6 +596,7 @@ type ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError Discord.User)
+    | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
 
 
 type alias LoginData =
@@ -647,6 +653,7 @@ type ServerChange
     | Server_DeleteMessage (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteMessage GuildChannelAndMessageId
     | Server_SetName (Id UserId) PersonName
+    | Server_SetUserIcon (Id UserId) FileHash
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel

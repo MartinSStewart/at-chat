@@ -5,6 +5,7 @@ import Effect.Browser.Dom as Dom
 import Env
 import Icons
 import Id exposing (AnyGuildOrDmId, GuildOrDmId, ThreadRoute)
+import ImageEditor
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
@@ -19,6 +20,7 @@ import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadedFront
 import Ui exposing (Element)
 import Ui.Font
 import Ui.Input
+import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -265,6 +267,18 @@ view isMobile time local loggedIn loaded model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
+                , Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color (Ui.rgb 128 128 128) ] (Ui.text "Profile Picture")
+                    , Ui.row
+                        [ Ui.spacing 12, Ui.alignLeft ]
+                        [ User.profileImage local.localUser.user.icon
+                        , ImageEditor.view
+                            loaded.windowSize
+                            loggedIn.profilePictureEditor
+                            |> Ui.map ProfilePictureEditorMsg
+                        ]
+                    ]
                 , Ui.column
                     [ Ui.spacing 8 ]
                     [ MyUi.radioColumn

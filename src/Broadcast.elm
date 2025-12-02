@@ -16,6 +16,7 @@ module Broadcast exposing
     , toDmChannel
     , toEveryone
     , toEveryoneWhoCanSeeUser
+    , toEveryoneWhoCanSeeUserIncludingUser
     , toGuild
     , toGuildExcludingOne
     , toOtherAdmins
@@ -670,6 +671,26 @@ toEveryoneWhoCanSeeUser clientId userId change model =
         SeqSet.empty
         model.guilds
         |> SeqSet.foldl (\userId2 cmds -> toUser (Just clientId) Nothing userId2 change model :: cmds) []
+        |> Command.batch
+
+
+toEveryoneWhoCanSeeUserIncludingUser :
+    Id UserId
+    -> LocalMsg
+    -> BackendModel
+    -> Command BackendOnly ToFrontend msg
+toEveryoneWhoCanSeeUserIncludingUser userId change model =
+    SeqDict.foldl
+        (\_ guild state ->
+            if userId == guild.owner || SeqDict.member userId guild.members then
+                guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
+
+            else
+                state
+        )
+        SeqSet.empty
+        model.guilds
+        |> SeqSet.foldl (\userId2 cmds -> toUser Nothing Nothing userId2 change model :: cmds) []
         |> Command.batch
 
 

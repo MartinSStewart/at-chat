@@ -34,6 +34,8 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Image
+import ImageEditor
 import Json.Decode
 import Lamdera as LamderaCore
 import List.Extra
@@ -59,6 +61,7 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
+import SessionIdHash
 import String.Nonempty
 import TextEditor
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
@@ -198,6 +201,7 @@ subscriptions model =
 
                                             MessageMenuFixed _ ->
                                                 Subscription.none
+                                , ImageEditor.subscriptions |> Subscription.map ProfilePictureEditorMsg
                                 ]
 
                         NotLoggedIn _ ->
@@ -389,6 +393,7 @@ loadedInitHelper time timezone userAgent loginData loading =
             , isReloading = False
             , channelScrollPosition = ScrolledToBottom
             , textEditor = TextEditor.init
+            , profilePictureEditor = ImageEditor.init
             }
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
@@ -1181,6 +1186,9 @@ isPressMsg msg =
 
         PublicVapidKeyEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
+
+        ProfilePictureEditorMsg imageEditorMsg ->
+            ImageEditor.isPressMsg imageEditorMsg
 
         OneFrameAfterDragEnd ->
             False
@@ -3609,6 +3617,27 @@ updateLoaded msg model =
                 )
                 model
 
+        ProfilePictureEditorMsg imageEditorMsg ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+
+                        ( newImageEditor, cmd ) =
+                            ImageEditor.update
+                                local.localUser.session.sessionIdHash
+                                model.windowSize
+                                imageEditorMsg
+                                loggedIn.profilePictureEditor
+                    in
+                    ( { loggedIn | profilePictureEditor = newImageEditor }
+                    , Command.map ProfilePictureEditorToBackend ProfilePictureEditorMsg cmd
+                    )
+                )
+                model
+
         PressedGuildNotificationLevel guildId notificationLevel ->
             updateLoggedIn
                 (\loggedIn ->
@@ -5785,6 +5814,26 @@ changeUpdate localMsg local =
                             }
                     }
 
+                Server_SetUserIcon userId icon ->
+                    let
+                        localUser : LocalUser
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | user =
+                                    if localUser.session.userId == userId then
+                                        User.setIcon icon localUser.user
+
+                                    else
+                                        localUser.user
+                                , otherUsers =
+                                    SeqDict.updateIfExists userId (User.setIcon icon) localUser.otherUsers
+                            }
+                    }
+
                 Server_DiscordDirectMessage time channelId sender richText replyTo ->
                     case SeqDict.get channelId local.discordDmChannels of
                         Just channel ->
@@ -6771,6 +6820,15 @@ updateLoadedFromBackend msg model =
                             Debug.log "err" error
                     in
                     ( model, Command.none )
+
+        ProfilePictureEditorToFrontend imageEditorToFrontend ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case imageEditorToFrontend of
+                        ImageEditor.ChangeUserAvatarResponse ->
+                            ( { loggedIn | profilePictureEditor = ImageEditor.init }, Command.none )
+                )
+                model
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

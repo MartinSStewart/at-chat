@@ -20,6 +20,7 @@ module User exposing
     , profileImageSize
     , sectionToString
     , setGuildNotificationLevel
+    , setIcon
     , setLastChannelViewed
     , setLastDiscordChannelViewed
     , setLastDmViewed
@@ -284,6 +285,11 @@ setLastDmViewed lastDmViewed user =
 setName : PersonName -> { b | name : PersonName } -> { b | name : PersonName }
 setName name user =
     { user | name = name }
+
+
+setIcon : FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
+setIcon icon user =
+    { user | icon = Just icon }
 
 
 type EmailNotifications

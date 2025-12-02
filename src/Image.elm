@@ -1,5 +1,7 @@
-module Image exposing (Error(..), Image(..), defaultSize, image)
+module Image exposing (Error(..), Image(..), defaultSize, image, toBytes)
 
+import Base64
+import Bytes exposing (Bytes)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 
@@ -33,3 +35,13 @@ image data =
 defaultSize : Quantity Int Pixels
 defaultSize =
     Pixels.pixels 80
+
+
+toBytes : Image -> Result Error Bytes
+toBytes (Image base64) =
+    case Base64.toBytes base64 of
+        Just bytes ->
+            Ok bytes
+
+        Nothing ->
+            Err InvalidDataUrlPrefix

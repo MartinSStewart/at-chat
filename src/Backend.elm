@@ -30,6 +30,7 @@ import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import ImageEditor
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -2842,6 +2843,29 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> DiscordSync.http
                         |> Task.attempt (LinkDiscordUserStep1 clientId session.userId data)
+                    )
+                )
+
+        ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest fileHash) ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    let
+                        user2 : BackendUser
+                        user2 =
+                            User.setIcon fileHash user
+                    in
+                    ( { model2 | users = NonemptyDict.insert session.userId user2 model2.users }
+                    , Command.batch
+                        [ Broadcast.toEveryoneWhoCanSeeUserIncludingUser
+                            session.userId
+                            (Server_SetUserIcon session.userId fileHash |> ServerChange)
+                            model2
+                        , Lamdera.sendToFrontend
+                            clientId
+                            (ProfilePictureEditorToFrontend ImageEditor.ChangeUserAvatarResponse)
+                        ]
                     )
                 )
 
