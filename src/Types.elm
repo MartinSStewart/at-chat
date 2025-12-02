@@ -524,6 +524,7 @@ type ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
+    | ProfilePictureEditorToBackend ImageEditor.ToBackend
 
 
 type BackendMsg

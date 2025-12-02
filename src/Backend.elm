@@ -2868,6 +2868,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ProfilePictureEditorToBackend toBackend ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    ( model2, Debug.todo "" )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId userId) }

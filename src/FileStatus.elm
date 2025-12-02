@@ -24,6 +24,7 @@ module FileStatus exposing
     , sizeToString
     , thumbnailUrl
     , upload
+    , uploadAvatar
     , uploadBytes
     , uploadTrackerId
     )
@@ -358,6 +359,23 @@ upload onResult sessionId guildOrDmId fileId file2 =
         , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
         , timeout = Nothing
         , tracker = uploadTrackerId guildOrDmId fileId |> Just
+        }
+
+
+uploadAvatar :
+    (Result Http.Error UploadResponse -> msg)
+    -> SessionIdHash
+    -> Bytes
+    -> Command restriction toFrontend msg
+uploadAvatar onResult sessionId file2 =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , url = domain ++ "/file/upload"
+        , body = Http.bytesBody "application/octet-stream" file2
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Nothing
+        , tracker = Just "avatar-file-upload"
         }
 
 

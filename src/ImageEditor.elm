@@ -1,5 +1,6 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg(..), init, isPressMsg, subscriptions, update, view)
+module ImageEditor exposing (DragPart, DragState, Model, Msg(..), ToBackend(..), UploadStatus, init, isPressMsg, subscriptions, update, view)
 
+import Base64
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -7,8 +8,11 @@ import Effect.Browser.Events
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Select as FileSelect
+import Effect.Http as Http
+import Effect.Lamdera as Lamdera
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
+import FileStatus exposing (UploadResponse)
 import Html
 import Html.Attributes
 import Html.Events
@@ -19,7 +23,9 @@ import List.Extra as List
 import MyUi
 import Pixels
 import Ports exposing (CropImageDataResponse)
+import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
+import Ui.Font
 
 
 type Msg
@@ -34,6 +40,11 @@ type Msg
     | GotImageSize (Result Dom.Error Dom.Element)
     | CroppedImage (Result String CropImageDataResponse)
     | PressedCancel
+    | UploadedImage (Result Http.Error UploadResponse)
+
+
+type ToBackend
+    = ChangeUserAvatarRequest FileStatus.FileHash
 
 
 type alias DragState =
@@ -60,7 +71,14 @@ type alias Model =
     , imageUrl : Maybe String
     , dragState : Maybe DragState
     , imageSize : Maybe ( Int, Int )
+    , status : UploadStatus
     }
+
+
+type UploadStatus
+    = NotUploaded
+    | Uploading
+    | UploadingError
 
 
 isPressMsg : Msg -> Bool
@@ -99,6 +117,9 @@ isPressMsg msg =
         PressedCancel ->
             True
 
+        UploadedImage result ->
+            False
+
 
 init : Model
 init =
@@ -108,17 +129,18 @@ init =
     , imageUrl = Nothing
     , dragState = Nothing
     , imageSize = Nothing
+    , status = NotUploaded
     }
 
 
-update : Coord CssPixels -> Msg -> Model -> ( Model, Maybe Image, Command FrontendOnly toMsg Msg )
-update windowSize msg model =
+update : SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update sessionIdHash windowSize msg model =
     case msg of
         PressedProfileImage ->
-            ( model, Nothing, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
+            ( model, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
 
         SelectedImage file ->
-            ( model, Nothing, File.toUrl file |> Task.perform GotImageUrl )
+            ( model, File.toUrl file |> Task.perform GotImageUrl )
 
         GotImageUrl imageUrl ->
             ( { x = 0
@@ -127,8 +149,8 @@ update windowSize msg model =
               , imageUrl = Just imageUrl
               , dragState = Nothing
               , imageSize = Nothing
+              , status = NotUploaded
               }
-            , Nothing
             , Dom.getElement profileImagePlaceholderId |> Task.attempt GotImageSize
             )
 
@@ -168,31 +190,27 @@ update windowSize msg model =
                     , currentY = ty
                     }
             in
-            ( { model | dragState = Just newDragState }, Nothing, Command.none )
+            ( { model | dragState = Just newDragState }, Command.none )
 
         MovedImageEditor x y ->
             ( updateDragState (pixelToT windowSize x) (pixelToT windowSize y) model
-            , Nothing
             , Command.none
             )
 
         MouseUpImageEditor ->
             ( getActualImageState model |> (\a -> { a | dragState = Nothing })
-            , Nothing
             , Command.none
             )
 
         TouchEndImageEditor ->
             ( getActualImageState model |> (\a -> { a | dragState = Nothing })
-            , Nothing
             , Command.none
             )
 
         PressedConfirmImage ->
             case ( model.imageSize, model.imageUrl ) of
                 ( Just ( w, _ ), Just imageUrl ) ->
-                    ( { model | imageSize = Nothing, imageUrl = Nothing }
-                    , Nothing
+                    ( { model | imageSize = Nothing, imageUrl = Nothing, status = Uploading }
                     , Ports.cropImageToJs
                         { requestId = 0
                         , imageUrl = imageUrl
@@ -206,14 +224,13 @@ update windowSize msg model =
                     )
 
                 _ ->
-                    ( model, Nothing, Command.none )
+                    ( model, Command.none )
 
         GotImageSize result ->
             case result of
                 Ok { element } ->
                     if element.height <= 0 then
                         ( model
-                        , Nothing
                         , Dom.getElement profileImagePlaceholderId |> Task.attempt GotImageSize
                         )
 
@@ -224,31 +241,35 @@ update windowSize msg model =
                             , y = 0
                             , size = min 1 (element.height / element.width)
                           }
-                        , Nothing
                         , Command.none
                         )
 
                 _ ->
-                    ( model, Nothing, Command.none )
+                    ( model, Command.none )
 
         CroppedImage result ->
             case result of
                 Ok imageData ->
-                    case Image.image imageData.croppedImageUrl of
-                        Ok profileImage ->
-                            ( model
-                            , Just profileImage
-                            , Command.none
-                            )
+                    case Base64.toBytes imageData.croppedImageUrl of
+                        Just bytes ->
+                            ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
 
-                        Err _ ->
-                            ( model, Nothing, Command.none )
+                        Nothing ->
+                            ( { model | status = UploadingError }, Command.none )
 
                 Err _ ->
-                    ( model, Nothing, Command.none )
+                    ( { model | status = UploadingError }, Command.none )
 
         PressedCancel ->
-            ( { model | imageUrl = Nothing, imageSize = Nothing }, Nothing, Command.none )
+            ( { model | imageUrl = Nothing, imageSize = Nothing }, Command.none )
+
+        UploadedImage result ->
+            case result of
+                Ok uploaded ->
+                    ( model, Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash) )
+
+                Err error ->
+                    ( { model | status = UploadingError }, Command.none )
 
 
 subscriptions : Subscription FrontendOnly Msg
@@ -555,5 +576,14 @@ view windowSize model =
                     [ Ui.spacing 16 ]
                     [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
                     , MyUi.primaryButton (Dom.id "imageEditor_confirm") PressedConfirmImage "Confirm"
+                    , case model.status of
+                        Uploading ->
+                            Ui.text "Uploading..."
+
+                        UploadingError ->
+                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text "Upload failed")
+
+                        NotUploaded ->
+                            Ui.none
                     ]
                 ]

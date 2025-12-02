@@ -3624,37 +3624,23 @@ updateLoaded msg model =
                         local =
                             Local.model loggedIn.localState
 
-                        ( newImageEditor, maybeImage, cmd ) =
+                        ( newImageEditor, cmd ) =
                             ImageEditor.update
+                                local.localUser.session.sessionIdHash
                                 model.windowSize
                                 imageEditorMsg
                                 loggedIn.profilePictureEditor
                     in
-                    case maybeImage of
-                        Just image ->
-                            -- Image was cropped successfully, upload to get file hash
-                            case Image.toBytes image of
-                                Ok bytes ->
-                                    ( { loggedIn | profilePictureEditor = newImageEditor }
-                                    , Command.batch
-                                        [ Command.map identity ProfilePictureEditorMsg cmd
+                    ( { loggedIn | profilePictureEditor = newImageEditor }
+                    , Command.batch
+                        [ Command.map ProfilePictureEditorToBackend ProfilePictureEditorMsg cmd
 
-                                        --, FileStatus.uploadBytes
-                                        --    (SessionIdHash.toString local.localUser.session.sessionIdHash)
-                                        --    bytes
-                                        --    |> Task.attempt GotProfilePictureUpload
-                                        ]
-                                    )
-
-                                Err _ ->
-                                    ( { loggedIn | profilePictureEditor = newImageEditor }
-                                    , Command.map identity ProfilePictureEditorMsg cmd
-                                    )
-
-                        Nothing ->
-                            ( { loggedIn | profilePictureEditor = newImageEditor }
-                            , Command.map identity ProfilePictureEditorMsg cmd
-                            )
+                        --, FileStatus.uploadBytes
+                        --    (SessionIdHash.toString local.localUser.session.sessionIdHash)
+                        --    bytes
+                        --    |> Task.attempt GotProfilePictureUpload
+                        ]
+                    )
                 )
                 model
 
