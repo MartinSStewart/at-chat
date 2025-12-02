@@ -255,11 +255,16 @@ update sessionIdHash windowSize msg model =
         CroppedImage result ->
             case result of
                 Ok imageData ->
-                    case Base64.toBytes imageData.croppedImageUrl of
-                        Just bytes ->
-                            ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
+                    case String.split ";base64," imageData.croppedImageUrl of
+                        [ _, base64 ] ->
+                            case Base64.toBytes base64 of
+                                Just bytes ->
+                                    ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
 
-                        Nothing ->
+                                Nothing ->
+                                    ( { model | status = UploadingError }, Command.none )
+
+                        _ ->
                             ( { model | status = UploadingError }, Command.none )
 
                 Err _ ->
