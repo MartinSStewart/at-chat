@@ -428,7 +428,15 @@ tToPixel windowSize value =
 
 imageEditorWidth : Coord CssPixels -> Int
 imageEditorWidth windowSize =
-    min 400 (Coord.xRaw windowSize)
+    let
+        isMobile =
+            Coord.xRaw windowSize < 700
+    in
+    if isMobile then
+        Coord.xRaw windowSize - 32
+
+    else
+        min 400 (Coord.xRaw windowSize)
 
 
 profileImagePlaceholderId : HtmlId
@@ -444,6 +452,9 @@ view windowSize model =
 
         Just imageUrl ->
             let
+                isMobile =
+                    Coord.xRaw windowSize < 700
+
                 { x, y, size, dragState } =
                     getActualImageState model
 
@@ -500,105 +511,132 @@ view windowSize model =
 
                 imageEditorWidth_ =
                     imageEditorWidth windowSize
-            in
-            Ui.column
-                [ Ui.spacing 8
-                , Ui.inFront
-                    (case model.imageSize of
-                        Just _ ->
-                            Ui.none
 
-                        Nothing ->
-                            Ui.el
-                                [ MyUi.htmlStyle "pointer-events" "none"
-                                ]
-                                (Ui.html
-                                    (Html.img
-                                        [ Dom.idToAttribute profileImagePlaceholderId
-                                        , Html.Attributes.src imageUrl
-                                        ]
-                                        []
-                                    )
-                                )
-                    )
-                ]
-                [ Ui.image
-                    [ Ui.width (Ui.px imageEditorWidth_)
-                    , case model.imageSize of
-                        Just ( w, h ) ->
-                            Ui.height (Ui.px (round (toFloat (imageEditorWidth_ * h) / toFloat w)))
-
-                        Nothing ->
-                            Ui.inFront Ui.none
-                    , Json.Decode.map2 (\x_ y_ -> ( MouseDownImageEditor x_ y_, True ))
-                        (Json.Decode.field "offsetX" Json.Decode.float)
-                        (Json.Decode.field "offsetY" Json.Decode.float)
-                        |> Html.Events.preventDefaultOn "mousedown"
-                        |> Ui.htmlAttribute
-                    , if dragState == Nothing then
-                        Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> Ui.htmlAttribute
-
-                      else
-                        Json.Decode.map2 (\x_ y_ -> ( MovedImageEditor x_ y_, True ))
-                            (Json.Decode.field "offsetX" Json.Decode.float)
-                            (Json.Decode.field "offsetY" Json.Decode.float)
-                            |> Html.Events.preventDefaultOn "mousemove"
-                            |> Ui.htmlAttribute
-                    , Html.Events.Extra.Touch.onStart
-                        (\event ->
-                            case List.reverse event.touches |> List.head of
-                                Just last ->
-                                    MouseDownImageEditor (Tuple.first last.clientPos) (Tuple.second last.clientPos)
+                editorContent =
+                    Ui.column
+                        [ Ui.spacing 8
+                        , Ui.inFront
+                            (case model.imageSize of
+                                Just _ ->
+                                    Ui.none
 
                                 Nothing ->
-                                    MouseDownImageEditor 0 0
-                        )
-                        |> Ui.htmlAttribute
-                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> Ui.htmlAttribute
-                    , if dragState == Nothing then
-                        Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> Ui.htmlAttribute
-
-                      else
-                        Html.Events.Extra.Touch.onMove
-                            (\event ->
-                                case List.reverse event.touches |> List.head of
-                                    Just last ->
-                                        MovedImageEditor (Tuple.first last.clientPos) (Tuple.second last.clientPos)
-
-                                    Nothing ->
-                                        MovedImageEditor 0 0
+                                    Ui.el
+                                        [ MyUi.htmlStyle "pointer-events" "none"
+                                        ]
+                                        (Ui.html
+                                            (Html.img
+                                                [ Dom.idToAttribute profileImagePlaceholderId
+                                                , Html.Attributes.src imageUrl
+                                                ]
+                                                []
+                                            )
+                                        )
                             )
-                            |> Ui.htmlAttribute
-                    , drawNode x y
-                    , drawNode (x + size) y
-                    , drawNode x (y + size)
-                    , drawNode (x + size) (y + size)
-                    , drawHorizontalLine x y size
-                    , drawHorizontalLine x (y + size) size
-                    , drawVerticalLine x y size
-                    , drawVerticalLine (x + size) y size
+                        , if isMobile then
+                            Ui.paddingXY 16 16
+
+                          else
+                            Ui.noAttr
+                        ]
+                        [ Ui.image
+                            [ Ui.width (Ui.px imageEditorWidth_)
+                            , case model.imageSize of
+                                Just ( w, h ) ->
+                                    Ui.height (Ui.px (round (toFloat (imageEditorWidth_ * h) / toFloat w)))
+
+                                Nothing ->
+                                    Ui.inFront Ui.none
+                            , Json.Decode.map2 (\x_ y_ -> ( MouseDownImageEditor x_ y_, True ))
+                                (Json.Decode.field "offsetX" Json.Decode.float)
+                                (Json.Decode.field "offsetY" Json.Decode.float)
+                                |> Html.Events.preventDefaultOn "mousedown"
+                                |> Ui.htmlAttribute
+                            , if dragState == Nothing then
+                                Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
+                                    |> Ui.htmlAttribute
+
+                              else
+                                Json.Decode.map2 (\x_ y_ -> ( MovedImageEditor x_ y_, True ))
+                                    (Json.Decode.field "offsetX" Json.Decode.float)
+                                    (Json.Decode.field "offsetY" Json.Decode.float)
+                                    |> Html.Events.preventDefaultOn "mousemove"
+                                    |> Ui.htmlAttribute
+                            , Html.Events.Extra.Touch.onStart
+                                (\event ->
+                                    case List.reverse event.touches |> List.head of
+                                        Just last ->
+                                            MouseDownImageEditor (Tuple.first last.clientPos) (Tuple.second last.clientPos)
+
+                                        Nothing ->
+                                            MouseDownImageEditor 0 0
+                                )
+                                |> Ui.htmlAttribute
+                            , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> Ui.htmlAttribute
+                            , if dragState == Nothing then
+                                Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
+                                    |> Ui.htmlAttribute
+
+                              else
+                                Html.Events.Extra.Touch.onMove
+                                    (\event ->
+                                        case List.reverse event.touches |> List.head of
+                                            Just last ->
+                                                MovedImageEditor (Tuple.first last.clientPos) (Tuple.second last.clientPos)
+
+                                            Nothing ->
+                                                MovedImageEditor 0 0
+                                    )
+                                    |> Ui.htmlAttribute
+                            , drawNode x y
+                            , drawNode (x + size) y
+                            , drawNode x (y + size)
+                            , drawNode (x + size) (y + size)
+                            , drawHorizontalLine x y size
+                            , drawHorizontalLine x (y + size) size
+                            , drawVerticalLine x y size
+                            , drawVerticalLine (x + size) y size
+                            ]
+                            { source = imageUrl
+                            , description = "Image editor"
+                            , onLoad = Nothing
+                            }
+                        , Ui.row
+                            [ Ui.spacing 16 ]
+                            [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
+                            , MyUi.simpleButton (Dom.id "imageEditor_confirm") PressedConfirmImage (Ui.text "Confirm")
+                            , case model.status of
+                                Cropping ->
+                                    Ui.text "Uploading..."
+
+                                Uploading _ ->
+                                    Ui.text "Uploading..."
+
+                                UploadingError ->
+                                    Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text "Upload failed")
+
+                                NotUploaded ->
+                                    Ui.none
+                            ]
+                        ]
+            in
+            if isMobile then
+                Ui.el
+                    [ Ui.width Ui.fill
+                    , Ui.height Ui.fill
+                    , Ui.background (Ui.rgba 0 0 0 0.8)
+                    , MyUi.blockClickPropagation PressedCancel
                     ]
-                    { source = imageUrl
-                    , description = "Image editor"
-                    , onLoad = Nothing
-                    }
-                , Ui.row
-                    [ Ui.spacing 16 ]
-                    [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
-                    , MyUi.simpleButton (Dom.id "imageEditor_confirm") PressedConfirmImage (Ui.text "Confirm")
-                    , case model.status of
-                        Cropping ->
-                            Ui.text "Uploading..."
+                    (Ui.el
+                        [ Ui.centerX
+                        , Ui.centerY
+                        , Ui.background MyUi.background1
+                        , Ui.rounded 8
+                        , Ui.border 1
+                        , Ui.borderColor MyUi.border1
+                        ]
+                        editorContent
+                    )
 
-                        Uploading _ ->
-                            Ui.text "Uploading..."
-
-                        UploadingError ->
-                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text "Upload failed")
-
-                        NotUploaded ->
-                            Ui.none
-                    ]
-                ]
+            else
+                editorContent
