@@ -587,7 +587,7 @@ view windowSize model =
                 , Ui.row
                     [ Ui.spacing 16 ]
                     [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
-                    , MyUi.primaryButton (Dom.id "imageEditor_confirm") PressedConfirmImage "Confirm"
+                    , MyUi.simpleButton (Dom.id "imageEditor_confirm") PressedConfirmImage (Ui.text "Confirm")
                     , case model.status of
                         Cropping ->
                             Ui.text "Uploading..."
