@@ -3621,6 +3621,7 @@ updateLoaded msg model =
             updateLoggedIn
                 (\loggedIn ->
                     let
+                        local : LocalState
                         local =
                             Local.model loggedIn.localState
 
@@ -3632,14 +3633,7 @@ updateLoaded msg model =
                                 loggedIn.profilePictureEditor
                     in
                     ( { loggedIn | profilePictureEditor = newImageEditor }
-                    , Command.batch
-                        [ Command.map ProfilePictureEditorToBackend ProfilePictureEditorMsg cmd
-
-                        --, FileStatus.uploadBytes
-                        --    (SessionIdHash.toString local.localUser.session.sessionIdHash)
-                        --    bytes
-                        --    |> Task.attempt GotProfilePictureUpload
-                        ]
+                    , Command.map ProfilePictureEditorToBackend ProfilePictureEditorMsg cmd
                     )
                 )
                 model
@@ -5145,10 +5139,6 @@ changeUpdate localMsg local =
                     in
                     { local | localUser = { localUser | user = User.setName name localUser.user } }
 
-                Local_SetProfilePicture _ ->
-                    -- Profile picture update will come through Server_SetIcon
-                    local
-
                 Local_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
                         GuildOrDmId_Guild guildId channelId ->
@@ -5824,7 +5814,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_SetIcon userId icon ->
+                Server_SetUserIcon userId icon ->
                     let
                         localUser : LocalUser
                         localUser =
@@ -6831,6 +6821,15 @@ updateLoadedFromBackend msg model =
                     in
                     ( model, Command.none )
 
+        ProfilePictureEditorToFrontend imageEditorToFrontend ->
+            updateLoggedIn
+                (\loggedIn ->
+                    case imageEditorToFrontend of
+                        ImageEditor.ChangeUserAvatarResponse ->
+                            ( { loggedIn | profilePictureEditor = ImageEditor.init }, Command.none )
+                )
+                model
+
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 logout model =
@@ -7099,9 +7098,6 @@ pendingChangesText localChange =
 
         Local_SetName _ ->
             "Set display name"
-
-        Local_SetProfilePicture _ ->
-            "Set profile picture"
 
         Local_LoadChannelMessages _ _ _ ->
             "Load channel messages"

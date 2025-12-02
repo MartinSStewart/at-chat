@@ -287,9 +287,9 @@ setName name user =
     { user | name = name }
 
 
-setIcon : Maybe FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
+setIcon : FileHash -> { b | icon : Maybe FileHash } -> { b | icon : Maybe FileHash }
 setIcon icon user =
-    { user | icon = icon }
+    { user | icon = Just icon }
 
 
 type EmailNotifications

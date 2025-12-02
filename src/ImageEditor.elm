@@ -1,4 +1,4 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg(..), ToBackend(..), UploadStatus, init, isPressMsg, subscriptions, update, view)
+module ImageEditor exposing (DragPart, DragState, Model, Msg(..), ToBackend(..), ToFrontend(..), UploadStatus, init, isPressMsg, subscriptions, update, view)
 
 import Base64
 import Coord exposing (Coord)
@@ -12,7 +12,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
-import FileStatus exposing (UploadResponse)
+import FileStatus exposing (FileHash, UploadResponse)
 import Html
 import Html.Attributes
 import Html.Events
@@ -47,6 +47,10 @@ type ToBackend
     = ChangeUserAvatarRequest FileStatus.FileHash
 
 
+type ToFrontend
+    = ChangeUserAvatarResponse
+
+
 type alias DragState =
     { startX : Float
     , startY : Float
@@ -77,7 +81,8 @@ type alias Model =
 
 type UploadStatus
     = NotUploaded
-    | Uploading
+    | Cropping
+    | Uploading FileHash
     | UploadingError
 
 
@@ -210,7 +215,7 @@ update sessionIdHash windowSize msg model =
         PressedConfirmImage ->
             case ( model.imageSize, model.imageUrl ) of
                 ( Just ( w, _ ), Just imageUrl ) ->
-                    ( { model | imageSize = Nothing, imageUrl = Nothing, status = Uploading }
+                    ( { model | status = Cropping }
                     , Ports.cropImageToJs
                         { requestId = 0
                         , imageUrl = imageUrl
@@ -266,7 +271,9 @@ update sessionIdHash windowSize msg model =
         UploadedImage result ->
             case result of
                 Ok uploaded ->
-                    ( model, Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash) )
+                    ( { model | status = Uploading uploaded.fileHash }
+                    , Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash)
+                    )
 
                 Err error ->
                     ( { model | status = UploadingError }, Command.none )
@@ -577,7 +584,10 @@ view windowSize model =
                     [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
                     , MyUi.primaryButton (Dom.id "imageEditor_confirm") PressedConfirmImage "Confirm"
                     , case model.status of
-                        Uploading ->
+                        Cropping ->
+                            Ui.text "Uploading..."
+
+                        Uploading _ ->
                             Ui.text "Uploading..."
 
                         UploadingError ->
