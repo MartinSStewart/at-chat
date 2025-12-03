@@ -7,7 +7,6 @@ module GuildIcon exposing
     , showFriendsButton
     , userView
     , view
-    , viewWithDiscordBadge
     )
 
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -142,13 +141,8 @@ notificationView userAgent xOffset yOffset borderColor notification =
             notificationHelper userAgent MyUi.alertColor MyUi.white borderColor xOffset yOffset count
 
 
-view : UserAgent -> Mode -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
-view userAgent mode guild =
-    viewWithDiscordBadge userAgent mode False guild
-
-
-viewWithDiscordBadge : UserAgent -> Mode -> Bool -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
-viewWithDiscordBadge userAgent mode isDiscord guild =
+view : UserAgent -> Mode -> Bool -> { a | name : GuildName, icon : Maybe FileHash } -> Element msg
+view userAgent mode isDiscord guild =
     let
         name : String
         name =
@@ -166,7 +160,7 @@ viewWithDiscordBadge userAgent mode isDiscord guild =
                 (Ui.el
                     [ Ui.alignBottom
                     , Ui.alignRight
-                    , Ui.move { x = 3, y = 3, z = 0 }
+                    , Ui.move { x = 1, y = 3, z = 0 }
                     , Ui.background (Ui.rgb 88 101 242)
                     , Ui.rounded 99
                     , Ui.padding 3
