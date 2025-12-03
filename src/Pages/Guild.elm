@@ -6237,7 +6237,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser =
             [ userId ] ->
                 case LocalState.getDiscordUser userId localUser of
                     Just otherUser ->
-                        [ User.profileImage otherUser.icon
+                        [ User.profileImageWithDiscordBadge True otherUser.icon
                         , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
                         ]
 
@@ -6249,7 +6249,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser =
                     (\userId ->
                         case LocalState.getDiscordUser userId localUser of
                             Just user ->
-                                User.profileImage user.icon |> Just
+                                User.profileImageWithDiscordBadge True user.icon |> Just
 
                             Nothing ->
                                 Nothing

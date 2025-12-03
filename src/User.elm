@@ -18,6 +18,7 @@ module User exposing
     , linkDiscordDataCodec
     , profileImage
     , profileImageSize
+    , profileImageWithDiscordBadge
     , sectionToString
     , setGuildNotificationLevel
     , setIcon
@@ -35,6 +36,7 @@ import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
+import Icons
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
@@ -407,24 +409,52 @@ profileImageSize =
 
 profileImage : Maybe FileHash -> Element msg
 profileImage maybeFileHash =
-    case maybeFileHash of
-        Just fileHash ->
-            Ui.image
-                [ Ui.rounded 8
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                , Ui.clip
-                ]
-                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
-                , description = ""
-                , onLoad = Nothing
-                }
+    profileImageWithDiscordBadge False maybeFileHash
 
-        Nothing ->
-            Ui.el
-                [ Ui.background (Ui.rgb 100 100 100)
-                , Ui.rounded 8
-                , Ui.width (Ui.px profileImageSize)
-                , Ui.height (Ui.px profileImageSize)
-                ]
-                Ui.none
+
+profileImageWithDiscordBadge : Bool -> Maybe FileHash -> Element msg
+profileImageWithDiscordBadge isDiscord maybeFileHash =
+    let
+        baseImage =
+            case maybeFileHash of
+                Just fileHash ->
+                    Ui.image
+                        [ Ui.rounded 8
+                        , Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        , Ui.clip
+                        ]
+                        { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                        , description = ""
+                        , onLoad = Nothing
+                        }
+
+                Nothing ->
+                    Ui.el
+                        [ Ui.background (Ui.rgb 100 100 100)
+                        , Ui.rounded 8
+                        , Ui.width (Ui.px profileImageSize)
+                        , Ui.height (Ui.px profileImageSize)
+                        ]
+                        Ui.none
+    in
+    if isDiscord then
+        Ui.el
+            [ Ui.inFront
+                (Ui.el
+                    [ Ui.alignBottom
+                    , Ui.alignRight
+                    , Ui.move { x = 2, y = 2, z = 0 }
+                    , Ui.background (Ui.rgb 88 101 242)
+                    , Ui.rounded 99
+                    , Ui.padding 2
+                    , Ui.border 2
+                    , Ui.borderColor (Ui.rgb 255 255 255)
+                    ]
+                    (Ui.html Icons.discord)
+                )
+            ]
+            baseImage
+
+    else
+        baseImage
