@@ -350,6 +350,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                     _ ->
                                         guildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
                                 )
+                                False
                                 guild
                             )
                     )
@@ -405,6 +406,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                             _ ->
                                                 discordGuildHasNotifications discordUserId localUser.user guildId guild |> GuildIcon.Normal
                                         )
+                                        True
                                         guild
                                     )
                                     |> Just
