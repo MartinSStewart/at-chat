@@ -391,7 +391,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                         |> DiscordGuildRoute
                                     )
                                     []
-                                    (GuildIcon.view
+                                    (GuildIcon.viewWithDiscordBadge
                                         localUser.userAgent
                                         (case route of
                                             DiscordGuildRoute data ->
@@ -405,6 +405,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                             _ ->
                                                 discordGuildHasNotifications discordUserId localUser.user guildId guild |> GuildIcon.Normal
                                         )
+                                        True
                                         guild
                                     )
                                     |> Just
