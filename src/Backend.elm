@@ -309,29 +309,6 @@ update msg model =
                     ( model, Command.none )
 
         SentDiscordGuildMessage time changeId sessionId clientId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId result ->
-            --case result of
-            --    Ok message ->
-            --        asDiscordGuildMember
-            --            model
-            --            sessionId
-            --            guildId
-            --            discordUserId
-            --            (sentDiscordGuildMessage
-            --                model
-            --                time
-            --                clientId
-            --                changeId
-            --                guildId
-            --                channelId
-            --                threadRouteWithMaybeReplyTo
-            --                text
-            --                attachedFiles
-            --                discordUserId
-            --                message
-            --            )
-            --
-            --    Err _ ->
-            --        ( model, invalidChangeResponse changeId clientId )
             case result of
                 Ok message ->
                     -- Wait until the websocket event instead. This simplifies the code since we don't have two places that handle messages being created
@@ -1424,6 +1401,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     of
                                                         ( Just messageId, Just thread ) ->
                                                             let
+                                                                _ =
+                                                                    Debug.log "messageId" (Discord.Id.toString messageId)
+
                                                                 discordThreadId : Discord.Id.Id Discord.Id.ChannelId
                                                                 discordThreadId =
                                                                     Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
@@ -1478,6 +1458,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 channelId
                                 (\session currentUser discordUser dmChannel ->
                                     let
+                                        attachedFiles2 : SeqDict (Id FileId) FileData
                                         attachedFiles2 =
                                             validateAttachedFiles model2.files attachedFiles
                                     in

@@ -1138,6 +1138,20 @@ handleDiscordCreateGuildMessage discordGuildId message model =
             case discordGetGuildChannel Nothing {- Fix later with actual message replied to -} message.channelId guild of
                 Just ( channelId, channel, threadRoute ) ->
                     let
+                        threadOrChannelId : Discord.Id.Id Discord.Id.ChannelId
+                        threadOrChannelId =
+                            case threadRoute of
+                                ViewThreadWithMaybeMessage threadId _ ->
+                                    case OneToOne.first threadId channel.linkedMessageIds of
+                                        Just messageId ->
+                                            Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
+
+                                        Nothing ->
+                                            channelId
+
+                                NoThreadWithMaybeMessage _ ->
+                                    channelId
+
                         threadRouteNoReply : ThreadRoute
                         threadRouteNoReply =
                             case threadRoute of
@@ -1229,10 +1243,10 @@ handleDiscordCreateGuildMessage discordGuildId message model =
                                         model.users
                                         usersMentioned
                                 , pendingDiscordCreateMessages =
-                                    SeqDict.remove ( message.author.id, channelId ) model.pendingDiscordCreateMessages
+                                    SeqDict.remove ( message.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages
                               }
                             , Command.batch
-                                [ case SeqDict.get ( message.author.id, channelId ) model.pendingDiscordCreateMessages of
+                                [ case SeqDict.get ( message.author.id, threadOrChannelId ) model.pendingDiscordCreateMessages of
                                     Just ( clientId, changeId ) ->
                                         Command.batch
                                             [ LocalChangeResponse
@@ -1346,6 +1360,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
+                                _ =
+                                    Debug.log "message" (Discord.Id.toString message.channelId)
+
                                 ( model3, cmd2 ) =
                                     handleDiscordCreateMessage message model2
                             in
