@@ -8,6 +8,7 @@ module DiscordSync exposing
     )
 
 import Array exposing (Array)
+import Array.Extra
 import Broadcast
 import ChannelName
 import Discord exposing (OptionalData(..))
@@ -1568,13 +1569,7 @@ handleReadyData userAuth readyData model =
                         )
                         (List.map
                             (\channel ->
-                                Discord.getMessagesPayload
-                                    auth
-                                    { channelId = channel.id
-                                    , limit = 100
-                                    , relativeTo = Discord.MostRecent
-                                    }
-                                    |> http
+                                getManyMessages auth { channelId = channel.id, limit = 1000 }
                                     |> Task.onError (\_ -> Task.succeed [])
                                     |> Task.map (\a -> ( channel, List.reverse a ))
                             )
@@ -1642,13 +1637,7 @@ handleReadyData userAuth readyData model =
                                         (\thread ->
                                             case thread.parentId of
                                                 Included (Just parentId) ->
-                                                    Discord.getMessagesPayload
-                                                        auth
-                                                        { channelId = thread.id
-                                                        , limit = 100
-                                                        , relativeTo = Discord.MostRecent
-                                                        }
-                                                        |> http
+                                                    getManyMessages auth { channelId = thread.id, limit = 1000 }
                                                         |> Task.onError (\_ -> Task.succeed [])
                                                         |> Task.map (\a -> ( parentId, thread, List.reverse a ))
                                                         |> Just
@@ -1677,6 +1666,68 @@ handleReadyData userAuth readyData model =
             |> Task.attempt (HandleReadyDataStep2 readyData.user.id)
         ]
     )
+
+
+getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id.Id Discord.Id.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getManyMessages authentication { channelId, limit } =
+    Discord.getMessagesPayload authentication { channelId = channelId, limit = min limit 100, relativeTo = Discord.MostRecent }
+        |> http
+        |> Task.andThen (\messages -> getManyMessagesHelper authentication channelId (limit - 100) Array.empty (Array.fromList messages))
+
+
+getManyMessagesHelper :
+    Discord.Authentication
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Int
+    -> Array Discord.Message
+    -> Array Discord.Message
+    -> Task BackendOnly Discord.HttpError (List Discord.Message)
+getManyMessagesHelper authentication channelId limit restOfMessages messages =
+    let
+        _ =
+            Debug.log "length" ( channelId, Array.length restOfMessages )
+    in
+    case Array.Extra.last messages of
+        Just last ->
+            if Array.length messages >= 100 && limit > 0 then
+                Discord.getMessagesPayload
+                    authentication
+                    { channelId = channelId, limit = min limit 100, relativeTo = Discord.Before last.id }
+                    |> http
+                    |> Task.onError
+                        (\error ->
+                            case error of
+                                Discord.TooManyRequests429 rateLimit ->
+                                    Process.sleep rateLimit.retryAfter
+                                        |> Task.andThen
+                                            (\() ->
+                                                Discord.getMessagesPayload
+                                                    authentication
+                                                    { channelId = channelId
+                                                    , limit = min limit 100
+                                                    , relativeTo = Discord.Before last.id
+                                                    }
+                                                    |> http
+                                            )
+
+                                _ ->
+                                    Task.fail error
+                        )
+                    |> Task.andThen
+                        (\newMessages ->
+                            getManyMessagesHelper
+                                authentication
+                                channelId
+                                (limit - 100)
+                                (Array.append restOfMessages messages)
+                                (Array.fromList newMessages)
+                        )
+
+            else
+                Task.succeed (Array.append restOfMessages messages |> Array.toList)
+
+        Nothing ->
+            Task.succeed (Array.append restOfMessages messages |> Array.toList)
 
 
 addDiscordUserData :

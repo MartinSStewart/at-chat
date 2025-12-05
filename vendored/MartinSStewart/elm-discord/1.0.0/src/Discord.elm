@@ -76,6 +76,7 @@ These are functions that return a url pointing to a particular image.
 -}
 
 import Array exposing (Array)
+import Array.Extra
 import Base64
 import Binary
 import Bitwise
@@ -1393,42 +1394,52 @@ searchThreadsPayload authentication { channelId, name, slop, tag, tagSetting, ar
                                 )
                         )
                         tagSetting
-                    , Maybe.map (\a -> Url.Builder.string "archived" (if a then "true" else "false")) archived
-                , Maybe.map
-                    (\sort ->
-                        Url.Builder.string "sort_by"
-                            (case sort of
-                                LastMessageTime ->
-                                    "last_message_time"
+                    , Maybe.map
+                        (\a ->
+                            Url.Builder.string "archived"
+                                (if a then
+                                    "true"
 
-                                ArchiveTime ->
-                                    "archive_time"
+                                 else
+                                    "false"
+                                )
+                        )
+                        archived
+                    , Maybe.map
+                        (\sort ->
+                            Url.Builder.string "sort_by"
+                                (case sort of
+                                    LastMessageTime ->
+                                        "last_message_time"
 
-                                Relevance ->
-                                    "relevance"
+                                    ArchiveTime ->
+                                        "archive_time"
 
-                                CreationTime ->
-                                    "creation_time"
-                            )
-                    )
-                    sortBy
-                , Maybe.map
-                    (\order ->
-                        Url.Builder.string "sort_order"
-                            (case order of
-                                Ascending ->
-                                    "asc"
+                                    Relevance ->
+                                        "relevance"
 
-                                Descending ->
-                                    "desc"
-                            )
-                    )
-                    sortOrder
-                , Maybe.map (\l -> Url.Builder.int "limit" l) limit
-                , Maybe.map (\o -> Url.Builder.int "offset" o) offset
-                , Maybe.map (\id -> Url.Builder.string "max_id" (Discord.Id.toString id)) maxId
-                , Maybe.map (\id -> Url.Builder.string "min_id" (Discord.Id.toString id)) minId
-                ]
+                                    CreationTime ->
+                                        "creation_time"
+                                )
+                        )
+                        sortBy
+                    , Maybe.map
+                        (\order ->
+                            Url.Builder.string "sort_order"
+                                (case order of
+                                    Ascending ->
+                                        "asc"
+
+                                    Descending ->
+                                        "desc"
+                                )
+                        )
+                        sortOrder
+                    , Maybe.map (\l -> Url.Builder.int "limit" l) limit
+                    , Maybe.map (\o -> Url.Builder.int "offset" o) offset
+                    , Maybe.map (\id -> Url.Builder.string "max_id" (Discord.Id.toString id)) maxId
+                    , Maybe.map (\id -> Url.Builder.string "min_id" (Discord.Id.toString id)) minId
+                    ]
     in
     httpGet
         authentication
