@@ -1595,26 +1595,49 @@ handleReadyData userAuth readyData model =
                             Nothing ->
                                 Task.succeed Nothing
                         )
-                        (List.filterMap
-                            (\thread ->
-                                case thread.parentId of
-                                    Included (Just parentId) ->
-                                        Discord.getMessagesPayload
-                                            auth
-                                            { channelId = thread.id
-                                            , limit = 100
-                                            , relativeTo = Discord.MostRecent
-                                            }
-                                            |> http
-                                            |> Task.onError (\_ -> Task.succeed [])
-                                            |> Task.map (\a -> ( parentId, thread, List.reverse a ))
-                                            |> Just
+                        (Task.andThen
+                            (\privateArchivedThreadsResults ->
+                                let
+                                    allThreads : List Discord.Channel
+                                    allThreads =
+                                        gatewayGuild.threads
+                                            ++ List.concatMap .threads privateArchivedThreadsResults
+                                in
+                                List.filterMap
+                                    (\thread ->
+                                        case thread.parentId of
+                                            Included (Just parentId) ->
+                                                Discord.getMessagesPayload
+                                                    auth
+                                                    { channelId = thread.id
+                                                    , limit = 100
+                                                    , relativeTo = Discord.MostRecent
+                                                    }
+                                                    |> http
+                                                    |> Task.onError (\_ -> Task.succeed [])
+                                                    |> Task.map (\a -> ( parentId, thread, List.reverse a ))
+                                                    |> Just
 
-                                    _ ->
-                                        Nothing
+                                            _ ->
+                                                Nothing
+                                    )
+                                    allThreads
+                                    |> Task.sequence
                             )
-                            gatewayGuild.threads
-                            |> Task.sequence
+                            (List.map
+                                (\channel ->
+                                    Discord.getPrivateArchivedThreadsPayload
+                                        auth
+                                        { channelId = channel.id
+                                        , before = Nothing
+                                        , limit = Nothing
+                                        }
+                                        |> http
+                                        |> Task.onError (\_ -> Task.succeed { threads = [], members = [], hasMore = False })
+                                )
+                                gatewayGuild.channels
+                                |> Task.sequence
+                            )
                         )
                 )
                 readyData.guilds
