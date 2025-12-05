@@ -2484,7 +2484,53 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId _ ->
-                            Debug.todo ""
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                currentDiscordUserId
+                                (\session discordUser user guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            ( { model2
+                                                | users =
+                                                    NonemptyDict.insert
+                                                        session.userId
+                                                        (User.setLastDiscordChannelViewed
+                                                            guildId
+                                                            channelId
+                                                            (ViewThread threadId)
+                                                            user
+                                                        )
+                                                        model2.users
+                                                , sessions =
+                                                    SeqDict.insert sessionId (updateSession session) model2.sessions
+                                              }
+                                            , Command.batch
+                                                [ ViewDiscordChannelThread
+                                                    guildId
+                                                    channelId
+                                                    currentDiscordUserId
+                                                    threadId
+                                                    (SeqDict.get threadId channel.threads
+                                                        |> Maybe.withDefault Thread.discordBackendInit
+                                                        |> loadMessagesHelper
+                                                    )
+                                                    |> Local_CurrentlyViewing
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , broadcastCmd session
+                                                ]
+                                            )
+
+                                        Nothing ->
+                                            ( model2
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                                , broadcastCmd session
+                                                ]
+                                            )
+                                )
 
                 Local_SetName name ->
                     asUser
