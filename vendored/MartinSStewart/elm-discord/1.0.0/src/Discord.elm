@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, PrivateChannel, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SequenceCounter(..), SessionId(..), Sticker, SupplementalGuild, ThreadMember, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
+    , ActiveThreads, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, PrivateChannel, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, SupplementalGuild, ThreadMember, ThreadSortType(..), UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -80,7 +80,7 @@ import Base64
 import Binary
 import Bitwise
 import Dict exposing (Dict)
-import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, PrivateChannelId, RoleId, StickerId, StickerPackId, TeamId, UserId, WebhookId)
+import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, PrivateChannelId, RoleId, StickerId, StickerPackId, TagId, TeamId, UserId, WebhookId)
 import Discord.Markdown exposing (Markdown)
 import Duration exposing (Duration, Seconds)
 import Http
@@ -1295,6 +1295,146 @@ type alias ThreadMember =
     , joinTimestamp : Time.Posix
     , flags : Int
     }
+
+
+type alias SearchThreadsResult =
+    { threads : List Channel
+    , members : List ThreadMember
+    , hasMore : Bool
+    , totalResults : Int
+    , firstMessages : Maybe (List Message)
+    }
+
+
+type ThreadSortType
+    = LastMessageTime
+    | ArchiveTime
+    | Relevance
+    | CreationTime
+
+
+type SortOrder
+    = Ascending
+    | Descending
+
+
+type SearchTagSetting
+    = MatchSome
+    | MatchAll
+    | MatchNone
+
+
+{-| <https://docs.discord.food/resources/channel#search-threads>
+-}
+searchThreads :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , name : Maybe String
+        , slop : Maybe Int
+        , tag : Maybe (List (Id TagId))
+        , tagSetting : Maybe SearchTagSetting
+        , archived : Maybe Bool
+        , sortBy : Maybe ThreadSortType
+        , sortOrder : Maybe SortOrder
+        , limit : Maybe Int
+        , offset : Maybe Int
+        , maxId : Maybe (Id ChannelId)
+        , minId : Maybe (Id ChannelId)
+        }
+    -> Task HttpError SearchThreadsResult
+searchThreads authentication params =
+    searchThreadsPayload authentication params |> toTask
+
+
+searchThreadsPayload :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , name : Maybe String
+        , slop : Maybe Int
+        , tag : Maybe (List (Id TagId))
+        , tagSetting : Maybe SearchTagSetting
+        , archived : Maybe Bool
+        , sortBy : Maybe ThreadSortType
+        , sortOrder : Maybe SortOrder
+        , limit : Maybe Int
+        , offset : Maybe Int
+        , maxId : Maybe (Id ChannelId)
+        , minId : Maybe (Id ChannelId)
+        }
+    -> HttpRequest SearchThreadsResult
+searchThreadsPayload authentication { channelId, name, slop, tag, tagSetting, archived, sortBy, sortOrder, limit, offset, maxId, minId } =
+    let
+        tagParams : List QueryParameter
+        tagParams =
+            tag
+                |> Maybe.map (List.map (\t -> Url.Builder.string "tag" (Discord.Id.toString t)))
+                |> Maybe.withDefault []
+
+        queryParams : List QueryParameter
+        queryParams =
+            tagParams
+                ++ List.filterMap identity
+                    [ Maybe.map (\n -> Url.Builder.string "name" n) name
+                    , Maybe.map (\s -> Url.Builder.int "slop" s) slop
+                    , Maybe.map
+                        (\setting ->
+                            Url.Builder.string "tag_setting"
+                                (case setting of
+                                    MatchSome ->
+                                        "match_some"
+
+                                    MatchAll ->
+                                        "match_all"
+
+                                    MatchNone ->
+                                        "match_none"
+                                )
+                        )
+                        tagSetting
+                    , Maybe.map (\a -> Url.Builder.string "archived" (if a then "true" else "false")) archived
+                , Maybe.map
+                    (\sort ->
+                        Url.Builder.string "sort_by"
+                            (case sort of
+                                LastMessageTime ->
+                                    "last_message_time"
+
+                                ArchiveTime ->
+                                    "archive_time"
+
+                                Relevance ->
+                                    "relevance"
+
+                                CreationTime ->
+                                    "creation_time"
+                            )
+                    )
+                    sortBy
+                , Maybe.map
+                    (\order ->
+                        Url.Builder.string "sort_order"
+                            (case order of
+                                Ascending ->
+                                    "asc"
+
+                                Descending ->
+                                    "desc"
+                            )
+                    )
+                    sortOrder
+                , Maybe.map (\l -> Url.Builder.int "limit" l) limit
+                , Maybe.map (\o -> Url.Builder.int "offset" o) offset
+                , Maybe.map (\id -> Url.Builder.string "max_id" (Discord.Id.toString id)) maxId
+                , Maybe.map (\id -> Url.Builder.string "min_id" (Discord.Id.toString id)) minId
+                ]
+    in
+    httpGet
+        authentication
+        decodeSearchThreadsResult
+        [ "channels", Discord.Id.toString channelId, "threads", "search" ]
+        queryParams
 
 
 
@@ -2910,6 +3050,17 @@ decodeThreadMember =
         (JD.field "user_id" Discord.Id.decodeId)
         (JD.field "join_timestamp" Iso8601.decoder)
         (JD.field "flags" JD.int)
+
+
+decodeSearchThreadsResult : JD.Decoder SearchThreadsResult
+decodeSearchThreadsResult =
+    JD.map5
+        SearchThreadsResult
+        (JD.field "threads" (JD.list decodeChannel))
+        (JD.field "members" (JD.list decodeThreadMember))
+        (JD.field "has_more" JD.bool)
+        (JD.field "total_results" JD.int)
+        (JD.optionalField "first_messages" (JD.list decodeMessage))
 
 
 decodeSessionId : JD.Decoder SessionId

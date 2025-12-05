@@ -12,6 +12,7 @@ module Discord.Id exposing
     , RoleId
     , StickerId
     , StickerPackId
+    , TagId
     , TeamId
     , UserId
     , WebhookId
@@ -95,6 +96,10 @@ type StickerId
 
 type StickerPackId
     = StickerPackId Never
+
+
+type TagId
+    = TagId Never
 
 
 encodeId : Id idType -> JE.Value
