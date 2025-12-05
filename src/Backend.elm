@@ -1372,22 +1372,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 guildId
                                 currentDiscordUserId
                                 (\session discordUser user guild ->
-                                    let
-                                        attachedFiles2 =
-                                            validateAttachedFiles model2.files attachedFiles
-                                    in
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
-                                            ( { model
-                                                | pendingDiscordCreateMessages =
-                                                    SeqDict.insert
-                                                        ( currentDiscordUserId, channelId )
-                                                        ( clientId, changeId )
-                                                        model.pendingDiscordCreateMessages
-                                              }
-                                            , case threadRouteWithMaybeReplyTo of
+                                            let
+                                                attachedFiles2 : SeqDict (Id FileId) FileData
+                                                attachedFiles2 =
+                                                    validateAttachedFiles model2.files attachedFiles
+                                            in
+                                            case threadRouteWithMaybeReplyTo of
                                                 NoThreadWithMaybeMessage maybeReplyTo ->
-                                                    Discord.createMarkdownMessagePayload
+                                                    ( { model
+                                                        | pendingDiscordCreateMessages =
+                                                            SeqDict.insert
+                                                                ( currentDiscordUserId, channelId )
+                                                                ( clientId, changeId )
+                                                                model.pendingDiscordCreateMessages
+                                                      }
+                                                    , Discord.createMarkdownMessagePayload
                                                         (Discord.userToken discordUser.auth)
                                                         { channelId = channelId
                                                         , content = RichText.toDiscord attachedFiles2 text
@@ -1413,21 +1414,60 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 attachedFiles2
                                                                 currentDiscordUserId
                                                             )
+                                                    )
 
                                                 ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                    Debug.todo ""
-                                              --Discord.createMessagePayload
-                                              --    discordUser.auth
-                                              --    { channelId = Debug.todo ""
-                                              --    , content = text
-                                              --    , replyTo = Maybe.andThen (OneToOne.first channel.linkedMessageIds) maybeReplyTo
-                                              --    }
-                                            )
+                                                    case
+                                                        ( OneToOne.first threadId channel.linkedMessageIds
+                                                        , SeqDict.get threadId channel.threads
+                                                        )
+                                                    of
+                                                        ( Just messageId, Just thread ) ->
+                                                            let
+                                                                discordThreadId : Discord.Id.Id Discord.Id.ChannelId
+                                                                discordThreadId =
+                                                                    Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
+                                                            in
+                                                            ( { model
+                                                                | pendingDiscordCreateMessages =
+                                                                    SeqDict.insert
+                                                                        ( currentDiscordUserId, discordThreadId )
+                                                                        ( clientId, changeId )
+                                                                        model.pendingDiscordCreateMessages
+                                                              }
+                                                            , Discord.createMarkdownMessagePayload
+                                                                (Discord.userToken discordUser.auth)
+                                                                { channelId = discordThreadId
+                                                                , content = RichText.toDiscord attachedFiles2 text
+                                                                , replyTo =
+                                                                    case maybeReplyTo of
+                                                                        Just replyTo ->
+                                                                            OneToOne.first replyTo thread.linkedMessageIds
+
+                                                                        Nothing ->
+                                                                            Nothing
+                                                                }
+                                                                |> DiscordSync.http
+                                                                |> Task.attempt
+                                                                    (SentDiscordGuildMessage
+                                                                        time
+                                                                        changeId
+                                                                        sessionId
+                                                                        clientId
+                                                                        guildId
+                                                                        channelId
+                                                                        threadRouteWithMaybeReplyTo
+                                                                        text
+                                                                        attachedFiles2
+                                                                        currentDiscordUserId
+                                                                    )
+                                                            )
+
+                                                        _ ->
+                                                            ( model, invalidChangeResponse changeId clientId )
 
                                         Nothing ->
-                                            ( model
-                                            , invalidChangeResponse changeId clientId
-                                            )
+                                            ( model, invalidChangeResponse changeId clientId )
                                 )
 
                         DiscordGuildOrDmId_Dm currentUserId channelId ->
