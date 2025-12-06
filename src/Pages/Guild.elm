@@ -469,7 +469,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin form
 
         ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
@@ -736,7 +736,7 @@ guildView model guildId channelRoute loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get guildId local.guilds of
@@ -911,7 +911,7 @@ discordGuildView model routeData loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get routeData.guildId local.discordGuilds of
@@ -1571,10 +1571,6 @@ discordChannelView routeData guild loggedIn local model =
 
         DiscordChannel_GuildSettingsRoute ->
             discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId guild (MyUi.isMobile model)
-
-
-
---inviteLinkCreatorForm model local routeData.guildId guild
 
 
 discordGuildSettingsView : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> DiscordFrontendGuild -> Bool -> Element FrontendMsg
@@ -6504,8 +6500,8 @@ channelNameInput form =
         ]
 
 
-newGuildFormView : NewGuildForm -> Element FrontendMsg
-newGuildFormView form =
+newGuildFormView : Bool -> NewGuildForm -> Element FrontendMsg
+newGuildFormView isAdmin form =
     Ui.column
         [ Ui.Font.color MyUi.font1
         , Ui.padding 16
@@ -6534,19 +6530,23 @@ newGuildFormView form =
                 ]
                 (Ui.text "Cancel")
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
-            , MyUi.elButton
-                (Dom.id "guild_importGuild")
-                PressedImportGuild
-                [ Ui.paddingXY 16 8
-                , Ui.background MyUi.buttonBackground
-                , Ui.width Ui.shrink
-                , Ui.rounded 8
-                , Ui.Font.color MyUi.buttonFontColor
-                , Ui.Font.bold
-                , Ui.borderColor MyUi.buttonBorder
-                , Ui.border 1
-                ]
-                (Ui.text "Import guild")
+            , if isAdmin then
+                MyUi.elButton
+                    (Dom.id "guild_importGuild")
+                    PressedImportGuild
+                    [ Ui.paddingXY 16 8
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 8
+                    , Ui.Font.color MyUi.buttonFontColor
+                    , Ui.Font.bold
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    ]
+                    (Ui.text "Import guild")
+
+              else
+                Ui.none
             ]
         ]
 
