@@ -1570,15 +1570,15 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.guildId
+            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId
 
 
 
 --inviteLinkCreatorForm model local routeData.guildId guild
 
 
-discordGuildSettingsView : Discord.Id.Id Discord.Id.GuildId -> Element FrontendMsg
-discordGuildSettingsView guildId =
+discordGuildSettingsView : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> Element FrontendMsg
+discordGuildSettingsView currentDiscordUserId guildId =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1588,7 +1588,7 @@ discordGuildSettingsView guildId =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
-            , submitButton (Dom.id "discord_guild_exportButton") (PressedExportDiscordGuild guildId) "Export guild data"
+            , submitButton (Dom.id "discord_guild_exportButton") (PressedExportDiscordGuild currentDiscordUserId guildId) "Export guild data"
             ]
         )
 

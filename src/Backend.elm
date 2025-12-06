@@ -2,6 +2,7 @@ module Backend exposing
     ( adminUser
     , app
     , app_
+    , asDiscordGuildOwner
     , emailToNotifyWhenErrorsAreLogged
     , loginEmailContent
     , loginEmailSubject
@@ -2937,73 +2938,23 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 )
 
         ExportGuildRequest guildId ->
-            asUser
+            asGuildOwner
                 model2
                 sessionId
-                (\session user ->
-                    let
-                        maybeGuild : Maybe BackendGuild
-                        maybeGuild =
-                            SeqDict.get guildId model2.guilds
-                                |> Maybe.andThen
-                                    (\guild ->
-                                        if session.userId == guild.owner || SeqDict.member session.userId guild.members then
-                                            Just guild
-
-                                        else
-                                            Nothing
-                                    )
-                    in
-                    ( model2
-                    , Lamdera.sendToFrontend clientId (ExportGuildResponse guildId maybeGuild)
-                    )
+                guildId
+                (\session user guild ->
+                    ( model2, Lamdera.sendToFrontend clientId (ExportGuildResponse guildId guild) )
                 )
 
-        ExportDiscordGuildRequest guildId ->
-            asUser
+        ExportDiscordGuildRequest currentDiscordUserId guildId ->
+            asDiscordGuildOwner
                 model2
                 sessionId
-                (\session user ->
-                    let
-                        -- Find all Discord users linked to this user
-                        userDiscordIds : List (Discord.Id.Id Discord.Id.UserId)
-                        userDiscordIds =
-                            SeqDict.toList model2.discordUsers
-                                |> List.filterMap
-                                    (\( discordUserId, discordUserData ) ->
-                                        case discordUserData of
-                                            FullData fullData ->
-                                                if fullData.linkedTo == session.userId then
-                                                    Just discordUserId
-
-                                                else
-                                                    Nothing
-
-                                            BasicData _ ->
-                                                Nothing
-                                    )
-
-                        maybeGuild : Maybe DiscordBackendGuild
-                        maybeGuild =
-                            SeqDict.get guildId model2.discordGuilds
-                                |> Maybe.andThen
-                                    (\guild ->
-                                        -- Check if any of the user's linked Discord accounts is a member of this guild
-                                        if
-                                            List.any
-                                                (\discordUserId ->
-                                                    discordUserId == guild.owner || SeqDict.member discordUserId guild.members
-                                                )
-                                                userDiscordIds
-                                        then
-                                            Just guild
-
-                                        else
-                                            Nothing
-                                    )
-                    in
+                guildId
+                currentDiscordUserId
+                (\session discordUser user guild ->
                     ( model2
-                    , Lamdera.sendToFrontend clientId (ExportDiscordGuildResponse guildId maybeGuild)
+                    , Lamdera.sendToFrontend clientId (ExportDiscordGuildResponse guildId guild)
                     )
                 )
 
@@ -3850,6 +3801,27 @@ asGuildOwner model sessionId guildId func =
         (\{ userId } user guild ->
             if userId == guild.owner then
                 func userId user guild
+
+            else
+                ( model, Command.none )
+        )
+
+
+asDiscordGuildOwner :
+    BackendModel
+    -> SessionId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordGuildOwner model sessionId guildId discordUserId func =
+    asDiscordGuildMember model
+        sessionId
+        guildId
+        discordUserId
+        (\session discordUser user guild ->
+            if discordUserId == guild.owner then
+                func session discordUser user guild
 
             else
                 ( model, Command.none )

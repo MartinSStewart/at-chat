@@ -1,4 +1,15 @@
-module CodecExtra exposing (discordId, nonempty, nonemptySet, nonemptyString, oneToOne, quantityInt, seqDict, seqSet, timePosix, uint64)
+module CodecExtra exposing
+    ( discordId
+    , nonempty
+    , nonemptySet
+    , nonemptyString
+    , oneToOne
+    , quantityInt
+    , seqDict
+    , seqSet
+    , timePosix
+    , uint64
+    )
 
 import Codec exposing (Codec)
 import Discord.Id
@@ -9,7 +20,7 @@ import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import String.Nonempty exposing (NonemptyString)
+import String.Nonempty exposing (NonemptyString(..))
 import UInt64 exposing (UInt64)
 
 

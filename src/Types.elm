@@ -486,7 +486,7 @@ type FrontendMsg
     | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
-    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
 
 
 type ScrollPosition
@@ -528,7 +528,7 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | ExportGuildRequest (Id GuildId)
-    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
+    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
 
 
 type BackendMsg
@@ -601,8 +601,8 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError Discord.User)
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
-    | ExportGuildResponse (Id GuildId) (Maybe BackendGuild)
-    | ExportDiscordGuildResponse (Discord.Id.Id Discord.Id.GuildId) (Maybe DiscordBackendGuild)
+    | ExportGuildResponse (Id GuildId) BackendGuild
+    | ExportDiscordGuildResponse (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
 
 
 type alias LoginData =

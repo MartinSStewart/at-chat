@@ -11,7 +11,6 @@ port module Ports exposing
     , copyToClipboard
     , cropImageFromJs
     , cropImageToJs
-    , downloadFile
     , fixCursorPosition
     , getScrollbarWidth
     , getUserAgent
@@ -449,18 +448,3 @@ cropImageDataCodec =
         |> Codec.field "width" .width CodecExtra.quantityInt
         |> Codec.field "height" .height CodecExtra.quantityInt
         |> Codec.buildObject
-
-
-port download_file_to_js : Json.Encode.Value -> Cmd msg
-
-
-downloadFile : String -> String -> Command FrontendOnly toMsg msg
-downloadFile filename content =
-    Command.sendToJs
-        "download_file_to_js"
-        download_file_to_js
-        (Json.Encode.object
-            [ ( "filename", Json.Encode.string filename )
-            , ( "content", Json.Encode.string content )
-            ]
-        )

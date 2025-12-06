@@ -19,6 +19,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera
@@ -34,7 +35,7 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Image
 import ImageEditor
 import Json.Decode
@@ -1307,6 +1308,12 @@ isPressMsg msg =
             True
 
         PressedDiscordFriendLabel id ->
+            True
+
+        PressedExportGuild id ->
+            True
+
+        PressedExportDiscordGuild _ id ->
             True
 
 
@@ -3822,8 +3829,8 @@ updateLoaded msg model =
         PressedExportGuild guildId ->
             exportGuild guildId model
 
-        PressedExportDiscordGuild guildId ->
-            exportDiscordGuild guildId model
+        PressedExportDiscordGuild currentDiscordUserId guildId ->
+            exportDiscordGuild currentDiscordUserId guildId model
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -6838,39 +6845,29 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
-        ExportGuildResponse guildId maybeGuild ->
-            case maybeGuild of
-                Just guild ->
-                    let
-                        jsonString : String
-                        jsonString =
-                            Codec.encodeToString 2 GuildExport.backendGuildCodec guild
+        ExportGuildResponse guildId guild ->
+            let
+                jsonString : String
+                jsonString =
+                    Codec.encodeToString 2 GuildExport.backendGuildCodec guild
 
-                        filename : String
-                        filename =
-                            "guild-" ++ Id.toString guildId ++ "-export.json"
-                    in
-                    ( model, Ports.downloadFile filename jsonString )
+                filename : String
+                filename =
+                    "guild-" ++ Id.toString guildId ++ "-export.json"
+            in
+            ( model, Effect.File.Download.string filename "application/json" jsonString )
 
-                Nothing ->
-                    ( model, Command.none )
+        ExportDiscordGuildResponse guildId guild ->
+            let
+                jsonString : String
+                jsonString =
+                    Codec.encodeToString 2 GuildExport.discordBackendGuildCodec guild
 
-        ExportDiscordGuildResponse guildId maybeGuild ->
-            case maybeGuild of
-                Just guild ->
-                    let
-                        jsonString : String
-                        jsonString =
-                            Codec.encodeToString 2 GuildExport.discordBackendGuildCodec guild
-
-                        filename : String
-                        filename =
-                            "discord-guild-" ++ Discord.Id.toString guildId ++ "-export.json"
-                    in
-                    ( model, Ports.downloadFile filename jsonString )
-
-                Nothing ->
-                    ( model, Command.none )
+                filename : String
+                filename =
+                    "discord-guild-" ++ Discord.Id.toString guildId ++ "-export.json"
+            in
+            ( model, Effect.File.Download.string filename "application/json" jsonString )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -7853,9 +7850,9 @@ exportGuild guildId model =
     ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
 
 
-exportDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-exportDiscordGuild guildId model =
-    ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest guildId) )
+exportDiscordGuild : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+exportDiscordGuild currentDiscordUserId guildId model =
+    ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest currentDiscordUserId guildId) )
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
