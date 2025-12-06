@@ -2936,6 +2936,77 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ExportGuildRequest guildId ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    let
+                        maybeGuild : Maybe BackendGuild
+                        maybeGuild =
+                            SeqDict.get guildId model2.guilds
+                                |> Maybe.andThen
+                                    (\guild ->
+                                        if session.userId == guild.owner || SeqDict.member session.userId guild.members then
+                                            Just guild
+
+                                        else
+                                            Nothing
+                                    )
+                    in
+                    ( model2
+                    , Lamdera.sendToFrontend clientId (ExportGuildResponse guildId maybeGuild)
+                    )
+                )
+
+        ExportDiscordGuildRequest guildId ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    let
+                        -- Find all Discord users linked to this user
+                        userDiscordIds : List (Discord.Id.Id Discord.Id.UserId)
+                        userDiscordIds =
+                            SeqDict.toList model2.discordUsers
+                                |> List.filterMap
+                                    (\( discordUserId, discordUserData ) ->
+                                        case discordUserData of
+                                            FullData fullData ->
+                                                if fullData.linkedTo == session.userId then
+                                                    Just discordUserId
+
+                                                else
+                                                    Nothing
+
+                                            BasicData _ ->
+                                                Nothing
+                                    )
+
+                        maybeGuild : Maybe DiscordBackendGuild
+                        maybeGuild =
+                            SeqDict.get guildId model2.discordGuilds
+                                |> Maybe.andThen
+                                    (\guild ->
+                                        -- Check if any of the user's linked Discord accounts is a member of this guild
+                                        if
+                                            List.any
+                                                (\discordUserId ->
+                                                    discordUserId == guild.owner || SeqDict.member discordUserId guild.members
+                                                )
+                                                userDiscordIds
+                                        then
+                                            Just guild
+
+                                        else
+                                            Nothing
+                                    )
+                    in
+                    ( model2
+                    , Lamdera.sendToFrontend clientId (ExportDiscordGuildResponse guildId maybeGuild)
+                    )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId userId) }

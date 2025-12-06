@@ -29,6 +29,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
+import GuildExport
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
@@ -37,6 +38,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuil
 import Image
 import ImageEditor
 import Json.Decode
+import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -3817,6 +3819,12 @@ updateLoaded msg model =
                 NotLoggedIn _ ->
                     ( model, Command.none )
 
+        PressedExportGuild guildId ->
+            exportGuild guildId model
+
+        PressedExportDiscordGuild guildId ->
+            exportDiscordGuild guildId model
+
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 setShowMembers showMembers model =
@@ -6830,6 +6838,40 @@ updateLoadedFromBackend msg model =
                 )
                 model
 
+        ExportGuildResponse guildId maybeGuild ->
+            case maybeGuild of
+                Just guild ->
+                    let
+                        jsonString : String
+                        jsonString =
+                            Codec.encodeToString 2 GuildExport.backendGuildCodec guild
+
+                        filename : String
+                        filename =
+                            "guild-" ++ Id.toString guildId ++ "-export.json"
+                    in
+                    ( model, Ports.downloadFile filename jsonString )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        ExportDiscordGuildResponse guildId maybeGuild ->
+            case maybeGuild of
+                Just guild ->
+                    let
+                        jsonString : String
+                        jsonString =
+                            Codec.encodeToString 2 GuildExport.discordBackendGuildCodec guild
+
+                        filename : String
+                        filename =
+                            "discord-guild-" ++ Discord.Id.toString guildId ++ "-export.json"
+                    in
+                    ( model, Ports.downloadFile filename jsonString )
+
+                Nothing ->
+                    ( model, Command.none )
+
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 logout model =
@@ -7804,6 +7846,16 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
+
+
+exportGuild : Id GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+exportGuild guildId model =
+    ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
+
+
+exportDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
+exportDiscordGuild guildId model =
+    ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest guildId) )
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
