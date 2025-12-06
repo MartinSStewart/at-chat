@@ -6,6 +6,7 @@ module GuildExport exposing (backendGuildCodec, discordBackendGuildCodec)
 import ChannelName exposing (ChannelName(..))
 import Codec exposing (Codec)
 import CodecExtra
+import Discord.Id
 import Emoji exposing (Emoji(..))
 import FileName exposing (FileName)
 import FileStatus exposing (ContentType(..), FileData, FileHash(..), FileId, ImageMetadata)
@@ -250,23 +251,30 @@ backendThreadCodec =
         |> Codec.buildObject
 
 
-discordBackendGuildCodec : Codec DiscordBackendGuild
+discordBackendGuildCodec : Codec ( Discord.Id.Id Discord.Id.GuildId, DiscordBackendGuild )
 discordBackendGuildCodec =
-    Codec.object DiscordBackendGuild
-        |> Codec.field "name" .name GuildName.codec
-        |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
-        |> Codec.field "channels" .channels (CodecExtra.seqDict CodecExtra.discordId discordBackendChannelCodec)
+    Codec.object Tuple.pair
+        |> Codec.field "guildId" Tuple.first CodecExtra.discordId
         |> Codec.field
-            "members"
-            .members
-            (CodecExtra.seqDict
-                CodecExtra.discordId
-                (Codec.object (\joinedAt -> { joinedAt = joinedAt })
-                    |> Codec.field "joinedAt" .joinedAt CodecExtra.timePosix
-                    |> Codec.buildObject
-                )
+            "guild"
+            Tuple.second
+            (Codec.object DiscordBackendGuild
+                |> Codec.field "name" .name GuildName.codec
+                |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+                |> Codec.field "channels" .channels (CodecExtra.seqDict CodecExtra.discordId discordBackendChannelCodec)
+                |> Codec.field
+                    "members"
+                    .members
+                    (CodecExtra.seqDict
+                        CodecExtra.discordId
+                        (Codec.object (\joinedAt -> { joinedAt = joinedAt })
+                            |> Codec.field "joinedAt" .joinedAt CodecExtra.timePosix
+                            |> Codec.buildObject
+                        )
+                    )
+                |> Codec.field "owner" .owner CodecExtra.discordId
+                |> Codec.buildObject
             )
-        |> Codec.field "owner" .owner CodecExtra.discordId
         |> Codec.buildObject
 
 

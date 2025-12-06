@@ -1325,13 +1325,13 @@ isPressMsg msg =
         GotGuildImportFileContent _ ->
             False
 
-        PressedImportDiscordGuild _ ->
+        PressedImportDiscordGuild ->
             True
 
-        DiscordGuildImportFileSelected _ _ ->
+        DiscordGuildImportFileSelected _ ->
             False
 
-        GotDiscordGuildImportFileContent _ _ ->
+        GotDiscordGuildImportFileContent _ ->
             False
 
 
@@ -3869,20 +3869,20 @@ updateLoaded msg model =
                     -- Could show an error message to the user
                     ( model, Command.none )
 
-        PressedImportDiscordGuild currentDiscordUserId ->
+        PressedImportDiscordGuild ->
             ( model
-            , Effect.File.Select.file [ "application/json" ] (DiscordGuildImportFileSelected currentDiscordUserId)
+            , Effect.File.Select.file [ "application/json" ] DiscordGuildImportFileSelected
             )
 
-        DiscordGuildImportFileSelected currentDiscordUserId file ->
+        DiscordGuildImportFileSelected file ->
             ( model
-            , Task.perform (GotDiscordGuildImportFileContent currentDiscordUserId) (File.toString file)
+            , Task.perform GotDiscordGuildImportFileContent (File.toString file)
             )
 
-        GotDiscordGuildImportFileContent currentDiscordUserId content ->
+        GotDiscordGuildImportFileContent content ->
             case Codec.decodeString GuildExport.discordBackendGuildCodec content of
                 Ok guild ->
-                    ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest currentDiscordUserId guild) )
+                    ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest guild) )
 
                 Err error ->
                     -- Could show an error message to the user
@@ -6917,7 +6917,7 @@ updateLoadedFromBackend msg model =
             let
                 jsonString : String
                 jsonString =
-                    Codec.encodeToString 2 GuildExport.discordBackendGuildCodec guild
+                    Codec.encodeToString 2 GuildExport.discordBackendGuildCodec ( guildId, guild )
 
                 filename : String
                 filename =
@@ -6928,7 +6928,6 @@ updateLoadedFromBackend msg model =
         ImportGuildResponse result ->
             case result of
                 Ok guildId ->
-                    -- Close the new guild form and reload data to show the imported guild
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn | newGuildForm = Nothing }
@@ -6938,14 +6937,18 @@ updateLoadedFromBackend msg model =
                         model
 
                 Err error ->
-                    -- Could show error message to user
                     ( model, Command.none )
 
         ImportDiscordGuildResponse result ->
             case result of
-                Ok guildId ->
-                    -- Reload data to show the imported Discord guild
-                    ( model, Lamdera.sendToBackend (ReloadDataRequest Nothing) )
+                Ok () ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | newGuildForm = Nothing }
+                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
+                            )
+                        )
+                        model
 
                 Err error ->
                     -- Could show error message to user

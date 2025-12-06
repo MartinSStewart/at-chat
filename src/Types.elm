@@ -490,9 +490,9 @@ type FrontendMsg
     | PressedImportGuild
     | GuildImportFileSelected File
     | GotGuildImportFileContent String
-    | PressedImportDiscordGuild (Discord.Id.Id Discord.Id.UserId)
-    | DiscordGuildImportFileSelected (Discord.Id.Id Discord.Id.UserId) File
-    | GotDiscordGuildImportFileContent (Discord.Id.Id Discord.Id.UserId) String
+    | PressedImportDiscordGuild
+    | DiscordGuildImportFileSelected File
+    | GotDiscordGuildImportFileContent String
 
 
 type ScrollPosition
@@ -536,7 +536,7 @@ type ToBackend
     | ExportGuildRequest (Id GuildId)
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
-    | ImportDiscordGuildRequest (Discord.Id.Id Discord.Id.UserId) DiscordBackendGuild
+    | ImportDiscordGuildRequest ( Discord.Id.Id Discord.Id.GuildId, DiscordBackendGuild )
 
 
 type BackendMsg
@@ -612,7 +612,7 @@ type ToFrontend
     | ExportGuildResponse (Id GuildId) BackendGuild
     | ExportDiscordGuildResponse (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     | ImportGuildResponse (Result String (Id GuildId))
-    | ImportDiscordGuildResponse (Result String (Discord.Id.Id Discord.Id.GuildId))
+    | ImportDiscordGuildResponse (Result String ())
 
 
 type alias LoginData =

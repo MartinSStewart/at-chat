@@ -2976,28 +2976,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        ImportDiscordGuildRequest currentDiscordUserId importedGuild ->
-            asUser
+        ImportDiscordGuildRequest ( guildId, importedGuild ) ->
+            asAdmin
                 model2
                 sessionId
                 (\session user ->
-                    -- Generate a new Discord guild ID by incrementing the secret counter
-                    let
-                        newGuildIdInt : Int
-                        newGuildIdInt =
-                            model2.secretCounter
-
-                        newGuildId : Discord.Id.Id Discord.Id.GuildId
-                        newGuildId =
-                            String.fromInt newGuildIdInt
-                                |> Unsafe.uint64
-                                |> Discord.Id.fromUInt64
-                    in
-                    ( { model2
-                        | discordGuilds = SeqDict.insert newGuildId importedGuild model2.discordGuilds
-                        , secretCounter = model2.secretCounter + 1
-                      }
-                    , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok newGuildId))
+                    ( { model2 | discordGuilds = SeqDict.insert guildId importedGuild model2.discordGuilds }
+                    , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
                     )
                 )
 
