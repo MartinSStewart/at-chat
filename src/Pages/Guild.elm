@@ -6534,6 +6534,19 @@ newGuildFormView form =
                 ]
                 (Ui.text "Cancel")
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
+            , MyUi.elButton
+                (Dom.id "guild_importGuild")
+                PressedImportGuild
+                [ Ui.paddingXY 16 8
+                , Ui.background MyUi.buttonBackground
+                , Ui.width Ui.shrink
+                , Ui.rounded 8
+                , Ui.Font.color MyUi.buttonFontColor
+                , Ui.Font.bold
+                , Ui.borderColor MyUi.buttonBorder
+                , Ui.border 1
+                ]
+                (Ui.text "Import guild")
             ]
         ]
 

@@ -1316,6 +1316,15 @@ isPressMsg msg =
         PressedExportDiscordGuild _ id ->
             True
 
+        PressedImportGuild ->
+            True
+
+        GuildImportFileSelected _ ->
+            False
+
+        GotGuildImportFileContent _ ->
+            False
+
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 updateLoaded msg model =
@@ -3831,6 +3840,25 @@ updateLoaded msg model =
 
         PressedExportDiscordGuild currentDiscordUserId guildId ->
             exportDiscordGuild currentDiscordUserId guildId model
+
+        PressedImportGuild ->
+            ( model
+            , Effect.File.Select.file [ "application/json" ] GuildImportFileSelected
+            )
+
+        GuildImportFileSelected file ->
+            ( model
+            , Task.perform GotGuildImportFileContent (File.toString file)
+            )
+
+        GotGuildImportFileContent content ->
+            case Codec.decodeString GuildExport.backendGuildCodec content of
+                Ok guild ->
+                    ( model, Lamdera.sendToBackend (ImportGuildRequest guild) )
+
+                Err error ->
+                    -- Could show an error message to the user
+                    ( model, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -6868,6 +6896,22 @@ updateLoadedFromBackend msg model =
                     "discord-guild-" ++ Discord.Id.toString guildId ++ "-export.json"
             in
             ( model, Effect.File.Download.string filename "application/json" jsonString )
+
+        ImportGuildResponse result ->
+            case result of
+                Ok guildId ->
+                    -- Close the new guild form and reload data to show the imported guild
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | newGuildForm = Nothing }
+                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
+                            )
+                        )
+                        model
+
+                Err error ->
+                    -- Could show error message to user
+                    ( model, Command.none )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

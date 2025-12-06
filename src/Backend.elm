@@ -2958,6 +2958,38 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ImportGuildRequest importedGuild ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    let
+                        -- Generate a new guild ID
+                        newGuildId : Id GuildId
+                        newGuildId =
+                            Id.fromInt model2.secretCounter
+
+                        -- Create the guild with the imported data but new ID and set current user as owner
+                        guild : BackendGuild
+                        guild =
+                            { importedGuild
+                                | createdBy = session.userId
+                                , owner = session.userId
+                                , members = SeqDict.singleton session.userId { joinedAt = importedGuild.createdAt }
+                            }
+
+                        newModel : BackendModel
+                        newModel =
+                            { model2
+                                | guilds = SeqDict.insert newGuildId guild model2.guilds
+                                , secretCounter = model2.secretCounter + 1
+                            }
+                    in
+                    ( newModel
+                    , Lamdera.sendToFrontend clientId (ImportGuildResponse (Ok newGuildId))
+                    )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId userId) }

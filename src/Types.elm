@@ -487,6 +487,9 @@ type FrontendMsg
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
     | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
+    | PressedImportGuild
+    | GuildImportFileSelected File
+    | GotGuildImportFileContent String
 
 
 type ScrollPosition
@@ -529,6 +532,7 @@ type ToBackend
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | ExportGuildRequest (Id GuildId)
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
+    | ImportGuildRequest BackendGuild
 
 
 type BackendMsg
@@ -603,6 +607,7 @@ type ToFrontend
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | ExportGuildResponse (Id GuildId) BackendGuild
     | ExportDiscordGuildResponse (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
+    | ImportGuildResponse (Result String (Id GuildId))
 
 
 type alias LoginData =
