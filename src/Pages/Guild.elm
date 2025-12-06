@@ -1570,15 +1570,15 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId
+            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId guild (MyUi.isMobile model)
 
 
 
 --inviteLinkCreatorForm model local routeData.guildId guild
 
 
-discordGuildSettingsView : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> Element FrontendMsg
-discordGuildSettingsView currentDiscordUserId guildId =
+discordGuildSettingsView : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> DiscordFrontendGuild -> Bool -> Element FrontendMsg
+discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1588,7 +1588,14 @@ discordGuildSettingsView currentDiscordUserId guildId =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
-            , submitButton (Dom.id "discord_guild_exportButton") (PressedExportDiscordGuild currentDiscordUserId guildId) "Export guild data"
+            , if currentDiscordUserId == guild.owner then
+                MyUi.container isMobile
+                    "Export"
+                    [ submitButton (Dom.id "discord_guild_exportButton") (PressedExportDiscordGuild currentDiscordUserId guildId) "Export guild data"
+                    ]
+
+              else
+                Ui.none
             ]
         )
 
@@ -1650,9 +1657,14 @@ inviteLinkCreatorForm model local guildId guild =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
-            , Ui.el
-                [ Ui.paddingXY 16 0 ]
-                (submitButton (Dom.id "guild_exportButton") (PressedExportGuild guildId) "Export guild data")
+            , if local.localUser.session.userId == guild.owner then
+                MyUi.container (MyUi.isMobile model)
+                    "Export"
+                    [ submitButton (Dom.id "guild_exportButton") (PressedExportGuild guildId) "Export guild data"
+                    ]
+
+              else
+                Ui.none
             ]
         )
 
