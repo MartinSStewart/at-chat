@@ -1593,6 +1593,10 @@ discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
                         (Dom.id "discord_guild_exportButton")
                         (PressedExportDiscordGuild currentDiscordUserId guildId)
                         "Export guild data"
+                    , submitButton
+                        (Dom.id "discord_guild_importButton")
+                        (PressedImportDiscordGuild currentDiscordUserId)
+                        "Import guild data"
                     ]
 
               else

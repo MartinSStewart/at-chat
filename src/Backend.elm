@@ -2976,6 +2976,43 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ImportDiscordGuildRequest currentDiscordUserId importedGuild ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    -- Generate a new Discord guild ID by incrementing the secret counter
+                    let
+                        newGuildIdInt : Int
+                        newGuildIdInt =
+                            model2.secretCounter
+
+                        newGuildId : Discord.Id.Id Discord.Id.GuildId
+                        newGuildId =
+                            String.fromInt newGuildIdInt
+                                |> Unsafe.uint64
+                                |> Discord.Id.fromUInt64
+
+                        -- Create the guild with the imported data but new ID
+                        guild : DiscordBackendGuild
+                        guild =
+                            { importedGuild
+                                | owner = currentDiscordUserId
+                                , members = SeqDict.singleton currentDiscordUserId { joinedAt = importedGuild.members |> SeqDict.toList |> List.head |> Maybe.map (Tuple.second >> .joinedAt) |> Maybe.withDefault (Time.millisToPosix 0) }
+                            }
+
+                        newModel : BackendModel
+                        newModel =
+                            { model2
+                                | discordGuilds = SeqDict.insert newGuildId guild model2.discordGuilds
+                                , secretCounter = model2.secretCounter + 1
+                            }
+                    in
+                    ( newModel
+                    , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok newGuildId))
+                    )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId userId) }
