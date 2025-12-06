@@ -2992,23 +2992,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             String.fromInt newGuildIdInt
                                 |> Unsafe.uint64
                                 |> Discord.Id.fromUInt64
-
-                        -- Create the guild with the imported data but new ID
-                        guild : DiscordBackendGuild
-                        guild =
-                            { importedGuild
-                                | owner = currentDiscordUserId
-                                , members = SeqDict.singleton currentDiscordUserId { joinedAt = importedGuild.members |> SeqDict.toList |> List.head |> Maybe.map (Tuple.second >> .joinedAt) |> Maybe.withDefault (Time.millisToPosix 0) }
-                            }
-
-                        newModel : BackendModel
-                        newModel =
-                            { model2
-                                | discordGuilds = SeqDict.insert newGuildId guild model2.discordGuilds
-                                , secretCounter = model2.secretCounter + 1
-                            }
                     in
-                    ( newModel
+                    ( { model2
+                        | discordGuilds = SeqDict.insert newGuildId importedGuild model2.discordGuilds
+                        , secretCounter = model2.secretCounter + 1
+                      }
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok newGuildId))
                     )
                 )
