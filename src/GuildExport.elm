@@ -6,6 +6,7 @@ module GuildExport exposing (backendGuildCodec, discordBackendGuildCodec)
 import Array exposing (Array)
 import ChannelName exposing (ChannelName(..))
 import Codec exposing (Codec)
+import CodecExtra
 import Coord
 import Discord.Id
 import Emoji exposing (Emoji(..))
@@ -29,200 +30,8 @@ import UInt64 exposing (UInt64)
 import Url exposing (Protocol(..))
 
 
+
 -- Helper codecs for basic types
-
-
-timePosixCodec : Codec Time.Posix
-timePosixCodec =
-    Codec.map Time.millisToPosix Time.posixToMillis Codec.int
-
-
-idCodec : Codec (Id a)
-idCodec =
-    Codec.map Id.fromInt Id.toInt Codec.int
-
-
-secretIdCodec : Codec (SecretId a)
-secretIdCodec =
-    Codec.map SecretId.fromString SecretId.toString Codec.string
-
-
-discordIdCodec : Codec (Discord.Id.Id a)
-discordIdCodec =
-    Codec.map Discord.Id.fromUInt64 Discord.Id.toUInt64 uint64Codec
-
-
-uint64Codec : Codec UInt64
-uint64Codec =
-    Codec.map
-        (\( high, low ) -> UInt64.fromInt32s high low)
-        (\u -> ( UInt64.toInt32s u |> Tuple.first, UInt64.toInt32s u |> Tuple.second ))
-        (Codec.tuple Codec.int Codec.int)
-
-
-nonemptyStringCodec : Codec NonemptyString
-nonemptyStringCodec =
-    Codec.map
-        (\s ->
-            case String.uncons s of
-                Just ( c, rest ) ->
-                    NonemptyString c rest
-
-                Nothing ->
-                    NonemptyString 'e' "rror"
-        )
-        (\(NonemptyString c rest) -> String.cons c rest)
-        Codec.string
-
-
-guildNameCodec : Codec GuildName
-guildNameCodec =
-    Codec.map GuildName (\(GuildName n) -> n) nonemptyStringCodec
-
-
-channelNameCodec : Codec ChannelName
-channelNameCodec =
-    Codec.map ChannelName (\(ChannelName n) -> n) nonemptyStringCodec
-
-
-fileHashCodec : Codec FileHash
-fileHashCodec =
-    Codec.map FileHash (\(FileHash h) -> h) Codec.string
-
-
-seqDictCodec : Codec comparable -> Codec v -> Codec (SeqDict comparable v)
-seqDictCodec keyCodec valueCodec =
-    Codec.map
-        SeqDict.fromList
-        SeqDict.toList
-        (Codec.list (Codec.tuple keyCodec valueCodec))
-
-
-seqSetCodec : Codec comparable -> Codec (SeqSet comparable)
-seqSetCodec itemCodec =
-    Codec.map
-        SeqSet.fromList
-        SeqSet.toList
-        (Codec.list itemCodec)
-
-
-nonemptyCodec : Codec a -> Codec (Nonempty a)
-nonemptyCodec itemCodec =
-    Codec.map
-        (\( head, tail ) -> List.Nonempty.Nonempty head tail)
-        (\(List.Nonempty.Nonempty head tail) -> ( head, tail ))
-        (Codec.tuple itemCodec (Codec.list itemCodec))
-
-
-nonemptySetCodec : Codec comparable -> Codec (NonemptySet comparable)
-nonemptySetCodec itemCodec =
-    Codec.map
-        NonemptySet.fromNonemptyList
-        NonemptySet.toNonemptyList
-        (nonemptyCodec itemCodec)
-
-
-oneToOneCodec : Codec comparable1 -> Codec comparable2 -> Codec (OneToOne comparable1 comparable2)
-oneToOneCodec keyCodec valueCodec =
-    Codec.map
-        OneToOne.fromList
-        OneToOne.toList
-        (Codec.list (Codec.tuple keyCodec valueCodec))
-
-
-emojiCodec : Codec Emoji
-emojiCodec =
-    Codec.map (\s -> UnicodeEmoji s) Emoji.toString Codec.string
-
-
-protocolCodec : Codec Protocol
-protocolCodec =
-    Codec.custom
-        (\httpEncoder httpsEncoder value ->
-            case value of
-                Http ->
-                    httpEncoder
-
-                Https ->
-                    httpsEncoder
-        )
-        |> Codec.variant0 "Http" Http
-        |> Codec.variant0 "Https" Https
-        |> Codec.buildCustom
-
-
-languageCodec : Codec Language
-languageCodec =
-    Codec.custom
-        (\langEncoder noLangEncoder value ->
-            case value of
-                Language nonempty ->
-                    langEncoder nonempty
-
-                NoLanguage ->
-                    noLangEncoder
-        )
-        |> Codec.variant1 "Language" Language nonemptyStringCodec
-        |> Codec.variant0 "NoLanguage" NoLanguage
-        |> Codec.buildCustom
-
-
--- RichText codec
-
-
-richTextCodec : Codec userId -> Codec (RichText userId)
-richTextCodec userIdCodec =
-    Codec.recursive
-        (\_ ->
-            Codec.custom
-                (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikeEncoder spoilerEncoder hyperlinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder value ->
-                    case value of
-                        UserMention userId ->
-                            userMentionEncoder userId
-
-                        NormalText c rest ->
-                            normalTextEncoder ( c, rest )
-
-                        Bold rt ->
-                            boldEncoder rt
-
-                        Italic rt ->
-                            italicEncoder rt
-
-                        Underline rt ->
-                            underlineEncoder rt
-
-                        Strikethrough rt ->
-                            strikeEncoder rt
-
-                        Spoiler rt ->
-                            spoilerEncoder rt
-
-                        Hyperlink protocol url ->
-                            hyperlinkEncoder ( protocol, url )
-
-                        InlineCode c rest ->
-                            inlineCodeEncoder ( c, rest )
-
-                        CodeBlock lang code ->
-                            codeBlockEncoder ( lang, code )
-
-                        AttachedFile fileId ->
-                            attachedFileEncoder fileId
-                )
-                |> Codec.variant1 "UserMention" UserMention userIdCodec
-                |> Codec.variant1 "NormalText" (\( c, rest ) -> NormalText c rest) (Codec.tuple charCodec Codec.string)
-                |> Codec.variant1 "Bold" Bold (nonemptyCodec (Codec.lazy (\_ -> richTextCodec userIdCodec)))
-                |> Codec.variant1 "Italic" Italic (nonemptyCodec (Codec.lazy (\_ -> richTextCodec userIdCodec)))
-                |> Codec.variant1 "Underline" Underline (nonemptyCodec (Codec.lazy (\_ -> richTextCodec userIdCodec)))
-                |> Codec.variant1 "Strikethrough" Strikethrough (nonemptyCodec (Codec.lazy (\_ -> richTextCodec userIdCodec)))
-                |> Codec.variant1 "Spoiler" Spoiler (nonemptyCodec (Codec.lazy (\_ -> richTextCodec userIdCodec)))
-                |> Codec.variant1 "Hyperlink" (\( protocol, url ) -> Hyperlink protocol url) (Codec.tuple protocolCodec Codec.string)
-                |> Codec.variant1 "InlineCode" (\( c, rest ) -> InlineCode c rest) (Codec.tuple charCodec Codec.string)
-                |> Codec.variant1 "CodeBlock" (\( lang, code ) -> CodeBlock lang code) (Codec.tuple languageCodec Codec.string)
-                |> Codec.variant1 "AttachedFile" AttachedFile idCodec
-                |> Codec.buildCustom
-        )
 
 
 charCodec : Codec Char
@@ -231,6 +40,7 @@ charCodec =
         (\s -> String.uncons s |> Maybe.map Tuple.first |> Maybe.withDefault 'e')
         String.fromChar
         Codec.string
+
 
 
 -- FileData codec
@@ -243,7 +53,7 @@ fileDataCodec =
         |> Codec.field "fileSize" .fileSize Codec.int
         |> Codec.field "imageMetadata" .imageMetadata (Codec.maybe imageMetadataStubCodec)
         |> Codec.field "contentType" .contentType contentTypeCodec
-        |> Codec.field "fileHash" .fileHash fileHashCodec
+        |> Codec.field "fileHash" .fileHash FileStatus.fileHashCodec
         |> Codec.buildObject
 
 
@@ -278,6 +88,7 @@ imageMetadataStubCodec =
 fileNameCodec : Codec FileName
 fileNameCodec =
     Codec.map FileName.fromString FileName.toString Codec.string
+
 
 
 -- Message codec
@@ -318,6 +129,7 @@ userTextMessageDataCodec messageIdCodec userIdCodec =
         |> Codec.buildObject
 
 
+
 -- LastTypedAt codec
 
 
@@ -327,6 +139,7 @@ lastTypedAtCodec messageIdCodec =
         |> Codec.field "time" .time timePosixCodec
         |> Codec.field "messageIndex" .messageIndex (Codec.maybe messageIdCodec)
         |> Codec.buildObject
+
 
 
 -- BackendThread codec
@@ -347,6 +160,7 @@ discordBackendThreadCodec =
         |> Codec.field "lastTypedAt" .lastTypedAt (seqDictCodec discordIdCodec (lastTypedAtCodec idCodec))
         |> Codec.field "linkedMessageIds" .linkedMessageIds (oneToOneCodec discordIdCodec idCodec)
         |> Codec.buildObject
+
 
 
 -- ChannelStatus codec
@@ -372,6 +186,7 @@ channelStatusCodec =
                 |> Codec.buildObject
             )
         |> Codec.buildCustom
+
 
 
 -- BackendChannel codec
@@ -402,6 +217,7 @@ discordBackendChannelCodec =
         |> Codec.buildObject
 
 
+
 -- BackendGuild codec
 
 
@@ -428,6 +244,7 @@ discordBackendGuildCodec =
         |> Codec.field "members" .members (seqDictCodec discordIdCodec memberDataCodec)
         |> Codec.field "owner" .owner discordIdCodec
         |> Codec.buildObject
+
 
 
 -- Helper codecs for guild member and invite data

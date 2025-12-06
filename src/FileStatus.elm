@@ -15,6 +15,7 @@ module FileStatus exposing
     , contentType
     , domain
     , fileHash
+    , fileHashCodec
     , fileUploadPreview
     , fileUrl
     , imageInfoView
