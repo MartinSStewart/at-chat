@@ -205,6 +205,7 @@ updateFromBackend toFrontend model =
 view : UserAgent -> Bool -> Time.Posix -> TwoFactorState -> Element Msg
 view userAgent isMobile time twoFactorStatus =
     MyUi.container
+        MyUi.background1
         isMobile
         "Two-factor authentication"
         [ case twoFactorStatus of

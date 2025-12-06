@@ -1589,9 +1589,14 @@ discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
             , if currentDiscordUserId == guild.owner then
-                MyUi.container isMobile
-                    "Export"
-                    [ submitButton (Dom.id "discord_guild_exportButton") (PressedExportDiscordGuild currentDiscordUserId guildId) "Export guild data"
+                MyUi.container
+                    MyUi.background3
+                    isMobile
+                    "Owner only"
+                    [ submitButton
+                        (Dom.id "discord_guild_exportButton")
+                        (PressedExportDiscordGuild currentDiscordUserId guildId)
+                        "Export guild data"
                     ]
 
               else
@@ -1602,6 +1607,10 @@ discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
 
 inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
 inviteLinkCreatorForm model local guildId guild =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1610,7 +1619,7 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ channelHeader (MyUi.isMobile model) False (Ui.text "Invite member to guild")
+            [ channelHeader isMobile False (Ui.text "Invite member to guild")
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
@@ -1658,8 +1667,10 @@ inviteLinkCreatorForm model local guildId guild =
                     ]
                 )
             , if local.localUser.session.userId == guild.owner then
-                MyUi.container (MyUi.isMobile model)
-                    "Export"
+                MyUi.container
+                    MyUi.background3
+                    isMobile
+                    "Owner only"
                     [ submitButton (Dom.id "guild_exportButton") (PressedExportGuild guildId) "Export guild data"
                     ]
 

@@ -184,6 +184,7 @@ view isMobile time local loggedIn loaded model =
             [ case local.adminData of
                 IsAdmin adminData2 ->
                     MyUi.container
+                        MyUi.background1
                         isMobile
                         "Admin"
                         [ Editable.view
@@ -257,6 +258,7 @@ view isMobile time local loggedIn loaded model =
             , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
             , MyUi.container
+                MyUi.background1
                 isMobile
                 "Miscellaneous"
                 [ Editable.view
@@ -439,6 +441,7 @@ view isMobile time local loggedIn loaded model =
                         (Ui.text "Link Discord account")
                 ]
             , MyUi.container
+                MyUi.background1
                 isMobile
                 "Connected devices"
                 (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
