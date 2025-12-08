@@ -5,8 +5,11 @@ module Types exposing
     , BackendMsg(..)
     , ChannelSidebarMode(..)
     , DiscordBasicUserData
+    , DiscordExport
     , DiscordFullUserData
+    , DiscordFullUserDataExport
     , DiscordUserData(..)
+    , DiscordUserDataExport(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -332,6 +335,26 @@ type alias DiscordBasicUserData =
     { user : Discord.PartialUser, icon : Maybe FileHash }
 
 
+type alias DiscordExport =
+    { guildId : Discord.Id.Id Discord.Id.GuildId
+    , guild : DiscordBackendGuild
+    , users : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserDataExport
+    }
+
+
+type DiscordUserDataExport
+    = BasicDataExport DiscordBasicUserData
+    | FullDataExport DiscordFullUserDataExport
+
+
+type alias DiscordFullUserDataExport =
+    { auth : Discord.UserAuth
+    , user : Discord.User
+    , linkedTo : Id UserId
+    , icon : Maybe FileHash
+    }
+
+
 type alias BackendFileData =
     { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
@@ -486,7 +509,7 @@ type FrontendMsg
     | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
-    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
+    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | PressedImportGuild
     | GuildImportFileSelected File
     | GotGuildImportFileContent String
@@ -534,9 +557,9 @@ type ToBackend
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | ExportGuildRequest (Id GuildId)
-    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId)
+    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
-    | ImportDiscordGuildRequest ( Discord.Id.Id Discord.Id.GuildId, DiscordBackendGuild )
+    | ImportDiscordGuildRequest DiscordExport
 
 
 type BackendMsg
@@ -610,7 +633,7 @@ type ToFrontend
     | LinkDiscordResponse (Result Discord.HttpError Discord.User)
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | ExportGuildResponse (Id GuildId) BackendGuild
-    | ExportDiscordGuildResponse (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
+    | ExportDiscordGuildResponse DiscordExport
     | ImportGuildResponse (Result String (Id GuildId))
     | ImportDiscordGuildResponse (Result String ())
 

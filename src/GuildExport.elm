@@ -1,4 +1,4 @@
-module GuildExport exposing (backendGuildCodec, discordBackendGuildCodec)
+module GuildExport exposing (backendGuildCodec, discordExportCodec)
 
 {-| Module for encoding and decoding guild data for export/import functionality
 -}
@@ -6,6 +6,7 @@ module GuildExport exposing (backendGuildCodec, discordBackendGuildCodec)
 import ChannelName exposing (ChannelName(..))
 import Codec exposing (Codec)
 import CodecExtra
+import Discord
 import Discord.Id
 import Emoji exposing (Emoji(..))
 import FileName exposing (FileName)
@@ -16,7 +17,10 @@ import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), Dis
 import Message exposing (Message(..), UserTextMessageData)
 import RichText exposing (Language(..), RichText(..))
 import SecretId exposing (SecretId(..))
+import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
+import Types exposing (DiscordBasicUserData, DiscordExport, DiscordFullUserDataExport, DiscordUserData, DiscordUserDataExport(..))
+import User
 
 
 backendGuildCodec : Codec BackendGuild
@@ -251,30 +255,135 @@ backendThreadCodec =
         |> Codec.buildObject
 
 
-discordBackendGuildCodec : Codec ( Discord.Id.Id Discord.Id.GuildId, DiscordBackendGuild )
-discordBackendGuildCodec =
-    Codec.object Tuple.pair
-        |> Codec.field "guildId" Tuple.first CodecExtra.discordId
+discordExportCodec : Codec DiscordExport
+discordExportCodec =
+    Codec.object Types.DiscordExport
+        |> Codec.field "guildId" .guildId CodecExtra.discordId
+        |> Codec.field "guild" .guild discordGuildCodec
+        |> Codec.field "users" .users (CodecExtra.seqDict CodecExtra.discordId discordUserDataCodec)
+        |> Codec.buildObject
+
+
+discordUserDataCodec : Codec DiscordUserDataExport
+discordUserDataCodec =
+    Codec.custom
+        (\basicDataEncoder fullDataEncoder value ->
+            case value of
+                BasicDataExport arg0 ->
+                    basicDataEncoder arg0
+
+                FullDataExport arg0 ->
+                    fullDataEncoder arg0
+        )
+        |> Codec.variant1 "BasicData" BasicDataExport discordBasicUserDataCodec
+        |> Codec.variant1 "FullData" FullDataExport discordFullUserDataCodec
+        |> Codec.buildCustom
+
+
+discordBasicUserDataCodec : Codec Types.DiscordBasicUserData
+discordBasicUserDataCodec =
+    Codec.object Types.DiscordBasicUserData
+        |> Codec.field "user" .user partialUserCodec
+        |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.buildObject
+
+
+partialUserCodec : Codec Discord.PartialUser
+partialUserCodec =
+    Codec.object Discord.PartialUser
+        |> Codec.field "id" .id CodecExtra.discordId
+        |> Codec.field "username" .username Codec.string
+        |> Codec.field "avatar" .avatar (Codec.nullable imageHashCodec)
+        |> Codec.field "discriminator" .discriminator userDiscriminatorCodec
+        |> Codec.buildObject
+
+
+imageHashCodec : Codec (Discord.ImageHash hashType)
+imageHashCodec =
+    Codec.custom
+        (\imageHashEncoder value ->
+            case value of
+                Discord.ImageHash arg0 ->
+                    imageHashEncoder arg0
+        )
+        |> Codec.variant1 "ImageHash" Discord.ImageHash Codec.string
+        |> Codec.buildCustom
+
+
+userDiscriminatorCodec : Codec Discord.UserDiscriminator
+userDiscriminatorCodec =
+    Codec.custom
+        (\userDiscriminatorEncoder value ->
+            case value of
+                Discord.UserDiscriminator arg0 ->
+                    userDiscriminatorEncoder arg0
+        )
+        |> Codec.variant1 "UserDiscriminator" Discord.UserDiscriminator Codec.int
+        |> Codec.buildCustom
+
+
+discordFullUserDataCodec : Codec DiscordFullUserDataExport
+discordFullUserDataCodec =
+    Codec.object Types.DiscordFullUserDataExport
+        |> Codec.field "auth" .auth User.linkDiscordDataCodec
+        |> Codec.field "user" .user userCodec
+        |> Codec.field "linkedTo" .linkedTo Id.codec
+        |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.buildObject
+
+
+userCodec : Codec Discord.User
+userCodec =
+    Codec.object Discord.User
+        |> Codec.field "id" .id CodecExtra.discordId
+        |> Codec.field "username" .username Codec.string
+        |> Codec.field "discriminator" .discriminator userDiscriminatorCodec
+        |> Codec.field "avatar" .avatar (Codec.nullable imageHashCodec)
+        |> Codec.field "bot" .bot (optionalDataCodec Codec.bool)
+        |> Codec.field "system" .system (optionalDataCodec Codec.bool)
+        |> Codec.field "mfaEnabled" .mfaEnabled (optionalDataCodec Codec.bool)
+        |> Codec.field "locale" .locale (optionalDataCodec Codec.string)
+        |> Codec.field "verified" .verified (optionalDataCodec Codec.bool)
+        |> Codec.field "email" .email (optionalDataCodec (Codec.nullable Codec.string))
+        |> Codec.field "flags" .flags (optionalDataCodec Codec.int)
+        |> Codec.field "premiumType" .premiumType (optionalDataCodec Codec.int)
+        |> Codec.field "publicFlags" .publicFlags (optionalDataCodec Codec.int)
+        |> Codec.buildObject
+
+
+optionalDataCodec : Codec a -> Codec (Discord.OptionalData a)
+optionalDataCodec a =
+    Codec.custom
+        (\includedEncoder missingEncoder value ->
+            case value of
+                Discord.Included arg0 ->
+                    includedEncoder arg0
+
+                Discord.Missing ->
+                    missingEncoder
+        )
+        |> Codec.variant1 "Included" Discord.Included a
+        |> Codec.variant0 "Missing" Discord.Missing
+        |> Codec.buildCustom
+
+
+discordGuildCodec : Codec DiscordBackendGuild
+discordGuildCodec =
+    Codec.object DiscordBackendGuild
+        |> Codec.field "name" .name GuildName.codec
+        |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.field "channels" .channels (CodecExtra.seqDict CodecExtra.discordId discordBackendChannelCodec)
         |> Codec.field
-            "guild"
-            Tuple.second
-            (Codec.object DiscordBackendGuild
-                |> Codec.field "name" .name GuildName.codec
-                |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
-                |> Codec.field "channels" .channels (CodecExtra.seqDict CodecExtra.discordId discordBackendChannelCodec)
-                |> Codec.field
-                    "members"
-                    .members
-                    (CodecExtra.seqDict
-                        CodecExtra.discordId
-                        (Codec.object (\joinedAt -> { joinedAt = joinedAt })
-                            |> Codec.field "joinedAt" .joinedAt CodecExtra.timePosix
-                            |> Codec.buildObject
-                        )
-                    )
-                |> Codec.field "owner" .owner CodecExtra.discordId
-                |> Codec.buildObject
+            "members"
+            .members
+            (CodecExtra.seqDict
+                CodecExtra.discordId
+                (Codec.object (\joinedAt -> { joinedAt = joinedAt })
+                    |> Codec.field "joinedAt" .joinedAt CodecExtra.timePosix
+                    |> Codec.buildObject
+                )
             )
+        |> Codec.field "owner" .owner CodecExtra.discordId
         |> Codec.buildObject
 
 

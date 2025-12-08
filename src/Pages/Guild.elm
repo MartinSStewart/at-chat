@@ -1570,11 +1570,11 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.currentDiscordUserId routeData.guildId guild (MyUi.isMobile model)
+            discordGuildSettingsView local.localUser.user.isAdmin routeData.guildId (MyUi.isMobile model)
 
 
-discordGuildSettingsView : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> DiscordFrontendGuild -> Bool -> Element FrontendMsg
-discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
+discordGuildSettingsView : Bool -> Discord.Id.Id Discord.Id.GuildId -> Bool -> Element FrontendMsg
+discordGuildSettingsView isAdmin guildId isMobile =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1584,14 +1584,14 @@ discordGuildSettingsView currentDiscordUserId guildId guild isMobile =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
-            , if currentDiscordUserId == guild.owner then
+            , if isAdmin then
                 MyUi.container
                     MyUi.background3
                     isMobile
-                    "Owner only"
+                    "Admin only"
                     [ submitButton
                         (Dom.id "discord_guild_exportButton")
-                        (PressedExportDiscordGuild currentDiscordUserId guildId)
+                        (PressedExportDiscordGuild guildId)
                         "Export guild data"
                     ]
 

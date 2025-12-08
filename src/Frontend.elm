@@ -1313,7 +1313,7 @@ isPressMsg msg =
         PressedExportGuild id ->
             True
 
-        PressedExportDiscordGuild _ id ->
+        PressedExportDiscordGuild id ->
             True
 
         PressedImportGuild ->
@@ -3845,15 +3845,13 @@ updateLoaded msg model =
                     ( model, Command.none )
 
         PressedExportGuild guildId ->
-            exportGuild guildId model
+            ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
 
-        PressedExportDiscordGuild currentDiscordUserId guildId ->
-            exportDiscordGuild currentDiscordUserId guildId model
+        PressedExportDiscordGuild guildId ->
+            ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest guildId) )
 
         PressedImportGuild ->
-            ( model
-            , Effect.File.Select.file [ "application/json" ] GuildImportFileSelected
-            )
+            ( model, Effect.File.Select.file [ "application/json" ] GuildImportFileSelected )
 
         GuildImportFileSelected file ->
             ( model
@@ -3880,7 +3878,7 @@ updateLoaded msg model =
             )
 
         GotDiscordGuildImportFileContent content ->
-            case Codec.decodeString GuildExport.discordBackendGuildCodec content of
+            case Codec.decodeString GuildExport.discordExportCodec content of
                 Ok guild ->
                     ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest guild) )
 
@@ -6913,15 +6911,15 @@ updateLoadedFromBackend msg model =
             in
             ( model, Effect.File.Download.string filename "application/json" jsonString )
 
-        ExportDiscordGuildResponse guildId guild ->
+        ExportDiscordGuildResponse export ->
             let
                 jsonString : String
                 jsonString =
-                    Codec.encodeToString 2 GuildExport.discordBackendGuildCodec ( guildId, guild )
+                    Codec.encodeToString 2 GuildExport.discordExportCodec export
 
                 filename : String
                 filename =
-                    "discord-guild-" ++ Discord.Id.toString guildId ++ "-export.json"
+                    "discord-guild-" ++ Discord.Id.toString export.guildId ++ "-export.json"
             in
             ( model, Effect.File.Download.string filename "application/json" jsonString )
 
@@ -7928,16 +7926,6 @@ guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
 
                 Nothing ->
                     Nothing
-
-
-exportGuild : Id GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-exportGuild guildId model =
-    ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
-
-
-exportDiscordGuild : Discord.Id.Id Discord.Id.UserId -> Discord.Id.Id Discord.Id.GuildId -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
-exportDiscordGuild currentDiscordUserId guildId model =
-    ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest currentDiscordUserId guildId) )
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
