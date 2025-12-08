@@ -1,5 +1,6 @@
-module SecretId exposing (SecretId(..), fromString, getShortUniqueId, getUniqueId, toString)
+module SecretId exposing (SecretId(..), codec, fromString, getShortUniqueId, getUniqueId, toString)
 
+import Codec exposing (Codec)
 import Effect.Time as Time
 import Env
 import Sha256
@@ -56,3 +57,8 @@ toString (SecretId text) =
 fromString : String -> SecretId a
 fromString =
     SecretId
+
+
+codec : Codec (SecretId a)
+codec =
+    Codec.map fromString toString Codec.string

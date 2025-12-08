@@ -608,8 +608,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Bool -> String -> List (Element msg) -> Element msg
-container isMobile2 label2 contents =
+container : Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container backgroundColor isMobile2 label2 contents =
     let
         paddingX =
             if isMobile2 then
@@ -636,7 +636,7 @@ container isMobile2 label2 contents =
                     }
                 , Ui.paddingXY 2 0
                 , Ui.width Ui.shrink
-                , Ui.background background1
+                , Ui.background backgroundColor
                 ]
             |> Ui.inFront
         ]

@@ -6,6 +6,7 @@ module RichText exposing
     , append
     , attachedFilePrefix
     , attachedFileSuffix
+    , codec
     , fromDiscord
     , fromNonemptyString
     , fromSlack
@@ -21,6 +22,8 @@ module RichText exposing
     )
 
 import Array exposing (Array)
+import Codec exposing (Codec)
+import CodecExtra
 import Coord
 import Discord.Id
 import Discord.Markdown
@@ -1692,3 +1695,93 @@ discordBailOut state modifiers =
         )
         (Array.append state.rest (parserHelper state))
         |> Done
+
+
+protocolCodec : Codec Protocol
+protocolCodec =
+    Codec.custom
+        (\httpEncoder httpsEncoder value ->
+            case value of
+                Http ->
+                    httpEncoder
+
+                Https ->
+                    httpsEncoder
+        )
+        |> Codec.variant0 "Http" Http
+        |> Codec.variant0 "Https" Https
+        |> Codec.buildCustom
+
+
+languageCodec : Codec Language
+languageCodec =
+    Codec.custom
+        (\langEncoder noLangEncoder value ->
+            case value of
+                Language nonempty ->
+                    langEncoder nonempty
+
+                NoLanguage ->
+                    noLangEncoder
+        )
+        |> Codec.variant1 "Language" Language CodecExtra.nonemptyString
+        |> Codec.variant0 "NoLanguage" NoLanguage
+        |> Codec.buildCustom
+
+
+codec : Codec userId -> Codec (RichText userId)
+codec userIdCodec =
+    Codec.custom
+        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikeEncoder spoilerEncoder hyperlinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder value ->
+            case value of
+                UserMention userId ->
+                    userMentionEncoder userId
+
+                NormalText c rest ->
+                    normalTextEncoder (String.Nonempty.NonemptyString c rest)
+
+                Bold rt ->
+                    boldEncoder rt
+
+                Italic rt ->
+                    italicEncoder rt
+
+                Underline rt ->
+                    underlineEncoder rt
+
+                Strikethrough rt ->
+                    strikeEncoder rt
+
+                Spoiler rt ->
+                    spoilerEncoder rt
+
+                Hyperlink protocol url ->
+                    hyperlinkEncoder protocol url
+
+                InlineCode c rest ->
+                    inlineCodeEncoder (String.Nonempty.NonemptyString c rest)
+
+                CodeBlock lang code ->
+                    codeBlockEncoder lang code
+
+                AttachedFile fileId ->
+                    attachedFileEncoder fileId
+        )
+        |> Codec.variant1 "UserMention" UserMention userIdCodec
+        |> Codec.variant1
+            "NormalText"
+            (\text -> NormalText (String.Nonempty.head text) (String.Nonempty.tail text))
+            CodecExtra.nonemptyString
+        |> Codec.variant1 "Bold" Bold (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Italic" Italic (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Underline" Underline (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Strikethrough" Strikethrough (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Spoiler" Spoiler (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant2 "Hyperlink" Hyperlink protocolCodec Codec.string
+        |> Codec.variant1
+            "InlineCode"
+            (\text -> InlineCode (String.Nonempty.head text) (String.Nonempty.tail text))
+            CodecExtra.nonemptyString
+        |> Codec.variant2 "CodeBlock" CodeBlock languageCodec Codec.string
+        |> Codec.variant1 "AttachedFile" AttachedFile Id.codec
+        |> Codec.buildCustom

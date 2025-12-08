@@ -19,6 +19,7 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
+import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera
@@ -29,14 +30,16 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
+import GuildExport
 import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import Image
 import ImageEditor
 import Json.Decode
+import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -1306,6 +1309,30 @@ isPressMsg msg =
 
         PressedDiscordFriendLabel id ->
             True
+
+        PressedExportGuild id ->
+            True
+
+        PressedExportDiscordGuild id ->
+            True
+
+        PressedImportGuild ->
+            True
+
+        GuildImportFileSelected _ ->
+            False
+
+        GotGuildImportFileContent _ ->
+            False
+
+        PressedImportDiscordGuild ->
+            True
+
+        DiscordGuildImportFileSelected _ ->
+            False
+
+        GotDiscordGuildImportFileContent _ ->
+            False
 
 
 updateLoaded : FrontendMsg -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -3815,6 +3842,48 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 NotLoggedIn _ ->
+                    ( model, Command.none )
+
+        PressedExportGuild guildId ->
+            ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
+
+        PressedExportDiscordGuild guildId ->
+            ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest guildId) )
+
+        PressedImportGuild ->
+            ( model, Effect.File.Select.file [ "application/json" ] GuildImportFileSelected )
+
+        GuildImportFileSelected file ->
+            ( model
+            , Task.perform GotGuildImportFileContent (File.toString file)
+            )
+
+        GotGuildImportFileContent content ->
+            case Codec.decodeString GuildExport.backendGuildCodec content of
+                Ok guild ->
+                    ( model, Lamdera.sendToBackend (ImportGuildRequest guild) )
+
+                Err error ->
+                    -- Could show an error message to the user
+                    ( model, Command.none )
+
+        PressedImportDiscordGuild ->
+            ( model
+            , Effect.File.Select.file [ "application/json" ] DiscordGuildImportFileSelected
+            )
+
+        DiscordGuildImportFileSelected file ->
+            ( model
+            , Task.perform GotDiscordGuildImportFileContent (File.toString file)
+            )
+
+        GotDiscordGuildImportFileContent content ->
+            case Codec.decodeString GuildExport.discordExportCodec content of
+                Ok guild ->
+                    ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest guild) )
+
+                Err error ->
+                    -- Could show an error message to the user
                     ( model, Command.none )
 
 
@@ -6829,6 +6898,59 @@ updateLoadedFromBackend msg model =
                             ( { loggedIn | profilePictureEditor = ImageEditor.init }, Command.none )
                 )
                 model
+
+        ExportGuildResponse guildId guild ->
+            let
+                jsonString : String
+                jsonString =
+                    Codec.encodeToString 2 GuildExport.backendGuildCodec guild
+
+                filename : String
+                filename =
+                    "guild-" ++ Id.toString guildId ++ "-export.json"
+            in
+            ( model, Effect.File.Download.string filename "application/json" jsonString )
+
+        ExportDiscordGuildResponse export ->
+            let
+                jsonString : String
+                jsonString =
+                    Codec.encodeToString 2 GuildExport.discordExportCodec export
+
+                filename : String
+                filename =
+                    "discord-guild-" ++ Discord.Id.toString export.guildId ++ "-export.json"
+            in
+            ( model, Effect.File.Download.string filename "application/json" jsonString )
+
+        ImportGuildResponse result ->
+            case result of
+                Ok guildId ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | newGuildForm = Nothing }
+                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
+                            )
+                        )
+                        model
+
+                Err error ->
+                    ( model, Command.none )
+
+        ImportDiscordGuildResponse result ->
+            case result of
+                Ok () ->
+                    updateLoggedIn
+                        (\loggedIn ->
+                            ( { loggedIn | newGuildForm = Nothing }
+                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
+                            )
+                        )
+                        model
+
+                Err error ->
+                    -- Could show error message to user
+                    ( model, Command.none )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

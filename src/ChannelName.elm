@@ -1,5 +1,6 @@
-module ChannelName exposing (ChannelName(..), fromString, fromStringLossy, toString)
+module ChannelName exposing (ChannelName(..), codec, fromString, fromStringLossy, toString)
 
+import Codec exposing (Codec)
 import String.Nonempty exposing (NonemptyString(..))
 
 
@@ -47,3 +48,18 @@ fromStringLossy text =
 toString : ChannelName -> String
 toString (ChannelName a) =
     String.Nonempty.toString a
+
+
+codec : Codec ChannelName
+codec =
+    Codec.andThen
+        (\text ->
+            case fromString text of
+                Ok ok ->
+                    Codec.succeed ok
+
+                Err err ->
+                    Codec.fail err
+        )
+        toString
+        Codec.string

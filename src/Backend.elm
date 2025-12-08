@@ -2,6 +2,7 @@ module Backend exposing
     ( adminUser
     , app
     , app_
+    , asDiscordGuildOwner
     , emailToNotifyWhenErrorsAreLogged
     , loginEmailContent
     , loginEmailSubject
@@ -59,7 +60,7 @@ import TextEditor
 import Thread exposing (BackendThread, LastTypedAt)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -2936,6 +2937,116 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        ExportGuildRequest guildId ->
+            asGuildOwner
+                model2
+                sessionId
+                guildId
+                (\session user guild ->
+                    ( model2, Lamdera.sendToFrontend clientId (ExportGuildResponse guildId guild) )
+                )
+
+        ExportDiscordGuildRequest guildId ->
+            asAdmin
+                model2
+                sessionId
+                (\session user ->
+                    case SeqDict.get guildId model.discordGuilds of
+                        Just guild ->
+                            ( model2
+                            , Lamdera.sendToFrontend
+                                clientId
+                                (ExportDiscordGuildResponse
+                                    { guildId = guildId
+                                    , guild = guild
+                                    , users =
+                                        SeqDict.map (\_ _ -> ()) guild.members
+                                            |> SeqDict.insert guild.owner ()
+                                            |> SeqDict.filterMap
+                                                (\userId () ->
+                                                    case SeqDict.get userId model.discordUsers of
+                                                        Just (BasicData data) ->
+                                                            BasicDataExport data |> Just
+
+                                                        Just (FullData data) ->
+                                                            { auth = data.auth
+                                                            , user = data.user
+                                                            , linkedTo = data.linkedTo
+                                                            , icon = data.icon
+                                                            }
+                                                                |> FullDataExport
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                    }
+                                )
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+                )
+
+        ImportGuildRequest importedGuild ->
+            asAdmin
+                model2
+                sessionId
+                (\session user ->
+                    let
+                        newGuildId : Id GuildId
+                        newGuildId =
+                            Id.fromInt model2.secretCounter
+                    in
+                    ( { model2
+                        | guilds = SeqDict.insert newGuildId importedGuild model2.guilds
+                        , secretCounter = model2.secretCounter + 1
+                      }
+                    , Lamdera.sendToFrontend clientId (ImportGuildResponse (Ok newGuildId))
+                    )
+                )
+
+        ImportDiscordGuildRequest { guildId, guild, users } ->
+            asAdmin
+                model2
+                sessionId
+                (\session user ->
+                    ( { model2
+                        | discordGuilds = SeqDict.insert guildId guild model2.discordGuilds
+                        , discordUsers =
+                            SeqDict.foldl
+                                (\userId discordUser dict ->
+                                    SeqDict.update userId
+                                        (\maybe ->
+                                            case maybe of
+                                                Just _ ->
+                                                    maybe
+
+                                                Nothing ->
+                                                    (case discordUser of
+                                                        BasicDataExport discordBasicUserData ->
+                                                            BasicData discordBasicUserData
+
+                                                        FullDataExport data ->
+                                                            FullData
+                                                                { auth = data.auth
+                                                                , user = data.user
+                                                                , connection = Discord.init
+                                                                , linkedTo = data.linkedTo
+                                                                , icon = data.icon
+                                                                }
+                                                    )
+                                                        |> Just
+                                        )
+                                        dict
+                                )
+                                model2.discordUsers
+                                users
+                      }
+                    , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
+                    )
+                )
+
 
 loadMessagesHelper :
     { a | messages : Array (Message messageId userId) }
@@ -3779,6 +3890,27 @@ asGuildOwner model sessionId guildId func =
         (\{ userId } user guild ->
             if userId == guild.owner then
                 func userId user guild
+
+            else
+                ( model, Command.none )
+        )
+
+
+asDiscordGuildOwner :
+    BackendModel
+    -> SessionId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordGuildOwner model sessionId guildId discordUserId func =
+    asDiscordGuildMember model
+        sessionId
+        guildId
+        discordUserId
+        (\session discordUser user guild ->
+            if discordUserId == guild.owner then
+                func session discordUser user guild
 
             else
                 ( model, Command.none )

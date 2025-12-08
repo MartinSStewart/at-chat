@@ -469,7 +469,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin model form
 
         ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
@@ -736,7 +736,7 @@ guildView model guildId channelRoute loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin model form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get guildId local.guilds of
@@ -911,7 +911,7 @@ discordGuildView model routeData loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView form
+            newGuildFormView local.localUser.user.isAdmin model form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get routeData.guildId local.discordGuilds of
@@ -1570,15 +1570,43 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            Debug.todo ""
+            discordGuildSettingsView local.localUser.user.isAdmin routeData.guildId (MyUi.isMobile model)
 
 
+discordGuildSettingsView : Bool -> Discord.Id.Id Discord.Id.GuildId -> Bool -> Element FrontendMsg
+discordGuildSettingsView isAdmin guildId isMobile =
+    Ui.el
+        [ Ui.height Ui.fill ]
+        (Ui.column
+            [ Ui.Font.color MyUi.font1
+            , Ui.alignTop
+            , Ui.spacing 16
+            , Ui.padding 16
+            ]
+            [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
+            , if isAdmin then
+                MyUi.container
+                    MyUi.background3
+                    isMobile
+                    "Admin only"
+                    [ submitButton
+                        (Dom.id "discord_guild_exportButton")
+                        (PressedExportDiscordGuild guildId)
+                        "Export guild data"
+                    ]
 
---inviteLinkCreatorForm model local routeData.guildId guild
+              else
+                Ui.none
+            ]
+        )
 
 
 inviteLinkCreatorForm : LoadedFrontend -> LocalState -> Id GuildId -> FrontendGuild -> Element FrontendMsg
 inviteLinkCreatorForm model local guildId guild =
+    let
+        isMobile =
+            MyUi.isMobile model
+    in
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1587,7 +1615,7 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ channelHeader (MyUi.isMobile model) False (Ui.text "Invite member to guild")
+            [ channelHeader isMobile False (Ui.text "Invite member to guild")
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
@@ -1634,6 +1662,16 @@ inviteLinkCreatorForm model local guildId guild =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
+            , if local.localUser.session.userId == guild.owner then
+                MyUi.container
+                    MyUi.background3
+                    isMobile
+                    "Owner only"
+                    [ submitButton (Dom.id "guild_exportButton") (PressedExportGuild guildId) "Export guild data"
+                    ]
+
+              else
+                Ui.none
             ]
         )
 
@@ -6462,11 +6500,11 @@ channelNameInput form =
         ]
 
 
-newGuildFormView : NewGuildForm -> Element FrontendMsg
-newGuildFormView form =
+newGuildFormView : Bool -> LoadedFrontend -> NewGuildForm -> Element FrontendMsg
+newGuildFormView isAdmin model form =
     Ui.column
         [ Ui.Font.color MyUi.font1
-        , Ui.padding 16
+        , Ui.paddingXY 0 16
         , Ui.alignTop
         , Ui.spacing 16
         , Ui.height Ui.fill
@@ -6474,10 +6512,10 @@ newGuildFormView form =
         , Ui.background MyUi.background1
         , MyUi.htmlStyle "padding-top" MyUi.insetTop
         ]
-        [ Ui.el [ Ui.Font.size 24 ] (Ui.text "Create new guild")
+        [ Ui.el [ Ui.Font.size 24, Ui.paddingXY 16 0 ] (Ui.text "Create new guild")
         , guildNameInput form |> Ui.map NewGuildFormChanged
         , Ui.row
-            [ Ui.spacing 16 ]
+            [ Ui.spacing 16, Ui.paddingXY 16 0 ]
             [ MyUi.elButton
                 (Dom.id "guild_cancelNewGuild")
                 PressedCancelNewGuild
@@ -6493,6 +6531,39 @@ newGuildFormView form =
                 (Ui.text "Cancel")
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]
+        , if isAdmin then
+            MyUi.container
+                MyUi.background1
+                (MyUi.isMobile model)
+                "Admin only"
+                [ MyUi.elButton
+                    (Dom.id "guild_importGuild")
+                    PressedImportGuild
+                    [ Ui.paddingXY 16 8
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 8
+                    , Ui.Font.bold
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    ]
+                    (Ui.text "Import guild")
+                , MyUi.elButton
+                    (Dom.id "discord_guild_importButton")
+                    PressedImportDiscordGuild
+                    [ Ui.paddingXY 16 8
+                    , Ui.background MyUi.buttonBackground
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 8
+                    , Ui.Font.bold
+                    , Ui.borderColor MyUi.buttonBorder
+                    , Ui.border 1
+                    ]
+                    (Ui.text "Import Discord guild")
+                ]
+
+          else
+            Ui.none
         ]
 
 
@@ -6506,7 +6577,7 @@ guildNameInput form =
                 (Ui.text "Guild name")
     in
     Ui.column
-        []
+        [ Ui.paddingXY 16 0 ]
         [ nameLabel.element
         , Ui.Input.text
             [ Ui.padding 6

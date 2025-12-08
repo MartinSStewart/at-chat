@@ -5,8 +5,11 @@ module Types exposing
     , BackendMsg(..)
     , ChannelSidebarMode(..)
     , DiscordBasicUserData
+    , DiscordExport
     , DiscordFullUserData
+    , DiscordFullUserDataExport
     , DiscordUserData(..)
+    , DiscordUserDataExport(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -332,6 +335,26 @@ type alias DiscordBasicUserData =
     { user : Discord.PartialUser, icon : Maybe FileHash }
 
 
+type alias DiscordExport =
+    { guildId : Discord.Id.Id Discord.Id.GuildId
+    , guild : DiscordBackendGuild
+    , users : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserDataExport
+    }
+
+
+type DiscordUserDataExport
+    = BasicDataExport DiscordBasicUserData
+    | FullDataExport DiscordFullUserDataExport
+
+
+type alias DiscordFullUserDataExport =
+    { auth : Discord.UserAuth
+    , user : Discord.User
+    , linkedTo : Id UserId
+    , icon : Maybe FileHash
+    }
+
+
 type alias BackendFileData =
     { fileSize : Int, imageSize : Maybe (Coord CssPixels) }
 
@@ -485,6 +508,14 @@ type FrontendMsg
     | TypedBookmarkletData String
     | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | PressedExportGuild (Id GuildId)
+    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedImportGuild
+    | GuildImportFileSelected File
+    | GotGuildImportFileContent String
+    | PressedImportDiscordGuild
+    | DiscordGuildImportFileSelected File
+    | GotDiscordGuildImportFileContent String
 
 
 type ScrollPosition
@@ -525,6 +556,10 @@ type ToBackend
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
+    | ExportGuildRequest (Id GuildId)
+    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
+    | ImportGuildRequest BackendGuild
+    | ImportDiscordGuildRequest DiscordExport
 
 
 type BackendMsg
@@ -597,6 +632,10 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError Discord.User)
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
+    | ExportGuildResponse (Id GuildId) BackendGuild
+    | ExportDiscordGuildResponse DiscordExport
+    | ImportGuildResponse (Result String (Id GuildId))
+    | ImportDiscordGuildResponse (Result String ())
 
 
 type alias LoginData =
