@@ -916,6 +916,22 @@ addDiscordGuilds guilds model =
 --    guilds
 
 
+referencedMessageToMessageId :
+    Discord.Message
+    -> { a | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId) }
+    -> Maybe (Id ChannelMessageId)
+referencedMessageToMessageId message channel =
+    case message.referencedMessage of
+        Discord.Referenced referenced ->
+            OneToOne.second referenced.id channel.linkedMessageIds
+
+        Discord.ReferenceDeleted ->
+            Nothing
+
+        Discord.NoReference ->
+            Nothing
+
+
 handleDiscordCreateMessage :
     Discord.Message
     -> BackendModel
@@ -945,15 +961,7 @@ handleDiscordCreateMessage message model =
 
                                 replyTo : Maybe (Id ChannelMessageId)
                                 replyTo =
-                                    case message.referencedMessage of
-                                        Discord.Referenced referenced ->
-                                            OneToOne.second referenced.id channel.linkedMessageIds
-
-                                        Discord.ReferenceDeleted ->
-                                            Nothing
-
-                                        Discord.NoReference ->
-                                            Nothing
+                                    referencedMessageToMessageId message channel
 
                                 channel2Result =
                                     LocalState.createDiscordDmChannelMessageBackend
@@ -1044,20 +1052,33 @@ handleDiscordCreateMessage message model =
 
 
 discordGetGuildChannel :
-    Maybe (Id ChannelMessageId)
-    -> Discord.Id.Id Discord.Id.ChannelId
+    Discord.Message
     -> DiscordBackendGuild
     -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRouteWithMaybeMessage )
-discordGetGuildChannel replyTo channelId guild =
-    case SeqDict.get channelId guild.channels of
+discordGetGuildChannel message guild =
+    case SeqDict.get message.channelId guild.channels of
         Just channel ->
-            Just ( channelId, channel, NoThreadWithMaybeMessage replyTo )
+            let
+                replyTo =
+                    referencedMessageToMessageId message channel
+
+                _ =
+                    Debug.log "discord msg created" ( message.referencedMessage, replyTo )
+            in
+            Just ( message.channelId, channel, NoThreadWithMaybeMessage replyTo )
 
         Nothing ->
             List.Extra.findMap
                 (\( channelId2, channel ) ->
-                    case OneToOne.second (Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64) channel.linkedMessageIds of
+                    case OneToOne.second (Discord.Id.toUInt64 message.channelId |> Discord.Id.fromUInt64) channel.linkedMessageIds of
                         Just messageIndex ->
+                            let
+                                replyTo =
+                                    referencedMessageToMessageId message channel
+
+                                _ =
+                                    Debug.log "discord msg created2" ( message.referencedMessage, replyTo )
+                            in
                             ( channelId2
                             , channel
                             , ViewThreadWithMaybeMessage messageIndex (Maybe.map Id.changeType replyTo)
@@ -1135,7 +1156,7 @@ handleDiscordCreateGuildMessage discordGuildId message model =
     in
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
-            case discordGetGuildChannel Nothing {- Fix later with actual message replied to -} message.channelId guild of
+            case discordGetGuildChannel message guild of
                 Just ( channelId, channel, threadRoute ) ->
                     let
                         threadOrChannelId : Discord.Id.Id Discord.Id.ChannelId
@@ -1700,10 +1721,6 @@ getManyMessagesHelper :
     -> Array Discord.Message
     -> Task BackendOnly Discord.HttpError (List Discord.Message)
 getManyMessagesHelper authentication channelId limit restOfMessages messages =
-    let
-        _ =
-            Debug.log "length" ( channelId, Array.length restOfMessages )
-    in
     case Array.Extra.last messages of
         Just last ->
             if Array.length messages >= 100 && limit > 0 then

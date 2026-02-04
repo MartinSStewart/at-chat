@@ -4590,8 +4590,16 @@ discordMessageViewNotThreadStarter data revealedSpoilers currentDiscordUserId lo
             messageViewDecode data
 
         _ =
-            Debug.log "rerender messageViewNotThreadStarter" ()
+            Debug.log "discord rerender messageViewNotThreadStarter" ()
     in
+    --Ui.el
+    --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
+    --    , Ui.inFront (MyUi.lazyChangedValue "localUser" localUser)
+    --    , Ui.inFront (MyUi.lazyChangedValue "messageIndex" messageIndex)
+    --    , Ui.inFront (MyUi.lazyChangedValue "message" message)
+    --    , Ui.inFront (MyUi.lazyChangedValue "data" data)
+    --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
+    --    ]
     messageView
         isMobile
         containerWidth
@@ -4656,9 +4664,19 @@ discordMessageViewThreadStarter data revealedSpoilers currentDiscordUserId local
         { containerWidth, isEditing, highlight, isHovered, isMobile } =
             messageViewDecode data
 
-        _ =
-            Debug.log "rerender messageViewThreadStarter" ()
+        -- TODO, figure out why this lazy keeps getting triggered even though all the values seem reference unchanged
+        --_ =
+        --    Debug.log "discord rerender messageViewThreadStarter" ()
     in
+    --Ui.el
+    --    [ Ui.inFront (MyUi.lazyChangedValue "revealedSpoilers" revealedSpoilers)
+    --    , Ui.inFront (MyUi.lazyChangedValue "localUser" localUser)
+    --    , Ui.inFront (MyUi.lazyChangedValue "messageIndex" messageIndex)
+    --    , Ui.inFront (MyUi.lazyChangedValue "thread" thread)
+    --    , Ui.inFront (MyUi.lazyChangedValue "message" message)
+    --    , Ui.inFront (MyUi.lazyChangedValue "data" data)
+    --    , Ui.inFront (MyUi.lazyChangedValue "currentDiscordUserId" currentDiscordUserId)
+    --    ]
     messageView
         isMobile
         containerWidth
@@ -4720,7 +4738,7 @@ discordThreadMessageViewLazy data revealedSpoilers currentDiscordUserId localUse
             messageViewDecode data
 
         _ =
-            Debug.log "rerender threadMessageViewLazy" ()
+            Debug.log "discord rerender threadMessageViewLazy" ()
     in
     threadMessageView
         isMobile
@@ -5005,14 +5023,12 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 
 messageIdView : Id messageId -> Element msg
-messageIdView _ =
-    --if Env.isProduction then
-    Ui.none
+messageIdView messageId =
+    if Env.isProduction then
+        Ui.none
 
-
-
---else
---    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
+    else
+        Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg

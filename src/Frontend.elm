@@ -4054,7 +4054,15 @@ pressedEditMessage guildOrDmId threadRoute model =
                                     Nothing
 
                         DiscordGuildOrDmId guildOrDmId2 ->
-                            Debug.todo ""
+                            case discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
+                                Just ( message, _ ) ->
+                                    ( RichText.toString (LocalState.allDiscordUsers2 local.localUser) message.content
+                                    , message.attachedFiles
+                                    )
+                                        |> Just
+
+                                Nothing ->
+                                    Nothing
             in
             ( case maybeContentAndFiles of
                 Just ( content, attachedFiles ) ->

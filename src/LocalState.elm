@@ -587,11 +587,6 @@ createDiscordMessageBackend messageId message channel =
         Err DiscordMessageAlreadyExists
 
     else
-        let
-            previousIndex : Id messageId
-            previousIndex =
-                Array.length channel.messages - 1 |> Id.fromInt
-        in
         { channel
             | messages = Array.push message channel.messages
             , lastTypedAt =
@@ -604,7 +599,8 @@ createDiscordMessageBackend messageId message channel =
 
                     DeletedMessage _ ->
                         channel.lastTypedAt
-            , linkedMessageIds = OneToOne.insert messageId previousIndex channel.linkedMessageIds
+            , linkedMessageIds =
+                OneToOne.insert messageId (Array.length channel.messages |> Id.fromInt) channel.linkedMessageIds
         }
             |> Ok
 

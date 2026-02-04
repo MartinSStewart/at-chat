@@ -44,6 +44,7 @@ module MyUi exposing
     , insetTop
     , isMobile
     , label
+    , lazyChangedValue
     , mentionColor
     , montserrat
     , noPointerEvents
@@ -89,6 +90,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Shadow
 
 
@@ -1017,3 +1019,17 @@ hoverAndMentionColor =
 alertColor : Ui.Color
 alertColor =
     Ui.rgb 255 10 40
+
+
+lazyChangedValue : String -> b -> Element msg
+lazyChangedValue name value =
+    Ui.Lazy.lazy2 lazyChangedValueHelper name value
+
+
+lazyChangedValueHelper : String -> b -> Element msg
+lazyChangedValueHelper name value =
+    let
+        _ =
+            Debug.log ("Lazy change: " ++ name) ()
+    in
+    Ui.none

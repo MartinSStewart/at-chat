@@ -312,7 +312,7 @@ update msg model =
         SentDiscordGuildMessage time changeId sessionId clientId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId result ->
             case result of
                 Ok message ->
-                    -- Wait until the websocket event instead. This simplifies the code since we don't have two places that handle messages being created
+                    -- Wait until the Discord.UserOutMsg_UserCreatedMessage websocket event instead. This simplifies the code since we don't have two places that handle messages being created
                     ( model, Command.none )
 
                 Err _ ->
@@ -1359,6 +1359,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             in
                                             case threadRouteWithMaybeReplyTo of
                                                 NoThreadWithMaybeMessage maybeReplyTo ->
+                                                    let
+                                                        replyTo2 =
+                                                            case maybeReplyTo of
+                                                                Just replyTo ->
+                                                                    OneToOne.first replyTo channel.linkedMessageIds
+
+                                                                Nothing ->
+                                                                    Nothing
+
+                                                        _ =
+                                                            Debug.log "replyTo" ( replyTo2, channel.linkedMessageIds )
+                                                    in
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
                                                             SeqDict.insert
@@ -1370,13 +1382,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (Discord.userToken discordUser.auth)
                                                         { channelId = channelId
                                                         , content = RichText.toDiscord attachedFiles2 text
-                                                        , replyTo =
-                                                            case maybeReplyTo of
-                                                                Just replyTo ->
-                                                                    OneToOne.first replyTo channel.linkedMessageIds
-
-                                                                Nothing ->
-                                                                    Nothing
+                                                        , replyTo = replyTo2
                                                         }
                                                         |> DiscordSync.http
                                                         |> Task.attempt
