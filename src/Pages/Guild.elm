@@ -1559,12 +1559,12 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_NewChannelRoute ->
-            Debug.todo ""
+            pageMissing "Adding Discord channels not supported yet"
 
         DiscordChannel_EditChannelRoute channelId ->
             case SeqDict.get channelId guild.channels of
                 Just channel ->
-                    Debug.todo ""
+                    pageMissing "Editing Discord channels not supported yet"
 
                 Nothing ->
                     pageMissing "Channel does not exist"
@@ -3075,6 +3075,33 @@ showFilesButton =
         (Ui.html Icons.document)
 
 
+privateChatWithYourself : List (Element FrontendMsg)
+privateChatWithYourself =
+    [ Ui.el
+        [ Ui.Font.color MyUi.font3
+        , Ui.width Ui.shrink
+        , MyUi.prewrap
+        , Ui.clipWithEllipsis
+        ]
+        (Ui.text "Private chat with yourself")
+    , showFilesButton
+    ]
+
+
+privateChatWith : String -> List (Element FrontendMsg)
+privateChatWith name =
+    [ Ui.el
+        [ Ui.Font.color MyUi.font3
+        , Ui.width Ui.shrink
+        , MyUi.prewrap
+        , Ui.clipWithEllipsis
+        ]
+        (Ui.text "Private chat with ")
+    , Ui.text name
+    , showFilesButton
+    ]
+
+
 conversationView :
     Id ChannelMessageId
     -> AnyGuildOrDmId
@@ -3121,27 +3148,10 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with yourself")
-                            , showFilesButton
-                            ]
+                            privateChatWithYourself
 
                          else
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with ")
-                            , Ui.text name
-                            , showFilesButton
-                            ]
+                            privateChatWith name
                         )
 
                 GuildOrDmId (GuildOrDmId_Guild _ _) ->
@@ -3152,8 +3162,23 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         , showFilesButton
                         ]
 
-                DiscordGuildOrDmId _ ->
-                    Debug.todo ""
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId channelId) ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
+                        (if SeqDict.member otherUserId local.localUser.linkedDiscordUsers then
+                            privateChatWithYourself
+
+                         else
+                            privateChatWith name
+                        )
+
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
+                    Ui.row
+                        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
+                        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
+                        , Ui.text name
+                        , showFilesButton
+                        ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of
