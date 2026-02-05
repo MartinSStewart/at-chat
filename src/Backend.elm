@@ -1359,18 +1359,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             in
                                             case threadRouteWithMaybeReplyTo of
                                                 NoThreadWithMaybeMessage maybeReplyTo ->
-                                                    let
-                                                        replyTo2 =
-                                                            case maybeReplyTo of
-                                                                Just replyTo ->
-                                                                    OneToOne.first replyTo channel.linkedMessageIds
-
-                                                                Nothing ->
-                                                                    Nothing
-
-                                                        _ =
-                                                            Debug.log "replyTo" ( replyTo2, channel.linkedMessageIds )
-                                                    in
                                                     ( { model
                                                         | pendingDiscordCreateMessages =
                                                             SeqDict.insert
@@ -1382,7 +1370,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (Discord.userToken discordUser.auth)
                                                         { channelId = channelId
                                                         , content = RichText.toDiscord attachedFiles2 text
-                                                        , replyTo = replyTo2
+                                                        , replyTo =
+                                                            case maybeReplyTo of
+                                                                Just replyTo ->
+                                                                    OneToOne.first replyTo channel.linkedMessageIds
+
+                                                                Nothing ->
+                                                                    Nothing
                                                         }
                                                         |> DiscordSync.http
                                                         |> Task.attempt

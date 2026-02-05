@@ -2479,6 +2479,26 @@ updateLoaded msg model =
                         { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
                         (DmRoute otherUserId (ViewThreadWithFriends messageIndex Nothing HideMembersTab))
 
+                ( DiscordGuildRoute guildRoute, LoggedIn loggedIn ) ->
+                    case guildRoute.channelRoute of
+                        DiscordChannel_ChannelRoute channelId (NoThreadWithFriends _ _) ->
+                            routePush
+                                { model | loginStatus = MessageMenu.close model loggedIn |> LoggedIn }
+                                (DiscordGuildRoute
+                                    { guildRoute
+                                        | channelRoute =
+                                            DiscordChannel_ChannelRoute
+                                                channelId
+                                                (ViewThreadWithFriends messageIndex Nothing HideMembersTab)
+                                    }
+                                )
+
+                        _ ->
+                            ( model, Command.none )
+
+                ( DiscordDmRoute _, LoggedIn loggedIn ) ->
+                    Debug.todo ""
+
                 _ ->
                     ( model, Command.none )
 

@@ -28,6 +28,7 @@ import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
+import SeqSet
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Font
@@ -363,6 +364,32 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                 _ ->
                     Nothing
 
+        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id.Id Discord.Id.UserId)) } -> Maybe ( Bool, String )
+        discordHelper messageId thread =
+            case DmChannel.getArray messageId thread.messages of
+                Just (MessageLoaded message) ->
+                    ( case message of
+                        UserTextMessage data ->
+                            SeqDict.member data.createdBy local.localUser.linkedDiscordUsers
+
+                        _ ->
+                            False
+                    , case message of
+                        UserTextMessage a ->
+                            RichText.toString (LocalState.allDiscordUsers2 local.localUser) a.content
+
+                        UserJoinedMessage _ userId _ ->
+                            User.toString userId (LocalState.allDiscordUsers2 local.localUser)
+                                ++ " joined!"
+
+                        DeletedMessage _ ->
+                            "Message deleted"
+                    )
+                        |> Just
+
+                _ ->
+                    Nothing
+
         maybeData : Maybe ( Bool, String )
         maybeData =
             case guildOrDmId of
@@ -409,13 +436,13 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                                 ViewThreadWithMessage threadMessageIndex messageId ->
                                     case SeqDict.get threadMessageIndex channel.threads of
                                         Just thread ->
-                                            Debug.todo ""
+                                            discordHelper messageId thread
 
                                         Nothing ->
                                             Nothing
 
                                 NoThreadWithMessage messageId ->
-                                    Debug.todo ""
+                                    discordHelper messageId channel
 
                         Nothing ->
                             Nothing
