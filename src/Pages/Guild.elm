@@ -3273,8 +3273,17 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                     name
                                )
 
-                    DiscordGuildOrDmId _ ->
-                        Debug.todo ""
+                    DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
+                        "Write a message in #" ++ name
+
+                    DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId _) ->
+                        "Write a message to "
+                            ++ (if SeqDict.member otherUserId local.localUser.linkedDiscordUsers then
+                                    "yourself"
+
+                                else
+                                    name
+                               )
                 )
                 (case SeqDict.get guildOrDmId loggedIn.drafts of
                     Just text ->
