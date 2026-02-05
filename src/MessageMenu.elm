@@ -447,8 +447,18 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ _) ->
-                    Debug.todo ""
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId) ->
+                    case SeqDict.get channelId local.discordDmChannels of
+                        Just channel ->
+                            case threadRoute of
+                                ViewThreadWithMessage _ _ ->
+                                    Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    discordHelper messageId channel
+
+                        Nothing ->
+                            Nothing
     in
     case maybeData of
         Just ( canEditAndDelete, text ) ->
