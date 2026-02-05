@@ -3227,8 +3227,22 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                         )
                                     )
 
-                            DiscordGuildOrDmId _ ->
-                                Debug.todo ""
+                            DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
+                                Ui.el
+                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                                    (Ui.text ("This is the start of #" ++ name))
+
+                            DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId _) ->
+                                Ui.el
+                                    [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
+                                    (Ui.text
+                                        (if SeqDict.member otherUserId local.localUser.linkedDiscordUsers then
+                                            "This is the start of a conversation with yourself"
+
+                                         else
+                                            "This is the start of your conversation with " ++ name
+                                        )
+                                    )
                       )
                     ]
 
