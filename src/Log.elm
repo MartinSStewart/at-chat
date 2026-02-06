@@ -153,51 +153,148 @@ logContent log =
         LoginEmail result emailAddress ->
             case result of
                 Ok () ->
-                    Ui.Prose.paragraph
-                        []
-                        [ Ui.text "Login email sent to "
-                        , MyUi.emailAddress emailAddress
-                        , Ui.text " successfully"
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag successTag "Login Email"
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
                         ]
 
                 Err error ->
-                    Ui.Prose.paragraph
-                        []
-                        ([ Ui.text "Failed to send login email to "
-                         , MyUi.emailAddress emailAddress
-                         , Ui.text ". "
-                         ]
-                            ++ sendEmailErrorToString error
-                        )
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag errorTag "Login Email Failed"
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , errorDetails (sendEmailErrorToString error)
+                        ]
 
         LoginsRateLimited id ->
-            "User " ++ Id.toString id ++ " has their login rate limited" |> Ui.text
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag warningTag "Rate Limited"
+                , fieldRow "User" (Ui.text (Id.toString id))
+                ]
 
         ChangedUsers id ->
-            "User " ++ Id.toString id ++ " modified the user table" |> Ui.text
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag infoTag "User Table Modified"
+                , fieldRow "By" (Ui.text (Id.toString id))
+                ]
 
         SendLogErrorEmailFailed error emailAddress ->
             Ui.column
-                [ Ui.spacing 2 ]
-                (Ui.text
-                    ("Failed to send email to "
-                        ++ EmailAddress.toString emailAddress
-                        ++ " about an important error that was logged. Http error: "
-                    )
-                    :: sendEmailErrorToString error
-                )
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Log Email Failed"
+                , fieldRow "To" (MyUi.emailAddress emailAddress)
+                , errorDetails (sendEmailErrorToString error)
+                ]
 
         PushNotificationError userId error ->
-            Ui.Prose.paragraph
-                []
-                [ Ui.text "PushNotificationError for user "
-                , Ui.text (Id.toString userId)
-                , Ui.text " with error "
-                , Ui.text (httpErrorToString error)
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Push Notification Error"
+                , fieldRow "User" (Ui.text (Id.toString userId))
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 
         FailedToDeleteDiscordMessage guildId channelId threadRoute discordMessageId httpError ->
-            Ui.text "Message was deleted internally but wasn't deleted on Discord"
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord Delete Failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+
+type alias TagStyle =
+    { background : Ui.Color
+    , font : Ui.Color
+    , border : Ui.Color
+    }
+
+
+successTag : TagStyle
+successTag =
+    { background = Ui.rgb 220 252 231
+    , font = Ui.rgb 22 101 52
+    , border = Ui.rgb 187 247 208
+    }
+
+
+errorTag : TagStyle
+errorTag =
+    { background = Ui.rgb 254 226 226
+    , font = Ui.rgb 153 27 27
+    , border = Ui.rgb 254 202 202
+    }
+
+
+warningTag : TagStyle
+warningTag =
+    { background = Ui.rgb 254 249 195
+    , font = Ui.rgb 133 77 14
+    , border = Ui.rgb 253 224 71
+    }
+
+
+infoTag : TagStyle
+infoTag =
+    { background = Ui.rgb 224 231 255
+    , font = Ui.rgb 55 48 163
+    , border = Ui.rgb 199 210 254
+    }
+
+
+tag : TagStyle -> String -> Element msg
+tag style label =
+    Ui.el
+        [ Ui.background style.background
+        , Ui.Font.color style.font
+        , Ui.borderColor style.border
+        , Ui.border 1
+        , Ui.rounded 4
+        , Ui.paddingXY 6 2
+        , Ui.Font.size 12
+        , Ui.Font.bold
+        , Ui.width Ui.shrink
+        ]
+        (Ui.text label)
+
+
+fieldRow : String -> Element msg -> Element msg
+fieldRow label value =
+    Ui.row
+        [ Ui.spacing 6, Ui.width Ui.shrink ]
+        [ Ui.el
+            [ Ui.Font.color MyUi.gray
+            , Ui.Font.size 13
+            , Ui.width Ui.shrink
+            ]
+            (Ui.text (label ++ ":"))
+        , Ui.el [ Ui.Font.size 13 ] value
+        ]
+
+
+successColor : Ui.Color
+successColor =
+    Ui.rgb 22 101 52
+
+
+errorDetails : List (Element msg) -> Element msg
+errorDetails content =
+    Ui.row
+        [ Ui.spacing 6, Ui.width Ui.shrink ]
+        [ Ui.el
+            [ Ui.Font.color MyUi.gray
+            , Ui.Font.size 13
+            , Ui.width Ui.shrink
+            ]
+            (Ui.text "Error:")
+        , Ui.Prose.paragraph [ Ui.Font.size 13 ] content
+        ]
 
 
 httpErrorToString : Http.Error -> String
