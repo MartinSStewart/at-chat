@@ -1,5 +1,6 @@
 .idea
 elm-stuff
+index.html
 node_modules
 tests/RdSapTests
 public/cache
