@@ -43,6 +43,7 @@ module LocalState exposing
     , deleteMessageBackendHelper
     , deleteMessageFrontend
     , deleteMessageFrontendHelper
+    , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
     , discordGuildToFrontendForUser
     , editChannel
@@ -1617,37 +1618,36 @@ deleteMessageBackendHelper userId threadRoute channel =
 
 
 deleteMessageFrontend :
-    Id UserId
-    -> Id ChannelId
+    channelId
     -> ThreadRouteWithMessage
     ->
         { a
             | channels :
                 SeqDict
-                    (Id ChannelId)
+                    channelId
                     { c
-                        | messages : Array (MessageState ChannelMessageId (Id UserId))
-                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                        | messages : Array (MessageState ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
     ->
         { a
             | channels :
                 SeqDict
-                    (Id ChannelId)
+                    channelId
                     { c
-                        | messages : Array (MessageState ChannelMessageId (Id UserId))
-                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                        | messages : Array (MessageState ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
-deleteMessageFrontend userId channelId threadRoute guild =
+deleteMessageFrontend channelId threadRoute guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             { guild
                 | channels =
                     SeqDict.insert
                         channelId
-                        (deleteMessageFrontendHelper userId threadRoute channel)
+                        (deleteMessageFrontendHelper threadRoute channel)
                         guild.channels
             }
 
@@ -1656,42 +1656,37 @@ deleteMessageFrontend userId channelId threadRoute guild =
 
 
 deleteMessageFrontendHelper :
-    Id UserId
-    -> ThreadRouteWithMessage
+    ThreadRouteWithMessage
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
-            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
     ->
         { a
-            | messages : Array (MessageState ChannelMessageId (Id UserId))
-            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+            | messages : Array (MessageState ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
         }
-deleteMessageFrontendHelper userId threadRoute channel =
+deleteMessageFrontendHelper threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
             case SeqDict.get threadId channel.threads of
                 Just thread ->
                     case DmChannel.getArray messageId thread.messages of
                         Just (MessageLoaded (UserTextMessage message)) ->
-                            if message.createdBy == userId then
-                                { channel
-                                    | threads =
-                                        SeqDict.insert
-                                            threadId
-                                            { thread
-                                                | messages =
-                                                    DmChannel.setArray
-                                                        messageId
-                                                        (MessageLoaded (DeletedMessage message.createdAt))
-                                                        thread.messages
-                                            }
-                                            channel.threads
-                                }
-
-                            else
-                                channel
+                            { channel
+                                | threads =
+                                    SeqDict.insert
+                                        threadId
+                                        { thread
+                                            | messages =
+                                                DmChannel.setArray
+                                                    messageId
+                                                    (MessageLoaded (DeletedMessage message.createdAt))
+                                                    thread.messages
+                                        }
+                                        channel.threads
+                            }
 
                         _ ->
                             channel
@@ -1700,22 +1695,26 @@ deleteMessageFrontendHelper userId threadRoute channel =
                     channel
 
         NoThreadWithMessage messageId ->
-            case DmChannel.getArray messageId channel.messages of
-                Just (MessageLoaded (UserTextMessage message)) ->
-                    if message.createdBy == userId then
-                        { channel
-                            | messages =
-                                DmChannel.setArray
-                                    messageId
-                                    (MessageLoaded (DeletedMessage message.createdAt))
-                                    channel.messages
-                        }
+            deleteMessageFrontendNoThread messageId channel
 
-                    else
-                        channel
 
-                _ ->
-                    channel
+deleteMessageFrontendNoThread :
+    Id messageId
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : Array (MessageState messageId userId) }
+deleteMessageFrontendNoThread messageId channel =
+    case DmChannel.getArray messageId channel.messages of
+        Just (MessageLoaded (UserTextMessage message)) ->
+            { channel
+                | messages =
+                    DmChannel.setArray
+                        messageId
+                        (MessageLoaded (DeletedMessage message.createdAt))
+                        channel.messages
+            }
+
+        _ ->
+            channel
 
 
 getGuildAndChannel : Id GuildId -> Id ChannelId -> LocalState -> Maybe ( FrontendGuild, FrontendChannel )

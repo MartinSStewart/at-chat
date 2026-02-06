@@ -5070,8 +5070,8 @@ changeUpdate localMsg local =
                                     }
                             }
 
-                Local_DeleteMessage guildOrDmId messageIndex ->
-                    deleteMessage local.localUser.session.userId guildOrDmId messageIndex local
+                Local_DeleteMessage guildOrDmId threadRoute ->
+                    deleteMessage guildOrDmId threadRoute local
 
                 Local_CurrentlyViewing viewing ->
                     let
@@ -5864,8 +5864,8 @@ changeUpdate localMsg local =
                 Server_MemberEditTyping time userId guildOrDmId messageIndex ->
                     memberEditTyping time userId guildOrDmId messageIndex local
 
-                Server_DeleteMessage userId guildOrDmId messageIndex ->
-                    deleteMessage userId guildOrDmId messageIndex local
+                Server_DeleteMessage guildOrDmId messageIndex ->
+                    deleteMessage guildOrDmId messageIndex local
 
                 Server_DiscordDeleteMessage messageId ->
                     { local
@@ -6307,15 +6307,15 @@ discordEditMessage time guildOrDmId newContent attachedFiles threadRoute local =
                     local
 
 
-deleteMessage : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState
-deleteMessage userId guildOrDmId threadRoute local =
+deleteMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState
+deleteMessage guildOrDmId threadRoute local =
     case guildOrDmId of
         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
                         guildId
-                        (LocalState.deleteMessageFrontend userId channelId threadRoute)
+                        (LocalState.deleteMessageFrontend channelId threadRoute)
                         local.guilds
             }
 
@@ -6324,21 +6324,32 @@ deleteMessage userId guildOrDmId threadRoute local =
                 | dmChannels =
                     SeqDict.updateIfExists
                         otherUserId
-                        (LocalState.deleteMessageFrontendHelper userId threadRoute)
+                        (LocalState.deleteMessageFrontendHelper threadRoute)
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
             { local
                 | discordGuilds =
                     SeqDict.updateIfExists
                         guildId
-                        (Debug.todo "")
+                        (LocalState.deleteMessageFrontend channelId threadRoute)
                         local.discordGuilds
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-            Debug.todo ""
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId) ->
+            case threadRoute of
+                NoThreadWithMessage messageId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.deleteMessageFrontendNoThread messageId)
+                                local.discordDmChannels
+                    }
+
+                ViewThreadWithMessage _ _ ->
+                    local
 
 
 loadOlderMessages :

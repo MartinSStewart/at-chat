@@ -2263,7 +2263,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 , Broadcast.toGuildExcludingOne
                                                     clientId
                                                     guildId
-                                                    (Server_DeleteMessage userId guildOrDmId threadRoute |> ServerChange)
+                                                    (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                     model2
                                                 ]
                                             )
@@ -2301,7 +2301,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             otherUserId
                                                             (\otherUserId2 ->
                                                                 Server_DeleteMessage
-                                                                    userId
                                                                     (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
                                                                     threadRoute
                                                             )
@@ -2324,8 +2323,81 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        DiscordGuildOrDmId _ ->
-                            Debug.todo ""
+                        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                (\{ userId } _ guild ->
+                                    case LocalState.deleteMessageBackend userId channelId threadRoute guild of
+                                        Ok guild2 ->
+                                            ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend
+                                                    clientId
+                                                    (LocalChangeResponse changeId localMsg)
+                                                , Broadcast.toGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
+                                                    model2
+                                                ]
+                                            )
+
+                                        Err _ ->
+                                            ( model2
+                                            , Lamdera.sendToFrontend
+                                                clientId
+                                                (LocalChangeResponse changeId Local_Invalid)
+                                            )
+                                )
+
+                        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                (\{ userId } _ ->
+                                    let
+                                        dmChannelId : DmChannelId
+                                        dmChannelId =
+                                            DmChannel.channelIdFromUserIds userId otherUserId
+                                    in
+                                    case SeqDict.get dmChannelId model2.dmChannels of
+                                        Just dmChannel ->
+                                            case LocalState.deleteMessageBackendHelper userId threadRoute dmChannel of
+                                                Ok dmChannel2 ->
+                                                    ( { model2 | dmChannels = SeqDict.insert dmChannelId dmChannel2 model2.dmChannels }
+                                                    , Command.batch
+                                                        [ Lamdera.sendToFrontend
+                                                            clientId
+                                                            (LocalChangeResponse changeId localMsg)
+                                                        , Broadcast.toDmChannel
+                                                            clientId
+                                                            userId
+                                                            otherUserId
+                                                            (\otherUserId2 ->
+                                                                Server_DeleteMessage
+                                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                                    threadRoute
+                                                            )
+                                                            model2
+                                                        ]
+                                                    )
+
+                                                Err _ ->
+                                                    ( model2
+                                                    , Lamdera.sendToFrontend
+                                                        clientId
+                                                        (LocalChangeResponse changeId Local_Invalid)
+                                                    )
+
+                                        Nothing ->
+                                            ( model2
+                                            , Lamdera.sendToFrontend
+                                                clientId
+                                                (LocalChangeResponse changeId Local_Invalid)
+                                            )
+                                )
 
                 Local_CurrentlyViewing viewing ->
                     let
