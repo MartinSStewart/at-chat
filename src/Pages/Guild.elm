@@ -1415,15 +1415,7 @@ threadPreviewText :
 threadPreviewText allUsers threadMessageIndex channel =
     case DmChannel.getArray threadMessageIndex channel.messages of
         Just (MessageLoaded message) ->
-            case message of
-                UserTextMessage data ->
-                    RichText.toString allUsers data.content
-
-                UserJoinedMessage _ userId _ ->
-                    User.toString userId allUsers ++ " joined!"
-
-                DeletedMessage _ ->
-                    "Deleted message"
+            LocalState.messageToString allUsers message
 
         _ ->
             "Thread not found"

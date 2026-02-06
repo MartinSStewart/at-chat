@@ -3,6 +3,7 @@ module Broadcast exposing
     , adminUserId
     , broadcastDm
     , discordMessageNotification
+    , discordRichTextToString
     , getSessionFromSessionIdHash
     , getUserFromSessionId
     , messageNotification
@@ -382,6 +383,25 @@ messageNotification usersMentioned time sender guildId channelId threadRoute con
         |> Command.batch
 
 
+discordRichTextToString : Nonempty (RichText userId) -> SeqDict userId DiscordUserData -> String
+discordRichTextToString content discordUsers =
+    RichText.toString
+        (SeqDict.map
+            (\userId user ->
+                { name =
+                    case user of
+                        BasicData data ->
+                            PersonName.fromStringLossy data.user.username
+
+                        FullData data ->
+                            PersonName.fromStringLossy data.user.username
+                }
+            )
+            discordUsers
+        )
+        content
+
+
 discordMessageNotification :
     SeqSet (Discord.Id.Id Discord.Id.UserId)
     -> Time.Posix
@@ -395,24 +415,6 @@ discordMessageNotification :
     -> Command restriction toMsg BackendMsg
 discordMessageNotification usersMentioned time sender guildId channelId threadRoute content members model =
     let
-        plainText : String
-        plainText =
-            RichText.toString
-                (SeqDict.map
-                    (\userId user ->
-                        { name =
-                            case user of
-                                BasicData data ->
-                                    PersonName.fromStringLossy data.user.username
-
-                                FullData data ->
-                                    PersonName.fromStringLossy data.user.username
-                        }
-                    )
-                    model.discordUsers
-                )
-                content
-
         alwaysNotify : SeqSet (Discord.Id.Id Discord.Id.UserId)
         alwaysNotify =
             List.filter
@@ -471,7 +473,7 @@ discordMessageNotification usersMentioned time sender guildId channelId threadRo
                                         time
                                         discordUser.linkedTo
                                         user2
-                                        plainText
+                                        (discordRichTextToString content model.discordUsers)
                                         (DiscordGuildRoute
                                             { currentDiscordUserId = userId2
                                             , guildId = guildId

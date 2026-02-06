@@ -63,6 +63,7 @@ module LocalState exposing
     , memberIsEditTypingHelper
     , memberIsTyping
     , memberIsTypingHelper
+    , messageToString
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , updateChannel
@@ -87,6 +88,7 @@ import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
+import PersonName exposing (PersonName)
 import Quantity
 import RichText exposing (RichText(..))
 import SecretId exposing (SecretId)
@@ -313,6 +315,20 @@ type alias DiscordFrontendChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread
     }
+
+
+messageToString : SeqDict userId { a | name : PersonName } -> Message messageId userId -> String
+messageToString allUsers3 message =
+    case message of
+        UserTextMessage a ->
+            RichText.toString allUsers3 a.content
+
+        UserJoinedMessage _ userId _ ->
+            User.toString userId allUsers3
+                ++ " joined!"
+
+        DeletedMessage _ ->
+            "Message deleted"
 
 
 channelToFrontend : Maybe ThreadRoute -> BackendChannel -> Maybe FrontendChannel

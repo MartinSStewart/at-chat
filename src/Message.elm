@@ -1,4 +1,13 @@
-module Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
+module Message exposing
+    ( Message(..)
+    , MessageNoReply(..)
+    , MessageState(..)
+    , MessageStateNoReply(..)
+    , UserTextMessageData
+    , UserTextMessageDataNoReply
+    , addReactionEmoji
+    , removeReactionEmoji
+    )
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)

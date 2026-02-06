@@ -348,16 +348,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , case message of
-                        UserTextMessage a ->
-                            RichText.toString (LocalState.allUsers local) a.content
-
-                        UserJoinedMessage _ userId _ ->
-                            User.toString userId (LocalState.allUsers local)
-                                ++ " joined!"
-
-                        DeletedMessage _ ->
-                            "Message deleted"
+                    , LocalState.messageToString (LocalState.allUsers local) message
                     )
                         |> Just
 
@@ -374,16 +365,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , case message of
-                        UserTextMessage a ->
-                            RichText.toString (LocalState.allDiscordUsers2 local.localUser) a.content
-
-                        UserJoinedMessage _ userId _ ->
-                            User.toString userId (LocalState.allDiscordUsers2 local.localUser)
-                                ++ " joined!"
-
-                        DeletedMessage _ ->
-                            "Message deleted"
+                    , LocalState.messageToString (LocalState.allDiscordUsers2 local.localUser) message
                     )
                         |> Just
 

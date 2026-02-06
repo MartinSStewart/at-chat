@@ -57,7 +57,7 @@ import Slack exposing (Channel(..))
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TextEditor
-import Thread exposing (BackendThread, LastTypedAt)
+import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
@@ -1038,6 +1038,48 @@ getLoginData sessionId session user requestMessagesFor model =
     }
 
 
+discordStartThread :
+    DiscordFullUserData
+    -> DiscordBackendChannel
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> Id ChannelMessageId
+    -> Discord.Id.Id Discord.Id.MessageId
+    -> { d | discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData }
+    -> Task restriction Discord.HttpError Discord.Channel
+discordStartThread discordUser channel channelId threadId messageId model =
+    Discord.startThreadFromMessagePayload
+        (Discord.userToken discordUser.auth)
+        { channelId = channelId
+        , messageId = messageId
+        , name =
+            case DmChannel.getArray threadId channel.messages of
+                Just message ->
+                    case message of
+                        UserTextMessage a ->
+                            Broadcast.discordRichTextToString a.content model.discordUsers
+
+                        UserJoinedMessage _ userId _ ->
+                            case SeqDict.get userId model.discordUsers of
+                                Just (FullData user2) ->
+                                    user2.user.username ++ " joined!"
+
+                                Just (BasicData user2) ->
+                                    user2.user.username ++ " joined!"
+
+                                Nothing ->
+                                    "Thread"
+
+                        DeletedMessage _ ->
+                            "Message deleted"
+
+                Nothing ->
+                    "Thread"
+        , autoArchiveDuration = Missing
+        , rateLimitPerUser = Missing
+        }
+        |> DiscordSync.http
+
+
 updateFromFrontendWithTime :
     Time.Posix
     -> SessionId
@@ -1395,13 +1437,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
 
                                                 ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                                    case
-                                                        ( OneToOne.first threadId channel.linkedMessageIds
-                                                        , SeqDict.get threadId channel.threads
-                                                        )
-                                                    of
-                                                        ( Just messageId, Just thread ) ->
+                                                    case OneToOne.first threadId channel.linkedMessageIds of
+                                                        Just messageId ->
                                                             let
+                                                                thread : DiscordBackendThread
+                                                                thread =
+                                                                    SeqDict.get threadId channel.threads
+                                                                        |> Maybe.withDefault Thread.discordBackendInit
+
                                                                 _ =
                                                                     Debug.log "messageId" (Discord.Id.toString messageId)
 
@@ -1416,19 +1459,36 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         ( clientId, changeId )
                                                                         model.pendingDiscordCreateMessages
                                                               }
-                                                            , Discord.createMarkdownMessagePayload
-                                                                (Discord.userToken discordUser.auth)
-                                                                { channelId = discordThreadId
-                                                                , content = RichText.toDiscord attachedFiles2 text
-                                                                , replyTo =
-                                                                    case maybeReplyTo of
-                                                                        Just replyTo ->
-                                                                            OneToOne.first replyTo thread.linkedMessageIds
+                                                            , (case SeqDict.get threadId channel.threads of
+                                                                Just _ ->
+                                                                    Task.succeed ()
 
-                                                                        Nothing ->
-                                                                            Nothing
-                                                                }
-                                                                |> DiscordSync.http
+                                                                Nothing ->
+                                                                    discordStartThread
+                                                                        discordUser
+                                                                        channel
+                                                                        channelId
+                                                                        threadId
+                                                                        messageId
+                                                                        model
+                                                                        |> Task.map (\_ -> ())
+                                                              )
+                                                                |> Task.andThen
+                                                                    (\() ->
+                                                                        Discord.createMarkdownMessagePayload
+                                                                            (Discord.userToken discordUser.auth)
+                                                                            { channelId = discordThreadId
+                                                                            , content = RichText.toDiscord attachedFiles2 text
+                                                                            , replyTo =
+                                                                                case maybeReplyTo of
+                                                                                    Just replyTo ->
+                                                                                        OneToOne.first replyTo thread.linkedMessageIds
+
+                                                                                    Nothing ->
+                                                                                        Nothing
+                                                                            }
+                                                                            |> DiscordSync.http
+                                                                    )
                                                                 |> Task.attempt
                                                                     (SentDiscordGuildMessage
                                                                         time
