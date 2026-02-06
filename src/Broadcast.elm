@@ -79,23 +79,41 @@ toGuildExcludingOne clientToSkip _ msg model =
 
 
 toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordGuildExcludingOne clientToSkip _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.filterMap
-                    (\otherClientId ->
-                        if clientToSkip == otherClientId then
-                            Nothing
+toDiscordGuildExcludingOne clientToSkip guildId msg model =
+    let
+        connections : List ClientId
+        connections =
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    List.concatMap
+                        (\member ->
+                            case SeqDict.get member model.discordUsers of
+                                Just (FullData discordUser) ->
+                                    userConnections discordUser.linkedTo model
+                                        |> List.concatMap
+                                            (\( _, clientIds ) ->
+                                                List.Nonempty.toList clientIds
+                                            )
 
-                        else
-                            ChangeBroadcast msg
-                                |> Lamdera.sendToFrontend otherClientId
-                                |> Just
-                    )
+                                _ ->
+                                    []
+                        )
+                        (SeqDict.keys guild.members)
+
+                Nothing ->
+                    []
+    in
+    List.filterMap
+        (\otherClientId ->
+            if clientToSkip == otherClientId then
+                Nothing
+
+            else
+                ChangeBroadcast msg
+                    |> Lamdera.sendToFrontend otherClientId
+                    |> Just
         )
-        (SeqDict.toList model.connections)
+        connections
         |> Command.batch
 
 
@@ -283,6 +301,25 @@ getUserFromSessionId : SessionId -> BackendModel -> Maybe ( UserSession, Backend
 getUserFromSessionId sessionId model =
     SeqDict.get sessionId model.sessions
         |> Maybe.andThen (\session -> NonemptyDict.get session.userId model.users |> Maybe.map (Tuple.pair session))
+
+
+userConnections : Id UserId -> BackendModel -> List ( UserSession, Nonempty ClientId )
+userConnections userId model =
+    SeqDict.foldl
+        (\sessionId session list ->
+            if session.userId == userId then
+                case SeqDict.get sessionId model.connections of
+                    Just connection ->
+                        ( session, NonemptyDict.keys connection ) :: list
+
+                    Nothing ->
+                        list
+
+            else
+                list
+        )
+        []
+        model.sessions
 
 
 getSessionFromSessionIdHash : SessionIdHash -> BackendModel -> Maybe ( SessionId, UserSession )

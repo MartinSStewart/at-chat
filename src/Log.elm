@@ -1,10 +1,12 @@
 module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, view)
 
 import Array exposing (Array)
+import Discord
+import Discord.Id
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (Id, ThreadRouteWithMessage, UserId)
 import MyUi
 import Postmark
 import Time exposing (Month(..))
@@ -20,6 +22,7 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
+    | FailedToDeleteDiscordMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -39,6 +42,9 @@ shouldNotifyAdmin log =
 
         PushNotificationError _ _ ->
             Just "PushNotificationError"
+
+        FailedToDeleteDiscordMessage _ _ _ _ _ ->
+            Nothing
 
 
 addLog :
@@ -189,6 +195,9 @@ logContent log =
                 , Ui.text " with error "
                 , Ui.text (httpErrorToString error)
                 ]
+
+        FailedToDeleteDiscordMessage guildId channelId threadRoute discordMessageId httpError ->
+            Ui.text "Message was deleted internally but wasn't deleted on Discord"
 
 
 httpErrorToString : Http.Error -> String

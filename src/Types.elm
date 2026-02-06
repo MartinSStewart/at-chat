@@ -571,7 +571,7 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.PrivateChannelId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
-    | DeletedDiscordMessage
+    | DeletedDiscordMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)

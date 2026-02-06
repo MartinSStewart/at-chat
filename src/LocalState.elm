@@ -1521,37 +1521,42 @@ markAllChannelsAsViewed guildId guild user =
 
 
 deleteMessageBackend :
-    Id UserId
-    -> Id ChannelId
+    userId
+    -> channelId
     -> ThreadRouteWithMessage
     ->
         { a
             | channels :
                 SeqDict
-                    (Id ChannelId)
+                    channelId
                     { c
-                        | messages : Array (Message ChannelMessageId (Id UserId))
-                        , threads : SeqDict (Id ChannelMessageId) BackendThread
+                        | messages : Array (Message ChannelMessageId userId)
+                        , threads : SeqDict (Id ChannelMessageId) { thread | messages : Array (Message ThreadMessageId userId) }
                     }
         }
     ->
         Result
             ()
-            { a
+            ( { a
                 | channels :
                     SeqDict
-                        (Id ChannelId)
+                        channelId
                         { c
-                            | messages : Array (Message ChannelMessageId (Id UserId))
-                            , threads : SeqDict (Id ChannelMessageId) BackendThread
+                            | messages : Array (Message ChannelMessageId userId)
+                            , threads : SeqDict (Id ChannelMessageId) { thread | messages : Array (Message ThreadMessageId userId) }
                         }
-            }
+              }
+            , { c
+                | messages : Array (Message ChannelMessageId userId)
+                , threads : SeqDict (Id ChannelMessageId) { thread | messages : Array (Message ThreadMessageId userId) }
+              }
+            )
 deleteMessageBackend userId channelId threadRoute guild =
     case SeqDict.get channelId guild.channels of
         Just channel ->
             case deleteMessageBackendHelper userId threadRoute channel of
                 Ok channel2 ->
-                    Ok { guild | channels = SeqDict.insert channelId channel2 guild.channels }
+                    Ok ( { guild | channels = SeqDict.insert channelId channel2 guild.channels }, channel2 )
 
                 _ ->
                     Err ()
@@ -1561,19 +1566,19 @@ deleteMessageBackend userId channelId threadRoute guild =
 
 
 deleteMessageBackendHelper :
-    Id UserId
+    userId
     -> ThreadRouteWithMessage
     ->
         { a
-            | messages : Array (Message ChannelMessageId (Id UserId))
-            , threads : SeqDict (Id ChannelMessageId) BackendThread
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { thread | messages : Array (Message ThreadMessageId userId) }
         }
     ->
         Result
             ()
             { a
-                | messages : Array (Message ChannelMessageId (Id UserId))
-                , threads : SeqDict (Id ChannelMessageId) BackendThread
+                | messages : Array (Message ChannelMessageId userId)
+                , threads : SeqDict (Id ChannelMessageId) { thread | messages : Array (Message ThreadMessageId userId) }
             }
 deleteMessageBackendHelper userId threadRoute channel =
     case threadRoute of
