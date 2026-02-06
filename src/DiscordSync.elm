@@ -352,25 +352,33 @@ handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId mode
                             }
 
                         Nothing ->
-                            Debug.todo ""
-                 --{ guild
-                 --    | channels =
-                 --        SeqDict.map
-                 --            (\_ channel ->
-                 --                { channel
-                 --                    | threads =
-                 --                        SeqDict.updateIfExists
-                 --                            discordChannelId
-                 --                            (deleteMessageHelper discordMessageId)
-                 --                            channel.threads
-                 --                }
-                 --            )
-                 --            guild.channels
-                 --}
+                            { guild
+                                | channels =
+                                    SeqDict.map
+                                        (\_ channel ->
+                                            case
+                                                OneToOne.second
+                                                    (Discord.Id.toUInt64 discordChannelId |> Discord.Id.fromUInt64)
+                                                    channel.linkedMessageIds
+                                            of
+                                                Just threadId ->
+                                                    { channel
+                                                        | threads =
+                                                            SeqDict.updateIfExists
+                                                                threadId
+                                                                (deleteMessageHelper discordMessageId)
+                                                                channel.threads
+                                                    }
+
+                                                Nothing ->
+                                                    channel
+                                        )
+                                        guild.channels
+                            }
                 )
                 model.discordGuilds
       }
-    , Command.none
+    , Debug.todo ""
     )
 
 
@@ -396,63 +404,6 @@ deleteMessageHelper discordMessageId channel =
 
         Nothing ->
             channel
-
-
-
---case getGuildFromDiscordId discordGuildId model of
---    Just ( guildId, guild ) ->
---        case LocalState.linkedChannel (DiscordChannelId discordChannelId) guild of
---            Just ( channelId, channel ) ->
---                case OneToOne.second (DiscordMessageId messageId) channel.linkedMessageIds of
---                    Just messageIndex ->
---                        case DmChannel.getArray messageIndex channel.messages of
---                            Just (UserTextMessage data) ->
---                                ( { model
---                                    | guilds =
---                                        SeqDict.insert
---                                            guildId
---                                            { guild
---                                                | channels =
---                                                    SeqDict.insert
---                                                        channelId
---                                                        { channel
---                                                            | messages =
---                                                                DmChannel.setArray
---                                                                    messageIndex
---                                                                    (DeletedMessage data.createdAt)
---                                                                    channel.messages
---                                                            , linkedMessageIds =
---                                                                OneToOne.removeFirst
---                                                                    (DiscordMessageId messageId)
---                                                                    channel.linkedMessageIds
---                                                        }
---                                                        guild.channels
---                                            }
---                                            model.guilds
---                                  }
---                                , Broadcast.toGuild
---                                    guildId
---                                    (Server_DiscordDeleteMessage
---                                        { guildId = guildId
---                                        , channelId = channelId
---                                        , messageIndex = messageIndex
---                                        }
---                                        |> ServerChange
---                                    )
---                                    model
---                                )
---
---                            _ ->
---                                ( model, Command.none )
---
---                    Nothing ->
---                        ( model, Command.none )
---
---            Nothing ->
---                ( model, Command.none )
---
---    Nothing ->
---        ( model, Command.none )
 
 
 addDiscordChannel :
