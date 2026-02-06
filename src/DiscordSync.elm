@@ -335,8 +335,67 @@ handleDiscordDeleteMessage :
     -> Discord.Id.Id Discord.Id.MessageId
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordDeleteMessage discordGuildId discordChannelId messageId model =
-    Debug.todo ""
+handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId model =
+    ( { model
+        | discordGuilds =
+            SeqDict.updateIfExists
+                discordGuildId
+                (\guild ->
+                    case SeqDict.get discordChannelId guild.channels of
+                        Just channel ->
+                            { guild
+                                | channels =
+                                    SeqDict.insert
+                                        discordChannelId
+                                        (deleteMessageHelper discordMessageId channel)
+                                        guild.channels
+                            }
+
+                        Nothing ->
+                            Debug.todo ""
+                 --{ guild
+                 --    | channels =
+                 --        SeqDict.map
+                 --            (\_ channel ->
+                 --                { channel
+                 --                    | threads =
+                 --                        SeqDict.updateIfExists
+                 --                            discordChannelId
+                 --                            (deleteMessageHelper discordMessageId)
+                 --                            channel.threads
+                 --                }
+                 --            )
+                 --            guild.channels
+                 --}
+                )
+                model.discordGuilds
+      }
+    , Command.none
+    )
+
+
+deleteMessageHelper :
+    Discord.Id.Id Discord.Id.MessageId
+    -> { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+    -> { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+deleteMessageHelper discordMessageId channel =
+    case OneToOne.second discordMessageId channel.linkedMessageIds of
+        Just messageId ->
+            case DmChannel.getArray messageId channel.messages of
+                Just (UserTextMessage message) ->
+                    { channel
+                        | messages =
+                            DmChannel.setArray
+                                messageId
+                                (DeletedMessage message.createdAt)
+                                channel.messages
+                    }
+
+                _ ->
+                    channel
+
+        Nothing ->
+            channel
 
 
 
