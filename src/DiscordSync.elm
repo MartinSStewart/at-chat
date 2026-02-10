@@ -336,74 +336,111 @@ handleDiscordDeleteMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId model =
-    ( { model
-        | discordGuilds =
-            SeqDict.updateIfExists
-                discordGuildId
-                (\guild ->
+    case SeqDict.get discordGuildId model.discordGuilds of
+        Just guild ->
+            let
+                ( guild2, cmd ) =
                     case SeqDict.get discordChannelId guild.channels of
                         Just channel ->
-                            { guild
-                                | channels =
-                                    SeqDict.insert
-                                        discordChannelId
-                                        (deleteMessageHelper discordMessageId channel)
-                                        guild.channels
-                            }
+                            case deleteMessageHelper discordMessageId channel of
+                                Just ( messageId, channel2 ) ->
+                                    ( { guild | channels = SeqDict.insert discordChannelId channel2 guild.channels }
+                                    , Broadcast.toDiscordGuild
+                                        discordGuildId
+                                        (Server_DiscordDeleteMessage
+                                            discordGuildId
+                                            discordChannelId
+                                            (NoThreadWithMessage messageId)
+                                            |> ServerChange
+                                        )
+                                        model
+                                    )
+
+                                Nothing ->
+                                    ( guild, Command.none )
 
                         Nothing ->
-                            { guild
-                                | channels =
-                                    SeqDict.map
-                                        (\_ channel ->
-                                            case
-                                                OneToOne.second
-                                                    (Discord.Id.toUInt64 discordChannelId |> Discord.Id.fromUInt64)
-                                                    channel.linkedMessageIds
-                                            of
-                                                Just threadId ->
-                                                    { channel
-                                                        | threads =
-                                                            SeqDict.updateIfExists
-                                                                threadId
-                                                                (deleteMessageHelper discordMessageId)
-                                                                channel.threads
-                                                    }
+                            List.Extra.findMap
+                                (\( channelId, channel ) ->
+                                    case
+                                        OneToOne.second
+                                            (Discord.Id.toUInt64 discordChannelId |> Discord.Id.fromUInt64)
+                                            channel.linkedMessageIds
+                                    of
+                                        Just threadId ->
+                                            case SeqDict.get threadId channel.threads of
+                                                Just thread ->
+                                                    case deleteMessageHelper discordMessageId thread of
+                                                        Just ( messageId, thread2 ) ->
+                                                            ( { guild
+                                                                | channels =
+                                                                    SeqDict.insert
+                                                                        channelId
+                                                                        { channel
+                                                                            | threads =
+                                                                                SeqDict.insert threadId thread2 channel.threads
+                                                                        }
+                                                                        guild.channels
+                                                              }
+                                                            , Broadcast.toDiscordGuild
+                                                                discordGuildId
+                                                                (Server_DiscordDeleteMessage
+                                                                    discordGuildId
+                                                                    discordChannelId
+                                                                    (ViewThreadWithMessage threadId messageId)
+                                                                    |> ServerChange
+                                                                )
+                                                                model
+                                                            )
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            Nothing
 
                                                 Nothing ->
-                                                    channel
-                                        )
-                                        guild.channels
-                            }
-                )
-                model.discordGuilds
-      }
-    , Debug.todo ""
-    )
+                                                    Nothing
+
+                                        Nothing ->
+                                            Nothing
+                                )
+                                (SeqDict.toList guild.channels)
+                                |> Maybe.withDefault ( guild, Command.none )
+            in
+            ( { model | discordGuilds = SeqDict.insert discordGuildId guild2 model.discordGuilds }, cmd )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 deleteMessageHelper :
     Discord.Id.Id Discord.Id.MessageId
     -> { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
-    -> { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+    ->
+        Maybe
+            ( Id messageId
+            , { b | linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId), messages : Array (Message messageId (Discord.Id.Id Discord.Id.UserId)) }
+            )
 deleteMessageHelper discordMessageId channel =
     case OneToOne.second discordMessageId channel.linkedMessageIds of
         Just messageId ->
             case DmChannel.getArray messageId channel.messages of
                 Just (UserTextMessage message) ->
-                    { channel
+                    ( messageId
+                    , { channel
                         | messages =
                             DmChannel.setArray
                                 messageId
                                 (DeletedMessage message.createdAt)
                                 channel.messages
-                    }
+                      }
+                    )
+                        |> Just
 
                 _ ->
-                    channel
+                    Nothing
 
         Nothing ->
-            channel
+            Nothing
 
 
 addDiscordChannel :

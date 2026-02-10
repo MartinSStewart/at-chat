@@ -537,7 +537,7 @@ type alias NewGuildForm =
 
 
 type alias GuildChannelAndMessageId =
-    { guildId : Id GuildId, channelId : Id ChannelId, messageIndex : Id ChannelMessageId }
+    { guildId : Id GuildId, channelId : Id ChannelId, threadRoute : ThreadRouteWithMessage }
 
 
 type ToBackend
@@ -690,7 +690,7 @@ type ServerChange
     | Server_DiscordSendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | Server_DiscordDeleteMessage GuildChannelAndMessageId
+    | Server_DiscordDeleteMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) FileHash
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))

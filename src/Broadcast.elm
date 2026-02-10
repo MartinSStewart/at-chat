@@ -80,29 +80,6 @@ toGuildExcludingOne clientToSkip _ msg model =
 
 toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordGuildExcludingOne clientToSkip guildId msg model =
-    let
-        connections : List ClientId
-        connections =
-            case SeqDict.get guildId model.discordGuilds of
-                Just guild ->
-                    List.concatMap
-                        (\member ->
-                            case SeqDict.get member model.discordUsers of
-                                Just (FullData discordUser) ->
-                                    userConnections discordUser.linkedTo model
-                                        |> List.concatMap
-                                            (\( _, clientIds ) ->
-                                                List.Nonempty.toList clientIds
-                                            )
-
-                                _ ->
-                                    []
-                        )
-                        (SeqDict.keys guild.members)
-
-                Nothing ->
-                    []
-    in
     List.filterMap
         (\otherClientId ->
             if clientToSkip == otherClientId then
@@ -113,8 +90,31 @@ toDiscordGuildExcludingOne clientToSkip guildId msg model =
                     |> Lamdera.sendToFrontend otherClientId
                     |> Just
         )
-        connections
+        (guildConnections guildId model)
         |> Command.batch
+
+
+guildConnections : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> List ClientId
+guildConnections guildId model =
+    case SeqDict.get guildId model.discordGuilds of
+        Just guild ->
+            List.concatMap
+                (\member ->
+                    case SeqDict.get member model.discordUsers of
+                        Just (FullData discordUser) ->
+                            userConnections discordUser.linkedTo model
+                                |> List.concatMap
+                                    (\( _, clientIds ) ->
+                                        List.Nonempty.toList clientIds
+                                    )
+
+                        _ ->
+                            []
+                )
+                (SeqDict.keys guild.members)
+
+        Nothing ->
+            []
 
 
 toDiscordDmChannelExcludingOne : ClientId -> Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
@@ -172,18 +172,10 @@ toGuild _ msg model =
 
 
 toDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordGuild _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.map
-                    (\otherClientId ->
-                        ChangeBroadcast msg
-                            |> Lamdera.sendToFrontend otherClientId
-                    )
-        )
-        (SeqDict.toList model.connections)
+toDiscordGuild guildId msg model =
+    List.filterMap
+        (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId |> Just)
+        (guildConnections guildId model)
         |> Command.batch
 
 
