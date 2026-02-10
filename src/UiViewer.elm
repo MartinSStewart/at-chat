@@ -14,6 +14,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Id
 import Log
+import MyUi
 import Postmark
 import String.Nonempty exposing (NonemptyString)
 import Time
@@ -27,10 +28,16 @@ main =
         []
         (Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
-            [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
-            , Ui.html loginEmail
-            , Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Log entries")
-            , logExamples
+            [ Ui.column
+                [ Ui.background (Ui.rgb 255 255 255) ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Emails")
+                , Ui.html loginEmail
+                ]
+            , Ui.column
+                [ Ui.background (Ui.rgb 255 255 255), Ui.Font.family [ Ui.Font.sansSerif ] ]
+                [ Ui.el [ Ui.Font.size 24, Ui.Font.bold ] (Ui.text "Log entries")
+                , logExamples
+                ]
             ]
         )
 
@@ -38,7 +45,7 @@ main =
 emailView : NonemptyString -> Email.Html.Html -> Html msg
 emailView subject content =
     Html.div
-        [ Html.Attributes.style "background-color" "white" ]
+        []
         [ Html.span []
             [ String.Nonempty.toString subject ++ " " |> Html.text
             , Html.input
