@@ -5867,34 +5867,13 @@ changeUpdate localMsg local =
                 Server_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage guildOrDmId messageIndex local
 
-                Server_DiscordDeleteMessage messageId ->
+                Server_DiscordDeleteMessage guildId channelId threadRoute ->
                     { local
-                        | guilds =
+                        | discordGuilds =
                             SeqDict.updateIfExists
-                                messageId.guildId
-                                (\guild ->
-                                    { guild
-                                        | channels =
-                                            SeqDict.updateIfExists
-                                                messageId.channelId
-                                                (\channel ->
-                                                    case DmChannel.getArray messageId.messageIndex channel.messages of
-                                                        Just (MessageLoaded (UserTextMessage data)) ->
-                                                            { channel
-                                                                | messages =
-                                                                    DmChannel.setArray
-                                                                        messageId.messageIndex
-                                                                        (DeletedMessage data.createdAt |> MessageLoaded)
-                                                                        channel.messages
-                                                            }
-
-                                                        _ ->
-                                                            channel
-                                                )
-                                                guild.channels
-                                    }
-                                )
-                                local.guilds
+                                guildId
+                                (LocalState.deleteMessageFrontend channelId threadRoute)
+                                local.discordGuilds
                     }
 
                 Server_SetName userId name ->
