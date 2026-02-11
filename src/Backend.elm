@@ -2135,14 +2135,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 (\{ userId } _ guild ->
-                                    case
-                                        LocalState.memberIsEditTyping
-                                            userId
-                                            time
-                                            channelId
-                                            threadRoute
-                                            guild
-                                    of
+                                    case LocalState.memberIsEditTypingBackend userId time channelId threadRoute guild of
                                         Ok guild2 ->
                                             ( { model2 | guilds = SeqDict.insert guildId guild2 model2.guilds }
                                             , Command.batch
@@ -2177,7 +2170,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     in
                                     case SeqDict.get dmChannelId model2.dmChannels of
                                         Just dmChannel ->
-                                            case LocalState.memberIsEditTypingHelper time userId threadRoute dmChannel of
+                                            case LocalState.memberIsEditTypingBackendHelper time userId threadRoute dmChannel of
                                                 Ok dmChannel2 ->
                                                     ( { model2
                                                         | dmChannels =
@@ -2213,8 +2206,77 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        DiscordGuildOrDmId _ ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+                            asDiscordGuildMember
+                                model
+                                sessionId
+                                guildId
+                                currentUserId
+                                (\session _ _ guild ->
+                                    case LocalState.memberIsEditTypingBackend currentUserId time channelId threadRoute guild of
+                                        Ok guild2 ->
+                                            ( { model2 | discordGuilds = SeqDict.insert guildId guild2 model2.discordGuilds }
+                                            , Command.batch
+                                                [ Local_MemberEditTyping time guildOrDmId threadRoute
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_MemberEditTyping time session.userId guildOrDmId threadRoute
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                ]
+                                            )
+
+                                        Err () ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
+
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+                            asDiscordDmUser
+                                model
+                                sessionId
+                                currentUserId
+                                channelId
+                                (\session userData user channel ->
+                                    case threadRoute of
+                                        ViewThreadWithMessage _ _ ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+
+                                        NoThreadWithMessage messageId ->
+                                            case LocalState.memberIsEditTypingBackendHelperNoThread time currentUserId messageId channel of
+                                                Ok channel2 ->
+                                                    ( { model | discordDmChannels = SeqDict.insert channelId channel2 model.discordDmChannels }
+                                                    , Command.batch
+                                                        [ Local_MemberEditTyping time guildOrDmId threadRoute
+                                                            |> LocalChangeResponse changeId
+                                                            |> Lamdera.sendToFrontend clientId
+                                                        , Broadcast.toDiscordDmChannelExcludingOne
+                                                            clientId
+                                                            channelId
+                                                            (Server_MemberEditTyping
+                                                                time
+                                                                session.userId
+                                                                guildOrDmId
+                                                                threadRoute
+                                                                |> ServerChange
+                                                            )
+                                                            model2
+                                                        ]
+                                                    )
+
+                                                Err () ->
+                                                    ( model
+                                                    , LocalChangeResponse changeId Local_Invalid
+                                                        |> Lamdera.sendToFrontend clientId
+                                                    )
+                                )
 
                 Local_SetLastViewed guildOrDmId threadRoute ->
                     asUser

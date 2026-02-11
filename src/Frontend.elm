@@ -2497,7 +2497,7 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 ( DiscordDmRoute _, LoggedIn loggedIn ) ->
-                    Debug.todo ""
+                    ( model, Command.none )
 
                 _ ->
                     ( model, Command.none )
@@ -3490,14 +3490,16 @@ updateLoaded msg model =
                                                         )
 
                                                 ( DiscordGuildOrDmId_Dm currentUserId channelId, NoThreadWithMaybeMessage (Just repliedTo) ) ->
-                                                    Debug.todo ""
+                                                    routePush
+                                                        model
+                                                        (DiscordDmRoute
+                                                            { currentDiscordUserId = currentUserId
+                                                            , channelId = channelId
+                                                            , viewingMessage = Just repliedTo
+                                                            , showMembersTab = HideMembersTab
+                                                            }
+                                                        )
 
-                                                --routePush
-                                                --    model
-                                                --    (DmRoute
-                                                --        otherUserId
-                                                --        (NoThreadWithFriends (Just repliedTo) HideMembersTab)
-                                                --    )
                                                 _ ->
                                                     ( model, Command.none )
 
@@ -3594,11 +3596,16 @@ updateLoaded msg model =
                                 )
 
                         ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId), NoThreadWithMessage messageId ) ->
-                            Debug.todo ""
+                            routePush
+                                model
+                                (DiscordDmRoute
+                                    { currentDiscordUserId = currentUserId
+                                    , channelId = channelId
+                                    , viewingMessage = Nothing
+                                    , showMembersTab = HideMembersTab
+                                    }
+                                )
 
-                        --routePush
-                        --    model
-                        --    (DmRoute otherUserId (ViewThreadWithFriends messageId Nothing HideMembersTab))
                         _ ->
                             ( model, Command.none )
 
@@ -5353,26 +5360,8 @@ changeUpdate localMsg local =
                             }
 
                         DiscordGuildOrDmId_Dm currentUserId channelId ->
-                            Debug.todo ""
+                            local
 
-                --{ local
-                --    | dmChannels =
-                --        SeqDict.updateIfExists
-                --            otherUserId
-                --            (\dmChannel ->
-                --                { dmChannel
-                --                    | threads =
-                --                        SeqDict.updateIfExists
-                --                            threadId
-                --                            (loadOlderMessages
-                --                                previousOldestVisibleMessage
-                --                                messagesLoaded
-                --                            )
-                --                            dmChannel.threads
-                --                }
-                --            )
-                --            local.dmChannels
-                --}
                 Local_SetGuildNotificationLevel guildId notificationLevel ->
                     let
                         localUser =
@@ -7777,61 +7766,63 @@ discordGuildOrDmIdToMessage :
     -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
 discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
     let
-        helper :
-            { a | messages : Array (MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId)), threads : SeqDict (Id ChannelMessageId) DiscordFrontendThread }
-            -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
-        helper channel =
-            case threadRoute of
-                ViewThreadWithMessage threadId messageId ->
-                    case
-                        SeqDict.get threadId channel.threads
-                            |> Maybe.withDefault Thread.discordFrontendInit
-                            |> .messages
-                            |> DmChannel.getArray messageId
-                    of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , ViewThreadWithMaybeMessage threadId data.repliedTo
-                            )
-                                |> Just
+        helper messageId channel =
+            case DmChannel.getArray messageId channel.messages of
+                Just (MessageLoaded (UserTextMessage data)) ->
+                    ( { createdAt = data.createdAt
+                      , createdBy = data.createdBy
+                      , content = data.content
+                      , reactions = data.reactions
+                      , editedAt = data.editedAt
+                      , attachedFiles = data.attachedFiles
+                      }
+                    , NoThreadWithMaybeMessage data.repliedTo
+                    )
+                        |> Just
 
-                        _ ->
-                            Nothing
-
-                NoThreadWithMessage messageId ->
-                    case DmChannel.getArray messageId channel.messages of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , NoThreadWithMaybeMessage data.repliedTo
-                            )
-                                |> Just
-
-                        _ ->
-                            Nothing
+                _ ->
+                    Nothing
     in
     case guildOrDmId of
         DiscordGuildOrDmId_Guild _ guildId channelId ->
             case LocalState.getDiscordGuildAndChannel guildId channelId local of
                 Just ( _, channel ) ->
-                    helper channel
+                    case threadRoute of
+                        ViewThreadWithMessage threadId messageId ->
+                            case
+                                SeqDict.get threadId channel.threads
+                                    |> Maybe.withDefault Thread.discordFrontendInit
+                                    |> .messages
+                                    |> DmChannel.getArray messageId
+                            of
+                                Just (MessageLoaded (UserTextMessage data)) ->
+                                    ( { createdAt = data.createdAt
+                                      , createdBy = data.createdBy
+                                      , content = data.content
+                                      , reactions = data.reactions
+                                      , editedAt = data.editedAt
+                                      , attachedFiles = data.attachedFiles
+                                      }
+                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                    )
+                                        |> Just
+
+                                _ ->
+                                    Nothing
+
+                        NoThreadWithMessage messageId ->
+                            helper messageId channel
 
                 Nothing ->
                     Nothing
 
-        DiscordGuildOrDmId_Dm _ _ ->
-            Debug.todo ""
+        DiscordGuildOrDmId_Dm _ channelId ->
+            case ( SeqDict.get channelId local.discordDmChannels, threadRoute ) of
+                ( Just channel, NoThreadWithMessage messageId ) ->
+                    helper messageId channel
+
+                _ ->
+                    Nothing
 
 
 guildOrDmIdToMessages : ( GuildOrDmId, ThreadRoute ) -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
