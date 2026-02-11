@@ -6088,7 +6088,18 @@ addReactionEmoji userId guildOrDmId threadRoute emoji local =
             }
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-            Debug.todo ""
+            case threadRoute of
+                ViewThreadWithMessage _ _ ->
+                    local
+
+                NoThreadWithMessage messageId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.addReactionEmojiFrontendHelper emoji currentUserId messageId)
+                                local.discordDmChannels
+                    }
 
 
 removeReactionEmoji :
@@ -6134,7 +6145,18 @@ removeReactionEmoji userId guildOrDmId threadRoute emoji local =
             }
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-            Debug.todo ""
+            case threadRoute of
+                ViewThreadWithMessage _ _ ->
+                    local
+
+                NoThreadWithMessage messageId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.removeReactionEmojiFrontendHelper emoji currentUserId messageId)
+                                local.discordDmChannels
+                    }
 
 
 memberEditTyping : Time.Posix -> Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState

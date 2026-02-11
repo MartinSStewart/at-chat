@@ -22,6 +22,7 @@ module LocalState exposing
     , addMemberFrontend
     , addReactionEmoji
     , addReactionEmojiFrontend
+    , addReactionEmojiFrontendHelper
     , allDiscordUsers2
     , allUsers
     , allUsers2
@@ -68,6 +69,7 @@ module LocalState exposing
     , messageToString
     , removeReactionEmoji
     , removeReactionEmojiFrontend
+    , removeReactionEmojiFrontendHelper
     , updateChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
@@ -1170,40 +1172,35 @@ addReactionEmojiFrontend emoji userId threadRoute channel =
                 | threads =
                     SeqDict.updateIfExists
                         threadId
-                        (\thread ->
-                            { thread
-                                | messages =
-                                    updateArray
-                                        messageId
-                                        (\message ->
-                                            case message of
-                                                MessageLoaded message2 ->
-                                                    Message.addReactionEmoji userId emoji message2 |> MessageLoaded
-
-                                                MessageUnloaded ->
-                                                    message
-                                        )
-                                        thread.messages
-                            }
-                        )
+                        (addReactionEmojiFrontendHelper emoji userId messageId)
                         channel.threads
             }
 
         NoThreadWithMessage messageId ->
-            { channel
-                | messages =
-                    updateArray
-                        messageId
-                        (\message ->
-                            case message of
-                                MessageLoaded message2 ->
-                                    Message.addReactionEmoji userId emoji message2 |> MessageLoaded
+            addReactionEmojiFrontendHelper emoji userId messageId channel
 
-                                MessageUnloaded ->
-                                    message
-                        )
-                        channel.messages
-            }
+
+addReactionEmojiFrontendHelper :
+    Emoji
+    -> userId
+    -> Id messageId
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : Array (MessageState messageId userId) }
+addReactionEmojiFrontendHelper emoji userId messageId channel =
+    { channel
+        | messages =
+            updateArray
+                messageId
+                (\message ->
+                    case message of
+                        MessageLoaded message2 ->
+                            Message.addReactionEmoji userId emoji message2 |> MessageLoaded
+
+                        MessageUnloaded ->
+                            message
+                )
+                channel.messages
+    }
 
 
 updateChannel :
@@ -1433,77 +1430,40 @@ removeReactionEmojiFrontend :
         }
 removeReactionEmojiFrontend emoji userId threadRoute channel =
     case threadRoute of
-        ViewThreadWithMessage threadMessageIndex messageIndex ->
+        ViewThreadWithMessage threadId messageId ->
             { channel
                 | threads =
                     SeqDict.updateIfExists
-                        threadMessageIndex
-                        (\thread ->
-                            { thread
-                                | messages =
-                                    updateArray
-                                        messageIndex
-                                        (\message ->
-                                            case message of
-                                                MessageLoaded message2 ->
-                                                    Message.removeReactionEmoji userId emoji message2 |> MessageLoaded
-
-                                                MessageUnloaded ->
-                                                    message
-                                        )
-                                        thread.messages
-                            }
-                        )
+                        threadId
+                        (removeReactionEmojiFrontendHelper emoji userId messageId)
                         channel.threads
             }
 
-        NoThreadWithMessage messageIndex ->
-            { channel
-                | messages =
-                    updateArray
-                        messageIndex
-                        (\message ->
-                            case message of
-                                MessageLoaded message2 ->
-                                    Message.removeReactionEmoji userId emoji message2 |> MessageLoaded
-
-                                MessageUnloaded ->
-                                    message
-                        )
-                        channel.messages
-            }
+        NoThreadWithMessage messageId ->
+            removeReactionEmojiFrontendHelper emoji userId messageId channel
 
 
+removeReactionEmojiFrontendHelper :
+    Emoji
+    -> userId
+    -> Id messageId
+    -> { a | messages : Array (MessageState messageId userId) }
+    -> { a | messages : Array (MessageState messageId userId) }
+removeReactionEmojiFrontendHelper emoji userId messageId channel =
+    { channel
+        | messages =
+            updateArray
+                messageId
+                (\message ->
+                    case message of
+                        MessageLoaded message2 ->
+                            Message.removeReactionEmoji userId emoji message2 |> MessageLoaded
 
---
---currentDiscordUser : LocalUser -> Maybe (Discord.Id.Id Discord.Id.UserId)
---currentDiscordUser local =
---    case local.session.currentlyViewing of
---        Just ( DiscordGuildOrDmId viewing, _ ) ->
---            case viewing of
---                DiscordGuildOrDmId_Guild currentDiscordUserId _ _ ->
---                    Just currentDiscordUserId
---
---                DiscordGuildOrDmId_Dm dmChannelId ->
---                    let
---                        ( userIdA, userIdB ) =
---                            DiscordDmChannelId.toUserIds dmChannelId
---                    in
---                    case SeqDict.get userIdA local.linkedDiscordUsers of
---                        Just userA ->
---                            Just userIdA
---
---                        Nothing ->
---                            case SeqDict.get userIdA local.linkedDiscordUsers of
---                                Just userB ->
---                                    Just userIdB
---
---                                Nothing ->
---                                    Nothing
---
---        _ ->
---            Nothing
---
+                        MessageUnloaded ->
+                            message
+                )
+                channel.messages
+    }
 
 
 markAllChannelsAsViewed :
