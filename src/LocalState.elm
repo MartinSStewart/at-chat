@@ -61,6 +61,7 @@ module LocalState exposing
     , memberIsEditTyping
     , memberIsEditTypingFrontend
     , memberIsEditTypingFrontendHelper
+    , memberIsEditTypingFrontendHelperNoThread
     , memberIsEditTypingHelper
     , memberIsTyping
     , memberIsTypingHelper
@@ -878,19 +879,19 @@ memberIsEditTyping userId time channelId threadRoute guild =
 
 
 memberIsEditTypingFrontend :
-    Id UserId
+    userId
     -> Time.Posix
-    -> Id ChannelId
+    -> channelId
     -> ThreadRouteWithMessage
     ->
         { d
             | channels :
                 SeqDict
-                    (Id ChannelId)
+                    channelId
                     { e
-                        | messages : Array (MessageState ChannelMessageId (Id UserId))
-                        , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-                        , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                        | messages : Array (MessageState ChannelMessageId userId)
+                        , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                        , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                     }
         }
     ->
@@ -899,11 +900,11 @@ memberIsEditTypingFrontend :
             { d
                 | channels :
                     SeqDict
-                        (Id ChannelId)
+                        channelId
                         { e
-                            | messages : Array (MessageState ChannelMessageId (Id UserId))
-                            , lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId)
-                            , threads : SeqDict (Id ChannelMessageId) FrontendThread
+                            | messages : Array (MessageState ChannelMessageId userId)
+                            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
                         }
             }
 memberIsEditTypingFrontend userId time channelId threadRoute guild =
@@ -982,57 +983,62 @@ memberIsEditTypingHelper time userId threadRoute channel =
 
 memberIsEditTypingFrontendHelper :
     Time.Posix
-    -> Id UserId
+    -> userId
     -> ThreadRouteWithMessage
-    -> { a | messages : Array (MessageState ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-    -> Result () { a | messages : Array (MessageState ChannelMessageId (Id UserId)), lastTypedAt : SeqDict (Id UserId) (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+    ->
+        { a
+            | messages : Array (MessageState ChannelMessageId userId)
+            , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+            , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+        }
+    ->
+        Result
+            ()
+            { a
+                | messages : Array (MessageState ChannelMessageId userId)
+                , lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId)
+                , threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId)
+            }
 memberIsEditTypingFrontendHelper time userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageIndex ->
             case SeqDict.get threadMessageIndex channel.threads of
                 Just thread ->
-                    case DmChannel.getArray messageIndex thread.messages of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            if data.createdBy == userId then
-                                { channel
-                                    | threads =
-                                        SeqDict.insert
-                                            threadMessageIndex
-                                            { thread
-                                                | lastTypedAt =
-                                                    SeqDict.insert
-                                                        userId
-                                                        { time = time, messageIndex = Just messageIndex }
-                                                        thread.lastTypedAt
-                                            }
-                                            channel.threads
-                                }
-                                    |> Ok
+                    case memberIsEditTypingFrontendHelperNoThread time userId messageIndex thread of
+                        Ok thread2 ->
+                            Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
 
-                            else
-                                Err ()
-
-                        _ ->
+                        Err () ->
                             Err ()
 
                 Nothing ->
                     Err ()
 
         NoThreadWithMessage messageIndex ->
-            case DmChannel.getArray messageIndex channel.messages of
-                Just (MessageLoaded (UserTextMessage data)) ->
-                    if data.createdBy == userId then
-                        { channel
-                            | lastTypedAt =
-                                SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
-                        }
-                            |> Ok
+            memberIsEditTypingFrontendHelperNoThread time userId messageIndex channel
 
-                    else
-                        Err ()
 
-                _ ->
-                    Err ()
+memberIsEditTypingFrontendHelperNoThread :
+    Time.Posix
+    -> userId
+    -> Id messageId
+    -> { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : Array (MessageState messageId userId) }
+    -> Result () { a | lastTypedAt : SeqDict userId (LastTypedAt messageId), messages : Array (MessageState messageId userId) }
+memberIsEditTypingFrontendHelperNoThread time userId messageIndex channel =
+    case DmChannel.getArray messageIndex channel.messages of
+        Just (MessageLoaded (UserTextMessage data)) ->
+            if data.createdBy == userId then
+                { channel
+                    | lastTypedAt =
+                        SeqDict.insert userId { time = time, messageIndex = Just messageIndex } channel.lastTypedAt
+                }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
 
 
 addInvite :

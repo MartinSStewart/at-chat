@@ -6170,14 +6170,28 @@ memberEditTyping time userId guildOrDmId threadRoute local =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            Debug.todo ""
+                            LocalState.memberIsEditTypingFrontend currentDiscordUserId time channelId threadRoute guild
                                 |> Result.withDefault guild
                         )
                         local.discordGuilds
             }
 
         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
-            Debug.todo ""
+            case threadRoute of
+                ViewThreadWithMessage _ _ ->
+                    local
+
+                NoThreadWithMessage messageId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (\dmChannel ->
+                                    LocalState.memberIsEditTypingFrontendHelperNoThread time currentUserId messageId dmChannel
+                                        |> Result.withDefault dmChannel
+                                )
+                                local.discordDmChannels
+                    }
 
 
 editMessage :
