@@ -2447,9 +2447,9 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 data
                                 (\session userData user channel ->
-                                    case SeqDict.get data.channelId model2.discordDmChannels of
-                                        Just dmChannel ->
-                                            case LocalState.deleteMessageBackendHelperNoThread data.currentUserId threadRoute channel of
+                                    case threadRoute of
+                                        NoThreadWithMessage messageId ->
+                                            case LocalState.deleteMessageBackendHelperNoThread data.currentUserId messageId channel of
                                                 Ok dmChannel2 ->
                                                     ( { model2
                                                         | discordDmChannels =
@@ -2462,7 +2462,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         , Broadcast.toDiscordDmChannelExcludingOne
                                                             clientId
                                                             data.channelId
-                                                            (Server_DeleteMessage guildOrDmId threadRoute)
+                                                            (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                             model2
                                                         ]
                                                     )
@@ -2474,12 +2474,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         (LocalChangeResponse changeId Local_Invalid)
                                                     )
 
-                                        Nothing ->
-                                            ( model2
-                                            , Lamdera.sendToFrontend
-                                                clientId
-                                                (LocalChangeResponse changeId Local_Invalid)
-                                            )
+                                        ViewThreadWithMessage _ _ ->
+                                            ( model2, Command.none )
                                 )
 
                 Local_CurrentlyViewing viewing ->

@@ -42,6 +42,7 @@ module LocalState exposing
     , deleteChannelFrontend
     , deleteMessageBackend
     , deleteMessageBackendHelper
+    , deleteMessageBackendHelperNoThread
     , deleteMessageFrontend
     , deleteMessageFrontendHelper
     , deleteMessageFrontendNoThread
@@ -1591,41 +1592,44 @@ deleteMessageBackendHelper userId threadRoute channel =
         ViewThreadWithMessage threadId messageId ->
             case SeqDict.get threadId channel.threads of
                 Just thread ->
-                    case DmChannel.getArray messageId thread.messages of
-                        Just (UserTextMessage message) ->
-                            if message.createdBy == userId then
-                                { channel
-                                    | threads =
-                                        SeqDict.insert
-                                            threadId
-                                            { thread
-                                                | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) thread.messages
-                                            }
-                                            channel.threads
-                                }
-                                    |> Ok
+                    case deleteMessageBackendHelperNoThread userId messageId thread of
+                        Ok thread2 ->
+                            { channel
+                                | threads =
+                                    SeqDict.insert
+                                        threadId
+                                        thread2
+                                        channel.threads
+                            }
+                                |> Ok
 
-                            else
-                                Err ()
-
-                        _ ->
+                        Err () ->
                             Err ()
 
                 Nothing ->
                     Err ()
 
         NoThreadWithMessage messageId ->
-            case DmChannel.getArray messageId channel.messages of
-                Just (UserTextMessage message) ->
-                    if message.createdBy == userId then
-                        { channel | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) channel.messages }
-                            |> Ok
+            deleteMessageBackendHelperNoThread userId messageId channel
 
-                    else
-                        Err ()
 
-                _ ->
-                    Err ()
+deleteMessageBackendHelperNoThread :
+    userId
+    -> Id messageId
+    -> { b | messages : Array (Message c userId) }
+    -> Result () { b | messages : Array (Message c userId) }
+deleteMessageBackendHelperNoThread userId messageId channel =
+    case DmChannel.getArray messageId channel.messages of
+        Just (UserTextMessage message) ->
+            if message.createdBy == userId then
+                { channel | messages = DmChannel.setArray messageId (DeletedMessage message.createdAt) channel.messages }
+                    |> Ok
+
+            else
+                Err ()
+
+        _ ->
+            Err ()
 
 
 deleteMessageFrontend :
