@@ -28,7 +28,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuil
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet
@@ -180,7 +180,7 @@ handleDiscordDmEditMessage edit model =
                             edit.timestamp
                             edit.author.id
                             richText
-                            SeqDict.empty
+                            DoNotChangeAttachments
                             messageIndex
                             channel
                     of
@@ -191,12 +191,12 @@ handleDiscordDmEditMessage edit model =
                               }
                             , Broadcast.toDiscordDmChannel
                                 channelId
-                                (Server_DiscordSendEditMessage
+                                (Server_DiscordSendEditDmMessage
                                     edit.timestamp
-                                    (DiscordGuildOrDmId_Dm { currentUserId = edit.author.id, channelId = channelId })
-                                    (NoThreadWithMessage messageIndex)
+                                    edit.author.id
+                                    channelId
+                                    messageIndex
                                     richText
-                                    SeqDict.empty
                                     |> ServerChange
                                 )
                                 model
@@ -233,7 +233,7 @@ handleDiscordGuildEditMessage guildId guild edit model =
                             edit.timestamp
                             edit.author.id
                             richText
-                            SeqDict.empty
+                            DoNotChangeAttachments
                             (NoThreadWithMessage messageIndex)
                             channel
                     of
@@ -247,12 +247,13 @@ handleDiscordGuildEditMessage guildId guild edit model =
                               }
                             , Broadcast.toDiscordGuild
                                 guildId
-                                (Server_DiscordSendEditMessage
+                                (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
-                                    (DiscordGuildOrDmId_Guild edit.author.id guildId edit.channelId)
+                                    edit.author.id
+                                    guildId
+                                    edit.channelId
                                     (NoThreadWithMessage messageIndex)
                                     richText
-                                    SeqDict.empty
                                     |> ServerChange
                                 )
                                 model
@@ -297,7 +298,7 @@ handleDiscordGuildEditMessage guildId guild edit model =
                             edit.timestamp
                             edit.author.id
                             richText
-                            SeqDict.empty
+                            DoNotChangeAttachments
                             (ViewThreadWithMessage threadId messageIndex)
                             channel
                     of
@@ -311,12 +312,13 @@ handleDiscordGuildEditMessage guildId guild edit model =
                               }
                             , Broadcast.toDiscordGuild
                                 guildId
-                                (Server_DiscordSendEditMessage
+                                (Server_DiscordSendEditGuildMessage
                                     edit.timestamp
-                                    (DiscordGuildOrDmId_Guild edit.author.id guildId channelId)
+                                    edit.author.id
+                                    guildId
+                                    channelId
                                     (ViewThreadWithMessage threadId messageIndex)
                                     richText
-                                    SeqDict.empty
                                     |> ServerChange
                                 )
                                 model

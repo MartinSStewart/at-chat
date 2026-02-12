@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -1577,19 +1577,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                --asUser
-                --    model2
-                --    sessionId
-                --    (sendDirectMessage
-                --        model2
-                --        time
-                --        clientId
-                --        changeId
-                --        otherUserId
-                --        threadRoute
-                --        text
-                --        (validateAttachedFiles model2.files attachedFiles)
-                --    )
                 Local_NewChannel _ guildId channelName ->
                     asGuildOwner
                         model2
@@ -1858,39 +1845,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                --asUser
-                --    model2
-                --    sessionId
-                --    (\{ userId } _ ->
-                --        let
-                --            dmChannelId =
-                --                DmChannel.channelIdFromUserIds userId otherUserId
-                --        in
-                --        ( { model2
-                --            | dmChannels =
-                --                SeqDict.updateIfExists
-                --                    dmChannelId
-                --                    (LocalState.memberIsTyping userId time threadRoute)
-                --                    model2.dmChannels
-                --          }
-                --        , Command.batch
-                --            [ Local_MemberTyping time ( guildOrDmId, threadRoute )
-                --                |> LocalChangeResponse changeId
-                --                |> Lamdera.sendToFrontend clientId
-                --            , Broadcast.toUser
-                --                (Just clientId)
-                --                Nothing
-                --                otherUserId
-                --                (Server_MemberTyping
-                --                    time
-                --                    userId
-                --                    ( GuildOrDmId (GuildOrDmId_Dm userId), threadRoute )
-                --                    |> ServerChange
-                --                )
-                --                model2
-                --            ]
-                --        )
-                --    )
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     case guildOrDmId of
                         GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
@@ -2085,7 +2039,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     time
                                                     userId
                                                     newContent
-                                                    attachedFiles2
+                                                    (ChangeAttachments attachedFiles2)
                                                     threadRoute
                                                     dmChannel
                                             of
@@ -2131,6 +2085,69 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                             )
                                 )
+
+                Local_Discord_SendEditGuildMessage _ currentUserId guildId channelId threadRoute newContent ->
+                    asDiscordGuildMember
+                        model2
+                        sessionId
+                        guildId
+                        currentUserId
+                        (\session _ _ guild ->
+                            case SeqDict.get channelId guild.channels of
+                                Just channel ->
+                                    case
+                                        LocalState.editMessageHelper
+                                            time
+                                            currentUserId
+                                            newContent
+                                            DoNotChangeAttachments
+                                            threadRoute
+                                            channel
+                                    of
+                                        Ok channel2 ->
+                                            ( { model2
+                                                | discordGuilds =
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (LocalState.updateChannel (\_ -> channel2) channelId)
+                                                        model2.discordGuilds
+                                              }
+                                            , Command.batch
+                                                [ Local_Discord_SendEditGuildMessage
+                                                    time
+                                                    currentUserId
+                                                    guildId
+                                                    channelId
+                                                    threadRoute
+                                                    newContent
+                                                    |> LocalChangeResponse changeId
+                                                    |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DiscordSendEditGuildMessage
+                                                        time
+                                                        currentUserId
+                                                        guildId
+                                                        channelId
+                                                        threadRoute
+                                                        newContent
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                ]
+                                            )
+
+                                        Err () ->
+                                            ( model2
+                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            )
+
+                                Nothing ->
+                                    ( model2
+                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
 
                 Local_MemberEditTyping _ guildOrDmId threadRoute ->
                     case guildOrDmId of
@@ -3081,9 +3098,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         Local_Discord_DeleteChannel guildId channelId ->
                             Debug.todo ""
 
-                        Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
-                            Debug.todo ""
-
                         Local_Discord_SetName personName ->
                             Debug.todo ""
 
@@ -3349,7 +3363,7 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
                     time
                     userId
                     newContent
-                    attachedFiles2
+                    (ChangeAttachments attachedFiles2)
                     threadRoute
                     channel
             of

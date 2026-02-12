@@ -6211,7 +6211,6 @@ friendsColumn isMobile openedOtherUserId local =
         [ Ui.el
             [ Ui.Font.bold
             , Ui.paddingXY 8 8
-            , Ui.spacing 8
             , Ui.Font.color MyUi.font1
             ]
             (Ui.text "Direct messages")

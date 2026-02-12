@@ -688,7 +688,8 @@ type ServerChange
     | Server_AddReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Server_SendEditMessage Time.Posix (Id UserId) GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
-    | Server_DiscordSendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
+    | Server_DiscordSendEditGuildMessage Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
+    | Server_DiscordSendEditDmMessage Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DiscordDeleteGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage
@@ -731,6 +732,7 @@ type LocalChange
     | Local_AddReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_RemoveReactionEmoji AnyGuildOrDmId ThreadRouteWithMessage Emoji
     | Local_SendEditMessage Time.Posix GuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Id UserId))) (SeqDict (Id FileId) FileData)
+    | Local_Discord_SendEditGuildMessage Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)))
     | Local_MemberEditTyping Time.Posix AnyGuildOrDmId ThreadRouteWithMessage
     | Local_SetLastViewed AnyGuildOrDmId ThreadRouteWithMessage
     | Local_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
@@ -751,6 +753,5 @@ type LocalDiscordChange
     = Local_Discord_NewChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) ChannelName
     | Local_Discord_EditChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Local_Discord_DeleteChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | Local_Discord_SendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Local_Discord_SetName PersonName
     | Local_Discord_SetGuildNotificationLevel (Id GuildId) NotificationLevel

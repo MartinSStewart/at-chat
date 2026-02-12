@@ -44,7 +44,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), DiscordFrontendChannel, FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), ChangeAttachments(..), DiscordFrontendChannel, FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -2263,31 +2263,33 @@ updateLoaded msg model =
                                                 let
                                                     richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
                                                     richText =
-                                                        Debug.todo ""
-
-                                                    --RichText.fromNonemptyString
-                                                    --    (LocalState.allUsers local)
-                                                    --    nonempty
+                                                        RichText.fromNonemptyString
+                                                            (LocalState.allDiscordUsers2 local.localUser)
+                                                            nonempty
                                                 in
                                                 if message.content == richText then
                                                     Nothing
 
                                                 else
-                                                    Local_Discord_SendEditMessage
-                                                        model.time
-                                                        guildOrDmId2
-                                                        (case threadRoute of
-                                                            ViewThread threadId ->
-                                                                ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
+                                                    case guildOrDmId2 of
+                                                        DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
+                                                            Local_Discord_SendEditGuildMessage
+                                                                model.time
+                                                                currentUserId
+                                                                guildId
+                                                                channelId
+                                                                (case threadRoute of
+                                                                    ViewThread threadId ->
+                                                                        ViewThreadWithMessage threadId (Id.changeType edit.messageIndex)
 
-                                                            NoThread ->
-                                                                NoThreadWithMessage edit.messageIndex
-                                                        )
-                                                        richText
-                                                        (FileStatus.onlyUploadedFiles edit.attachedFiles)
-                                                        |> Local_DiscordChange (Debug.todo "")
-                                                        --(LocalState.currentDiscordUser local)
-                                                        |> Just
+                                                                    NoThread ->
+                                                                        NoThreadWithMessage edit.messageIndex
+                                                                )
+                                                                richText
+                                                                |> Just
+
+                                                        DiscordGuildOrDmId_Dm data ->
+                                                            Debug.todo ""
 
                                             _ ->
                                                 Nothing
@@ -5041,6 +5043,27 @@ changeUpdate localMsg local =
                 Local_SendEditMessage time guildOrDmId threadRoute newContent attachedFiles ->
                     editMessage time local.localUser.session.userId guildOrDmId newContent attachedFiles threadRoute local
 
+                Local_Discord_SendEditGuildMessage time currentUserId guildId channelId threadRoute newContent ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (\channel ->
+                                        LocalState.editMessageFrontendHelper
+                                            time
+                                            currentUserId
+                                            newContent
+                                            DoNotChangeAttachments
+                                            threadRoute
+                                            channel
+                                            |> Result.withDefault channel
+                                    )
+                                    channelId
+                                )
+                                local.discordGuilds
+                    }
+
                 Local_MemberEditTyping time guildOrDmId threadRoute ->
                     memberEditTyping time local.localUser.session.userId guildOrDmId threadRoute local
 
@@ -5847,8 +5870,44 @@ changeUpdate localMsg local =
                 Server_SendEditMessage time userId guildOrDmId messageIndex newContent attachedFiles ->
                     editMessage time userId guildOrDmId newContent attachedFiles messageIndex local
 
-                Server_DiscordSendEditMessage time guildOrDmId messageIndex newContent attachedFiles ->
-                    discordEditMessage time guildOrDmId newContent attachedFiles messageIndex local
+                Server_DiscordSendEditGuildMessage time editedBy guildId channelId threadRoute newContent ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (\channel ->
+                                        LocalState.editMessageFrontendHelper
+                                            time
+                                            editedBy
+                                            newContent
+                                            DoNotChangeAttachments
+                                            threadRoute
+                                            channel
+                                            |> Result.withDefault channel
+                                    )
+                                    channelId
+                                )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordSendEditDmMessage time editedBy channelId messageId newContent ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (\dmChannel ->
+                                    LocalState.editMessageFrontendHelper2
+                                        time
+                                        editedBy
+                                        newContent
+                                        DoNotChangeAttachments
+                                        messageId
+                                        dmChannel
+                                        |> Result.withDefault dmChannel
+                                )
+                                local.discordDmChannels
+                    }
 
                 Server_MemberEditTyping time userId guildOrDmId messageIndex ->
                     memberEditTyping time userId guildOrDmId messageIndex local
@@ -6236,7 +6295,7 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                     time
                                     userId
                                     newContent
-                                    attachedFiles
+                                    (ChangeAttachments attachedFiles)
                                     threadRoute
                                     channel
                                     |> Result.withDefault channel
@@ -6256,68 +6315,13 @@ editMessage time userId guildOrDmId newContent attachedFiles threadRoute local =
                                 time
                                 userId
                                 newContent
-                                attachedFiles
+                                (ChangeAttachments attachedFiles)
                                 threadRoute
                                 dmChannel
                                 |> Result.withDefault dmChannel
                         )
                         local.dmChannels
             }
-
-
-discordEditMessage :
-    Time.Posix
-    -> DiscordGuildOrDmId
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-    -> SeqDict (Id FileId) FileData
-    -> ThreadRouteWithMessage
-    -> LocalState
-    -> LocalState
-discordEditMessage time guildOrDmId newContent attachedFiles threadRoute local =
-    case guildOrDmId of
-        DiscordGuildOrDmId_Guild editedBy guildId channelId ->
-            { local
-                | discordGuilds =
-                    SeqDict.updateIfExists
-                        guildId
-                        (LocalState.updateChannel
-                            (\channel ->
-                                LocalState.editMessageFrontendHelper
-                                    time
-                                    editedBy
-                                    newContent
-                                    attachedFiles
-                                    threadRoute
-                                    channel
-                                    |> Result.withDefault channel
-                            )
-                            channelId
-                        )
-                        local.discordGuilds
-            }
-
-        DiscordGuildOrDmId_Dm data ->
-            case threadRoute of
-                NoThreadWithMessage messageId ->
-                    { local
-                        | discordDmChannels =
-                            SeqDict.updateIfExists
-                                data.channelId
-                                (\dmChannel ->
-                                    LocalState.editMessageFrontendHelper2
-                                        time
-                                        data.currentUserId
-                                        newContent
-                                        attachedFiles
-                                        messageId
-                                        dmChannel
-                                        |> Result.withDefault dmChannel
-                                )
-                                local.discordDmChannels
-                    }
-
-                ViewThreadWithMessage _ _ ->
-                    local
 
 
 deleteMessage : AnyGuildOrDmId -> ThreadRouteWithMessage -> LocalState -> LocalState
@@ -7258,6 +7262,9 @@ pendingChangesText localChange =
         Local_SendEditMessage _ _ _ _ _ ->
             "Edit message"
 
+        Local_Discord_SendEditGuildMessage posix _ _ _ threadRouteWithMessage nonempty ->
+            "Edit message"
+
         Local_MemberEditTyping _ _ _ ->
             "Editing message"
 
@@ -7312,9 +7319,6 @@ pendingChangesText localChange =
 
                 Local_Discord_DeleteChannel id _ ->
                     "Deleted channel"
-
-                Local_Discord_SendEditMessage posix discordGuildOrDmIdNoThread threadRouteWithMessage nonempty seqDict ->
-                    "Edit message"
 
                 Local_Discord_SetName personName ->
                     "Set display name"

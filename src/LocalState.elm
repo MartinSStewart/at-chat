@@ -4,6 +4,7 @@ module LocalState exposing
     , Archived
     , BackendChannel
     , BackendGuild
+    , ChangeAttachments(..)
     , ChannelStatus(..)
     , DiscordBackendChannel
     , DiscordBackendGuild
@@ -1257,7 +1258,7 @@ editMessageHelper :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> SeqDict (Id FileId) FileData
+    -> ChangeAttachments
     -> ThreadRouteWithMessage
     ->
         { b
@@ -1308,7 +1309,7 @@ editMessageHelper2 :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> SeqDict (Id FileId) FileData
+    -> ChangeAttachments
     -> Id messageId
     -> { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
     -> Result () { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
@@ -1319,7 +1320,17 @@ editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
                 let
                     data2 : UserTextMessageData messageId userId
                     data2 =
-                        { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
+                        { data
+                            | editedAt = Just time
+                            , content = newContent
+                            , attachedFiles =
+                                case attachedFiles of
+                                    ChangeAttachments attachedFiles2 ->
+                                        attachedFiles2
+
+                                    DoNotChangeAttachments ->
+                                        data.attachedFiles
+                        }
                 in
                 { channel
                     | messages = DmChannel.setArray messageIndex (UserTextMessage data2) channel.messages
@@ -1353,7 +1364,7 @@ editMessageFrontendHelper :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> SeqDict (Id FileId) FileData
+    -> ChangeAttachments
     -> ThreadRouteWithMessage
     -> { b | messages : Array (MessageState ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
     -> Result () { b | messages : Array (MessageState ChannelMessageId userId), lastTypedAt : SeqDict userId (LastTypedAt ChannelMessageId), threads : SeqDict (Id ChannelMessageId) (FrontendGenericThread userId) }
@@ -1376,11 +1387,16 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
             editMessageFrontendHelper2 time editedBy newContent attachedFiles messageId channel
 
 
+type ChangeAttachments
+    = ChangeAttachments (SeqDict (Id FileId) FileData)
+    | DoNotChangeAttachments
+
+
 editMessageFrontendHelper2 :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
-    -> SeqDict (Id FileId) FileData
+    -> ChangeAttachments
     -> Id messageId
     -> { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
     -> Result () { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
@@ -1391,7 +1407,17 @@ editMessageFrontendHelper2 time editedBy newContent attachedFiles messageIndex c
                 let
                     data2 : UserTextMessageData messageId userId
                     data2 =
-                        { data | editedAt = Just time, content = newContent, attachedFiles = attachedFiles }
+                        { data
+                            | editedAt = Just time
+                            , content = newContent
+                            , attachedFiles =
+                                case attachedFiles of
+                                    ChangeAttachments attachedFiles2 ->
+                                        attachedFiles2
+
+                                    DoNotChangeAttachments ->
+                                        data.attachedFiles
+                        }
                 in
                 { channel
                     | messages = DmChannel.setArray messageIndex (MessageLoaded (UserTextMessage data2)) channel.messages
