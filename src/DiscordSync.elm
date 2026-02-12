@@ -176,7 +176,7 @@ handleDiscordDmEditMessage edit model =
                             RichText.fromDiscord edit.content
                     in
                     case
-                        LocalState.editMessageHelper2
+                        LocalState.editMessageHelperNoThread
                             edit.timestamp
                             edit.author.id
                             richText
@@ -193,8 +193,7 @@ handleDiscordDmEditMessage edit model =
                                 channelId
                                 (Server_DiscordSendEditDmMessage
                                     edit.timestamp
-                                    edit.author.id
-                                    channelId
+                                    { currentUserId = edit.author.id, channelId = channelId }
                                     messageIndex
                                     richText
                                     |> ServerChange

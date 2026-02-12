@@ -24,6 +24,8 @@ type Log
     | PushNotificationError (Id UserId) Http.Error
     | FailedToDeleteDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
     | FailedToDeleteDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToEditDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToEditDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -48,6 +50,12 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToDeleteDiscordDmMessage _ _ _ _ ->
+            Nothing
+
+        FailedToEditDiscordGuildMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToEditDiscordDmMessage _ _ _ _ ->
             Nothing
 
 
@@ -216,6 +224,26 @@ logContent log =
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord DM message delete failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToEditDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord guild message edit failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToEditDiscordDmMessage channelId messageId discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord DM message edit failed"
                 , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))

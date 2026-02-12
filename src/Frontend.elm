@@ -2289,7 +2289,12 @@ updateLoaded msg model =
                                                                 |> Just
 
                                                         DiscordGuildOrDmId_Dm data ->
-                                                            Debug.todo ""
+                                                            Local_Discord_SendEditDmMessage
+                                                                model.time
+                                                                data
+                                                                edit.messageIndex
+                                                                richText
+                                                                |> Just
 
                                             _ ->
                                                 Nothing
@@ -4914,64 +4919,6 @@ changeUpdate localMsg local =
                                 Nothing ->
                                     local
 
-                --let
-                --    user =
-                --        local.localUser.user
-                --
-                --    localUser =
-                --        local.localUser
-                --
-                --    dmChannel : FrontendDmChannel
-                --    dmChannel =
-                --        SeqDict.get otherUserId local.dmChannels
-                --            |> Maybe.withDefault DmChannel.frontendInit
-                --
-                --    dmChannel2 : FrontendDmChannel
-                --    dmChannel2 =
-                --        case threadRouteWithRepliedTo of
-                --            ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                --                LocalState.createThreadMessageFrontend
-                --                    threadId
-                --                    (UserTextMessage
-                --                        { createdAt = createdAt
-                --                        , createdBy = localUser.session.userId
-                --                        , content = text
-                --                        , reactions = SeqDict.empty
-                --                        , editedAt = Nothing
-                --                        , repliedTo = maybeReplyTo
-                --                        , attachedFiles = attachedFiles
-                --                        }
-                --                    )
-                --                    dmChannel
-                --
-                --            NoThreadWithMaybeMessage maybeReplyTo ->
-                --                LocalState.createChannelMessageFrontend
-                --                    (UserTextMessage
-                --                        { createdAt = createdAt
-                --                        , createdBy = localUser.session.userId
-                --                        , content = text
-                --                        , reactions = SeqDict.empty
-                --                        , editedAt = Nothing
-                --                        , repliedTo = maybeReplyTo
-                --                        , attachedFiles = attachedFiles
-                --                        }
-                --                    )
-                --                    dmChannel
-                --in
-                --{ local
-                --    | dmChannels = SeqDict.insert otherUserId dmChannel2 local.dmChannels
-                --    , localUser =
-                --        { localUser
-                --            | user =
-                --                { user
-                --                    | lastViewed =
-                --                        SeqDict.insert
-                --                            (GuildOrDmId guildOrDmId)
-                --                            (DmChannel.latestMessageId dmChannel2)
-                --                            user.lastViewed
-                --                }
-                --        }
-                --}
                 Local_NewChannel time guildId channelName ->
                     { local
                         | guilds =
@@ -5062,6 +5009,24 @@ changeUpdate localMsg local =
                                     channelId
                                 )
                                 local.discordGuilds
+                    }
+
+                Local_Discord_SendEditDmMessage time dmData messageId newContent ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                dmData.channelId
+                                (\dmChannel ->
+                                    LocalState.editMessageFrontendHelperNoThread
+                                        time
+                                        dmData.currentUserId
+                                        newContent
+                                        DoNotChangeAttachments
+                                        messageId
+                                        dmChannel
+                                        |> Result.withDefault dmChannel
+                                )
+                                local.discordDmChannels
                     }
 
                 Local_MemberEditTyping time guildOrDmId threadRoute ->
@@ -5891,15 +5856,15 @@ changeUpdate localMsg local =
                                 local.discordGuilds
                     }
 
-                Server_DiscordSendEditDmMessage time editedBy channelId messageId newContent ->
+                Server_DiscordSendEditDmMessage time data messageId newContent ->
                     { local
                         | discordDmChannels =
                             SeqDict.updateIfExists
-                                channelId
+                                data.channelId
                                 (\dmChannel ->
-                                    LocalState.editMessageFrontendHelper2
+                                    LocalState.editMessageFrontendHelperNoThread
                                         time
-                                        editedBy
+                                        data.currentUserId
                                         newContent
                                         DoNotChangeAttachments
                                         messageId
@@ -7263,6 +7228,9 @@ pendingChangesText localChange =
             "Edit message"
 
         Local_Discord_SendEditGuildMessage posix _ _ _ threadRouteWithMessage nonempty ->
+            "Edit message"
+
+        Local_Discord_SendEditDmMessage posix _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->

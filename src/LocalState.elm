@@ -51,9 +51,9 @@ module LocalState exposing
     , discordGuildToFrontendForUser
     , editChannel
     , editMessageFrontendHelper
-    , editMessageFrontendHelper2
+    , editMessageFrontendHelperNoThread
     , editMessageHelper
-    , editMessageHelper2
+    , editMessageHelperNoThread
     , getDiscordGuildAndChannel
     , getDiscordUser
     , getGuildAndChannel
@@ -1291,7 +1291,7 @@ editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
         ViewThreadWithMessage threadMessageIndex messageId ->
             case SeqDict.get threadMessageIndex channel.threads of
                 Just thread ->
-                    case editMessageHelper2 time editedBy newContent attachedFiles messageId thread of
+                    case editMessageHelperNoThread time editedBy newContent attachedFiles messageId thread of
                         Ok thread2 ->
                             Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
 
@@ -1302,10 +1302,10 @@ editMessageHelper time editedBy newContent attachedFiles threadRoute channel =
                     Err ()
 
         NoThreadWithMessage messageId ->
-            editMessageHelper2 time editedBy newContent attachedFiles messageId channel
+            editMessageHelperNoThread time editedBy newContent attachedFiles messageId channel
 
 
-editMessageHelper2 :
+editMessageHelperNoThread :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
@@ -1313,7 +1313,7 @@ editMessageHelper2 :
     -> Id messageId
     -> { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
     -> Result () { b | messages : Array (Message messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
-editMessageHelper2 time editedBy newContent attachedFiles messageIndex channel =
+editMessageHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case DmChannel.getArray messageIndex channel.messages of
         Just (UserTextMessage data) ->
             if data.createdBy == editedBy && data.content /= newContent then
@@ -1373,7 +1373,7 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
         ViewThreadWithMessage threadMessageIndex messageId ->
             case SeqDict.get threadMessageIndex channel.threads of
                 Just thread ->
-                    case editMessageFrontendHelper2 time editedBy newContent attachedFiles messageId thread of
+                    case editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageId thread of
                         Ok thread2 ->
                             Ok { channel | threads = SeqDict.insert threadMessageIndex thread2 channel.threads }
 
@@ -1384,7 +1384,7 @@ editMessageFrontendHelper time editedBy newContent attachedFiles threadRoute cha
                     Err ()
 
         NoThreadWithMessage messageId ->
-            editMessageFrontendHelper2 time editedBy newContent attachedFiles messageId channel
+            editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageId channel
 
 
 type ChangeAttachments
@@ -1392,7 +1392,7 @@ type ChangeAttachments
     | DoNotChangeAttachments
 
 
-editMessageFrontendHelper2 :
+editMessageFrontendHelperNoThread :
     Time.Posix
     -> userId
     -> Nonempty (RichText userId)
@@ -1400,7 +1400,7 @@ editMessageFrontendHelper2 :
     -> Id messageId
     -> { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
     -> Result () { b | messages : Array (MessageState messageId userId), lastTypedAt : SeqDict userId (LastTypedAt messageId) }
-editMessageFrontendHelper2 time editedBy newContent attachedFiles messageIndex channel =
+editMessageFrontendHelperNoThread time editedBy newContent attachedFiles messageIndex channel =
     case DmChannel.getArray messageIndex channel.messages of
         Just (MessageLoaded (UserTextMessage data)) ->
             if data.createdBy == editedBy && data.content /= newContent then

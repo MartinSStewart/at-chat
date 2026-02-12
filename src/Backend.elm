@@ -343,8 +343,21 @@ update msg model =
                 Err error ->
                     addLog time (Log.FailedToDeleteDiscordDmMessage channelId messageId discordMessageId error) model
 
-        EditedDiscordMessage ->
-            ( model, Command.none )
+        EditedDiscordGuildMessage time guildId channelId threadRoute messageId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToEditDiscordGuildMessage guildId channelId threadRoute messageId error) model
+
+        EditedDiscordDmMessage time channelId messageId discordMessageId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToEditDiscordDmMessage channelId messageId discordMessageId error) model
 
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
@@ -2135,6 +2148,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> ServerChange
                                                     )
                                                     model2
+                                                , Debug.todo ""
                                                 ]
                                             )
 
@@ -2144,6 +2158,66 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                 Nothing ->
+                                    ( model2
+                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    )
+                        )
+
+                Local_Discord_SendEditDmMessage _ dmData messageId newContent ->
+                    asDiscordDmUser
+                        model2
+                        sessionId
+                        dmData
+                        (\session userData _ channel ->
+                            case
+                                LocalState.editMessageHelperNoThread
+                                    time
+                                    dmData.currentUserId
+                                    newContent
+                                    DoNotChangeAttachments
+                                    messageId
+                                    channel
+                            of
+                                Ok channel2 ->
+                                    ( { model2
+                                        | discordDmChannels =
+                                            SeqDict.insert dmData.channelId channel2 model2.discordDmChannels
+                                      }
+                                    , Command.batch
+                                        [ Local_Discord_SendEditDmMessage time dmData messageId newContent
+                                            |> LocalChangeResponse changeId
+                                            |> Lamdera.sendToFrontend clientId
+                                        , Broadcast.toDiscordDmChannelExcludingOne
+                                            clientId
+                                            dmData.channelId
+                                            (Server_DiscordSendEditDmMessage
+                                                time
+                                                dmData
+                                                messageId
+                                                newContent
+                                                |> ServerChange
+                                            )
+                                            model2
+                                        , case OneToOne.first messageId channel2.linkedMessageIds of
+                                            Just discordMessageId ->
+                                                Discord.editMessagePayload
+                                                    (Discord.userToken userData.auth)
+                                                    { channelId = Discord.Id.toUInt64 dmData.channelId |> Discord.Id.fromUInt64
+                                                    , messageId = discordMessageId
+                                                    , content =
+                                                        RichText.toDiscord SeqDict.empty newContent
+                                                            |> Discord.Markdown.toString
+                                                    }
+                                                    |> DiscordSync.http
+                                                    |> Task.attempt
+                                                        (EditedDiscordDmMessage time dmData.channelId messageId discordMessageId)
+
+                                            Nothing ->
+                                                Command.none
+                                        ]
+                                    )
+
+                                Err () ->
                                     ( model2
                                     , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                     )
