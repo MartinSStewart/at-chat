@@ -5856,13 +5856,22 @@ changeUpdate localMsg local =
                 Server_DeleteMessage guildOrDmId messageIndex ->
                     deleteMessage guildOrDmId messageIndex local
 
-                Server_DiscordDeleteMessage guildId channelId threadRoute ->
+                Server_DiscordDeleteGuildMessage guildId channelId threadRoute ->
                     { local
                         | discordGuilds =
                             SeqDict.updateIfExists
                                 guildId
                                 (LocalState.deleteMessageFrontend channelId threadRoute)
                                 local.discordGuilds
+                    }
+
+                Server_DiscordDeleteDmMessage channelId messageId ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.deleteMessageFrontendNoThread messageId)
+                                local.discordDmChannels
                     }
 
                 Server_SetName userId name ->

@@ -6,7 +6,7 @@ import Discord.Id
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Icons
-import Id exposing (Id, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage, UserId)
 import MyUi
 import Postmark
 import Time exposing (Month(..))
@@ -22,7 +22,8 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
-    | FailedToDeleteDiscordMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToDeleteDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToDeleteDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -43,7 +44,10 @@ shouldNotifyAdmin log =
         PushNotificationError _ _ ->
             Just "PushNotificationError"
 
-        FailedToDeleteDiscordMessage _ _ _ _ _ ->
+        FailedToDeleteDiscordGuildMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToDeleteDiscordDmMessage _ _ _ _ ->
             Nothing
 
 
@@ -198,13 +202,23 @@ logContent log =
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 
-        FailedToDeleteDiscordMessage guildId channelId threadRoute discordMessageId httpError ->
+        FailedToDeleteDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
             Ui.column
                 [ Ui.spacing 4 ]
-                [ tag errorTag "Discord Delete Failed"
+                [ tag errorTag "Discord guild message delete failed"
                 , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
                 , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
-                , fieldRow "Message" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToDeleteDiscordDmMessage channelId messageId discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord DM message delete failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

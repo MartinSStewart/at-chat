@@ -571,7 +571,8 @@ type BackendMsg
     | DiscordUserWebsocketMsg (Discord.Id.Id Discord.Id.UserId) Discord.Msg
     | SentDiscordGuildMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
     | SentDiscordDmMessage Time.Posix ChangeId SessionId ClientId (Discord.Id.Id Discord.Id.PrivateChannelId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Message)
-    | DeletedDiscordMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
+    | DeletedDiscordGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
+    | DeletedDiscordDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) (Result Discord.HttpError ())
     | EditedDiscordMessage
     | AiChatBackendMsg AiChat.BackendMsg
     | SentDirectMessageToDiscord DmChannelId (Id ChannelMessageId) (Result Discord.HttpError Discord.Message)
@@ -690,7 +691,8 @@ type ServerChange
     | Server_DiscordSendEditMessage Time.Posix DiscordGuildOrDmId ThreadRouteWithMessage (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (SeqDict (Id FileId) FileData)
     | Server_MemberEditTyping Time.Posix (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage
     | Server_DeleteMessage AnyGuildOrDmId ThreadRouteWithMessage
-    | Server_DiscordDeleteMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage
+    | Server_DiscordDeleteGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage
+    | Server_DiscordDeleteDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) FileHash
     | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))

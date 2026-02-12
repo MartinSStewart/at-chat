@@ -327,13 +327,21 @@ update msg model =
                 Err _ ->
                     ( model, invalidChangeResponse changeId clientId )
 
-        DeletedDiscordMessage time guildId channelId threadRoute messageId result ->
+        DeletedDiscordGuildMessage time guildId channelId threadRoute messageId result ->
             case result of
                 Ok () ->
                     ( model, Command.none )
 
                 Err error ->
-                    addLog time (Log.FailedToDeleteDiscordMessage guildId channelId threadRoute messageId error) model
+                    addLog time (Log.FailedToDeleteDiscordGuildMessage guildId channelId threadRoute messageId error) model
+
+        DeletedDiscordDmMessage time channelId messageId discordMessageId result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToDeleteDiscordDmMessage channelId messageId discordMessageId error) model
 
         EditedDiscordMessage ->
             ( model, Command.none )
@@ -1521,7 +1529,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session currentUser discordUser dmChannel ->
+                                (\session discordUser currentUser dmChannel ->
                                     let
                                         attachedFiles2 : SeqDict (Id FileId) FileData
                                         attachedFiles2 =
@@ -2426,7 +2434,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             (Discord.userToken userData.auth)
                                                             { channelId = channelId, messageId = discordMessageId }
                                                             |> DiscordSync.http
-                                                            |> Task.attempt (DeletedDiscordMessage time guildId channelId threadRoute discordMessageId)
+                                                            |> Task.attempt (DeletedDiscordGuildMessage time guildId channelId threadRoute discordMessageId)
 
                                                     Nothing ->
                                                         Command.none
@@ -2446,14 +2454,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session userData user channel ->
+                                (\_ userData _ channel ->
                                     case threadRoute of
                                         NoThreadWithMessage messageId ->
                                             case LocalState.deleteMessageBackendHelperNoThread data.currentUserId messageId channel of
-                                                Ok dmChannel2 ->
+                                                Ok channel2 ->
                                                     ( { model2
                                                         | discordDmChannels =
-                                                            SeqDict.insert data.channelId dmChannel2 model2.discordDmChannels
+                                                            SeqDict.insert data.channelId channel2 model2.discordDmChannels
                                                       }
                                                     , Command.batch
                                                         [ Lamdera.sendToFrontend
@@ -2464,6 +2472,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             data.channelId
                                                             (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                             model2
+                                                        , case OneToOne.first messageId channel.linkedMessageIds of
+                                                            Just discordMessageId ->
+                                                                Discord.deleteMessagePayload
+                                                                    (Discord.userToken userData.auth)
+                                                                    { channelId =
+                                                                        Discord.Id.toUInt64 data.channelId
+                                                                            |> Discord.Id.fromUInt64
+                                                                    , messageId = discordMessageId
+                                                                    }
+                                                                    |> DiscordSync.http
+                                                                    |> Task.attempt
+                                                                        (DeletedDiscordDmMessage
+                                                                            time
+                                                                            data.channelId
+                                                                            messageId
+                                                                            discordMessageId
+                                                                        )
+
+                                                            Nothing ->
+                                                                Command.none
                                                         ]
                                                     )
 
@@ -2571,7 +2599,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 { currentUserId = currentUserId, channelId = dmChannelId }
-                                (\session user _ dmChannel ->
+                                (\session _ user dmChannel ->
                                     ( { model2
                                         | users =
                                             NonemptyDict.insert
@@ -4010,8 +4038,8 @@ asDiscordDmUser :
     -> DiscordGuildOrDmId_DmData
     ->
         (UserSession
-         -> BackendUser
          -> DiscordFullUserData
+         -> BackendUser
          -> DiscordDmChannel
          -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
         )
@@ -4027,7 +4055,7 @@ asDiscordDmUser model sessionId { currentUserId, channelId } func =
             of
                 ( Just user, Just (FullData discordUser), Just dmChannel ) ->
                     if discordUser.linkedTo == session.userId then
-                        func session user discordUser dmChannel
+                        func session discordUser user dmChannel
 
                     else
                         ( model, Command.none )

@@ -131,7 +131,7 @@ logExamples =
             , Maybe.map3
                 (\guildId channelId messageId ->
                     logEntry
-                        (Log.FailedToDeleteDiscordMessage
+                        (Log.FailedToDeleteDiscordGuildMessage
                             guildId
                             channelId
                             (Id.NoThreadWithMessage (Id.fromInt 0))

@@ -5208,7 +5208,8 @@ type UserOutMsg connection
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
     | UserOutMsg_UserCreatedMessage ChannelType Message
-    | UserOutMsg_UserDeletedMessage (Id GuildId) (Id ChannelId) (Id MessageId)
+    | UserOutMsg_UserDeletedGuildMessage (Id GuildId) (Id ChannelId) (Id MessageId)
+    | UserOutMsg_UserDeletedDmMessage (Id PrivateChannelId) (Id MessageId)
     | UserOutMsg_UserEditedMessage UserMessageUpdate
     | UserOutMsg_FailedToParseWebsocketMessage JD.Error
     | UserOutMsg_ThreadCreatedOrUserAddedToThread Channel
@@ -5469,12 +5470,15 @@ handleUserGateway authToken intents response model =
                             case maybeGuildId of
                                 Included guildId ->
                                     ( model
-                                    , [ UserOutMsg_UserDeletedMessage guildId channelId messageId ]
+                                    , [ UserOutMsg_UserDeletedGuildMessage guildId channelId messageId ]
                                     )
 
                                 Missing ->
                                     ( model
-                                    , []
+                                    , [ UserOutMsg_UserDeletedDmMessage
+                                            (Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64)
+                                            messageId
+                                      ]
                                     )
 
                         DispatchUser_MessageDeleteBulkEvent messageIds channelId maybeGuildId ->
@@ -5482,7 +5486,7 @@ handleUserGateway authToken intents response model =
                                 Included guildId ->
                                     ( model
                                     , List.map
-                                        (UserOutMsg_UserDeletedMessage guildId channelId)
+                                        (UserOutMsg_UserDeletedGuildMessage guildId channelId)
                                         messageIds
                                     )
 

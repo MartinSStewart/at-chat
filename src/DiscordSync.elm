@@ -329,13 +329,13 @@ handleDiscordGuildEditMessage guildId guild edit model =
                     ( model, Command.none )
 
 
-handleDiscordDeleteMessage :
+handleDiscordDeleteGuildMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> Discord.Id.Id Discord.Id.ChannelId
     -> Discord.Id.Id Discord.Id.MessageId
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId model =
+handleDiscordDeleteGuildMessage discordGuildId discordChannelId discordMessageId model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             let
@@ -347,7 +347,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId mode
                                     ( { guild | channels = SeqDict.insert discordChannelId channel2 guild.channels }
                                     , Broadcast.toDiscordGuild
                                         discordGuildId
-                                        (Server_DiscordDeleteMessage
+                                        (Server_DiscordDeleteGuildMessage
                                             discordGuildId
                                             discordChannelId
                                             (NoThreadWithMessage messageId)
@@ -384,7 +384,7 @@ handleDiscordDeleteMessage discordGuildId discordChannelId discordMessageId mode
                                                               }
                                                             , Broadcast.toDiscordGuild
                                                                 discordGuildId
-                                                                (Server_DiscordDeleteMessage
+                                                                (Server_DiscordDeleteGuildMessage
                                                                     discordGuildId
                                                                     discordChannelId
                                                                     (ViewThreadWithMessage threadId messageId)
@@ -441,6 +441,30 @@ deleteMessageHelper discordMessageId channel =
 
         Nothing ->
             Nothing
+
+
+handleDiscordDeleteDmMessage :
+    Discord.Id.Id Discord.Id.PrivateChannelId
+    -> Discord.Id.Id Discord.Id.MessageId
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordDeleteDmMessage discordChannelId discordMessageId model =
+    case SeqDict.get discordChannelId model.discordDmChannels of
+        Just channel ->
+            case deleteMessageHelper discordMessageId channel of
+                Just ( messageId, channel2 ) ->
+                    ( { model | discordDmChannels = SeqDict.insert discordChannelId channel2 model.discordDmChannels }
+                    , Broadcast.toDiscordDmChannel
+                        discordChannelId
+                        (Server_DiscordDeleteDmMessage discordChannelId messageId |> ServerChange)
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
 
 
 addDiscordChannel :
@@ -1289,10 +1313,17 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             in
                             ( model3, cmd2 :: cmds )
 
-                        Discord.UserOutMsg_UserDeletedMessage discordGuildId discordChannelId messageId ->
+                        Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleDiscordDeleteMessage discordGuildId discordChannelId messageId model2
+                                    handleDiscordDeleteGuildMessage discordGuildId discordChannelId messageId model2
+                            in
+                            ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_UserDeletedDmMessage discordChannelId messageId ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleDiscordDeleteDmMessage discordChannelId messageId model2
                             in
                             ( model3, cmd2 :: cmds )
 

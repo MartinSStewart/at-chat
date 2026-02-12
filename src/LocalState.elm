@@ -1616,8 +1616,8 @@ deleteMessageBackendHelper userId threadRoute channel =
 deleteMessageBackendHelperNoThread :
     userId
     -> Id messageId
-    -> { b | messages : Array (Message c userId) }
-    -> Result () { b | messages : Array (Message c userId) }
+    -> { b | messages : Array (Message messageId userId) }
+    -> Result () { b | messages : Array (Message messageId userId) }
 deleteMessageBackendHelperNoThread userId messageId channel =
     case DmChannel.getArray messageId channel.messages of
         Just (UserTextMessage message) ->
