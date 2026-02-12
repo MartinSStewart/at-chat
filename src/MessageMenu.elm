@@ -429,8 +429,8 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId) ->
-                    case SeqDict.get channelId local.discordDmChannels of
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                    case SeqDict.get data.channelId local.discordDmChannels of
                         Just channel ->
                             case threadRoute of
                                 ViewThreadWithMessage _ _ ->

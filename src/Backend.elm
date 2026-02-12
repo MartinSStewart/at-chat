@@ -971,8 +971,8 @@ getLoginData sessionId session user requestMessagesFor model =
                 if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
                     DmChannel.discordDmChannelToFrontend
                         (case requestMessagesFor of
-                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm _ channelId), threadRoute ) ->
-                                dmChannelId == channelId
+                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), threadRoute ) ->
+                                dmChannelId == data.channelId
 
                             _ ->
                                 False
@@ -1516,7 +1516,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             ( model, invalidChangeResponse changeId clientId )
                                 )
 
-                        DiscordGuildOrDmId_Dm currentUserId channelId ->
+                        DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
                             asDiscordDmUser
                                 model2
                                 sessionId
@@ -1820,18 +1820,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId dmChannelId) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
                             asDiscordDmUser
                                 model2
                                 sessionId
-                                currentUserId
-                                dmChannelId
+                                data.currentUserId
+                                data.channelId
                                 (\session _ discordUser dmChannel ->
                                     ( { model2
                                         | discordDmChannels =
                                             SeqDict.insert
-                                                dmChannelId
-                                                (LocalState.memberIsTypingHelper currentUserId time dmChannel)
+                                                data.channelId
+                                                (LocalState.memberIsTypingHelper data.currentUserId time dmChannel)
                                                 model2.discordDmChannels
                                       }
                                     , Command.batch
@@ -1840,11 +1840,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             |> Lamdera.sendToFrontend clientId
                                         , Broadcast.toDiscordDmChannelExcludingOne
                                             clientId
-                                            dmChannelId
+                                            data.channelId
                                             (Server_MemberTyping
                                                 time
                                                 session.userId
-                                                ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId dmChannelId), threadRoute )
+                                                ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), threadRoute )
                                                 |> ServerChange
                                             )
                                             model2
@@ -1954,7 +1954,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     Debug.todo ""
                                 )
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
                             asDiscordDmUser
                                 model2
                                 sessionId
@@ -2236,7 +2236,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
                             asDiscordDmUser
                                 model
                                 sessionId
@@ -2445,9 +2445,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
                                 )
 
-                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm otherUserId channelId) ->
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
                             Debug.todo ""
 
+                --asDiscordDmUser
                 Local_CurrentlyViewing viewing ->
                     let
                         viewingChannel : Maybe ( AnyGuildOrDmId, ThreadRoute )
@@ -2856,7 +2857,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId_Dm currentUserId channelId ->
+                        DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
                             asDiscordDmUser
                                 model2
                                 sessionId
@@ -2909,7 +2910,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId_Dm currentUserId channelId ->
+                        DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
                             Debug.todo ""
 
                 --asUser

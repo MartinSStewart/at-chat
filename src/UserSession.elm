@@ -78,8 +78,8 @@ setViewingToCurrentlyViewing viewing =
         ViewDmThread otherUserId threadId _ ->
             Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, ViewThread threadId )
 
-        ViewDiscordDm discordUserId channelId _ ->
-            Just ( DiscordGuildOrDmId_Dm discordUserId channelId |> DiscordGuildOrDmId, NoThread )
+        ViewDiscordDm currentUserId channelId _ ->
+            Just ( DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId } |> DiscordGuildOrDmId, NoThread )
 
         ViewChannel guildId channelId _ ->
             Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, NoThread )

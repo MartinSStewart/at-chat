@@ -193,7 +193,7 @@ handleDiscordDmEditMessage edit model =
                                 channelId
                                 (Server_DiscordSendEditMessage
                                     edit.timestamp
-                                    (DiscordGuildOrDmId_Dm edit.author.id channelId)
+                                    (DiscordGuildOrDmId_Dm { currentUserId = edit.author.id, channelId = channelId })
                                     (NoThreadWithMessage messageIndex)
                                     richText
                                     SeqDict.empty
@@ -869,7 +869,7 @@ handleDiscordCreateMessage message model =
 
                                 guildOrDmId : DiscordGuildOrDmId
                                 guildOrDmId =
-                                    DiscordGuildOrDmId_Dm message.author.id dmChannelId
+                                    DiscordGuildOrDmId_Dm { currentUserId = message.author.id, channelId = dmChannelId }
                             in
                             case channel2Result of
                                 Ok channel2 ->

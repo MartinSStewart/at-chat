@@ -397,7 +397,7 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
                 ++ ","
                 ++ Discord.Id.toString channelId
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId channelId) ->
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
             "dd"
                 ++ Discord.Id.toString currentUserId
                 ++ ","

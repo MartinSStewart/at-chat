@@ -3,6 +3,7 @@ module Id exposing
     , ChannelId(..)
     , ChannelMessageId(..)
     , DiscordGuildOrDmId(..)
+    , DiscordGuildOrDmId_DmData
     , GuildId(..)
     , GuildOrDmId(..)
     , Id(..)
@@ -37,7 +38,13 @@ type GuildOrDmId
 
 type DiscordGuildOrDmId
     = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
-    | DiscordGuildOrDmId_Dm (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | DiscordGuildOrDmId_Dm DiscordGuildOrDmId_DmData
+
+
+type alias DiscordGuildOrDmId_DmData =
+    { currentUserId : Discord.Id.Id Discord.Id.UserId
+    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    }
 
 
 type AnyGuildOrDmId
