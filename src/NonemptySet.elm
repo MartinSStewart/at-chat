@@ -4,7 +4,7 @@ module NonemptySet exposing
     , member, size
     , fromNonemptyList, toNonemptyList, toList, fromList
     , map, toSeqSet, fromSeqSet
-    , head, insert
+    , all, any, head, insert
     )
 
 {-| A nonempty Set of unique values
@@ -65,6 +65,20 @@ member key (NonemptySet id set) =
 singleton : id -> NonemptySet id
 singleton key =
     NonemptySet key SeqSet.empty
+
+
+{-| Check if all items in the NonemptySet fulfill some predicate.
+-}
+all : (a -> Bool) -> NonemptySet a -> Bool
+all predicate (NonemptySet id set) =
+    predicate id && SeqSet.foldl (\item state -> state && predicate item) True set
+
+
+{-| Check if any items in the NonemptySet fulfill some predicate.
+-}
+any : (a -> Bool) -> NonemptySet a -> Bool
+any predicate (NonemptySet id set) =
+    predicate id || SeqSet.foldl (\item state -> state || predicate item) False set
 
 
 

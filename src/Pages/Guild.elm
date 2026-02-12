@@ -36,7 +36,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
 import List.Nonempty
@@ -3340,9 +3340,14 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         ]
 
 
-chattingWithYourself : Bool
-chattingWithYourself =
-    False
+chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
+chattingWithYourself { currentUserId, channelId } local =
+    case SeqDict.get channelId local.discordDmChannels of
+        Just channel ->
+            NonemptySet.all (\userId -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
+
+        Nothing ->
+            False
 
 
 
@@ -3392,31 +3397,14 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
             isMobile
             True
             (case guildOrDmIdNoThread of
-                DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
+                DiscordGuildOrDmId_Dm data ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if chattingWithYourself then
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with yourself")
-                            , showFilesButton
-                            ]
+                        (if chattingWithYourself data local then
+                            privateChatWithYourself
 
                          else
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with ")
-                            , Ui.text name
-                            , showFilesButton
-                            ]
+                            privateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->
@@ -3466,7 +3454,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
                                 Ui.el
                                     [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
                                     (Ui.text
-                                        (if chattingWithYourself then
+                                        (if chattingWithYourself data local then
                                             "This is the start of a conversation with yourself"
 
                                          else
@@ -3536,7 +3524,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
                     DiscordGuildOrDmId_Dm data ->
                         "Write a message to "
-                            ++ (if chattingWithYourself then
+                            ++ (if chattingWithYourself data local then
                                     "yourself"
 
                                 else
@@ -3667,27 +3655,10 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
                         (if otherUserId == local.localUser.session.userId then
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with yourself")
-                            , showFilesButton
-                            ]
+                            privateChatWithYourself
 
                          else
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with ")
-                            , Ui.text name
-                            , showFilesButton
-                            ]
+                            privateChatWithYourself
                         )
 
                 GuildOrDmId_Guild _ _ ->
@@ -3889,28 +3860,11 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
                 DiscordGuildOrDmId_Dm data ->
                     Ui.row
                         [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-                        (if chattingWithYourself then
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with yourself")
-                            , showFilesButton
-                            ]
+                        (if chattingWithYourself data local then
+                            privateChatWithYourself
 
                          else
-                            [ Ui.el
-                                [ Ui.Font.color MyUi.font3
-                                , Ui.width Ui.shrink
-                                , MyUi.prewrap
-                                , Ui.clipWithEllipsis
-                                ]
-                                (Ui.text "Private chat with ")
-                            , Ui.text name
-                            , showFilesButton
-                            ]
+                            privateChatWith name
                         )
 
                 DiscordGuildOrDmId_Guild _ _ _ ->
