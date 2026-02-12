@@ -70,7 +70,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import Image
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
@@ -313,7 +313,7 @@ type alias BackendModel =
     , textEditor : TextEditor.LocalState
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
-    , pendingDiscordCreateDmMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.PrivateChannelId ) ( ClientId, ChangeId )
+    , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     }
 
 

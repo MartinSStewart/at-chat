@@ -877,7 +877,11 @@ handleDiscordCreateMessage message model =
                                         | discordDmChannels =
                                             SeqDict.insert dmChannelId channel2 model.discordDmChannels
                                       }
-                                    , case SeqDict.get ( message.author.id, dmChannelId ) model.pendingDiscordCreateDmMessages of
+                                    , case
+                                        SeqDict.get
+                                            { currentUserId = message.author.id, channelId = dmChannelId }
+                                            model.pendingDiscordCreateDmMessages
+                                      of
                                         Just ( clientId, changeId ) ->
                                             Command.batch
                                                 [ LocalChangeResponse

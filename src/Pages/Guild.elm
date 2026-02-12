@@ -3159,23 +3159,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                         , Ui.text name
                         , showFilesButton
                         ]
-             --DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-             --    Ui.row
-             --        [ Ui.Font.color MyUi.font1, Ui.spacing 6 ]
-             --        (if SeqDict.member currentUserId local.localUser.linkedDiscordUsers then
-             --            privateChatWithYourself
-             --
-             --         else
-             --            privateChatWith name
-             --        )
-             --
-             --DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
-             --    Ui.row
-             --        [ Ui.Font.color MyUi.font1, Ui.spacing 2, Ui.clipWithEllipsis ]
-             --        [ Ui.el [ MyUi.noShrinking, Ui.width Ui.shrink ] (Ui.html Icons.hashtag)
-             --        , Ui.text name
-             --        , showFilesButton
-             --        ]
             )
         , Ui.el
             [ case loggedIn.showEmojiSelector of
@@ -3223,22 +3206,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                             "This is the start of your conversation with " ++ name
                                         )
                                     )
-                        --DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
-                        --    Ui.el
-                        --        [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                        --        (Ui.text ("This is the start of #" ++ name))
-                        --
-                        --DiscordGuildOrDmId (DiscordGuildOrDmId_Dm currentUserId _) ->
-                        --    Ui.el
-                        --        [ Ui.Font.color MyUi.font2, Ui.paddingXY 8 4, Ui.alignBottom, Ui.Font.size 20 ]
-                        --        (Ui.text
-                        --            (if SeqDict.member currentUserId local.localUser.linkedDiscordUsers then
-                        --                "This is the start of a conversation with yourself"
-                        --
-                        --             else
-                        --                "This is the start of your conversation with " ++ name
-                        --            )
-                        --        )
                       )
                     ]
 
@@ -3307,17 +3274,6 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
                                 else
                                     name
                                )
-                 --DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ _ _) ->
-                 --    "Write a message in #" ++ name
-                 --
-                 --DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-                 --    "Write a message to "
-                 --        ++ (if SeqDict.member data.currentUserId local.localUser.linkedDiscordUsers then
-                 --                "yourself"
-                 --
-                 --            else
-                 --                name
-                 --           )
                 )
                 (case SeqDict.get ( GuildOrDmId guildOrDmIdNoThread, NoThread ) loggedIn.drafts of
                     Just text ->
@@ -3348,10 +3304,6 @@ chattingWithYourself { currentUserId, channelId } local =
 
         Nothing ->
             False
-
-
-
---NonemptySet.size dmChannel.members == 1
 
 
 discordConversationView :
