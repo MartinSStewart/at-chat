@@ -60,7 +60,7 @@ import String.Nonempty
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import Time
 import Touch
-import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..))
+import Types exposing (Drag(..), EditMessage, EmojiSelector(..), FrontendMsg(..), GuildChannelNameHover(..), LoadedFrontend, LoggedIn2, MessageHover(..), NewChannelForm, NewGuildForm, ScrollPosition(..), VoiceChatState(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Events
@@ -1613,7 +1613,7 @@ inviteLinkCreatorForm model local guildId guild =
             , Ui.spacing 16
             , scrollable (canScroll model.drag)
             ]
-            [ channelHeader isMobile False (Ui.text "Invite member to guild")
+            [ channelHeader isMobile False VoiceChatNotJoined (Ui.text "Invite member to guild")
             , Ui.el
                 [ Ui.paddingXY 16 0 ]
                 (submitButton (Dom.id "guild_createInviteLink") (PressedCreateInviteLink guildId) "Create invite link")
@@ -2948,8 +2948,60 @@ messageViewDecode value =
     }
 
 
-channelHeader : Bool -> Bool -> Element FrontendMsg -> Element FrontendMsg
-channelHeader isMobile2 includeShowMembers content =
+channelHeader : Bool -> Bool -> VoiceChatState -> Element FrontendMsg -> Element FrontendMsg
+channelHeader isMobile2 includeShowMembers voiceChatState content =
+    let
+        voiceChatButton : Element FrontendMsg
+        voiceChatButton =
+            case voiceChatState of
+                VoiceChatNotJoined ->
+                    MyUi.elButton
+                        (Dom.id "guild_voiceChat")
+                        PressedJoinVoiceChat
+                        [ Ui.alignRight
+                        , Ui.width (Ui.px (24 + 24))
+                        , Ui.height Ui.fill
+                        , Ui.paddingXY 12 0
+                        , Ui.contentCenterY
+                        ]
+                        Icons.microphone
+
+                VoiceChatJoined { muted } ->
+                    Ui.row
+                        [ Ui.alignRight, Ui.height Ui.fill ]
+                        [ MyUi.elButton
+                            (Dom.id "guild_voiceChatMute")
+                            PressedToggleVoiceChatMute
+                            [ Ui.width (Ui.px (24 + 24))
+                            , Ui.height Ui.fill
+                            , Ui.paddingXY 12 0
+                            , Ui.contentCenterY
+                            , Ui.Font.color
+                                (if muted then
+                                    MyUi.errorColor
+
+                                 else
+                                    Ui.rgb 72 187 120
+                                )
+                            ]
+                            (if muted then
+                                Icons.microphoneSlash
+
+                             else
+                                Icons.microphone
+                            )
+                        , MyUi.elButton
+                            (Dom.id "guild_voiceChatLeave")
+                            PressedLeaveVoiceChat
+                            [ Ui.width (Ui.px (24 + 24))
+                            , Ui.height Ui.fill
+                            , Ui.paddingXY 12 0
+                            , Ui.contentCenterY
+                            , Ui.Font.color MyUi.errorColor
+                            ]
+                            (Ui.html Icons.x)
+                        ]
+    in
     Ui.row
         [ Ui.contentCenterY
         , Ui.borderWith { left = 0, right = 0, top = 0, bottom = 1 }
@@ -2961,6 +3013,7 @@ channelHeader isMobile2 includeShowMembers content =
         (if isMobile2 then
             [ headerBackButton (Dom.id "guild_headerBackButton") PressedChannelHeaderBackButton
             , Ui.el [ Ui.centerY ] content
+            , voiceChatButton
             , if includeShowMembers then
                 MyUi.elButton
                     (Dom.id "guild_showMembers")
@@ -2978,7 +3031,9 @@ channelHeader isMobile2 includeShowMembers content =
             ]
 
          else
-            [ Ui.el [ Ui.paddingXY 16 0 ] content ]
+            [ Ui.el [ Ui.paddingXY 16 0 ] content
+            , voiceChatButton
+            ]
         )
 
 
@@ -3141,6 +3196,7 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
         [ channelHeader
             isMobile
             True
+            model.voiceChatState
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
@@ -3348,6 +3404,7 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         [ channelHeader
             isMobile
             True
+            model.voiceChatState
             (case guildOrDmIdNoThread of
                 DiscordGuildOrDmId_Dm data ->
                     Ui.row
@@ -3602,6 +3659,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
         [ channelHeader
             isMobile
             True
+            model.voiceChatState
             (case guildOrDmIdNoThread of
                 GuildOrDmId_Dm otherUserId ->
                     Ui.row
@@ -3808,6 +3866,7 @@ discordThreadConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNo
         [ channelHeader
             isMobile
             True
+            model.voiceChatState
             (case guildOrDmIdNoThread of
                 DiscordGuildOrDmId_Dm data ->
                     Ui.row
@@ -6407,7 +6466,7 @@ newChannelFormView : Bool -> Id GuildId -> NewChannelForm -> Element FrontendMsg
 newChannelFormView isMobile2 guildId form =
     Ui.column
         [ Ui.Font.color MyUi.font1, Ui.alignTop ]
-        [ channelHeader isMobile2 False (Ui.text "Create new channel")
+        [ channelHeader isMobile2 False VoiceChatNotJoined (Ui.text "Create new channel")
         , Ui.column
             [ Ui.spacing 16, Ui.padding 16 ]
             [ channelNameInput form |> Ui.map (NewChannelFormChanged guildId)

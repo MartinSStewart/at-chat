@@ -42,6 +42,7 @@ module Types exposing
     , ToBackend(..)
     , ToFrontend(..)
     , UserOptionsModel
+    , VoiceChatState(..)
     , WaitingForLoginTokenData
     , messageMenuMobileOffset
     )
@@ -106,6 +107,7 @@ import Url exposing (Url)
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
+import VoiceChat
 
 
 type FrontendModel
@@ -152,7 +154,13 @@ type alias LoadedFrontend =
     , scrollbarWidth : Int
     , userAgent : UserAgent
     , pageHasFocus : Bool
+    , voiceChatState : VoiceChatState
     }
+
+
+type VoiceChatState
+    = VoiceChatNotJoined
+    | VoiceChatJoined { muted : Bool, connectedPeers : List String }
 
 
 type Drag
@@ -314,6 +322,7 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
+    , voiceChatParticipants : SeqDict ClientId (Id UserId)
     }
 
 
@@ -516,6 +525,15 @@ type FrontendMsg
     | PressedImportDiscordGuild
     | DiscordGuildImportFileSelected File
     | GotDiscordGuildImportFileContent String
+    | PressedJoinVoiceChat
+    | PressedLeaveVoiceChat
+    | PressedToggleVoiceChatMute
+    | VoiceChatGotOffer (Result String VoiceChat.SessionDescription)
+    | VoiceChatGotAnswer (Result String VoiceChat.SessionDescription)
+    | VoiceChatGotIceCandidate (Result String VoiceChat.IceCandidate)
+    | VoiceChatPeerConnected String
+    | VoiceChatPeerDisconnected String
+    | VoiceChatError VoiceChat.VoiceChatError
 
 
 type ScrollPosition
@@ -560,6 +578,11 @@ type ToBackend
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
     | ImportDiscordGuildRequest DiscordExport
+    | VoiceChatJoinRequest
+    | VoiceChatLeaveRequest
+    | VoiceChatOfferToBackend ClientId String
+    | VoiceChatAnswerToBackend ClientId String
+    | VoiceChatIceCandidateToBackend ClientId String
 
 
 type BackendMsg
@@ -638,6 +661,12 @@ type ToFrontend
     | ExportDiscordGuildResponse DiscordExport
     | ImportGuildResponse (Result String (Id GuildId))
     | ImportDiscordGuildResponse (Result String ())
+    | VoiceChatJoinResponse { existingParticipants : List ClientId }
+    | VoiceChatNewPeer ClientId
+    | VoiceChatPeerLeft ClientId
+    | VoiceChatOfferToFrontend ClientId String
+    | VoiceChatAnswerToFrontend ClientId String
+    | VoiceChatIceCandidateToFrontend ClientId String
 
 
 type alias LoginData =

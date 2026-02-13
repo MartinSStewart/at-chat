@@ -22,6 +22,8 @@ module Icons exposing
     , link
     , logoutSvg
     , map
+    , microphone
+    , microphoneSlash
     , mobile
     , openEye
     , pencil
@@ -108,6 +110,16 @@ download =
         , Svg.Attributes.width "18"
         ]
         [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" ] [] ]
+
+
+microphone : Ui.Element msg
+microphone =
+    Phosphor.microphone Phosphor.Regular |> icon
+
+
+microphoneSlash : Ui.Element msg
+microphoneSlash =
+    Phosphor.microphoneSlash Phosphor.Regular |> icon
 
 
 icon : Phosphor.IconVariant -> Ui.Element msg

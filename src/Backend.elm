@@ -179,6 +179,7 @@ init =
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
+      , voiceChatParticipants = SeqDict.empty
       }
     , Command.none
     )
@@ -241,6 +242,10 @@ update msg model =
 
         UserDisconnected sessionId clientId ->
             let
+                wasInVoiceChat : Bool
+                wasInVoiceChat =
+                    SeqDict.member clientId model.voiceChatParticipants
+
                 model2 : BackendModel
                 model2 =
                     { model
@@ -255,7 +260,22 @@ update msg model =
                                     )
                                 )
                                 model.connections
+                        , voiceChatParticipants =
+                            SeqDict.remove clientId model.voiceChatParticipants
                     }
+
+                voiceChatNotifyCmd : Command BackendOnly ToFrontend msg
+                voiceChatNotifyCmd =
+                    if wasInVoiceChat then
+                        SeqDict.keys model2.voiceChatParticipants
+                            |> List.map
+                                (\otherClientId ->
+                                    Lamdera.sendToFrontend otherClientId (VoiceChatPeerLeft clientId)
+                                )
+                            |> Command.batch
+
+                    else
+                        Command.none
             in
             case SeqDict.get sessionId model2.sessions of
                 Just session ->
@@ -266,16 +286,19 @@ update msg model =
                                 (UserSession.setCurrentlyViewing Nothing session)
                                 model2.sessions
                       }
-                    , Broadcast.toUser
-                        Nothing
-                        Nothing
-                        session.userId
-                        (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
-                        model2
+                    , Command.batch
+                        [ Broadcast.toUser
+                            Nothing
+                            Nothing
+                            session.userId
+                            (Server_CurrentlyViewing session.sessionIdHash Nothing |> ServerChange)
+                            model2
+                        , voiceChatNotifyCmd
+                        ]
                     )
 
                 Nothing ->
-                    ( model2, Command.none )
+                    ( model2, voiceChatNotifyCmd )
 
         BackendGotTime sessionId clientId toBackend time ->
             updateFromFrontendWithTime time sessionId clientId toBackend model
@@ -3371,6 +3394,91 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
                     )
                 )
+
+        VoiceChatJoinRequest ->
+            asUser
+                model2
+                sessionId
+                (\_ _ ->
+                    let
+                        existingParticipants : List ClientId
+                        existingParticipants =
+                            SeqDict.keys model2.voiceChatParticipants
+
+                        userId : Id UserId
+                        userId =
+                            case SeqDict.get sessionId model2.sessions of
+                                Just session ->
+                                    session.userId
+
+                                Nothing ->
+                                    Id.fromInt -1
+
+                        model3 : BackendModel
+                        model3 =
+                            { model2
+                                | voiceChatParticipants =
+                                    SeqDict.insert clientId userId model2.voiceChatParticipants
+                            }
+
+                        notifyExistingCmd : Command BackendOnly ToFrontend msg
+                        notifyExistingCmd =
+                            existingParticipants
+                                |> List.map
+                                    (\otherClientId ->
+                                        Lamdera.sendToFrontend otherClientId (VoiceChatNewPeer clientId)
+                                    )
+                                |> Command.batch
+                    in
+                    ( model3
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId
+                            (VoiceChatJoinResponse { existingParticipants = existingParticipants })
+                        , notifyExistingCmd
+                        ]
+                    )
+                )
+
+        VoiceChatLeaveRequest ->
+            let
+                wasInVoiceChat : Bool
+                wasInVoiceChat =
+                    SeqDict.member clientId model2.voiceChatParticipants
+
+                model3 : BackendModel
+                model3 =
+                    { model2
+                        | voiceChatParticipants =
+                            SeqDict.remove clientId model2.voiceChatParticipants
+                    }
+            in
+            ( model3
+            , if wasInVoiceChat then
+                SeqDict.keys model3.voiceChatParticipants
+                    |> List.map
+                        (\otherClientId ->
+                            Lamdera.sendToFrontend otherClientId (VoiceChatPeerLeft clientId)
+                        )
+                    |> Command.batch
+
+              else
+                Command.none
+            )
+
+        VoiceChatOfferToBackend targetClientId sdp ->
+            ( model2
+            , Lamdera.sendToFrontend targetClientId (VoiceChatOfferToFrontend clientId sdp)
+            )
+
+        VoiceChatAnswerToBackend targetClientId sdp ->
+            ( model2
+            , Lamdera.sendToFrontend targetClientId (VoiceChatAnswerToFrontend clientId sdp)
+            )
+
+        VoiceChatIceCandidateToBackend targetClientId candidate ->
+            ( model2
+            , Lamdera.sendToFrontend targetClientId (VoiceChatIceCandidateToFrontend clientId candidate)
+            )
 
 
 threadRouteToDiscordMessageId :

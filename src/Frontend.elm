@@ -70,7 +70,7 @@ import TextEditor
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel, VoiceChatState(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -82,6 +82,7 @@ import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import Vector2d
 import VisibleMessages exposing (VisibleMessages)
+import VoiceChat
 
 
 app :
@@ -126,6 +127,14 @@ subscriptions model =
         , Ports.checkNotificationPermissionResponse CheckedNotificationPermission
         , Ports.checkPwaStatusResponse CheckedPwaStatus
         , AiChat.subscriptions |> Subscription.map AiChatMsg
+        , VoiceChat.subscriptions
+            { onOffer = VoiceChatGotOffer
+            , onAnswer = VoiceChatGotAnswer
+            , onIceCandidate = VoiceChatGotIceCandidate
+            , onConnected = VoiceChatPeerConnected
+            , onDisconnected = VoiceChatPeerDisconnected
+            , onError = VoiceChatError
+            }
         , Ports.scrollbarWidthSub GotScrollbarWidth
         , Ports.pageHasFocus PageHasFocusChanged
         , Ports.userAgentSub GotUserAgent
@@ -302,6 +311,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
+            , voiceChatState = VoiceChatNotJoined
             }
 
         ( model2, cmdA ) =
@@ -1332,6 +1342,33 @@ isPressMsg msg =
             False
 
         GotDiscordGuildImportFileContent _ ->
+            False
+
+        PressedJoinVoiceChat ->
+            True
+
+        PressedLeaveVoiceChat ->
+            True
+
+        PressedToggleVoiceChatMute ->
+            True
+
+        VoiceChatGotOffer _ ->
+            False
+
+        VoiceChatGotAnswer _ ->
+            False
+
+        VoiceChatGotIceCandidate _ ->
+            False
+
+        VoiceChatPeerConnected _ ->
+            False
+
+        VoiceChatPeerDisconnected _ ->
+            False
+
+        VoiceChatError _ ->
             False
 
 
@@ -3919,6 +3956,126 @@ updateLoaded msg model =
                 Err error ->
                     -- Could show an error message to the user
                     ( model, Command.none )
+
+        PressedJoinVoiceChat ->
+            ( { model | voiceChatState = VoiceChatJoined { muted = False, connectedPeers = [] } }
+            , Lamdera.sendToBackend VoiceChatJoinRequest
+            )
+
+        PressedLeaveVoiceChat ->
+            let
+                peersToDisconnect : List String
+                peersToDisconnect =
+                    case model.voiceChatState of
+                        VoiceChatJoined { connectedPeers } ->
+                            connectedPeers
+
+                        VoiceChatNotJoined ->
+                            []
+            in
+            ( { model | voiceChatState = VoiceChatNotJoined }
+            , Command.batch
+                (Lamdera.sendToBackend VoiceChatLeaveRequest
+                    :: List.map VoiceChat.leaveVoiceChat peersToDisconnect
+                )
+            )
+
+        PressedToggleVoiceChatMute ->
+            case model.voiceChatState of
+                VoiceChatJoined state ->
+                    let
+                        newMuted =
+                            not state.muted
+                    in
+                    ( { model | voiceChatState = VoiceChatJoined { state | muted = newMuted } }
+                    , VoiceChat.setMuted newMuted
+                    )
+
+                VoiceChatNotJoined ->
+                    ( model, Command.none )
+
+        VoiceChatGotOffer result ->
+            case result of
+                Ok sessionDesc ->
+                    ( model
+                    , Lamdera.sendToBackend
+                        (VoiceChatOfferToBackend
+                            (Lamdera.clientIdFromString sessionDesc.peerId)
+                            sessionDesc.sdp
+                        )
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        VoiceChatGotAnswer result ->
+            case result of
+                Ok sessionDesc ->
+                    ( model
+                    , Lamdera.sendToBackend
+                        (VoiceChatAnswerToBackend
+                            (Lamdera.clientIdFromString sessionDesc.peerId)
+                            sessionDesc.sdp
+                        )
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        VoiceChatGotIceCandidate result ->
+            case result of
+                Ok iceCandidate ->
+                    ( model
+                    , Lamdera.sendToBackend
+                        (VoiceChatIceCandidateToBackend
+                            (Lamdera.clientIdFromString iceCandidate.peerId)
+                            iceCandidate.candidate
+                        )
+                    )
+
+                Err _ ->
+                    ( model, Command.none )
+
+        VoiceChatPeerConnected peerId ->
+            case model.voiceChatState of
+                VoiceChatJoined state ->
+                    ( { model
+                        | voiceChatState =
+                            VoiceChatJoined
+                                { state
+                                    | connectedPeers =
+                                        if List.member peerId state.connectedPeers then
+                                            state.connectedPeers
+
+                                        else
+                                            peerId :: state.connectedPeers
+                                }
+                      }
+                    , Command.none
+                    )
+
+                VoiceChatNotJoined ->
+                    ( model, Command.none )
+
+        VoiceChatPeerDisconnected peerId ->
+            case model.voiceChatState of
+                VoiceChatJoined state ->
+                    ( { model
+                        | voiceChatState =
+                            VoiceChatJoined
+                                { state
+                                    | connectedPeers =
+                                        List.filter (\p -> p /= peerId) state.connectedPeers
+                                }
+                      }
+                    , Command.none
+                    )
+
+                VoiceChatNotJoined ->
+                    ( model, Command.none )
+
+        VoiceChatError _ ->
+            ( model, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -6972,6 +7129,67 @@ updateLoadedFromBackend msg model =
                 Err error ->
                     -- Could show error message to user
                     ( model, Command.none )
+
+        VoiceChatJoinResponse { existingParticipants } ->
+            ( model
+            , existingParticipants
+                |> List.map
+                    (\peerClientId ->
+                        VoiceChat.startVoiceChat (Lamdera.clientIdToString peerClientId)
+                    )
+                |> Command.batch
+            )
+
+        VoiceChatNewPeer peerClientId ->
+            ( model
+            , Command.none
+            )
+
+        VoiceChatPeerLeft peerClientId ->
+            let
+                peerId : String
+                peerId =
+                    Lamdera.clientIdToString peerClientId
+            in
+            case model.voiceChatState of
+                VoiceChatJoined state ->
+                    ( { model
+                        | voiceChatState =
+                            VoiceChatJoined
+                                { state
+                                    | connectedPeers =
+                                        List.filter (\p -> p /= peerId) state.connectedPeers
+                                }
+                      }
+                    , VoiceChat.leaveVoiceChat peerId
+                    )
+
+                VoiceChatNotJoined ->
+                    ( model, Command.none )
+
+        VoiceChatOfferToFrontend senderClientId sdp ->
+            ( model
+            , VoiceChat.joinVoiceChat
+                { peerId = Lamdera.clientIdToString senderClientId
+                , sdp = sdp
+                }
+            )
+
+        VoiceChatAnswerToFrontend senderClientId sdp ->
+            ( model
+            , VoiceChat.receiveAnswer
+                { peerId = Lamdera.clientIdToString senderClientId
+                , sdp = sdp
+                }
+            )
+
+        VoiceChatIceCandidateToFrontend senderClientId candidate ->
+            ( model
+            , VoiceChat.receiveIceCandidate
+                { peerId = Lamdera.clientIdToString senderClientId
+                , candidate = candidate
+                }
+            )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
