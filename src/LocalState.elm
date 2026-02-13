@@ -24,6 +24,7 @@ module LocalState exposing
     , addReactionEmoji
     , addReactionEmojiFrontend
     , addReactionEmojiFrontendHelper
+    , addReactionEmojiHelper
     , allDiscordUsers2
     , allUsers
     , allUsers2
@@ -73,6 +74,7 @@ module LocalState exposing
     , removeReactionEmoji
     , removeReactionEmojiFrontend
     , removeReactionEmojiFrontendHelper
+    , removeReactionEmojiHelper
     , updateChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
@@ -1180,25 +1182,21 @@ addReactionEmoji emoji userId threadRoute channel =
         ViewThreadWithMessage threadId messageId ->
             { channel
                 | threads =
-                    SeqDict.updateIfExists
-                        threadId
-                        (\thread ->
-                            { thread
-                                | messages =
-                                    updateArray
-                                        messageId
-                                        (Message.addReactionEmoji userId emoji)
-                                        thread.messages
-                            }
-                        )
-                        channel.threads
+                    SeqDict.updateIfExists threadId (addReactionEmojiHelper emoji userId messageId) channel.threads
             }
 
         NoThreadWithMessage messageId ->
-            { channel
-                | messages =
-                    updateArray messageId (Message.addReactionEmoji userId emoji) channel.messages
-            }
+            addReactionEmojiHelper emoji userId messageId channel
+
+
+addReactionEmojiHelper :
+    Emoji
+    -> userId
+    -> Id messageId
+    -> { a | messages : Array (Message messageId userId) }
+    -> { a | messages : Array (Message messageId userId) }
+addReactionEmojiHelper emoji userId messageId channel =
+    { channel | messages = updateArray messageId (Message.addReactionEmoji userId emoji) channel.messages }
 
 
 addReactionEmojiFrontend :
@@ -1471,24 +1469,27 @@ removeReactionEmoji :
         }
 removeReactionEmoji emoji userId threadRoute channel =
     case threadRoute of
-        ViewThreadWithMessage threadMessageIndex messageIndex ->
+        ViewThreadWithMessage threadMessageIndex messageId ->
             { channel
                 | threads =
                     SeqDict.updateIfExists
                         threadMessageIndex
-                        (\thread ->
-                            { thread
-                                | messages =
-                                    updateArray messageIndex (Message.removeReactionEmoji userId emoji) thread.messages
-                            }
-                        )
+                        (removeReactionEmojiHelper emoji userId messageId)
                         channel.threads
             }
 
-        NoThreadWithMessage messageIndex ->
-            { channel
-                | messages = updateArray messageIndex (Message.removeReactionEmoji userId emoji) channel.messages
-            }
+        NoThreadWithMessage messageId ->
+            removeReactionEmojiHelper emoji userId messageId channel
+
+
+removeReactionEmojiHelper :
+    Emoji
+    -> userId
+    -> Id messageId
+    -> { a | messages : Array (Message messageId userId) }
+    -> { a | messages : Array (Message messageId userId) }
+removeReactionEmojiHelper emoji userId messageId channel =
+    { channel | messages = updateArray messageId (Message.removeReactionEmoji userId emoji) channel.messages }
 
 
 removeReactionEmojiFrontend :

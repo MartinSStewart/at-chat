@@ -115,96 +115,50 @@ addOrRemoveDiscordReaction isAdding reaction model =
                     ( model, Command.none )
 
         Missing ->
-            Debug.todo ""
+            let
+                dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                dmChannelId =
+                    Discord.Id.toUInt64 reaction.channelId |> Discord.Id.fromUInt64
+            in
+            case SeqDict.get dmChannelId model.discordDmChannels of
+                Just channel ->
+                    case OneToOne.second reaction.messageId channel.linkedMessageIds of
+                        Just messageId ->
+                            let
+                                emoji : Emoji
+                                emoji =
+                                    Emoji.fromDiscord reaction.emoji
+                            in
+                            ( { model
+                                | discordDmChannels =
+                                    SeqDict.updateIfExists
+                                        dmChannelId
+                                        (if isAdding then
+                                            LocalState.addReactionEmojiHelper emoji reaction.userId messageId
 
+                                         else
+                                            LocalState.removeReactionEmojiHelper emoji reaction.userId messageId
+                                        )
+                                        model.discordDmChannels
+                              }
+                            , Broadcast.toDiscordDmChannel
+                                dmChannelId
+                                ((if isAdding then
+                                    Server_DiscordAddReactionDmEmoji reaction.userId dmChannelId messageId emoji
 
+                                  else
+                                    Server_DiscordRemoveReactionDmEmoji reaction.userId dmChannelId messageId emoji
+                                 )
+                                    |> ServerChange
+                                )
+                                model
+                            )
 
---case ( reaction.guildId, SeqDict.get reaction.userId model.linkedDiscordUsers ) of
---    ( Included discordGuildId, Just userId ) ->
---        case discordGuildIdToGuild discordGuildId model of
---            Just ( guildId, guild ) ->
---                case OneToOne.second (DiscordChannelId reaction.channelId) guild.linkedChannelIds of
---                    Just channelId ->
---                        case SeqDict.get channelId guild.channels of
---                            Just channel ->
---                                case OneToOne.second (DiscordMessageId reaction.messageId) channel.linkedMessageIds of
---                                    Just messageId ->
---                                        (if isAdding then
---                                            addReactionEmoji
---
---                                         else
---                                            removeReactionEmoji
---                                        )
---                                            guildId
---                                            guild
---                                            channelId
---                                            (NoThreadWithMessage messageId)
---                                            userId
---                                            (Emoji.fromDiscord reaction.emoji)
---                                            model
---                                            Command.none
---
---                                    Nothing ->
---                                        ( model, Command.none )
---
---                            Nothing ->
---                                ( model, Command.none )
---
---                    -- If we don't find the channel ID among the guild channels then the Discord channel ID is actually a thread channel ID
---                    Nothing ->
---                        let
---                            maybeThread : Maybe ( Id ChannelId, BackendChannel, Id ChannelMessageId )
---                            maybeThread =
---                                List.Extra.findMap
---                                    (\( channelId, channel ) ->
---                                        case
---                                            OneToOne.second
---                                                (DiscordChannelId reaction.channelId)
---                                                channel.linkedThreadIds
---                                        of
---                                            Just threadId ->
---                                                Just ( channelId, channel, threadId )
---
---                                            Nothing ->
---                                                Nothing
---                                    )
---                                    (SeqDict.toList guild.channels)
---                        in
---                        case maybeThread of
---                            Just ( channelId, channel, threadId ) ->
---                                case SeqDict.get threadId channel.threads of
---                                    Just thread ->
---                                        case OneToOne.second (DiscordMessageId reaction.messageId) thread.linkedMessageIds of
---                                            Just messageId ->
---                                                (if isAdding then
---                                                    addReactionEmoji
---
---                                                 else
---                                                    removeReactionEmoji
---                                                )
---                                                    guildId
---                                                    guild
---                                                    channelId
---                                                    (ViewThreadWithMessage threadId messageId)
---                                                    userId
---                                                    (Emoji.fromDiscord reaction.emoji)
---                                                    model
---                                                    Command.none
---
---                                            Nothing ->
---                                                ( model, Command.none )
---
---                                    Nothing ->
---                                        ( model, Command.none )
---
---                            Nothing ->
---                                ( model, Command.none )
---
---            Nothing ->
---                ( model, Command.none )
---
---    _ ->
---        ( model, Command.none )
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 handleDiscordRemoveAllReactions : Discord.ReactionRemoveAll -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -694,135 +648,6 @@ messagesAndLinks messages =
                 , List.map Tuple.second list |> OneToOne.fromList
                 )
            )
-
-
-
---let
---    isTextChannel : Bool
---    isTextChannel =
---        case discordChannel.type_ of
---            Discord.GuildAnnouncement ->
---                True
---
---            Discord.GuildText ->
---                True
---
---            Discord.DirectMessage ->
---                True
---
---            Discord.GuildVoice ->
---                False
---
---            Discord.GroupDirectMessage ->
---                True
---
---            Discord.GuildCategory ->
---                False
---
---            Discord.AnnouncementThread ->
---                True
---
---            Discord.PublicThread ->
---                True
---
---            Discord.PrivateThread ->
---                True
---
---            Discord.GuildStageVoice ->
---                False
---
---            Discord.GuildDirectory ->
---                False
---
---            Discord.GuildForum ->
---                False
---
---            Discord.GuildMedia ->
---                False
---in
---if not (List.any (\a -> a.deny.viewChannel) discordChannel.permissionOverwrites) && isTextChannel then
---    let
---        channel : BackendChannel
---        channel =
---            { createdAt = time
---            , createdBy = ownerId
---            , name =
---                (case discordChannel.name of
---                    Included name ->
---                        name
---
---                    Missing ->
---                        "Channel " ++ String.fromInt index
---                )
---                    |> ChannelName.fromStringLossy
---            , messages = Array.empty
---            , status = ChannelActive
---            , lastTypedAt = SeqDict.empty
---            , threads = SeqDict.empty
---            }
---                |> addDiscordMessages NoThread messages model
---    in
---    ( Id.fromInt index
---    , List.foldl
---        (\( thread, threadMessages ) channel2 ->
---            case
---                OneToOne.second
---                    (Discord.Id.toUInt64 thread.id |> Discord.Id.fromUInt64 |> DiscordMessageId)
---                    channel2.linkedMessageIds
---            of
---                Just messageId ->
---                    addDiscordMessages (ViewThread messageId) threadMessages model channel2
---
---                Nothing ->
---                    channel2
---        )
---        channel
---        (SeqDict.get discordChannel.id threads |> Maybe.withDefault [])
---    )
---        |> Just
---
---else
---    Nothing
-
-
-addDiscordMessages : ThreadRoute -> List Discord.Message -> BackendModel -> DiscordBackendChannel -> DiscordBackendChannel
-addDiscordMessages threadRoute messages model channel =
-    Debug.todo ""
-
-
-
---List.foldr
---    (\message channel2 ->
---        case ( message.type_, SeqDict.get message.author.id model.linkedDiscordUsers ) of
---            ( Discord.ThreadCreated, Nothing ) ->
---                channel2
---
---            ( Discord.ThreadStarterMessage, Nothing ) ->
---                channel2
---
---            ( _, Just userId ) ->
---                handleDiscordCreateGuildMessageHelper
---                    message.id
---                    message.channelId
---                    (case threadRoute of
---                        ViewThread threadId ->
---                            ViewThreadWithMaybeMessage
---                                threadId
---                                (discordReplyTo message channel2 |> Maybe.map Id.changeType)
---
---                        NoThread ->
---                            NoThreadWithMaybeMessage (discordReplyTo message channel2)
---                    )
---                    userId
---                    (RichText.fromDiscord model.linkedDiscordUsers message.content)
---                    message
---                    channel2
---
---            _ ->
---                channel2
---    )
---    channel
---    messages
 
 
 addDiscordDms :
