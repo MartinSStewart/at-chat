@@ -21,6 +21,7 @@ import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
 import Effect.Websocket as Websocket
+import Emoji exposing (Emoji)
 import Env
 import FileStatus
 import GuildName
@@ -55,7 +56,66 @@ addOrRemoveDiscordReaction :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 addOrRemoveDiscordReaction isAdding reaction model =
-    Debug.todo ""
+    case reaction.guildId of
+        Included guildId ->
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    case discordChannelIdToChannelId reaction.channelId reaction.messageId guild of
+                        Just ( channelId, channel, threadRoute ) ->
+                            let
+                                emoji : Emoji
+                                emoji =
+                                    Emoji.fromDiscord reaction.emoji
+                            in
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    (if isAdding then
+                                                        LocalState.addReactionEmoji emoji reaction.userId threadRoute channel
+
+                                                     else
+                                                        LocalState.removeReactionEmoji emoji reaction.userId threadRoute channel
+                                                    )
+                                                    guild.channels
+                                        }
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                ((if isAdding then
+                                    Server_DiscordAddReactionGuildEmoji
+                                        reaction.userId
+                                        guildId
+                                        channelId
+                                        threadRoute
+                                        emoji
+
+                                  else
+                                    Server_DiscordRemoveReactionGuildEmoji
+                                        reaction.userId
+                                        guildId
+                                        channelId
+                                        threadRoute
+                                        emoji
+                                 )
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Missing ->
+            Debug.todo ""
 
 
 
@@ -209,6 +269,45 @@ handleDiscordDmEditMessage edit model =
 
         Nothing ->
             ( model, Command.none )
+
+
+discordChannelIdToChannelId :
+    Discord.Id.Id Discord.Id.ChannelId
+    -> Discord.Id.Id Discord.Id.MessageId
+    -> DiscordBackendGuild
+    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRouteWithMessage )
+discordChannelIdToChannelId channelId messageId guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            case OneToOne.second messageId channel.linkedMessageIds of
+                Just messageId2 ->
+                    Just ( channelId, channel, NoThreadWithMessage messageId2 )
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            List.Extra.findMap
+                (\( channelId2, channel ) ->
+                    case
+                        List.Extra.findMap
+                            (\( threadId, thread ) ->
+                                case OneToOne.second messageId thread.linkedMessageIds of
+                                    Just messageIndex ->
+                                        Just ( threadId, messageIndex )
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            (SeqDict.toList channel.threads)
+                    of
+                        Just ( threadId, messageIndex ) ->
+                            Just ( channelId2, channel, ViewThreadWithMessage threadId messageIndex )
+
+                        Nothing ->
+                            Nothing
+                )
+                (SeqDict.toList guild.channels)
 
 
 handleDiscordGuildEditMessage :

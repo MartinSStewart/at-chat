@@ -60,7 +60,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -3160,23 +3160,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 ]
                             )
                         )
-
-                Local_DiscordChange currentUserId discordChange ->
-                    case discordChange of
-                        Local_Discord_NewChannel posix id channelName ->
-                            Debug.todo ""
-
-                        Local_Discord_EditChannel guildId channelId channelName ->
-                            Debug.todo ""
-
-                        Local_Discord_DeleteChannel guildId channelId ->
-                            Debug.todo ""
-
-                        Local_Discord_SetName personName ->
-                            Debug.todo ""
-
-                        Local_Discord_SetGuildNotificationLevel id notificationLevel ->
-                            Debug.todo ""
 
         TwoFactorToBackend toBackend2 ->
             asUser

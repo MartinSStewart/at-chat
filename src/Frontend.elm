@@ -70,7 +70,7 @@ import TextEditor
 import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalDiscordChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -5399,9 +5399,6 @@ changeUpdate localMsg local =
                             TextEditor.localChangeUpdate local.localUser.session.userId localChange2 local.textEditor
                     }
 
-                Local_DiscordChange currentDiscordUserId localDiscordChange ->
-                    Debug.todo ""
-
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -5832,6 +5829,48 @@ changeUpdate localMsg local =
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
                     removeReactionEmoji userId guildOrDmId messageIndex emoji local
 
+                Server_DiscordAddReactionGuildEmoji userId guildId channelId threadRoute emoji ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (LocalState.addReactionEmojiFrontend emoji userId threadRoute)
+                                    channelId
+                                )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordAddReactionDmEmoji userId channelId messageId emoji ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.addReactionEmojiFrontendHelper emoji userId messageId)
+                                local.discordDmChannels
+                    }
+
+                Server_DiscordRemoveReactionGuildEmoji userId guildId channelId threadRoute emoji ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (LocalState.updateChannel
+                                    (LocalState.removeReactionEmojiFrontend emoji userId threadRoute)
+                                    channelId
+                                )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordRemoveReactionDmEmoji userId channelId messageId emoji ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.updateIfExists
+                                channelId
+                                (LocalState.removeReactionEmojiFrontendHelper emoji userId messageId)
+                                local.discordDmChannels
+                    }
+
                 Server_SendEditMessage time userId guildOrDmId messageIndex newContent attachedFiles ->
                     editMessage time userId guildOrDmId newContent attachedFiles messageIndex local
 
@@ -6025,9 +6064,6 @@ changeUpdate localMsg local =
                             local.localUser
                     in
                     local
-
-                Server_DiscordChange currentDiscordUserId serverDiscordChange ->
-                    Debug.todo ""
 
 
 memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmId, ThreadRoute ) -> LocalState -> LocalState
@@ -7276,28 +7312,6 @@ pendingChangesText localChange =
 
         Local_TextEditor _ ->
             "Text editor change"
-
-        Local_DiscordChange _ localDiscordChange ->
-            case localDiscordChange of
-                Local_Discord_NewChannel posix id channelName ->
-                    "Created new channel"
-
-                Local_Discord_EditChannel id _ channelName ->
-                    "Edited channel"
-
-                Local_Discord_DeleteChannel id _ ->
-                    "Deleted channel"
-
-                Local_Discord_SetName personName ->
-                    "Set display name"
-
-                Local_Discord_SetGuildNotificationLevel id notificationLevel ->
-                    case notificationLevel of
-                        NotifyOnEveryMessage ->
-                            "Enabled notifications for all messages"
-
-                        NotifyOnMention ->
-                            "Disabled notifications for all messages"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

@@ -1163,10 +1163,18 @@ allDiscordUsers2 localUser =
 
 addReactionEmoji :
     Emoji
-    -> Id UserId
+    -> userId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
 addReactionEmoji emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadId messageId ->
@@ -1449,10 +1457,18 @@ editMessageFrontendHelperNoThread time editedBy newContent attachedFiles message
 
 removeReactionEmoji :
     Emoji
-    -> Id UserId
+    -> userId
     -> ThreadRouteWithMessage
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
-    -> { b | messages : Array (Message ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) BackendThread }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
+    ->
+        { b
+            | messages : Array (Message ChannelMessageId userId)
+            , threads : SeqDict (Id ChannelMessageId) { c | messages : Array (Message ThreadMessageId userId) }
+        }
 removeReactionEmoji emoji userId threadRoute channel =
     case threadRoute of
         ViewThreadWithMessage threadMessageIndex messageIndex ->
@@ -1463,10 +1479,7 @@ removeReactionEmoji emoji userId threadRoute channel =
                         (\thread ->
                             { thread
                                 | messages =
-                                    updateArray
-                                        messageIndex
-                                        (Message.removeReactionEmoji userId emoji)
-                                        thread.messages
+                                    updateArray messageIndex (Message.removeReactionEmoji userId emoji) thread.messages
                             }
                         )
                         channel.threads
@@ -1474,10 +1487,7 @@ removeReactionEmoji emoji userId threadRoute channel =
 
         NoThreadWithMessage messageIndex ->
             { channel
-                | messages =
-                    updateArray messageIndex
-                        (Message.removeReactionEmoji userId emoji)
-                        channel.messages
+                | messages = updateArray messageIndex (Message.removeReactionEmoji userId emoji) channel.messages
             }
 
 

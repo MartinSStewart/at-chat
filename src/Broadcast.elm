@@ -102,11 +102,9 @@ guildConnections guildId model =
                 (\member ->
                     case SeqDict.get member model.discordUsers of
                         Just (FullData discordUser) ->
-                            userConnections discordUser.linkedTo model
-                                |> List.concatMap
-                                    (\( _, clientIds ) ->
-                                        List.Nonempty.toList clientIds
-                                    )
+                            List.concatMap
+                                (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                                (userConnections discordUser.linkedTo model)
 
                         _ ->
                             []
