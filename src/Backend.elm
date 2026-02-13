@@ -1885,7 +1885,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
                                         , Broadcast.toGuild
                                             guildId
-                                            (Server_AddReactionEmoji userId guildOrDmId threadRoute emoji |> ServerChange)
+                                            (Server_AddReactionEmoji userId (GuildOrDmId_Guild guildId channelId) threadRoute emoji |> ServerChange)
                                             model2
                                         ]
                                     )
@@ -1916,7 +1916,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_AddReactionEmoji
                                                     userId
-                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                    (GuildOrDmId_Dm otherUserId2)
                                                     threadRoute
                                                     emoji
                                             )
@@ -1990,8 +1990,54 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\userSession discordUser user channel ->
-                                    Debug.todo ""
+                                (\userSession userData user channel ->
+                                    case threadRoute of
+                                        NoThreadWithMessage messageId ->
+                                            ( { model2
+                                                | discordDmChannels =
+                                                    SeqDict.updateIfExists
+                                                        data.channelId
+                                                        (LocalState.addReactionEmojiHelper emoji data.currentUserId messageId)
+                                                        model2.discordDmChannels
+                                              }
+                                            , Command.batch
+                                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordDmChannelExcludingOne
+                                                    clientId
+                                                    data.channelId
+                                                    (Server_DiscordAddReactionDmEmoji
+                                                        data.currentUserId
+                                                        data.channelId
+                                                        messageId
+                                                        emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                , case OneToOne.first messageId channel.linkedMessageIds of
+                                                    Just discordMessageId ->
+                                                        Discord.createReactionPayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
+                                                            , messageId = discordMessageId
+                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            }
+                                                            |> DiscordSync.http
+                                                            |> Task.attempt
+                                                                (DiscordAddedReactionToDmMessage
+                                                                    time
+                                                                    data.channelId
+                                                                    messageId
+                                                                    discordMessageId
+                                                                    emoji
+                                                                )
+
+                                                    Nothing ->
+                                                        Command.none
+                                                ]
+                                            )
+
+                                        ViewThreadWithMessage _ _ ->
+                                            ( model2, Command.none )
                                 )
 
                 Local_RemoveReactionEmoji guildOrDmId threadRoute emoji ->
@@ -2020,7 +2066,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_RemoveReactionEmoji userId guildOrDmId threadRoute emoji
+                                            (Server_RemoveReactionEmoji
+                                                userId
+                                                (GuildOrDmId_Guild guildId channelId)
+                                                threadRoute
+                                                emoji
                                                 |> ServerChange
                                             )
                                             model2
@@ -2054,7 +2104,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (\otherUserId2 ->
                                                 Server_RemoveReactionEmoji
                                                     userId
-                                                    (GuildOrDmId (GuildOrDmId_Dm otherUserId2))
+                                                    (GuildOrDmId_Dm otherUserId2)
                                                     threadRoute
                                                     emoji
                                             )
@@ -2063,8 +2113,125 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId _ ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
+                            asDiscordGuildMember
+                                model2
+                                sessionId
+                                guildId
+                                currentUserId
+                                (\userSession userData user guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            ( { model2
+                                                | discordGuilds =
+                                                    SeqDict.insert
+                                                        guildId
+                                                        (LocalState.updateChannel
+                                                            (LocalState.removeReactionEmoji emoji currentUserId threadRoute)
+                                                            channelId
+                                                            guild
+                                                        )
+                                                        model2.discordGuilds
+                                              }
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                                , Broadcast.toDiscordGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DiscordRemoveReactionGuildEmoji
+                                                        currentUserId
+                                                        guildId
+                                                        channelId
+                                                        threadRoute
+                                                        emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                , case threadRouteToDiscordMessageId channelId channel threadRoute of
+                                                    Just ( discordChannelId, discordMessageId ) ->
+                                                        Discord.deleteOwnReactionPayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            }
+                                                            |> DiscordSync.http
+                                                            |> Task.attempt
+                                                                (DiscordRemovedReactionToGuildMessage
+                                                                    time
+                                                                    guildId
+                                                                    channelId
+                                                                    threadRoute
+                                                                    discordMessageId
+                                                                    emoji
+                                                                )
+
+                                                    Nothing ->
+                                                        Command.none
+                                                ]
+                                            )
+
+                                        Nothing ->
+                                            ( model
+                                            , LocalChangeResponse changeId Local_Invalid
+                                                |> Lamdera.sendToFrontend clientId
+                                            )
+                                )
+
+                        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                            asDiscordDmUser
+                                model2
+                                sessionId
+                                data
+                                (\userSession userData user channel ->
+                                    case threadRoute of
+                                        NoThreadWithMessage messageId ->
+                                            ( { model2
+                                                | discordDmChannels =
+                                                    SeqDict.updateIfExists
+                                                        data.channelId
+                                                        (LocalState.removeReactionEmojiHelper emoji data.currentUserId messageId)
+                                                        model2.discordDmChannels
+                                              }
+                                            , Command.batch
+                                                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                                                , Broadcast.toDiscordDmChannelExcludingOne
+                                                    clientId
+                                                    data.channelId
+                                                    (Server_DiscordRemoveReactionDmEmoji
+                                                        data.currentUserId
+                                                        data.channelId
+                                                        messageId
+                                                        emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                , case OneToOne.first messageId channel.linkedMessageIds of
+                                                    Just discordMessageId ->
+                                                        Discord.deleteOwnReactionPayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
+                                                            , messageId = discordMessageId
+                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            }
+                                                            |> DiscordSync.http
+                                                            |> Task.attempt
+                                                                (DiscordRemovedReactionToDmMessage
+                                                                    time
+                                                                    data.channelId
+                                                                    messageId
+                                                                    discordMessageId
+                                                                    emoji
+                                                                )
+
+                                                    Nothing ->
+                                                        Command.none
+                                                ]
+                                            )
+
+                                        ViewThreadWithMessage _ _ ->
+                                            ( model2, Command.none )
+                                )
 
                 Local_SendEditMessage _ guildOrDmId threadRoute newContent attachedFiles ->
                     let

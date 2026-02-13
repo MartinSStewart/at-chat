@@ -473,8 +473,11 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
                     |> Just
-            , case threadRoute of
-                NoThreadWithMessage messageId ->
+            , case ( threadRoute, guildOrDmId ) of
+                ( _, DiscordGuildOrDmId _ ) ->
+                    Nothing
+
+                ( NoThreadWithMessage messageId, _ ) ->
                     button
                         isMobile
                         (Dom.id "messageMenu_openThread")
@@ -483,7 +486,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         (MessageMenu_PressedOpenThread messageId)
                         |> Just
 
-                ViewThreadWithMessage _ _ ->
+                ( ViewThreadWithMessage _ _, _ ) ->
                     Nothing
             , button
                 isMobile

@@ -5824,10 +5824,10 @@ changeUpdate localMsg local =
                     memberTyping time userId guildOrDmId local
 
                 Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
-                    addReactionEmoji userId guildOrDmId messageIndex emoji local
+                    addReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 
                 Server_RemoveReactionEmoji userId guildOrDmId messageIndex emoji ->
-                    removeReactionEmoji userId guildOrDmId messageIndex emoji local
+                    removeReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
 
                 Server_DiscordAddReactionGuildEmoji userId guildId channelId threadRoute emoji ->
                     { local

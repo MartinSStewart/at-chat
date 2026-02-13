@@ -687,8 +687,8 @@ type ServerChange
             }
         )
     | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmId, ThreadRoute )
-    | Server_AddReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
-    | Server_RemoveReactionEmoji (Id UserId) AnyGuildOrDmId ThreadRouteWithMessage Emoji
+    | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
+    | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage Emoji
     | Server_DiscordAddReactionDmEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) Emoji
     | Server_DiscordRemoveReactionGuildEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage Emoji
