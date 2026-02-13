@@ -268,16 +268,48 @@ logContent log =
                 ]
 
         FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
-            Debug.todo ""
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Adding Discord guild reaction failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
 
         FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
-            Debug.todo ""
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Adding Discord DM reaction failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
 
         FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
-            Debug.todo ""
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord guild reaction failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
 
         FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
-            Debug.todo ""
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord DM reaction failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
 
 
 type alias TagStyle =
