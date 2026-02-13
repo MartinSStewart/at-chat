@@ -1935,19 +1935,14 @@ updateLoaded msg model =
                         Just text ->
                             let
                                 ( pingUser, text2, cmd ) =
-                                    case guildOrDmId of
-                                        GuildOrDmId guildOrDmId2 ->
-                                            MessageInput.pressedPingUser
-                                                SetFocus
-                                                guildOrDmId2
-                                                Pages.Guild.channelTextInputId
-                                                index
-                                                loggedIn.pingUser
-                                                (Local.model loggedIn.localState)
-                                                text
-
-                                        DiscordGuildOrDmId _ ->
-                                            Debug.todo ""
+                                    MessageInput.pressedPingUser
+                                        SetFocus
+                                        guildOrDmId
+                                        Pages.Guild.channelTextInputId
+                                        index
+                                        loggedIn.pingUser
+                                        (Local.model loggedIn.localState)
+                                        text
                             in
                             ( { loggedIn
                                 | pingUser = pingUser
@@ -1972,16 +1967,11 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | pingUser =
-                            case guildOrDmId of
-                                GuildOrDmId guildOrDmId2 ->
-                                    MessageInput.pressedArrowInDropdown
-                                        guildOrDmId2
-                                        index
-                                        loggedIn.pingUser
-                                        (Local.model loggedIn.localState)
-
-                                DiscordGuildOrDmId _ ->
-                                    Debug.todo ""
+                            MessageInput.pressedArrowInDropdown
+                                guildOrDmId
+                                index
+                                loggedIn.pingUser
+                                (Local.model loggedIn.localState)
                       }
                     , Command.none
                     )
@@ -2319,16 +2309,11 @@ updateLoaded msg model =
                 (\loggedIn ->
                     ( { loggedIn
                         | pingUser =
-                            case guildOrDmId of
-                                GuildOrDmId guildOrDmId2 ->
-                                    MessageInput.pressedArrowInDropdown
-                                        guildOrDmId2
-                                        index
-                                        loggedIn.pingUser
-                                        (Local.model loggedIn.localState)
-
-                                DiscordGuildOrDmId guildOrDmId2 ->
-                                    Debug.todo ""
+                            MessageInput.pressedArrowInDropdown
+                                guildOrDmId
+                                index
+                                loggedIn.pingUser
+                                (Local.model loggedIn.localState)
                       }
                     , Command.none
                     )
@@ -2344,19 +2329,14 @@ updateLoaded msg model =
                                 Just nonempty ->
                                     let
                                         ( pingUser, text2, cmd ) =
-                                            case guildOrDmId of
-                                                GuildOrDmId guildOrDmId2 ->
-                                                    MessageInput.pressedPingUser
-                                                        SetFocus
-                                                        guildOrDmId2
-                                                        MessageMenu.editMessageTextInputId
-                                                        dropdownIndex
-                                                        loggedIn.pingUser
-                                                        (Local.model loggedIn.localState)
-                                                        nonempty
-
-                                                DiscordGuildOrDmId guildOrDmId2 ->
-                                                    Debug.todo ""
+                                            MessageInput.pressedPingUser
+                                                SetFocus
+                                                guildOrDmId
+                                                MessageMenu.editMessageTextInputId
+                                                dropdownIndex
+                                                loggedIn.pingUser
+                                                (Local.model loggedIn.localState)
+                                                nonempty
                                     in
                                     ( { loggedIn
                                         | pingUser = pingUser
@@ -7348,24 +7328,18 @@ layout model attributes child =
                     Just ( guildOrDmId, threadRoute ) ->
                         case loggedIn.pingUser of
                             Just pingUser ->
-                                (case guildOrDmId of
-                                    GuildOrDmId guildOrDmId2 ->
-                                        MessageInput.pingDropdownView
-                                            (case pingUser.target of
-                                                MessageInput.NewMessage ->
-                                                    Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute )
+                                MessageInput.pingDropdownView
+                                    (case pingUser.target of
+                                        MessageInput.NewMessage ->
+                                            Pages.Guild.messageInputConfig ( guildOrDmId, threadRoute )
 
-                                                MessageInput.EditMessage ->
-                                                    MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute
-                                            )
-                                            guildOrDmId2
-                                            local
-                                            Pages.Guild.dropdownButtonId
-                                            pingUser
-
-                                    DiscordGuildOrDmId guildOrDmId2 ->
-                                        Debug.todo ""
-                                )
+                                        MessageInput.EditMessage ->
+                                            MessageMenu.editMessageTextInputConfig guildOrDmId threadRoute
+                                    )
+                                    guildOrDmId
+                                    local
+                                    Pages.Guild.dropdownButtonId
+                                    pingUser
                                     |> Ui.inFront
 
                             Nothing ->
