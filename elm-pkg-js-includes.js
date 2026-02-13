@@ -5,6 +5,7 @@
 const devicePixelRatio = require('./elm-pkg-js/devicePixelRatio.js');
 const setFavicon = require('./elm-pkg-js/set-favicon.js');
 const cropImage = require('./elm-pkg-js/crop-image.js');
+const voiceChat = require('./elm-pkg-js/voice-chat.js');
 
 exports.init = async function init(app) {
   // @WARNING: this only runs for Lamdera production deploys!
@@ -13,4 +14,5 @@ exports.init = async function init(app) {
   devicePixelRatio.init(app);
   setFavicon.init(app);
   cropImage.init(app);
+  voiceChat.init(app);
 }
