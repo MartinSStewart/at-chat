@@ -1022,68 +1022,15 @@ handleDiscordCreateGuildMessage :
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleDiscordCreateGuildMessage discordGuildId message model =
-    let
-        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-        richText =
-            RichText.fromDiscord message.content
-
-        --maybeData :
-        --    Maybe
-        --        { guildId : Discord.Id.Id Discord.Id.GuildId
-        --        , guild : BackendGuild
-        --        , channelId : Discord.Id.Id Discord.Id.ChannelId
-        --        , channel : BackendChannel
-        --        , threadRoute : ThreadRouteWithMaybeMessage
-        --        }
-        --maybeData =
-        --    case discordGuildIdToGuild discordGuildId model of
-        --        Just ( guildId, guild ) ->
-        --            case LocalState.linkedChannel (DiscordChannelId message.channelId) guild of
-        --                Just ( channelId, channel ) ->
-        --                    Just
-        --                        { guildId = guildId
-        --                        , guild = guild
-        --                        , channelId = channelId
-        --                        , channel = channel
-        --                        , threadRoute = NoThreadWithMaybeMessage (discordReplyTo message channel)
-        --                        }
-        --
-        --                Nothing ->
-        --                    List.Extra.findMap
-        --                        (\( channelId, channel ) ->
-        --                            case
-        --                                OneToOne.second
-        --                                    (Discord.Id.toUInt64 message.channelId
-        --                                        |> Discord.Id.fromUInt64
-        --                                        |> DiscordMessageId
-        --                                    )
-        --                                    channel.linkedMessageIds
-        --                            of
-        --                                Just messageIndex ->
-        --                                    { guildId = guildId
-        --                                    , guild = guild
-        --                                    , channelId = channelId
-        --                                    , channel = channel
-        --                                    , threadRoute =
-        --                                        ViewThreadWithMaybeMessage
-        --                                            messageIndex
-        --                                            (discordReplyTo message channel |> Maybe.map Id.changeType)
-        --                                    }
-        --                                        |> Just
-        --
-        --                                _ ->
-        --                                    Nothing
-        --                        )
-        --                        (SeqDict.toList guild.channels)
-        --
-        --        Nothing ->
-        --            Nothing
-    in
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             case discordGetGuildChannel message guild of
                 Just ( channelId, channel, threadRoute ) ->
                     let
+                        richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+                        richText =
+                            RichText.fromDiscord message.content
+
                         threadOrChannelId : Discord.Id.Id Discord.Id.ChannelId
                         threadOrChannelId =
                             case threadRoute of

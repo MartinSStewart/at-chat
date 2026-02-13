@@ -111,7 +111,7 @@ guildConnections guildId model =
                         _ ->
                             []
                 )
-                (SeqDict.keys guild.members)
+                (guild.owner :: SeqDict.keys guild.members)
 
         Nothing ->
             []

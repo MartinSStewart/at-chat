@@ -1584,7 +1584,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                         ViewThreadWithMaybeMessage threadId maybeReplyTo ->
-                                            -- Not supported for Discord DM channges
+                                            -- Not supported for Discord DM changes
                                             ( model2
                                             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
                                             )
@@ -2105,7 +2105,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         guildId
                         currentUserId
-                        (\session _ _ guild ->
+                        (\session userData _ guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
                                     case
@@ -2148,7 +2148,28 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> ServerChange
                                                     )
                                                     model2
-                                                , Debug.todo ""
+                                                , case threadRouteToDiscordMessageId channelId channel threadRoute of
+                                                    Just ( channelId2, discordMessageId ) ->
+                                                        Discord.editMessagePayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = channelId2
+                                                            , messageId = discordMessageId
+                                                            , content =
+                                                                RichText.toDiscord SeqDict.empty newContent
+                                                                    |> Discord.Markdown.toString
+                                                            }
+                                                            |> DiscordSync.http
+                                                            |> Task.attempt
+                                                                (EditedDiscordGuildMessage
+                                                                    time
+                                                                    guildId
+                                                                    channelId
+                                                                    threadRoute
+                                                                    discordMessageId
+                                                                )
+
+                                                    Nothing ->
+                                                        Command.none
                                                 ]
                                             )
 
@@ -2494,21 +2515,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\session userData _ guild ->
                                     case LocalState.deleteMessageBackend currentUserId channelId threadRoute guild of
                                         Ok ( guild2, channel ) ->
-                                            let
-                                                maybeDiscordMessageId : Maybe (Discord.Id.Id Discord.Id.MessageId)
-                                                maybeDiscordMessageId =
-                                                    case threadRoute of
-                                                        NoThreadWithMessage messageId ->
-                                                            OneToOne.first messageId channel.linkedMessageIds
-
-                                                        ViewThreadWithMessage threadId messageId ->
-                                                            case SeqDict.get threadId channel.threads of
-                                                                Just thread ->
-                                                                    OneToOne.first messageId thread.linkedMessageIds
-
-                                                                Nothing ->
-                                                                    Nothing
-                                            in
                                             ( { model2 | discordGuilds = SeqDict.insert guildId guild2 model2.discordGuilds }
                                             , Command.batch
                                                 [ Lamdera.sendToFrontend
@@ -2519,13 +2525,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     guildId
                                                     (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                     model2
-                                                , case maybeDiscordMessageId of
-                                                    Just discordMessageId ->
+                                                , case threadRouteToDiscordMessageId channelId channel threadRoute of
+                                                    Just ( channelId2, discordMessageId ) ->
                                                         Discord.deleteMessagePayload
                                                             (Discord.userToken userData.auth)
-                                                            { channelId = channelId, messageId = discordMessageId }
+                                                            { channelId = channelId2, messageId = discordMessageId }
                                                             |> DiscordSync.http
-                                                            |> Task.attempt (DeletedDiscordGuildMessage time guildId channelId threadRoute discordMessageId)
+                                                            |> Task.attempt
+                                                                (DeletedDiscordGuildMessage
+                                                                    time
+                                                                    guildId
+                                                                    channelId
+                                                                    threadRoute
+                                                                    discordMessageId
+                                                                )
 
                                                     Nothing ->
                                                         Command.none
@@ -3018,19 +3031,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                --asUser
-                --    model2
-                --    sessionId
-                --    (\{ userId } _ ->
-                --        ( model2
-                --        , SeqDict.get dmChannelId model2.dmChannels
-                --            |> Maybe.withDefault DmChannel.init
-                --            |> handleMessagesRequest oldestVisibleMessage
-                --            |> Local_LoadChannelMessages guildOrDmId oldestVisibleMessage
-                --            |> LocalChangeResponse changeId
-                --            |> Lamdera.sendToFrontend clientId
-                --        )
-                --    )
                 Local_Discord_LoadThreadMessages guildOrDmId threadId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
@@ -3371,6 +3371,35 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
                     )
                 )
+
+
+threadRouteToDiscordMessageId :
+    Discord.Id.Id Discord.Id.ChannelId
+    -> DiscordBackendChannel
+    -> ThreadRouteWithMessage
+    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, Discord.Id.Id Discord.Id.MessageId )
+threadRouteToDiscordMessageId channelId channel threadRoute =
+    case threadRoute of
+        NoThreadWithMessage messageId ->
+            case OneToOne.first messageId channel.linkedMessageIds of
+                Just discordMessageId ->
+                    Just ( channelId, discordMessageId )
+
+                Nothing ->
+                    Nothing
+
+        ViewThreadWithMessage threadId messageId ->
+            case ( SeqDict.get threadId channel.threads, OneToOne.first threadId channel.linkedMessageIds ) of
+                ( Just thread, Just discordThreadId ) ->
+                    case OneToOne.first messageId thread.linkedMessageIds of
+                        Just discordMessageId ->
+                            Just ( Discord.Id.toUInt64 discordThreadId |> Discord.Id.fromUInt64, discordMessageId )
+
+                        Nothing ->
+                            Nothing
+
+                _ ->
+                    Nothing
 
 
 loadMessagesHelper :
