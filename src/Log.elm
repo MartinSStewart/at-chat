@@ -5,6 +5,7 @@ import Discord
 import Discord.Id
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (Emoji)
 import Icons
 import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage, UserId)
 import MyUi
@@ -26,6 +27,10 @@ type Log
     | FailedToDeleteDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
     | FailedToEditDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
     | FailedToEditDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToAddReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToAddReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -56,6 +61,18 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToEditDiscordDmMessage _ _ _ _ ->
+            Nothing
+
+        FailedToAddReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+            Nothing
+
+        FailedToAddReactionToDiscordDmMessage id _ _ emoji httpError ->
+            Nothing
+
+        FailedToRemoveReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+            Nothing
+
+        FailedToRemoveReactionToDiscordDmMessage id _ _ emoji httpError ->
             Nothing
 
 
@@ -249,6 +266,18 @@ logContent log =
                 , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
+
+        FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+            Debug.todo ""
+
+        FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
+            Debug.todo ""
+
+        FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+            Debug.todo ""
+
+        FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
+            Debug.todo ""
 
 
 type alias TagStyle =

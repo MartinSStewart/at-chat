@@ -27,6 +27,7 @@ import Effect.Websocket as Websocket
 import Email.Html
 import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
+import Emoji
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
@@ -359,34 +360,41 @@ update msg model =
                 Err error ->
                     addLog time (Log.FailedToEditDiscordDmMessage channelId messageId discordMessageId error) model
 
+        DiscordAddedReactionToGuildMessage time guildId channelId threadRoute discordMessageId emoji result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
+
+        DiscordAddedReactionToDmMessage time channelId messageId discordMessageId emoji result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
+
+        DiscordRemovedReactionToGuildMessage time guildId channelId threadRoute discordMessageId emoji result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji error) model
+
+        DiscordRemovedReactionToDmMessage time channelId messageId discordMessageId emoji result ->
+            case result of
+                Ok () ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
+
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
-        SentDirectMessageToDiscord dmChannelId messageId result ->
-            Debug.todo ""
-
-        --case result of
-        --    Ok message ->
-        --        ( { model
-        --            | dmChannels =
-        --                SeqDict.updateIfExists
-        --                    dmChannelId
-        --                    (\dmChannel ->
-        --                        { dmChannel
-        --                            | linkedMessageIds =
-        --                                OneToOne.insert
-        --                                    (DiscordMessageId message.id)
-        --                                    messageId
-        --                                    dmChannel.linkedMessageIds
-        --                        }
-        --                    )
-        --                    model.dmChannels
-        --          }
-        --        , Command.none
-        --        )
-        --
-        --    Err _ ->
-        --        ( model, Command.none )
         GotDiscordUserAvatars result ->
             case result of
                 Ok userAvatars ->
@@ -1923,8 +1931,58 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentUserId
-                                (\userSession discordUser user guild ->
-                                    Debug.todo ""
+                                (\userSession userData user guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            ( { model2
+                                                | discordGuilds =
+                                                    SeqDict.insert
+                                                        guildId
+                                                        (LocalState.updateChannel
+                                                            (LocalState.addReactionEmoji emoji currentUserId threadRoute)
+                                                            channelId
+                                                            guild
+                                                        )
+                                                        model2.discordGuilds
+                                              }
+                                            , Command.batch
+                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                                , Broadcast.toDiscordGuildExcludingOne
+                                                    clientId
+                                                    guildId
+                                                    (Server_DiscordAddReactionGuildEmoji currentUserId guildId channelId threadRoute emoji
+                                                        |> ServerChange
+                                                    )
+                                                    model2
+                                                , case threadRouteToDiscordMessageId channelId channel threadRoute of
+                                                    Just ( discordChannelId, discordMessageId ) ->
+                                                        Discord.createReactionPayload
+                                                            (Discord.userToken userData.auth)
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            , emoji = Emoji.toString emoji |> Discord.UnicodeEmoji
+                                                            }
+                                                            |> DiscordSync.http
+                                                            |> Task.attempt
+                                                                (DiscordAddedReactionToGuildMessage
+                                                                    time
+                                                                    guildId
+                                                                    channelId
+                                                                    threadRoute
+                                                                    discordMessageId
+                                                                    emoji
+                                                                )
+
+                                                    Nothing ->
+                                                        Command.none
+                                                ]
+                                            )
+
+                                        Nothing ->
+                                            ( model
+                                            , LocalChangeResponse changeId Local_Invalid
+                                                |> Lamdera.sendToFrontend clientId
+                                            )
                                 )
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
@@ -3057,7 +3115,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
-                            Debug.todo ""
+                            ( model2, LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId )
 
                 --asUser
                 --    model2
