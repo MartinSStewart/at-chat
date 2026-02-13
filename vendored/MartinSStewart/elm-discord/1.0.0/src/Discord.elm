@@ -3872,7 +3872,7 @@ urlEncodeEmoji : Emoji -> String
 urlEncodeEmoji emojiId =
     case emojiId of
         UnicodeEmoji emoji ->
-            Url.percentEncode emoji
+            emoji
 
         CustomEmoji emoji ->
             emoji.name ++ ":" ++ Discord.Id.toString emoji.id |> Url.percentEncode
