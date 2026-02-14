@@ -180,6 +180,7 @@ init =
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
+      , pendingDiscordPrivateChannels = SeqSet.empty
       }
     , Command.none
     )
@@ -3332,21 +3333,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (currentDiscordUser.linkedTo == session.userId)
                                     && LocalState.isGuildMemberOrOwner currentUserId guild
                                     && LocalState.isGuildMemberOrOwner otherUserId guild
-                                    && SeqSet.member pendingId model2.pendingDiscordPrivateChannel
+                                    && not (SeqSet.member pendingId model2.pendingDiscordPrivateChannels)
                             then
                                 ( { model2
-                                    | pendingDiscordPrivateChannel =
-                                        SeqSet.insert pendingId model2.pendingDiscordPrivateChannel
+                                    | pendingDiscordPrivateChannels =
+                                        SeqSet.insert pendingId model2.pendingDiscordPrivateChannels
                                   }
                                 , Discord.createPrivateChannelPayload
                                     currentDiscordUser.auth
                                     [ otherUserId ]
+                                    |> Debug.log "createPrivateChannelPayload"
                                     |> DiscordSync.http
                                     |> Task.attempt (CreatedDiscordPrivateChannel time currentUserId otherUserId)
                                 )
 
                             else
                                 ( model2, Command.none )
+
+                        _ ->
+                            ( model2, Command.none )
                 )
 
 

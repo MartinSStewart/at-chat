@@ -313,7 +313,7 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
-    , pendingDiscordPrivateChannel : SeqSet ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
+    , pendingDiscordPrivateChannels : SeqSet ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
     }
 
 
@@ -506,7 +506,11 @@ type FrontendMsg
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
     | TypedBookmarkletData String
-    | PressedDiscordGuildMemberLabel { currentUserId : Discord.Id.Id Discord.Id.UserId, otherUserId : Discord.Id.Id Discord.Id.UserId }
+    | PressedDiscordGuildMemberLabel
+        { sharedGuildId : Discord.Id.Id Discord.Id.GuildId
+        , currentUserId : Discord.Id.Id Discord.Id.UserId
+        , otherUserId : Discord.Id.Id Discord.Id.UserId
+        }
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
     | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)

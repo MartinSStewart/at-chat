@@ -948,11 +948,12 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy4
+                                    Ui.Lazy.lazy5
                                         discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
                                         routeData.currentDiscordUserId
+                                        routeData.guildId
                                         guild.members
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -1030,7 +1031,12 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy3 discordMemberColumnNotMobile local.localUser routeData.currentDiscordUserId guild.members
+                            , Ui.Lazy.lazy4
+                                discordMemberColumnNotMobile
+                                local.localUser
+                                routeData.currentDiscordUserId
+                                routeData.guildId
+                                guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -1117,8 +1123,13 @@ memberColumnNotMobile localUser guildOwner guildMembers =
         ]
 
 
-discordMemberColumnNotMobile : LocalUser -> Discord.Id.Id Discord.Id.UserId -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix } -> Element FrontendMsg
-discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers =
+discordMemberColumnNotMobile :
+    LocalUser
+    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    -> Element FrontendMsg
+discordMemberColumnNotMobile localUser currentDiscordUserId guildId guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1138,7 +1149,7 @@ discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers =
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
-                    (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
+                    (\userId _ list -> discordMemberLabel False localUser guildId currentDiscordUserId userId :: list)
                     []
                     guildMembers
                 )
@@ -1198,9 +1209,10 @@ discordMemberColumnMobile :
     Bool
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.GuildId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
     -> Element FrontendMsg
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers =
+discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildId guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1233,7 +1245,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr
-                        (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
+                        (\userId _ list -> discordMemberLabel True localUser guildId currentDiscordUserId userId :: list)
                         []
                         guildMembers
                     )
@@ -1269,13 +1281,14 @@ memberLabel isMobile localUser userId =
 discordMemberLabel :
     Bool
     -> LocalUser
+    -> Discord.Id.Id Discord.Id.GuildId
     -> Discord.Id.Id Discord.Id.UserId
     -> Discord.Id.Id Discord.Id.UserId
     -> Element FrontendMsg
-discordMemberLabel isMobile localUser currentUserId userId =
+discordMemberLabel isMobile localUser guildId currentUserId userId =
     MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (PressedDiscordGuildMemberLabel { currentUserId = currentUserId, otherUserId = userId })
+        (PressedDiscordGuildMemberLabel { sharedGuildId = guildId, currentUserId = currentUserId, otherUserId = userId })
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
