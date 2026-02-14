@@ -948,13 +948,12 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy5
+                                    Ui.Lazy.lazy4
                                         discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
                                         routeData.currentDiscordUserId
                                         guild.members
-                                        local.discordDmChannels
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -1031,12 +1030,11 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy4
+                            , Ui.Lazy.lazy3
                                 discordMemberColumnNotMobile
                                 local.localUser
                                 routeData.currentDiscordUserId
                                 guild.members
-                                local.discordDmChannels
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -1127,9 +1125,8 @@ discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id.Id Discord.Id.UserId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
-    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers dmChannels =
+discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1149,7 +1146,7 @@ discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers dmChann
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
-                    (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId dmChannels :: list)
+                    (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId :: list)
                     []
                     guildMembers
                 )
@@ -1210,9 +1207,8 @@ discordMemberColumnMobile :
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
-    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers dmChannels =
+discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1245,7 +1241,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr
-                        (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId dmChannels :: list)
+                        (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId :: list)
                         []
                         guildMembers
                     )
@@ -1283,41 +1279,11 @@ discordMemberLabel :
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
     -> Discord.Id.Id Discord.Id.UserId
-    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberLabel isMobile localUser currentUserId userId discordDmChannels =
-    let
-        maybeRoute : Maybe Route
-        maybeRoute =
-            List.Extra.findMap
-                (\( channelId, channel ) ->
-                    if
-                        NonemptySet.unorderedEquals
-                            (NonemptySet.fromNonemptyList (Nonempty currentUserId [ userId ]))
-                            channel.members
-                    then
-                        DiscordDmRoute
-                            { currentDiscordUserId = currentUserId
-                            , channelId = channelId
-                            , viewingMessage = Nothing
-                            , showMembersTab = HideMembersTab
-                            }
-                            |> Just
-
-                    else
-                        Nothing
-                )
-                (SeqDict.toList discordDmChannels)
-    in
+discordMemberLabel isMobile localUser currentUserId userId =
     MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (case maybeRoute of
-            Just route ->
-                PressedLink route
-
-            Nothing ->
-                FrontendNoOp
-        )
+        (PressedDiscordGuildMemberLabel { currentUserId = currentUserId, otherUserId = userId })
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -1330,71 +1296,10 @@ discordMemberLabel isMobile localUser currentUserId userId discordDmChannels =
         ]
         (case LocalState.getDiscordUser userId localUser of
             Just user ->
-                [ User.profileImage user.icon
-                , Ui.column
-                    [ Ui.spacing 2 ]
-                    [ Ui.text (PersonName.toString user.name)
-                    , case maybeRoute of
-                        Just _ ->
-                            Ui.none
-
-                        Nothing ->
-                            Ui.el [ Ui.Font.size 12 ] (Ui.text "Add via Discord before DMing")
-                    ]
-                ]
+                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
 
             Nothing ->
                 []
-        )
-
-
-abc :
-    Bool
-    -> LocalUser
-    -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.PrivateChannelId
-    -> DiscordDmChannel
-    -> Element FrontendMsg
-abc isMobile localUser currentUserId channelId dmChannel =
-    rowLinkButton
-        (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString channelId))
-        (DiscordDmRoute
-            { currentDiscordUserId = currentUserId
-            , channelId = channelId
-            , viewingMessage = Nothing
-            , showMembersTab = HideMembersTab
-            }
-        )
-        [ Ui.spacing 8
-        , Ui.paddingXY 0 4
-        , MyUi.hover
-            isMobile
-            [ Ui.Anim.backgroundColor (Ui.rgba 255 255 255 0.1)
-            , Ui.Anim.fontColor MyUi.font1
-            ]
-        , Ui.Font.color MyUi.font3
-        , Ui.clipWithEllipsis
-        ]
-        (case NonemptySet.toSeqSet dmChannel.members |> SeqSet.remove currentUserId |> SeqSet.toList of
-            [ otherUserId ] ->
-                case LocalState.getDiscordUser otherUserId localUser of
-                    Just user ->
-                        [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
-
-                    Nothing ->
-                        []
-
-            many ->
-                List.filterMap
-                    (\userId ->
-                        case LocalState.getDiscordUser userId localUser of
-                            Just user ->
-                                User.profileImage user.icon |> Just
-
-                            Nothing ->
-                                Nothing
-                    )
-                    many
         )
 
 

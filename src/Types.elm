@@ -505,6 +505,10 @@ type FrontendMsg
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
     | TypedBookmarkletData String
+    | PressedDiscordGuildMemberLabel
+        { currentUserId : Discord.Id.Id Discord.Id.UserId
+        , otherUserId : Discord.Id.Id Discord.Id.UserId
+        }
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
     | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
