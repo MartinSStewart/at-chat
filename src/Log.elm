@@ -370,11 +370,13 @@ tag style label =
 fieldRow : String -> Element msg -> Element msg
 fieldRow label value =
     Ui.row
-        [ Ui.spacing 6, Ui.width Ui.shrink ]
+        [ Ui.spacing 6 ]
         [ Ui.el
             [ Ui.Font.color MyUi.gray
             , Ui.Font.size 13
             , Ui.width Ui.shrink
+            , MyUi.noShrinking
+            , Ui.alignTop
             ]
             (Ui.text (label ++ ":"))
         , Ui.el [ Ui.Font.size 13 ] value
@@ -389,14 +391,16 @@ successColor =
 errorDetails : List (Element msg) -> Element msg
 errorDetails content =
     Ui.row
-        [ Ui.spacing 6, Ui.width Ui.shrink ]
+        [ Ui.spacing 6 ]
         [ Ui.el
             [ Ui.Font.color MyUi.gray
             , Ui.Font.size 13
             , Ui.width Ui.shrink
+            , MyUi.noShrinking
+            , Ui.alignTop
             ]
             (Ui.text "Error:")
-        , Ui.Prose.paragraph [ Ui.Font.size 13 ] content
+        , Ui.Prose.paragraph [ Ui.Font.size 13, Ui.paddingXY 0 5 ] content
         ]
 
 
