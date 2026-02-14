@@ -4452,6 +4452,9 @@ decodeDispatchUserEvent eventName =
         "GUILD_MEMBERS_CHUNK" ->
             JD.field "d" decodeGuildMembersChunk |> JD.map DispatchUser_GuildMembersChunk
 
+        "CHANNEL_CREATE" ->
+            JD.field "d" decodeChannel |> JD.map DispatchUser_ChannelCreateEvent
+
         _ ->
             JD.fail <| "Invalid event name: " ++ eventName
 
@@ -4621,6 +4624,7 @@ type OpDispatchUserEvent
     | DispatchUser_MessageReactionRemoveAll ReactionRemoveAll
     | DispatchUser_MessageReactionRemoveEmoji ReactionRemoveEmoji
     | DispatchUser_GuildMembersChunk GuildMembersChunkData -- aka response(s) to OpRequestGuildMembers
+    | DispatchUser_ChannelCreateEvent Channel
 
 
 requestGuildMembers : (connection -> String -> cmd) -> List (Id GuildId) -> Model connection -> Result () cmd
@@ -5220,6 +5224,7 @@ type UserOutMsg connection
     | UserOutMsg_ListGuildMembersResponse GuildMembersChunkData
     | UserOutMsg_ReadyData ReadyData
     | UserOutMsg_SupplementalReadyData ReadySupplementalData
+    | UserOutMsg_ChannelCreated Channel
 
 
 type alias Model connection =
@@ -5523,6 +5528,9 @@ handleUserGateway authToken intents response model =
 
                         DispatchUser_GuildMembersChunk guildMembersChunkData ->
                             ( model, [ UserOutMsg_ListGuildMembersResponse guildMembersChunkData ] )
+
+                        DispatchUser_ChannelCreateEvent channel ->
+                            ( model, [ UserOutMsg_ChannelCreated channel ] )
 
                 OpReconnect ->
                     ( model, [ UserOutMsg_CloseAndReopenHandle connection ] )

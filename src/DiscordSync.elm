@@ -1270,6 +1270,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_SupplementalReadyData readySupplementalData ->
                             ( handleReadySupplementalData readySupplementalData model2, cmds )
+
+                        Discord.UserOutMsg_ChannelCreated channel ->
+                            Debug.todo ""
                 )
                 ( { model
                     | discordUsers =
