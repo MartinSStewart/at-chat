@@ -1275,7 +1275,7 @@ discordMemberLabel :
 discordMemberLabel isMobile localUser currentUserId userId =
     MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (PressedDiscordGuildMemberLabel userId)
+        (PressedDiscordGuildMemberLabel { currentUserId = currentUserId, otherUserId = userId })
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover

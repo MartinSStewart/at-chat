@@ -2438,8 +2438,93 @@ updateLoaded msg model =
                                 Nothing ->
                                     ( loggedIn, Command.none )
 
-                        DiscordGuildOrDmId _ ->
-                            Debug.todo ""
+                        DiscordGuildOrDmId guildOrDmId2 ->
+                            let
+                                local : LocalState
+                                local =
+                                    Local.model loggedIn.localState
+
+                                maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
+                                maybeMessages =
+                                    discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
+
+                                currentUserId : Discord.Id.Id Discord.Id.UserId
+                                currentUserId =
+                                    case guildOrDmId2 of
+                                        DiscordGuildOrDmId_Guild currentUserId2 _ _ ->
+                                            currentUserId2
+
+                                        DiscordGuildOrDmId_Dm data ->
+                                            data.currentUserId
+                            in
+                            case maybeMessages of
+                                Just messages ->
+                                    let
+                                        messageCount : Int
+                                        messageCount =
+                                            Array.length messages
+
+                                        mostRecentMessage : Maybe ( Id ChannelMessageId, UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId) )
+                                        mostRecentMessage =
+                                            (if messageCount < 5 then
+                                                Array.toList messages
+                                                    |> List.indexedMap (\index data -> ( Id.fromInt index, data ))
+
+                                             else
+                                                Array.slice (messageCount - 5) messageCount messages
+                                                    |> Array.toList
+                                                    |> List.indexedMap
+                                                        (\index message ->
+                                                            ( messageCount + index - 5 |> Id.fromInt, message )
+                                                        )
+                                            )
+                                                |> List.reverse
+                                                |> List.Extra.findMap
+                                                    (\( index, message ) ->
+                                                        case message of
+                                                            MessageLoaded_NoReply message2 ->
+                                                                case message2 of
+                                                                    UserTextMessage_NoReply data ->
+                                                                        if currentUserId == data.createdBy then
+                                                                            Just ( index, data )
+
+                                                                        else
+                                                                            Nothing
+
+                                                                    UserJoinedMessage_NoReply _ _ _ ->
+                                                                        Nothing
+
+                                                                    DeletedMessage_NoReply _ ->
+                                                                        Nothing
+
+                                                            MessageUnloaded_NoReply ->
+                                                                Nothing
+                                                    )
+                                    in
+                                    case mostRecentMessage of
+                                        Just ( index, message ) ->
+                                            ( { loggedIn
+                                                | editMessage =
+                                                    SeqDict.insert
+                                                        ( guildOrDmId, threadRoute )
+                                                        { messageIndex = index
+                                                        , text =
+                                                            RichText.toString
+                                                                (LocalState.allDiscordUsers2 local.localUser)
+                                                                message.content
+                                                        , attachedFiles =
+                                                            SeqDict.map (\_ a -> FileUploaded a) message.attachedFiles
+                                                        }
+                                                        loggedIn.editMessage
+                                              }
+                                            , setFocus model MessageMenu.editMessageTextInputId
+                                            )
+
+                                        Nothing ->
+                                            ( loggedIn, Command.none )
+
+                                Nothing ->
+                                    ( loggedIn, Command.none )
                 )
                 model
 
@@ -3811,8 +3896,39 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedDiscordGuildMemberLabel id ->
-            Debug.todo ""
+        PressedDiscordGuildMemberLabel data ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
+                    let
+                        local : LocalState
+                        local =
+                            Local.model loggedIn.localState
+                    in
+                    case
+                        List.Extra.find
+                            (\( _, channel ) ->
+                                NonemptySet.unorderedEquals
+                                    (NonemptySet.fromNonemptyList (Nonempty data.currentUserId [ data.otherUserId ]))
+                                    channel.members
+                            )
+                            (SeqDict.toList local.discordDmChannels)
+                    of
+                        Just ( channelId, _ ) ->
+                            routePush
+                                model
+                                (DiscordDmRoute
+                                    { currentDiscordUserId = data.currentUserId
+                                    , channelId = channelId
+                                    , viewingMessage = Nothing
+                                    , showMembersTab = HideMembersTab
+                                    }
+                                )
+
+                        Nothing ->
+                            ( model, Lamdera.sendToBackend (DiscordCreatePrivateChannelRequest data) )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         PressedDiscordFriendLabel channelId ->
             case model.loginStatus of
@@ -7874,6 +7990,68 @@ guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
             case SeqDict.get otherUserId local.dmChannels of
                 Just dmChannel ->
                     helper dmChannel
+
+                Nothing ->
+                    Nothing
+
+
+discordGuildOrDmIdToMessages : DiscordGuildOrDmId -> ThreadRoute -> LocalState -> Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
+discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
+    let
+        helper2 : { a | messages : Array (MessageState messageId userId) } -> Maybe (Array (MessageStateNoReply userId))
+        helper2 channel =
+            Array.map
+                (\messageState ->
+                    case messageState of
+                        MessageLoaded message ->
+                            (case message of
+                                UserTextMessage data ->
+                                    { createdAt = data.createdAt
+                                    , createdBy = data.createdBy
+                                    , content = data.content
+                                    , reactions = data.reactions
+                                    , editedAt = data.editedAt
+                                    , attachedFiles = data.attachedFiles
+                                    }
+                                        |> UserTextMessage_NoReply
+
+                                UserJoinedMessage time userId reactions ->
+                                    UserJoinedMessage_NoReply time userId reactions
+
+                                DeletedMessage time ->
+                                    DeletedMessage_NoReply time
+                            )
+                                |> MessageLoaded_NoReply
+
+                        MessageUnloaded ->
+                            MessageUnloaded_NoReply
+                )
+                channel.messages
+                |> Just
+    in
+    case guildOrDmId of
+        DiscordGuildOrDmId_Guild _ guildId channelId ->
+            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            case SeqDict.get threadMessageIndex channel.threads of
+                                Just thread ->
+                                    helper2 thread
+
+                                Nothing ->
+                                    Nothing
+
+                        NoThread ->
+                            helper2 channel
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId_Dm data ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just dmChannel ->
+                    helper2 dmChannel
 
                 Nothing ->
                     Nothing

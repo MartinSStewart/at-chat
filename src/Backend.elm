@@ -391,6 +391,14 @@ update msg model =
                 Err error ->
                     addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
+        CreatedDiscordPrivateChannel time currentUserId otherUserId result ->
+            case result of
+                Ok _ ->
+                    ( model, Command.none )
+
+                Err error ->
+                    addLog time (Log.FailedToCreateDiscordPrivateChannel currentUserId otherUserId error) model
+
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
@@ -3301,6 +3309,44 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                       }
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
                     )
+                )
+
+        DiscordCreatePrivateChannelRequest { sharedGuildId, currentUserId, otherUserId } ->
+            asUser
+                model2
+                sessionId
+                (\session user ->
+                    case
+                        ( SeqDict.get currentUserId model2.discordUsers
+                        , SeqDict.get otherUserId model2.discordUsers
+                        , SeqDict.get sharedGuildId model.discordGuilds
+                        )
+                    of
+                        ( Just (FullData currentDiscordUser), Just _, Just guild ) ->
+                            let
+                                pendingId : ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
+                                pendingId =
+                                    DmChannel.stableDiscordIdPair currentUserId otherUserId
+                            in
+                            if
+                                (currentDiscordUser.linkedTo == session.userId)
+                                    && LocalState.isGuildMemberOrOwner currentUserId guild
+                                    && LocalState.isGuildMemberOrOwner otherUserId guild
+                                    && SeqSet.member pendingId model2.pendingDiscordPrivateChannel
+                            then
+                                ( { model2
+                                    | pendingDiscordPrivateChannel =
+                                        SeqSet.insert pendingId model2.pendingDiscordPrivateChannel
+                                  }
+                                , Discord.createPrivateChannelPayload
+                                    currentDiscordUser.auth
+                                    [ otherUserId ]
+                                    |> DiscordSync.http
+                                    |> Task.attempt (CreatedDiscordPrivateChannel time currentUserId otherUserId)
+                                )
+
+                            else
+                                ( model2, Command.none )
                 )
 
 

@@ -31,6 +31,7 @@ type Log
     | FailedToAddReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToCreateDiscordPrivateChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -73,6 +74,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToRemoveReactionToDiscordDmMessage id _ _ emoji httpError ->
+            Nothing
+
+        FailedToCreateDiscordPrivateChannel id _ httpError ->
             Nothing
 
 
@@ -308,6 +312,15 @@ logContent log =
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToCreateDiscordPrivateChannel currentUserId otherUserId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord DM reaction failed"
+                , fieldRow "Current user id" (Ui.text (Discord.Id.toString currentUserId))
+                , fieldRow "Other user id" (Ui.text (Discord.Id.toString otherUserId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

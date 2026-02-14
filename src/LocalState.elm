@@ -61,6 +61,7 @@ module LocalState exposing
     , getUser
     , guildToFrontend
     , guildToFrontendForUser
+    , isGuildMemberOrOwner
     , markAllChannelsAsViewed
     , memberIsEditTypingBackend
     , memberIsEditTypingBackendHelper
@@ -188,9 +189,14 @@ type alias DiscordFrontendGuild =
     }
 
 
+isGuildMemberOrOwner : userId -> { a | owner : userId, members : SeqDict userId { joinedAt : Time.Posix } } -> Bool
+isGuildMemberOrOwner userId guild =
+    userId == guild.owner || SeqDict.member userId guild.members
+
+
 guildToFrontendForUser : Maybe ( Id ChannelId, ThreadRoute ) -> Id UserId -> BackendGuild -> Maybe FrontendGuild
 guildToFrontendForUser requestMessagesFor userId guild =
-    if userId == guild.owner || SeqDict.member userId guild.members then
+    if isGuildMemberOrOwner userId guild then
         { createdAt = guild.createdAt
         , createdBy = guild.createdBy
         , name = guild.name

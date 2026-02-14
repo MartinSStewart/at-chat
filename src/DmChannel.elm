@@ -14,6 +14,7 @@ module DmChannel exposing
     , latestThreadMessageId
     , otherUserId
     , setArray
+    , stableDiscordIdPair
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -30,6 +31,7 @@ import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
+import UInt64
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -67,7 +69,7 @@ type alias FrontendDmChannel =
 {-| OpaqueVariants
 -}
 type DmChannelId
-    = DirectMessageChannelId (Id UserId) (Id UserId)
+    = DmChannelId (Id UserId) (Id UserId)
 
 
 backendInit : DmChannel
@@ -187,11 +189,24 @@ setArray id message array =
 
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
 channelIdFromUserIds (Id userIdA) (Id userIdB) =
-    DirectMessageChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
+    DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
+
+
+stableDiscordIdPair :
+    Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
+stableDiscordIdPair userIdA userIdB =
+    case UInt64.compare (Discord.Id.toUInt64 userIdA) (Discord.Id.toUInt64 userIdB) of
+        GT ->
+            ( userIdB, userIdA )
+
+        _ ->
+            ( userIdA, userIdB )
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)
-otherUserId userId (DirectMessageChannelId userIdA userIdB) =
+otherUserId userId (DmChannelId userIdA userIdB) =
     if userId == userIdA then
         Just userIdB
 

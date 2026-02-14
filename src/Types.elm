@@ -93,6 +93,7 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
+import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
@@ -312,6 +313,7 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
+    , pendingDiscordPrivateChannel : SeqSet ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
     }
 
 
@@ -504,7 +506,7 @@ type FrontendMsg
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
     | TypedBookmarkletData String
-    | PressedDiscordGuildMemberLabel (Discord.Id.Id Discord.Id.UserId)
+    | PressedDiscordGuildMemberLabel { currentUserId : Discord.Id.Id Discord.Id.UserId, otherUserId : Discord.Id.Id Discord.Id.UserId }
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedExportGuild (Id GuildId)
     | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
@@ -558,6 +560,11 @@ type ToBackend
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
     | ImportDiscordGuildRequest DiscordExport
+    | DiscordCreatePrivateChannelRequest
+        { sharedGuildId : Discord.Id.Id Discord.Id.GuildId
+        , currentUserId : Discord.Id.Id Discord.Id.UserId
+        , otherUserId : Discord.Id.Id Discord.Id.UserId
+        }
 
 
 type BackendMsg
@@ -577,6 +584,7 @@ type BackendMsg
     | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
+    | CreatedDiscordPrivateChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Channel)
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse )))
     | SentNotification SessionId (Id UserId) Time.Posix (Result Http.Error ())

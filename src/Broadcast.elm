@@ -691,7 +691,7 @@ toEveryoneWhoCanSeeUser :
 toEveryoneWhoCanSeeUser clientId userId change model =
     SeqDict.foldl
         (\_ guild state ->
-            if userId == guild.owner || SeqDict.member userId guild.members then
+            if LocalState.isGuildMemberOrOwner userId guild then
                 guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
 
             else
@@ -711,7 +711,7 @@ toEveryoneWhoCanSeeUserIncludingUser :
 toEveryoneWhoCanSeeUserIncludingUser userId change model =
     SeqDict.foldl
         (\_ guild state ->
-            if userId == guild.owner || SeqDict.member userId guild.members then
+            if LocalState.isGuildMemberOrOwner userId guild then
                 guild.owner :: SeqDict.keys guild.members |> List.foldl SeqSet.insert state
 
             else

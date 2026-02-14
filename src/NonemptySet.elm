@@ -4,7 +4,7 @@ module NonemptySet exposing
     , member, size
     , fromNonemptyList, toNonemptyList, toList, fromList
     , map, toSeqSet, fromSeqSet
-    , all, any, head, insert
+    , all, any, head, insert, unorderedEquals
     )
 
 {-| A nonempty Set of unique values
@@ -79,6 +79,14 @@ all predicate (NonemptySet id set) =
 any : (a -> Bool) -> NonemptySet a -> Bool
 any predicate (NonemptySet id set) =
     predicate id || SeqSet.foldl (\item state -> state || predicate item) False set
+
+
+{-| Check if two sets are equal regardless what order items were inserted.
+Note that this is not the same as writing `set1 == set2`. Insertion order matters when using `==`.
+-}
+unorderedEquals : NonemptySet a -> NonemptySet a -> Bool
+unorderedEquals (NonemptySet a setA) (NonemptySet b setB) =
+    SeqSet.unorderedEquals (SeqSet.insert a setA) (SeqSet.insert b setB)
 
 
 
