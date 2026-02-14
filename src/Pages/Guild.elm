@@ -39,7 +39,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
-import List.Nonempty
+import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -953,8 +953,8 @@ discordGuildView model routeData loggedIn local =
                                         canScroll2
                                         local.localUser
                                         routeData.currentDiscordUserId
-                                        routeData.guildId
                                         guild.members
+                                        local.discordDmChannels
                                         |> Ui.el
                                             [ Ui.height Ui.fill
                                             , Ui.background MyUi.background3
@@ -1035,8 +1035,8 @@ discordGuildView model routeData loggedIn local =
                                 discordMemberColumnNotMobile
                                 local.localUser
                                 routeData.currentDiscordUserId
-                                routeData.guildId
                                 guild.members
+                                local.discordDmChannels
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
                                     , Ui.height Ui.fill
@@ -1126,10 +1126,10 @@ memberColumnNotMobile localUser guildOwner guildMembers =
 discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.GuildId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberColumnNotMobile localUser currentDiscordUserId guildId guildMembers =
+discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers dmChannels =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1149,7 +1149,7 @@ discordMemberColumnNotMobile localUser currentDiscordUserId guildId guildMembers
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
-                    (\userId _ list -> discordMemberLabel False localUser guildId currentDiscordUserId userId :: list)
+                    (\userId _ list -> discordMemberLabel False localUser currentDiscordUserId userId dmChannels :: list)
                     []
                     guildMembers
                 )
@@ -1209,10 +1209,10 @@ discordMemberColumnMobile :
     Bool
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.GuildId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildId guildMembers =
+discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers dmChannels =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1245,7 +1245,7 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildId guil
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr
-                        (\userId _ list -> discordMemberLabel True localUser guildId currentDiscordUserId userId :: list)
+                        (\userId _ list -> discordMemberLabel True localUser currentDiscordUserId userId dmChannels :: list)
                         []
                         guildMembers
                     )
@@ -1281,14 +1281,43 @@ memberLabel isMobile localUser userId =
 discordMemberLabel :
     Bool
     -> LocalUser
-    -> Discord.Id.Id Discord.Id.GuildId
     -> Discord.Id.Id Discord.Id.UserId
     -> Discord.Id.Id Discord.Id.UserId
+    -> SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
     -> Element FrontendMsg
-discordMemberLabel isMobile localUser guildId currentUserId userId =
+discordMemberLabel isMobile localUser currentUserId userId discordDmChannels =
+    let
+        maybeRoute : Maybe Route
+        maybeRoute =
+            List.Extra.findMap
+                (\( channelId, channel ) ->
+                    if
+                        NonemptySet.unorderedEquals
+                            (NonemptySet.fromNonemptyList (Nonempty currentUserId [ userId ]))
+                            channel.members
+                    then
+                        DiscordDmRoute
+                            { currentDiscordUserId = currentUserId
+                            , channelId = channelId
+                            , viewingMessage = Nothing
+                            , showMembersTab = HideMembersTab
+                            }
+                            |> Just
+
+                    else
+                        Nothing
+                )
+                (SeqDict.toList discordDmChannels)
+    in
     MyUi.rowButton
         (Dom.id ("guild_openDiscordDm_" ++ Discord.Id.toString userId))
-        (PressedDiscordGuildMemberLabel { sharedGuildId = guildId, currentUserId = currentUserId, otherUserId = userId })
+        (case maybeRoute of
+            Just route ->
+                PressedLink route
+
+            Nothing ->
+                FrontendNoOp
+        )
         [ Ui.spacing 8
         , Ui.paddingXY 0 4
         , MyUi.hover
@@ -1301,7 +1330,18 @@ discordMemberLabel isMobile localUser guildId currentUserId userId =
         ]
         (case LocalState.getDiscordUser userId localUser of
             Just user ->
-                [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+                [ User.profileImage user.icon
+                , Ui.column
+                    [ Ui.spacing 2 ]
+                    [ Ui.text (PersonName.toString user.name)
+                    , case maybeRoute of
+                        Just _ ->
+                            Ui.none
+
+                        Nothing ->
+                            Ui.el [ Ui.Font.size 12 ] (Ui.text "Add via Discord before DMing")
+                    ]
+                ]
 
             Nothing ->
                 []

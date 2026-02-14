@@ -14,7 +14,6 @@ module DmChannel exposing
     , latestThreadMessageId
     , otherUserId
     , setArray
-    , stableDiscordIdPair
     , toDiscordFrontendHelper
     , toFrontend
     , toFrontendHelper
@@ -190,19 +189,6 @@ setArray id message array =
 channelIdFromUserIds : Id UserId -> Id UserId -> DmChannelId
 channelIdFromUserIds (Id userIdA) (Id userIdB) =
     DmChannelId (min userIdA userIdB |> Id) (max userIdA userIdB |> Id)
-
-
-stableDiscordIdPair :
-    Discord.Id.Id Discord.Id.UserId
-    -> Discord.Id.Id Discord.Id.UserId
-    -> ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
-stableDiscordIdPair userIdA userIdB =
-    case UInt64.compare (Discord.Id.toUInt64 userIdA) (Discord.Id.toUInt64 userIdB) of
-        GT ->
-            ( userIdB, userIdA )
-
-        _ ->
-            ( userIdA, userIdB )
 
 
 otherUserId : Id UserId -> DmChannelId -> Maybe (Id UserId)

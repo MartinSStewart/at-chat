@@ -180,7 +180,6 @@ init =
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
-      , pendingDiscordPrivateChannels = SeqSet.empty
       }
     , Command.none
     )
@@ -3310,48 +3309,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                       }
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
                     )
-                )
-
-        DiscordCreatePrivateChannelRequest { sharedGuildId, currentUserId, otherUserId } ->
-            asUser
-                model2
-                sessionId
-                (\session user ->
-                    case
-                        ( SeqDict.get currentUserId model2.discordUsers
-                        , SeqDict.get otherUserId model2.discordUsers
-                        , SeqDict.get sharedGuildId model.discordGuilds
-                        )
-                    of
-                        ( Just (FullData currentDiscordUser), Just _, Just guild ) ->
-                            let
-                                pendingId : ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.UserId )
-                                pendingId =
-                                    DmChannel.stableDiscordIdPair currentUserId otherUserId
-                            in
-                            if
-                                (currentDiscordUser.linkedTo == session.userId)
-                                    && LocalState.isGuildMemberOrOwner currentUserId guild
-                                    && LocalState.isGuildMemberOrOwner otherUserId guild
-                                    && not (SeqSet.member pendingId model2.pendingDiscordPrivateChannels)
-                            then
-                                ( { model2
-                                    | pendingDiscordPrivateChannels =
-                                        SeqSet.insert pendingId model2.pendingDiscordPrivateChannels
-                                  }
-                                , Discord.createPrivateChannelPayload
-                                    currentDiscordUser.auth
-                                    [ otherUserId ]
-                                    |> Debug.log "createPrivateChannelPayload"
-                                    |> DiscordSync.http
-                                    |> Task.attempt (CreatedDiscordPrivateChannel time currentUserId otherUserId)
-                                )
-
-                            else
-                                ( model2, Command.none )
-
-                        _ ->
-                            ( model2, Command.none )
                 )
 
 

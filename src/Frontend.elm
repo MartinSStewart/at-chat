@@ -1304,9 +1304,6 @@ isPressMsg msg =
         MouseExitedDiscordChannelName id _ threadRoute ->
             False
 
-        PressedDiscordGuildMemberLabel id ->
-            True
-
         PressedDiscordFriendLabel id ->
             True
 
@@ -3895,40 +3892,6 @@ updateLoaded msg model =
                             ( loggedIn, Command.none )
                 )
                 model
-
-        PressedDiscordGuildMemberLabel data ->
-            case model.loginStatus of
-                LoggedIn loggedIn ->
-                    let
-                        local : LocalState
-                        local =
-                            Local.model loggedIn.localState
-                    in
-                    case
-                        List.Extra.find
-                            (\( _, channel ) ->
-                                NonemptySet.unorderedEquals
-                                    (NonemptySet.fromNonemptyList (Nonempty data.currentUserId [ data.otherUserId ]))
-                                    channel.members
-                            )
-                            (SeqDict.toList local.discordDmChannels)
-                    of
-                        Just ( channelId, _ ) ->
-                            routePush
-                                model
-                                (DiscordDmRoute
-                                    { currentDiscordUserId = data.currentUserId
-                                    , channelId = channelId
-                                    , viewingMessage = Nothing
-                                    , showMembersTab = HideMembersTab
-                                    }
-                                )
-
-                        Nothing ->
-                            ( model, Lamdera.sendToBackend (DiscordCreatePrivateChannelRequest data) )
-
-                NotLoggedIn _ ->
-                    ( model, Command.none )
 
         PressedDiscordFriendLabel channelId ->
             case model.loginStatus of

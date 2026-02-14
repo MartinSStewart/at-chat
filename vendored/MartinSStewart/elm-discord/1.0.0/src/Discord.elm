@@ -5623,6 +5623,10 @@ getRelationshipsPayload auth =
 
 
 {-| <https://docs.discord.food/resources/channel#create-private-channel>
+
+I recommend not using this endpoint. Discord immediately locked my account for suspicious behavior.
+Trying to start a new DM channel is probably too similar to spam bot behavior.
+
 -}
 createPrivateChannel : UserAuth -> List (Id UserId) -> Task HttpError Channel
 createPrivateChannel auth recipients =
@@ -5630,6 +5634,10 @@ createPrivateChannel auth recipients =
 
 
 {-| <https://docs.discord.food/resources/channel#create-private-channel>
+
+I recommend not using this endpoint. Discord immediately locked my account for suspicious behavior.
+Trying to start a new DM channel is probably too similar to spam bot behavior.
+
 -}
 createPrivateChannelPayload : UserAuth -> List (Id UserId) -> HttpRequest Channel
 createPrivateChannelPayload auth recipients =
