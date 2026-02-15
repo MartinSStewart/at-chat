@@ -100,6 +100,7 @@ config =
         , ( "Effect.WebGL.Settings.Blend", "Blend" )
         , ( "Lamdera", "LamderaCore" )
         ]
+        |> NoInconsistentAliases.noMissingAliases
         |> NoInconsistentAliases.rule
         |> defaultIgnore
     , NoModuleOnExposedNames.rule |> defaultIgnore

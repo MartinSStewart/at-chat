@@ -1,10 +1,13 @@
 module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, view)
 
 import Array exposing (Array)
+import Discord
+import Discord.Id
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
+import Emoji exposing (Emoji)
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage, UserId)
 import MyUi
 import Postmark
 import Time exposing (Month(..))
@@ -20,6 +23,15 @@ type Log
     | ChangedUsers (Id UserId)
     | SendLogErrorEmailFailed Postmark.SendEmailError EmailAddress
     | PushNotificationError (Id UserId) Http.Error
+    | FailedToDeleteDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToDeleteDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToEditDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToEditDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Discord.HttpError
+    | FailedToAddReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToAddReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToCreateDiscordPrivateChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -39,6 +51,33 @@ shouldNotifyAdmin log =
 
         PushNotificationError _ _ ->
             Just "PushNotificationError"
+
+        FailedToDeleteDiscordGuildMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToDeleteDiscordDmMessage _ _ _ _ ->
+            Nothing
+
+        FailedToEditDiscordGuildMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToEditDiscordDmMessage _ _ _ _ ->
+            Nothing
+
+        FailedToAddReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+            Nothing
+
+        FailedToAddReactionToDiscordDmMessage id _ _ emoji httpError ->
+            Nothing
+
+        FailedToRemoveReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+            Nothing
+
+        FailedToRemoveReactionToDiscordDmMessage id _ _ emoji httpError ->
+            Nothing
+
+        FailedToCreateDiscordPrivateChannel id _ httpError ->
+            Nothing
 
 
 addLog :
@@ -147,48 +186,235 @@ logContent log =
         LoginEmail result emailAddress ->
             case result of
                 Ok () ->
-                    Ui.Prose.paragraph
-                        []
-                        [ Ui.text "Login email sent to "
-                        , MyUi.emailAddress emailAddress
-                        , Ui.text " successfully"
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag successTag "Login Email"
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , fieldRow "Status" (Ui.el [ Ui.Font.color successColor ] (Ui.text "Sent"))
                         ]
 
                 Err error ->
-                    Ui.Prose.paragraph
-                        []
-                        ([ Ui.text "Failed to send login email to "
-                         , MyUi.emailAddress emailAddress
-                         , Ui.text ". "
-                         ]
-                            ++ sendEmailErrorToString error
-                        )
+                    Ui.column
+                        [ Ui.spacing 4 ]
+                        [ tag errorTag "Login Email Failed"
+                        , fieldRow "To" (MyUi.emailAddress emailAddress)
+                        , errorDetails (sendEmailErrorToString error)
+                        ]
 
         LoginsRateLimited id ->
-            "User " ++ Id.toString id ++ " has their login rate limited" |> Ui.text
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag warningTag "Rate Limited"
+                , fieldRow "User" (Ui.text (Id.toString id))
+                ]
 
         ChangedUsers id ->
-            "User " ++ Id.toString id ++ " modified the user table" |> Ui.text
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag infoTag "User Table Modified"
+                , fieldRow "By" (Ui.text (Id.toString id))
+                ]
 
         SendLogErrorEmailFailed error emailAddress ->
             Ui.column
-                [ Ui.spacing 2 ]
-                (Ui.text
-                    ("Failed to send email to "
-                        ++ EmailAddress.toString emailAddress
-                        ++ " about an important error that was logged. Http error: "
-                    )
-                    :: sendEmailErrorToString error
-                )
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Log Email Failed"
+                , fieldRow "To" (MyUi.emailAddress emailAddress)
+                , errorDetails (sendEmailErrorToString error)
+                ]
 
         PushNotificationError userId error ->
-            Ui.Prose.paragraph
-                []
-                [ Ui.text "PushNotificationError for user "
-                , Ui.text (Id.toString userId)
-                , Ui.text " with error "
-                , Ui.text (httpErrorToString error)
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Push Notification Error"
+                , fieldRow "User" (Ui.text (Id.toString userId))
+                , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
+
+        FailedToDeleteDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord guild message delete failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToDeleteDiscordDmMessage channelId messageId discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord DM message delete failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToEditDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord guild message edit failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToEditDiscordDmMessage channelId messageId discordMessageId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Discord DM message edit failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Adding Discord guild reaction failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToAddReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Adding Discord DM reaction failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord guild reaction failed"
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord DM reaction failed"
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Message id" (Ui.text (Id.toString messageId))
+                , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
+                , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToCreateDiscordPrivateChannel currentUserId otherUserId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Removing Discord DM reaction failed"
+                , fieldRow "Current user id" (Ui.text (Discord.Id.toString currentUserId))
+                , fieldRow "Other user id" (Ui.text (Discord.Id.toString otherUserId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+
+type alias TagStyle =
+    { background : Ui.Color
+    , font : Ui.Color
+    , border : Ui.Color
+    }
+
+
+successTag : TagStyle
+successTag =
+    { background = Ui.rgb 220 252 231
+    , font = Ui.rgb 22 101 52
+    , border = Ui.rgb 187 247 208
+    }
+
+
+errorTag : TagStyle
+errorTag =
+    { background = Ui.rgb 254 226 226
+    , font = Ui.rgb 153 27 27
+    , border = Ui.rgb 254 202 202
+    }
+
+
+warningTag : TagStyle
+warningTag =
+    { background = Ui.rgb 254 249 195
+    , font = Ui.rgb 133 77 14
+    , border = Ui.rgb 253 224 71
+    }
+
+
+infoTag : TagStyle
+infoTag =
+    { background = Ui.rgb 224 231 255
+    , font = Ui.rgb 55 48 163
+    , border = Ui.rgb 199 210 254
+    }
+
+
+tag : TagStyle -> String -> Element msg
+tag style label =
+    Ui.el
+        [ Ui.background style.background
+        , Ui.Font.color style.font
+        , Ui.borderColor style.border
+        , Ui.border 1
+        , Ui.rounded 4
+        , Ui.paddingXY 6 2
+        , Ui.Font.size 12
+        , Ui.Font.bold
+        , Ui.width Ui.shrink
+        ]
+        (Ui.text label)
+
+
+fieldRow : String -> Element msg -> Element msg
+fieldRow label value =
+    Ui.row
+        [ Ui.spacing 6 ]
+        [ Ui.el
+            [ Ui.Font.color MyUi.gray
+            , Ui.Font.size 13
+            , Ui.width Ui.shrink
+            , MyUi.noShrinking
+            , Ui.alignTop
+            ]
+            (Ui.text (label ++ ":"))
+        , Ui.el [ Ui.Font.size 13 ] value
+        ]
+
+
+successColor : Ui.Color
+successColor =
+    Ui.rgb 22 101 52
+
+
+errorDetails : List (Element msg) -> Element msg
+errorDetails content =
+    Ui.row
+        [ Ui.spacing 6 ]
+        [ Ui.el
+            [ Ui.Font.color MyUi.gray
+            , Ui.Font.size 13
+            , Ui.width Ui.shrink
+            , MyUi.noShrinking
+            , Ui.alignTop
+            ]
+            (Ui.text "Error:")
+        , Ui.Prose.paragraph [ Ui.Font.size 13, Ui.paddingXY 0 5 ] content
+        ]
 
 
 httpErrorToString : Http.Error -> String

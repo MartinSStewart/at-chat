@@ -6,6 +6,7 @@ module RichText exposing
     , append
     , attachedFilePrefix
     , attachedFileSuffix
+    , codec
     , fromDiscord
     , fromNonemptyString
     , fromSlack
@@ -21,6 +22,8 @@ module RichText exposing
     )
 
 import Array exposing (Array)
+import Codec exposing (Codec)
+import CodecExtra
 import Coord
 import Discord.Id
 import Discord.Markdown
@@ -32,6 +35,7 @@ import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (Id, UserId)
+import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
 import OneToOne exposing (OneToOne)
@@ -45,14 +49,14 @@ import UInt64
 import Url exposing (Protocol(..))
 
 
-type RichText
-    = UserMention (Id UserId)
+type RichText userId
+    = UserMention userId
     | NormalText Char String
-    | Bold (Nonempty RichText)
-    | Italic (Nonempty RichText)
-    | Underline (Nonempty RichText)
-    | Strikethrough (Nonempty RichText)
-    | Spoiler (Nonempty RichText)
+    | Bold (Nonempty (RichText userId))
+    | Italic (Nonempty (RichText userId))
+    | Underline (Nonempty (RichText userId))
+    | Strikethrough (Nonempty (RichText userId))
+    | Spoiler (Nonempty (RichText userId))
     | Hyperlink Protocol String
     | InlineCode Char String
     | CodeBlock Language String
@@ -64,7 +68,7 @@ type Language
     | NoLanguage
 
 
-normalTextFromString : String -> Maybe RichText
+normalTextFromString : String -> Maybe (RichText userId)
 normalTextFromString text =
     case String.uncons text of
         Just ( head, rest ) ->
@@ -74,12 +78,12 @@ normalTextFromString text =
             Nothing
 
 
-normalTextFromNonempty : NonemptyString -> RichText
+normalTextFromNonempty : NonemptyString -> RichText userId
 normalTextFromNonempty text =
     NormalText (String.Nonempty.head text) (String.Nonempty.tail text)
 
 
-removeAttachedFile : Id FileId -> Nonempty RichText -> Maybe (Nonempty RichText)
+removeAttachedFile : Id FileId -> Nonempty (RichText userId) -> Maybe (Nonempty (RichText userId))
 removeAttachedFile fileId list =
     List.filterMap
         (\richText ->
@@ -125,7 +129,7 @@ removeAttachedFile fileId list =
         |> List.Nonempty.fromList
 
 
-toString : SeqDict (Id UserId) { a | name : PersonName } -> Nonempty RichText -> String
+toString : SeqDict userId { a | name : PersonName } -> Nonempty (RichText userId) -> String
 toString users nonempty =
     List.Nonempty.map
         (\richText ->
@@ -182,12 +186,12 @@ toString users nonempty =
         |> String.concat
 
 
-append : Nonempty RichText -> Nonempty RichText -> Nonempty RichText
+append : Nonempty (RichText userId) -> Nonempty (RichText userId) -> Nonempty (RichText userId)
 append first second =
     List.Nonempty.append first second |> normalize
 
 
-fromNonemptyString : SeqDict (Id UserId) { a | name : PersonName } -> NonemptyString -> Nonempty RichText
+fromNonemptyString : SeqDict userId { a | name : PersonName } -> NonemptyString -> Nonempty (RichText userId)
 fromNonemptyString users string =
     case Parser.run (parser users []) (String.Nonempty.toString string) of
         Ok ok ->
@@ -202,7 +206,7 @@ fromNonemptyString users string =
             Nonempty (normalTextFromNonempty string) []
 
 
-normalize : Nonempty RichText -> Nonempty RichText
+normalize : Nonempty (RichText userId) -> Nonempty (RichText userId)
 normalize nonempty =
     List.foldl
         (\richText nonempty2 ->
@@ -315,11 +319,11 @@ modifierToSymbol modifier =
             NonemptyString '|' "|"
 
 
-type alias LoopState =
-    { current : Array String, rest : Array RichText }
+type alias LoopState userId =
+    { current : Array String, rest : Array (RichText userId) }
 
 
-parser : SeqDict (Id UserId) { a | name : PersonName } -> List Modifiers -> Parser (Array RichText)
+parser : SeqDict userId { a | name : PersonName } -> List Modifiers -> Parser (Array (RichText userId))
 parser users modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
@@ -529,7 +533,7 @@ codeBlockParser =
             )
 
 
-bailOut : LoopState -> List Modifiers -> Step state (Array RichText)
+bailOut : LoopState userId -> List Modifiers -> Step state (Array (RichText userId))
 bailOut state modifiers =
     Array.append
         (case modifiers of
@@ -555,13 +559,13 @@ getRemainingText =
 
 
 modifierHelper :
-    SeqDict (Id UserId) { a | name : PersonName }
+    SeqDict userId { a | name : PersonName }
     -> Bool
     -> Modifiers
-    -> (Nonempty RichText -> RichText)
-    -> LoopState
+    -> (Nonempty (RichText userId) -> RichText userId)
+    -> LoopState userId
     -> List Modifiers
-    -> Parser (Step LoopState (Array RichText))
+    -> Parser (Step (LoopState userId) (Array (RichText userId)))
 modifierHelper users noTrailingWhitespace modifier container state modifiers =
     let
         symbol : NonemptyString
@@ -640,7 +644,7 @@ modifierHelper users noTrailingWhitespace modifier container state modifiers =
                 ]
 
 
-parserHelper : LoopState -> Array RichText
+parserHelper : LoopState userId -> Array (RichText userId)
 parserHelper state =
     case state.current |> Array.toList |> String.concat |> normalTextFromString of
         Just a ->
@@ -650,12 +654,12 @@ parserHelper state =
             Array.empty
 
 
-mentionsUser : Nonempty RichText -> SeqSet (Id UserId)
+mentionsUser : Nonempty (RichText userId) -> SeqSet userId
 mentionsUser nonempty =
     mentionsUserHelper SeqSet.empty nonempty
 
 
-mentionsUserHelper : SeqSet (Id UserId) -> Nonempty RichText -> SeqSet (Id UserId)
+mentionsUserHelper : SeqSet userId -> Nonempty (RichText userId) -> SeqSet userId
 mentionsUserHelper set nonempty =
     List.Nonempty.foldl
         (\richText set2 ->
@@ -702,9 +706,9 @@ view :
     -> Int
     -> (Int -> msg)
     -> SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty RichText
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedFiles nonempty =
     viewHelper
@@ -721,9 +725,9 @@ view htmlIdPrefix containerWidth pressedSpoiler revealedSpoilers users attachedF
 
 preview :
     SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty RichText
+    -> Nonempty (RichText userId)
     -> List (Html msg)
 preview revealedSpoilers users attachedFiles nonempty =
     viewHelper
@@ -757,9 +761,9 @@ viewHelper :
     -> Int
     -> RichTextState
     -> SeqSet Int
-    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict userId { a | name : PersonName }
     -> SeqDict (Id FileId) FileData
-    -> Nonempty RichText
+    -> Nonempty (RichText userId)
     -> ( Int, List (Html msg) )
 viewHelper containerWidth maybePressedSpoiler spoilerIndex state revealedSpoilers allUsers attachedFiles nonempty =
     List.foldl
@@ -1060,7 +1064,11 @@ rangeSize range =
     range.end - range.start
 
 
-textInputView : SeqDict (Id UserId) { a | name : PersonName } -> SeqDict (Id FileId) b -> Nonempty RichText -> List (Html msg)
+textInputView :
+    SeqDict (Id UserId) { a | name : PersonName }
+    -> SeqDict (Id FileId) b
+    -> Nonempty (RichText (Id UserId))
+    -> List (Html msg)
 textInputView users attachedFiles nonempty =
     textInputViewHelper
         { underline = False, italic = False, bold = False, strikethrough = False, spoiler = False }
@@ -1086,7 +1094,7 @@ textInputViewHelper :
     RichTextState
     -> SeqDict (Id UserId) { a | name : PersonName }
     -> SeqDict (Id FileId) b
-    -> Nonempty RichText
+    -> Nonempty (RichText (Id UserId))
     -> List (Html msg)
 textInputViewHelper state allUsers attachedFiles nonempty =
     List.concatMap
@@ -1239,8 +1247,8 @@ formatText text =
     Html.span [ Html.Attributes.style "color" "rgb(180,180,180)" ] [ Html.text text ]
 
 
-fromSlack : OneToOne (Slack.Id Slack.UserId) (Id UserId) -> List Slack.Block -> Nonempty RichText
-fromSlack users blocks =
+fromSlack : List Slack.Block -> Nonempty (RichText (Slack.Id Slack.UserId))
+fromSlack blocks =
     List.concatMap
         (\block ->
             case block of
@@ -1294,14 +1302,7 @@ fromSlack users blocks =
                                                         |> Just
 
                                                 Slack.RichText_UserMention id ->
-                                                    (case OneToOne.second id users of
-                                                        Just userId ->
-                                                            UserMention userId
-
-                                                        Nothing ->
-                                                            NormalText '<' "user missing>"
-                                                    )
-                                                        |> Just
+                                                    UserMention id |> Just
                                         )
                                         elements2
 
@@ -1330,14 +1331,14 @@ fromSlack users blocks =
         |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> String -> Nonempty RichText
-fromDiscord users text =
+fromDiscord : String -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+fromDiscord text =
     let
         textOrEmpty =
             String.Nonempty.fromString text
                 |> Maybe.withDefault (NonemptyString '<' "empty>")
     in
-    case Parser.run (discordParser users []) text of
+    case Parser.run (discordParser []) text of
         Ok ok ->
             case List.Nonempty.fromList (Array.toList ok) of
                 Just nonempty ->
@@ -1394,8 +1395,8 @@ discordModifierToSymbol modifier =
 
 {-| <https://discord.com/developers/docs/reference#message-formatting>
 -}
-discordParser : OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId) -> List DiscordModifiers -> Parser (Array RichText)
-discordParser users modifiers =
+discordParser : List DiscordModifiers -> Parser (Array (RichText (Discord.Id.Id Discord.Id.UserId)))
+discordParser modifiers =
     Parser.loop
         { current = Array.empty, rest = Array.empty }
         (\state ->
@@ -1404,21 +1405,16 @@ discordParser users modifiers =
                     (\digits ->
                         case UInt64.fromString digits of
                             Just discordUserId ->
-                                case OneToOne.second (Discord.Id.fromUInt64 discordUserId) users of
-                                    Just userId ->
-                                        Loop
-                                            { current = Array.empty
-                                            , rest =
-                                                Array.append
-                                                    state.rest
-                                                    (Array.push (UserMention userId) (parserHelper state))
-                                            }
-
-                                    Nothing ->
-                                        Loop
-                                            { current = Array.push ("<@" ++ digits ++ ">") state.current
-                                            , rest = state.rest
-                                            }
+                                Loop
+                                    { current = Array.empty
+                                    , rest =
+                                        Array.append
+                                            state.rest
+                                            (Array.push
+                                                (UserMention (Discord.Id.fromUInt64 discordUserId))
+                                                (parserHelper state)
+                                            )
+                                    }
 
                             Nothing ->
                                 Loop
@@ -1434,12 +1430,12 @@ discordParser users modifiers =
                     |= (Parser.chompWhile Char.isDigit |> Parser.getChompedString)
                     |. Parser.symbol ">"
                     |> Parser.backtrackable
-                , discordModifierHelper users False DiscordIsBold Bold state modifiers
-                , discordModifierHelper users False DiscordIsUnderlined Underline state modifiers
-                , discordModifierHelper users True DiscordIsItalic Italic state modifiers
-                , discordModifierHelper users False DiscordIsItalic2 Italic state modifiers
-                , discordModifierHelper users False DiscordIsStrikethrough Strikethrough state modifiers
-                , discordModifierHelper users False DiscordIsSpoilered Spoiler state modifiers
+                , discordModifierHelper False DiscordIsBold Bold state modifiers
+                , discordModifierHelper False DiscordIsUnderlined Underline state modifiers
+                , discordModifierHelper True DiscordIsItalic Italic state modifiers
+                , discordModifierHelper False DiscordIsItalic2 Italic state modifiers
+                , discordModifierHelper False DiscordIsStrikethrough Strikethrough state modifiers
+                , discordModifierHelper False DiscordIsSpoilered Spoiler state modifiers
                 , Parser.succeed
                     (\( language, text ) ->
                         case String.Nonempty.fromString text of
@@ -1532,39 +1528,33 @@ discordStopOnChar =
 
 
 toDiscord :
-    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
-    -> SeqDict (Id FileId) FileData
-    -> Nonempty RichText
+    SeqDict (Id FileId) FileData
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> List (Discord.Markdown.Markdown a)
-toDiscord mapping attachedFiles content =
+toDiscord attachedFiles content =
     List.map
         (\item ->
             case item of
-                UserMention userId ->
-                    case OneToOne.first userId mapping of
-                        Just discordUserId ->
-                            Discord.Markdown.ping discordUserId
-
-                        Nothing ->
-                            Discord.Markdown.text "@???"
+                UserMention discordUserId ->
+                    Discord.Markdown.ping discordUserId
 
                 NormalText char string ->
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord mapping attachedFiles nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord attachedFiles nonempty)
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord mapping attachedFiles nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord attachedFiles nonempty)
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord mapping attachedFiles nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord attachedFiles nonempty)
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord mapping attachedFiles nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord attachedFiles nonempty)
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord mapping attachedFiles nonempty)
+                    Discord.Markdown.spoiler (toDiscord attachedFiles nonempty)
 
                 Hyperlink protocol string ->
                     Discord.Markdown.text (hyperlinkToString protocol string)
@@ -1602,14 +1592,13 @@ toDiscord mapping attachedFiles content =
 
 
 discordModifierHelper :
-    OneToOne (Discord.Id.Id Discord.Id.UserId) (Id UserId)
-    -> Bool
+    Bool
     -> DiscordModifiers
-    -> (Nonempty RichText -> RichText)
-    -> LoopState
+    -> (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId)) -> RichText (Discord.Id.Id Discord.Id.UserId))
+    -> LoopState (Discord.Id.Id Discord.Id.UserId)
     -> List DiscordModifiers
-    -> Parser (Step LoopState (Array RichText))
-discordModifierHelper users noTrailingWhitespace modifier container state modifiers =
+    -> Parser (Step (LoopState (Discord.Id.Id Discord.Id.UserId)) (Array (RichText (Discord.Id.Id Discord.Id.UserId))))
+discordModifierHelper noTrailingWhitespace modifier container state modifiers =
     let
         symbol : NonemptyString
         symbol =
@@ -1670,7 +1659,7 @@ discordModifierHelper users noTrailingWhitespace modifier container state modifi
                                                 , rest = Array.append state.rest (Array.append (parserHelper state) a)
                                                 }
                                         )
-                                        (discordParser users (modifier :: modifiers))
+                                        (discordParser (modifier :: modifiers))
                             )
 
                   else
@@ -1681,13 +1670,16 @@ discordModifierHelper users noTrailingWhitespace modifier container state modifi
                                 , rest = Array.append state.rest (Array.append (parserHelper state) a)
                                 }
                         )
-                        (discordParser users (modifier :: modifiers))
+                        (discordParser (modifier :: modifiers))
                 , Loop { current = Array.push symbolText state.current, rest = state.rest }
                     |> Parser.succeed
                 ]
 
 
-discordBailOut : LoopState -> List DiscordModifiers -> Step state (Array RichText)
+discordBailOut :
+    LoopState (Discord.Id.Id Discord.Id.UserId)
+    -> List DiscordModifiers
+    -> Step state (Array (RichText (Discord.Id.Id Discord.Id.UserId)))
 discordBailOut state modifiers =
     Array.append
         (case modifiers of
@@ -1703,3 +1695,93 @@ discordBailOut state modifiers =
         )
         (Array.append state.rest (parserHelper state))
         |> Done
+
+
+protocolCodec : Codec Protocol
+protocolCodec =
+    Codec.custom
+        (\httpEncoder httpsEncoder value ->
+            case value of
+                Http ->
+                    httpEncoder
+
+                Https ->
+                    httpsEncoder
+        )
+        |> Codec.variant0 "Http" Http
+        |> Codec.variant0 "Https" Https
+        |> Codec.buildCustom
+
+
+languageCodec : Codec Language
+languageCodec =
+    Codec.custom
+        (\langEncoder noLangEncoder value ->
+            case value of
+                Language nonempty ->
+                    langEncoder nonempty
+
+                NoLanguage ->
+                    noLangEncoder
+        )
+        |> Codec.variant1 "Language" Language CodecExtra.nonemptyString
+        |> Codec.variant0 "NoLanguage" NoLanguage
+        |> Codec.buildCustom
+
+
+codec : Codec userId -> Codec (RichText userId)
+codec userIdCodec =
+    Codec.custom
+        (\userMentionEncoder normalTextEncoder boldEncoder italicEncoder underlineEncoder strikeEncoder spoilerEncoder hyperlinkEncoder inlineCodeEncoder codeBlockEncoder attachedFileEncoder value ->
+            case value of
+                UserMention userId ->
+                    userMentionEncoder userId
+
+                NormalText c rest ->
+                    normalTextEncoder (String.Nonempty.NonemptyString c rest)
+
+                Bold rt ->
+                    boldEncoder rt
+
+                Italic rt ->
+                    italicEncoder rt
+
+                Underline rt ->
+                    underlineEncoder rt
+
+                Strikethrough rt ->
+                    strikeEncoder rt
+
+                Spoiler rt ->
+                    spoilerEncoder rt
+
+                Hyperlink protocol url ->
+                    hyperlinkEncoder protocol url
+
+                InlineCode c rest ->
+                    inlineCodeEncoder (String.Nonempty.NonemptyString c rest)
+
+                CodeBlock lang code ->
+                    codeBlockEncoder lang code
+
+                AttachedFile fileId ->
+                    attachedFileEncoder fileId
+        )
+        |> Codec.variant1 "UserMention" UserMention userIdCodec
+        |> Codec.variant1
+            "NormalText"
+            (\text -> NormalText (String.Nonempty.head text) (String.Nonempty.tail text))
+            CodecExtra.nonemptyString
+        |> Codec.variant1 "Bold" Bold (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Italic" Italic (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Underline" Underline (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Strikethrough" Strikethrough (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant1 "Spoiler" Spoiler (CodecExtra.nonempty (Codec.lazy (\_ -> codec userIdCodec)))
+        |> Codec.variant2 "Hyperlink" Hyperlink protocolCodec Codec.string
+        |> Codec.variant1
+            "InlineCode"
+            (\text -> InlineCode (String.Nonempty.head text) (String.Nonempty.tail text))
+            CodecExtra.nonemptyString
+        |> Codec.variant2 "CodeBlock" CodeBlock languageCodec Codec.string
+        |> Codec.variant1 "AttachedFile" AttachedFile Id.codec
+        |> Codec.buildCustom

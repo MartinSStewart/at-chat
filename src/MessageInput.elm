@@ -12,6 +12,7 @@ module MessageInput exposing
     )
 
 import Diff
+import Discord.Id
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
@@ -21,21 +22,23 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (GuildOrDmIdNoThread(..), Id, UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, UserId)
 import Json.Decode
 import Json.Decode.Extra
 import List.Extra
 import List.Nonempty exposing (Nonempty)
 import LocalState exposing (LocalState)
 import MyUi
-import PersonName
+import NonemptyDict
+import NonemptySet
+import PersonName exposing (PersonName)
 import RichText
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
-import User exposing (FrontendUser)
+import User exposing (DiscordFrontendUser, FrontendUser)
 
 
 type alias MentionUserDropdown =
@@ -457,7 +460,7 @@ newAtSymbol oldText text =
         |> .foundAtSymbol
 
 
-userDropdownList : GuildOrDmIdNoThread -> LocalState -> List ( Id UserId, FrontendUser )
+userDropdownList : GuildOrDmId -> LocalState -> List ( Id UserId, FrontendUser )
 userDropdownList guildOrDmId local =
     let
         allUsers : SeqDict (Id UserId) FrontendUser
@@ -468,8 +471,7 @@ userDropdownList guildOrDmId local =
         GuildOrDmId_Guild guildId _ ->
             case SeqDict.get guildId local.guilds of
                 Just guild ->
-                    guild.owner
-                        :: SeqDict.keys guild.members
+                    guild.owner :: SeqDict.keys guild.members
 
                 Nothing ->
                     []
@@ -489,16 +491,62 @@ userDropdownList guildOrDmId local =
         |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
 
 
-pressedArrowInDropdown : GuildOrDmIdNoThread -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
+discordUserDropdownList : DiscordGuildOrDmId -> LocalState -> List ( Discord.Id.Id Discord.Id.UserId, DiscordFrontendUser )
+discordUserDropdownList guildOrDmId local =
+    let
+        allUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+        allUsers =
+            LocalState.allDiscordUsers2 local.localUser
+    in
+    (case guildOrDmId of
+        DiscordGuildOrDmId_Guild _ guildId _ ->
+            case SeqDict.get guildId local.discordGuilds of
+                Just guild ->
+                    guild.owner :: SeqDict.keys guild.members
+
+                Nothing ->
+                    []
+
+        DiscordGuildOrDmId_Dm data ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just channel ->
+                    NonemptySet.toList channel.members
+
+                Nothing ->
+                    []
+    )
+        |> List.filterMap
+            (\userId ->
+                case SeqDict.get userId allUsers of
+                    Just user ->
+                        Just ( userId, user )
+
+                    Nothing ->
+                        Nothing
+            )
+        |> List.sortBy (\( _, user ) -> PersonName.toString user.name)
+
+
+pressedArrowInDropdown : AnyGuildOrDmId -> Int -> Maybe MentionUserDropdown -> LocalState -> Maybe MentionUserDropdown
 pressedArrowInDropdown guildOrDmId index maybePingUser local =
     case maybePingUser of
         Just pingUser ->
+            let
+                dropdownListLength : Int
+                dropdownListLength =
+                    case guildOrDmId of
+                        GuildOrDmId guildOrDmId2 ->
+                            userDropdownList guildOrDmId2 local |> List.length
+
+                        DiscordGuildOrDmId guildOrDmId2 ->
+                            discordUserDropdownList guildOrDmId2 local |> List.length
+            in
             { pingUser
                 | dropdownIndex =
                     if index < 0 then
-                        List.length (userDropdownList guildOrDmId local) - 1
+                        dropdownListLength - 1
 
-                    else if index >= List.length (userDropdownList guildOrDmId local) then
+                    else if index >= dropdownListLength then
                         0
 
                     else
@@ -512,7 +560,7 @@ pressedArrowInDropdown guildOrDmId index maybePingUser local =
 
 pressedPingUser :
     msg
-    -> GuildOrDmIdNoThread
+    -> AnyGuildOrDmId
     -> HtmlId
     -> Int
     -> Maybe MentionUserDropdown
@@ -520,16 +568,12 @@ pressedPingUser :
     -> NonemptyString
     -> ( Maybe MentionUserDropdown, NonemptyString, Command FrontendOnly toMsg msg )
 pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local inputText =
-    case ( pingUser, userDropdownList guildOrDmId local |> List.Extra.getAt index ) of
-        ( Just { charIndex }, Just ( _, user ) ) ->
+    case ( pingUser, selectedUserName guildOrDmId index local ) of
+        ( Just { charIndex }, Just name ) ->
             let
                 applyText : NonemptyString -> NonemptyString
                 applyText nonempty =
                     let
-                        name : String
-                        name =
-                            PersonName.toString user.name
-
                         text2 =
                             String.Nonempty.toString nonempty
 
@@ -570,9 +614,29 @@ pressedPingUser setFocusMsg guildOrDmId channelTextInputId index pingUser local 
             ( Nothing, inputText, Command.none )
 
 
+selectedUserName : AnyGuildOrDmId -> Int -> LocalState -> Maybe String
+selectedUserName guildOrDmId index local =
+    case guildOrDmId of
+        GuildOrDmId guildOrDmId2 ->
+            case userDropdownList guildOrDmId2 local |> List.Extra.getAt index of
+                Just ( _, user ) ->
+                    PersonName.toString user.name |> Just
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId guildOrDmId2 ->
+            case discordUserDropdownList guildOrDmId2 local |> List.Extra.getAt index of
+                Just ( _, user ) ->
+                    PersonName.toString user.name |> Just
+
+                Nothing ->
+                    Nothing
+
+
 pingDropdownView :
     MsgConfig msg
-    -> GuildOrDmIdNoThread
+    -> AnyGuildOrDmId
     -> LocalState
     -> (Int -> HtmlId)
     -> MentionUserDropdown
@@ -599,37 +663,47 @@ pingDropdownView msgConfig guildOrDmId localState dropdownButtonId dropdown =
         [ Ui.el [ Ui.Font.size 14, Ui.Font.bold, Ui.paddingXY 8 2 ] (Ui.text "Mention a user:")
         , Ui.column
             []
-            (List.indexedMap
-                (\index ( _, user ) ->
-                    MyUi.elButton
-                        (dropdownButtonId index)
-                        (msgConfig.pressedPingUser index)
-                        [ Ui.paddingXY 8 4
-                        , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
-                        , if dropdown.dropdownIndex == index then
-                            Ui.background MyUi.background3
+            (case guildOrDmId of
+                GuildOrDmId guildOrDmId2 ->
+                    List.indexedMap
+                        (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
+                        (userDropdownList guildOrDmId2 localState)
 
-                          else
-                            Ui.noAttr
-                        , Html.Events.on
-                            "keydown"
-                            (Json.Decode.field "key" Json.Decode.string
-                                |> Json.Decode.andThen
-                                    (\key ->
-                                        if key == "ArrowDown" then
-                                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
-
-                                        else if key == "ArrowUp" then
-                                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
-
-                                        else
-                                            Json.Decode.fail ""
-                                    )
-                            )
-                            |> Ui.htmlAttribute
-                        ]
-                        (Ui.text (PersonName.toString user.name))
-                )
-                (userDropdownList guildOrDmId localState)
+                DiscordGuildOrDmId guildOrDmId2 ->
+                    List.indexedMap
+                        (\index ( _, user ) -> dropdownButton msgConfig dropdown dropdownButtonId index user.name)
+                        (discordUserDropdownList guildOrDmId2 localState)
             )
         ]
+
+
+dropdownButton : MsgConfig msg -> MentionUserDropdown -> (Int -> HtmlId) -> Int -> PersonName -> Element msg
+dropdownButton msgConfig dropdown dropdownButtonId index name =
+    MyUi.elButton
+        (dropdownButtonId index)
+        (msgConfig.pressedPingUser index)
+        [ Ui.paddingXY 8 4
+        , Ui.Anim.focused (Ui.Anim.ms 100) [ Ui.Anim.backgroundColor MyUi.background3 ]
+        , if dropdown.dropdownIndex == index then
+            Ui.background MyUi.background3
+
+          else
+            Ui.noAttr
+        , Html.Events.on
+            "keydown"
+            (Json.Decode.field "key" Json.Decode.string
+                |> Json.Decode.andThen
+                    (\key ->
+                        if key == "ArrowDown" then
+                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index + 1))
+
+                        else if key == "ArrowUp" then
+                            Json.Decode.succeed (msgConfig.pressedArrowInDropdown (index - 1))
+
+                        else
+                            Json.Decode.fail ""
+                    )
+            )
+            |> Ui.htmlAttribute
+        ]
+        (Ui.text (PersonName.toString name))

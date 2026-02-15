@@ -1,5 +1,8 @@
 module Route exposing
     ( ChannelRoute(..)
+    , DiscordChannelRoute(..)
+    , DiscordDmRouteData
+    , DiscordGuildRouteData
     , Route(..)
     , ShowMembersTab(..)
     , ThreadRouteWithFriends(..)
@@ -9,10 +12,12 @@ module Route exposing
 
 import AppUrl
 import Dict
+import Discord.Id
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
+import UInt64 exposing (UInt64)
 import Url exposing (Url)
 import Url.Builder
 
@@ -21,18 +26,42 @@ type Route
     = HomePageRoute
     | AdminRoute { highlightLog : Maybe Int }
     | GuildRoute (Id GuildId) ChannelRoute
+    | DiscordGuildRoute DiscordGuildRouteData
     | DmRoute (Id UserId) ThreadRouteWithFriends
+    | DiscordDmRoute DiscordDmRouteData
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
+
+
+type alias DiscordDmRouteData =
+    { currentDiscordUserId : Discord.Id.Id Discord.Id.UserId
+    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    , viewingMessage : Maybe (Id ChannelMessageId)
+    , showMembersTab : ShowMembersTab
+    }
+
+
+type alias DiscordGuildRouteData =
+    { currentDiscordUserId : Discord.Id.Id Discord.Id.UserId
+    , guildId : Discord.Id.Id Discord.Id.GuildId
+    , channelRoute : DiscordChannelRoute
+    }
 
 
 type ChannelRoute
     = ChannelRoute (Id ChannelId) ThreadRouteWithFriends
     | NewChannelRoute
     | EditChannelRoute (Id ChannelId)
-    | InviteLinkCreatorRoute
+    | GuildSettingsRoute
     | JoinRoute (SecretId InviteLinkId)
+
+
+type DiscordChannelRoute
+    = DiscordChannel_ChannelRoute (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithFriends
+    | DiscordChannel_NewChannelRoute
+    | DiscordChannel_EditChannelRoute (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordChannel_GuildSettingsRoute
 
 
 type ThreadRouteWithFriends
@@ -127,8 +156,8 @@ decode url =
                         [ "new" ] ->
                             GuildRoute guildId2 NewChannelRoute
 
-                        [ "invite" ] ->
-                            GuildRoute guildId2 InviteLinkCreatorRoute
+                        [ "settings" ] ->
+                            GuildRoute guildId2 GuildSettingsRoute
 
                         [ "join", inviteLinkId ] ->
                             GuildRoute guildId2 (JoinRoute (SecretId.fromString inviteLinkId))
@@ -137,6 +166,71 @@ decode url =
                             HomePageRoute
 
                 Nothing ->
+                    HomePageRoute
+
+        "dg" :: userId :: guildId :: rest ->
+            case ( Discord.Id.fromString userId, Discord.Id.fromString guildId ) of
+                ( Just userId2, Just guildId2 ) ->
+                    case rest of
+                        "c" :: channelId :: rest2 ->
+                            case ( Discord.Id.fromString channelId, rest2 ) of
+                                ( Just channelId2, [ "t", threadMessageIndex, "m", messageIndex ] ) ->
+                                    DiscordGuildRouteData
+                                        userId2
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (stringToThread showMembers threadMessageIndex messageIndex)
+                                        )
+                                        |> DiscordGuildRoute
+
+                                ( Just channelId2, [ "t", threadMessageIndex ] ) ->
+                                    DiscordGuildRouteData
+                                        userId2
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (stringToThread showMembers threadMessageIndex "")
+                                        )
+                                        |> DiscordGuildRoute
+
+                                ( Just channelId2, [ "m", messageIndex ] ) ->
+                                    DiscordGuildRouteData
+                                        userId2
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends (Id.fromString messageIndex) showMembers)
+                                        )
+                                        |> DiscordGuildRoute
+
+                                ( Just channelId2, [] ) ->
+                                    DiscordGuildRouteData
+                                        userId2
+                                        guildId2
+                                        (DiscordChannel_ChannelRoute
+                                            channelId2
+                                            (NoThreadWithFriends Nothing showMembers)
+                                        )
+                                        |> DiscordGuildRoute
+
+                                ( Just channelId2, [ "edit" ] ) ->
+                                    DiscordGuildRouteData userId2 guildId2 (DiscordChannel_EditChannelRoute channelId2)
+                                        |> DiscordGuildRoute
+
+                                _ ->
+                                    HomePageRoute
+
+                        [ "new" ] ->
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_NewChannelRoute |> DiscordGuildRoute
+
+                        [ "settings" ] ->
+                            DiscordGuildRouteData userId2 guildId2 DiscordChannel_GuildSettingsRoute |> DiscordGuildRoute
+
+                        _ ->
+                            HomePageRoute
+
+                _ ->
                     HomePageRoute
 
         "d" :: userId :: rest ->
@@ -156,6 +250,25 @@ decode url =
                             DmRoute userId2 (NoThreadWithFriends Nothing showMembers)
 
                 Nothing ->
+                    HomePageRoute
+
+        "dd" :: userId :: otherUserId :: rest ->
+            case ( Discord.Id.fromString userId, Discord.Id.fromString otherUserId ) of
+                ( Just userId2, Just otherUserId2 ) ->
+                    DiscordDmRoute
+                        { currentDiscordUserId = userId2
+                        , channelId = otherUserId2
+                        , viewingMessage =
+                            case rest of
+                                [ "m", messageIndex ] ->
+                                    Id.fromString messageIndex
+
+                                _ ->
+                                    Nothing
+                        , showMembersTab = showMembers
+                        }
+
+                _ ->
                     HomePageRoute
 
         [ "slack-oauth" ] ->
@@ -232,11 +345,60 @@ encode route =
                         NewChannelRoute ->
                             ( [ "g", Id.toString guildId, "new" ], [] )
 
-                        InviteLinkCreatorRoute ->
-                            ( [ "g", Id.toString guildId, "invite" ], [] )
+                        GuildSettingsRoute ->
+                            ( [ "g", Id.toString guildId, "settings" ], [] )
 
                         JoinRoute inviteLinkId ->
                             ( [ "g", Id.toString guildId, "join", SecretId.toString inviteLinkId ], [] )
+
+                DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
+                    case channelRoute of
+                        DiscordChannel_ChannelRoute channelId thread ->
+                            case thread of
+                                ViewThreadWithFriends threadMessageIndex maybeMessageId showMembers ->
+                                    ( [ "dg"
+                                      , Discord.Id.toString currentDiscordUserId
+                                      , Discord.Id.toString guildId
+                                      , "c"
+                                      , Discord.Id.toString channelId
+                                      , "t"
+                                      , Id.toString threadMessageIndex
+                                      ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
+
+                                NoThreadWithFriends maybeMessageId showMembers ->
+                                    ( [ "dg"
+                                      , Discord.Id.toString currentDiscordUserId
+                                      , Discord.Id.toString guildId
+                                      , "c"
+                                      , Discord.Id.toString channelId
+                                      ]
+                                        ++ maybeMessageIdToString maybeMessageId
+                                    , encodeShowMembers showMembers
+                                    )
+
+                        DiscordChannel_EditChannelRoute channelId ->
+                            ( [ "dg"
+                              , Discord.Id.toString currentDiscordUserId
+                              , Discord.Id.toString guildId
+                              , "c"
+                              , Discord.Id.toString channelId
+                              , "edit"
+                              ]
+                            , []
+                            )
+
+                        DiscordChannel_NewChannelRoute ->
+                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "new" ]
+                            , []
+                            )
+
+                        DiscordChannel_GuildSettingsRoute ->
+                            ( [ "dg", Discord.Id.toString currentDiscordUserId, Discord.Id.toString guildId, "settings" ]
+                            , []
+                            )
 
                 DmRoute userId thread ->
                     case thread of
@@ -250,6 +412,15 @@ encode route =
                             ( [ "d", Id.toString userId ] ++ maybeMessageIdToString maybeMessageId
                             , encodeShowMembers showMembers
                             )
+
+                DiscordDmRoute { currentDiscordUserId, channelId, viewingMessage, showMembersTab } ->
+                    ( [ "dd"
+                      , Discord.Id.toString currentDiscordUserId
+                      , Discord.Id.toString channelId
+                      ]
+                        ++ maybeMessageIdToString viewingMessage
+                    , encodeShowMembers showMembersTab
+                    )
 
                 SlackOAuthRedirect _ ->
                     ( [ "slack-oauth" ]

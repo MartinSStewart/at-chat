@@ -1,5 +1,6 @@
-module GuildName exposing (GuildName(..), fromString, fromStringLossy, toString)
+module GuildName exposing (GuildName(..), codec, fromString, fromStringLossy, toString)
 
+import Codec exposing (Codec)
 import String.Nonempty exposing (NonemptyString(..))
 
 
@@ -47,3 +48,18 @@ fromStringLossy text =
 toString : GuildName -> String
 toString (GuildName a) =
     String.Nonempty.toString a
+
+
+codec : Codec GuildName
+codec =
+    Codec.andThen
+        (\text ->
+            case fromString text of
+                Ok ok ->
+                    Codec.succeed ok
+
+                Err err ->
+                    Codec.fail err
+        )
+        toString
+        Codec.string

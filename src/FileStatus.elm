@@ -15,6 +15,7 @@ module FileStatus exposing
     , contentType
     , domain
     , fileHash
+    , fileHashCodec
     , fileUploadPreview
     , fileUrl
     , imageInfoView
@@ -24,6 +25,7 @@ module FileStatus exposing
     , sizeToString
     , thumbnailUrl
     , upload
+    , uploadAvatar
     , uploadBytes
     , uploadTrackerId
     )
@@ -33,6 +35,7 @@ import Codec exposing (Codec)
 import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord.Id
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
@@ -43,7 +46,7 @@ import FileName exposing (FileName)
 import Html
 import Html.Attributes
 import Icons
-import Id exposing (GuildOrDmId, GuildOrDmIdNoThread(..), Id, ThreadRoute(..))
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -344,7 +347,7 @@ type alias ExposureTime =
 upload :
     (Result Http.Error UploadResponse -> msg)
     -> SessionIdHash
-    -> GuildOrDmId
+    -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> File
     -> Command restriction toFrontend msg
@@ -360,16 +363,45 @@ upload onResult sessionId guildOrDmId fileId file2 =
         }
 
 
-uploadTrackerId : GuildOrDmId -> Id FileId -> String
+uploadAvatar :
+    (Result Http.Error UploadResponse -> msg)
+    -> SessionIdHash
+    -> Bytes
+    -> Command restriction toFrontend msg
+uploadAvatar onResult sessionId file2 =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , url = domain ++ "/file/upload"
+        , body = Http.bytesBody "application/octet-stream" file2
+        , expect = Http.expectJson onResult (Codec.decoder uploadResponseCodec)
+        , timeout = Nothing
+        , tracker = Just "avatar-file-upload"
+        }
+
+
+uploadTrackerId : ( AnyGuildOrDmId, ThreadRoute ) -> Id FileId -> String
 uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
     (case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
             Id.toString guildId
                 ++ ","
                 ++ Id.toString channelId
 
-        GuildOrDmId_Dm otherUserId ->
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
             Id.toString otherUserId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+            "d"
+                ++ Discord.Id.toString guildId
+                ++ ","
+                ++ Discord.Id.toString channelId
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
+            "dd"
+                ++ Discord.Id.toString currentUserId
+                ++ ","
+                ++ Discord.Id.toString channelId
     )
         ++ (case threadRoute of
                 ViewThread threadMessageIndex ->

@@ -1,5 +1,6 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg, init, subscriptions, update, view)
+module ImageEditor exposing (DragPart, DragState, Model, Msg(..), ToBackend(..), ToFrontend(..), UploadStatus, init, isPressMsg, subscriptions, update, view)
 
+import Base64
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -7,8 +8,11 @@ import Effect.Browser.Events
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
 import Effect.File.Select as FileSelect
+import Effect.Http as Http
+import Effect.Lamdera as Lamdera
 import Effect.Subscription as Subscription exposing (Subscription)
 import Effect.Task as Task
+import FileStatus exposing (FileHash, UploadResponse)
 import Html
 import Html.Attributes
 import Html.Events
@@ -19,7 +23,9 @@ import List.Extra as List
 import MyUi
 import Pixels
 import Ports exposing (CropImageDataResponse)
+import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
+import Ui.Font
 
 
 type Msg
@@ -34,6 +40,15 @@ type Msg
     | GotImageSize (Result Dom.Error Dom.Element)
     | CroppedImage (Result String CropImageDataResponse)
     | PressedCancel
+    | UploadedImage (Result Http.Error UploadResponse)
+
+
+type ToBackend
+    = ChangeUserAvatarRequest FileStatus.FileHash
+
+
+type ToFrontend
+    = ChangeUserAvatarResponse
 
 
 type alias DragState =
@@ -60,7 +75,55 @@ type alias Model =
     , imageUrl : Maybe String
     , dragState : Maybe DragState
     , imageSize : Maybe ( Int, Int )
+    , status : UploadStatus
     }
+
+
+type UploadStatus
+    = NotUploaded
+    | Cropping
+    | Uploading FileHash
+    | UploadingError
+
+
+isPressMsg : Msg -> Bool
+isPressMsg msg =
+    case msg of
+        PressedProfileImage ->
+            True
+
+        SelectedImage _ ->
+            False
+
+        GotImageUrl _ ->
+            False
+
+        MouseDownImageEditor _ _ ->
+            False
+
+        MouseUpImageEditor ->
+            False
+
+        MovedImageEditor _ _ ->
+            False
+
+        TouchEndImageEditor ->
+            False
+
+        PressedConfirmImage ->
+            False
+
+        GotImageSize _ ->
+            False
+
+        CroppedImage _ ->
+            False
+
+        PressedCancel ->
+            True
+
+        UploadedImage result ->
+            False
 
 
 init : Model
@@ -71,17 +134,18 @@ init =
     , imageUrl = Nothing
     , dragState = Nothing
     , imageSize = Nothing
+    , status = NotUploaded
     }
 
 
-update : Coord CssPixels -> Msg -> Model -> ( Model, Maybe Image, Command FrontendOnly toMsg Msg )
-update windowSize msg model =
+update : SessionIdHash -> Coord CssPixels -> Msg -> Model -> ( Model, Command FrontendOnly ToBackend Msg )
+update sessionIdHash windowSize msg model =
     case msg of
         PressedProfileImage ->
-            ( model, Nothing, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
+            ( model, FileSelect.file [ "image/png", "image/jpg", "image/jpeg" ] SelectedImage )
 
         SelectedImage file ->
-            ( model, Nothing, File.toUrl file |> Task.perform GotImageUrl )
+            ( model, File.toUrl file |> Task.perform GotImageUrl )
 
         GotImageUrl imageUrl ->
             ( { x = 0
@@ -90,8 +154,8 @@ update windowSize msg model =
               , imageUrl = Just imageUrl
               , dragState = Nothing
               , imageSize = Nothing
+              , status = NotUploaded
               }
-            , Nothing
             , Dom.getElement profileImagePlaceholderId |> Task.attempt GotImageSize
             )
 
@@ -131,31 +195,27 @@ update windowSize msg model =
                     , currentY = ty
                     }
             in
-            ( { model | dragState = Just newDragState }, Nothing, Command.none )
+            ( { model | dragState = Just newDragState }, Command.none )
 
         MovedImageEditor x y ->
             ( updateDragState (pixelToT windowSize x) (pixelToT windowSize y) model
-            , Nothing
             , Command.none
             )
 
         MouseUpImageEditor ->
             ( getActualImageState model |> (\a -> { a | dragState = Nothing })
-            , Nothing
             , Command.none
             )
 
         TouchEndImageEditor ->
             ( getActualImageState model |> (\a -> { a | dragState = Nothing })
-            , Nothing
             , Command.none
             )
 
         PressedConfirmImage ->
             case ( model.imageSize, model.imageUrl ) of
                 ( Just ( w, _ ), Just imageUrl ) ->
-                    ( { model | imageSize = Nothing, imageUrl = Nothing }
-                    , Nothing
+                    ( { model | status = Cropping }
                     , Ports.cropImageToJs
                         { requestId = 0
                         , imageUrl = imageUrl
@@ -169,14 +229,13 @@ update windowSize msg model =
                     )
 
                 _ ->
-                    ( model, Nothing, Command.none )
+                    ( model, Command.none )
 
         GotImageSize result ->
             case result of
                 Ok { element } ->
                     if element.height <= 0 then
                         ( model
-                        , Nothing
                         , Dom.getElement profileImagePlaceholderId |> Task.attempt GotImageSize
                         )
 
@@ -187,31 +246,42 @@ update windowSize msg model =
                             , y = 0
                             , size = min 1 (element.height / element.width)
                           }
-                        , Nothing
                         , Command.none
                         )
 
                 _ ->
-                    ( model, Nothing, Command.none )
+                    ( model, Command.none )
 
         CroppedImage result ->
             case result of
                 Ok imageData ->
-                    case Image.image imageData.croppedImageUrl of
-                        Ok profileImage ->
-                            ( model
-                            , Just profileImage
-                            , Command.none
-                            )
+                    case String.split ";base64," imageData.croppedImageUrl of
+                        [ _, base64 ] ->
+                            case Base64.toBytes base64 of
+                                Just bytes ->
+                                    ( model, FileStatus.uploadAvatar UploadedImage sessionIdHash bytes )
 
-                        Err _ ->
-                            ( model, Nothing, Command.none )
+                                Nothing ->
+                                    ( { model | status = UploadingError }, Command.none )
+
+                        _ ->
+                            ( { model | status = UploadingError }, Command.none )
 
                 Err _ ->
-                    ( model, Nothing, Command.none )
+                    ( { model | status = UploadingError }, Command.none )
 
         PressedCancel ->
-            ( { model | imageUrl = Nothing, imageSize = Nothing }, Nothing, Command.none )
+            ( { model | imageUrl = Nothing, imageSize = Nothing }, Command.none )
+
+        UploadedImage result ->
+            case result of
+                Ok uploaded ->
+                    ( { model | status = Uploading uploaded.fileHash }
+                    , Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash)
+                    )
+
+                Err error ->
+                    ( { model | status = UploadingError }, Command.none )
 
 
 subscriptions : Subscription FrontendOnly Msg
@@ -370,7 +440,7 @@ view : Coord CssPixels -> Model -> Element Msg
 view windowSize model =
     case model.imageUrl of
         Nothing ->
-            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") [] PressedProfileImage "Select image"
+            MyUi.secondaryButton (Dom.id "imageEditor_selectImage") PressedProfileImage "Select image"
 
         Just imageUrl ->
             let
@@ -389,7 +459,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -406,7 +476,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -423,7 +493,7 @@ view windowSize model =
                                 }
                             , Ui.background MyUi.white
                             , Ui.border 2
-                            , MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                            , MyUi.htmlStyle "pointer-events" "none"
                             ]
                             Ui.none
                         )
@@ -440,7 +510,7 @@ view windowSize model =
 
                         Nothing ->
                             Ui.el
-                                [ MyUi.htmlStyle (Html.Attributes.style "pointer-events" "none")
+                                [ MyUi.htmlStyle "pointer-events" "none"
                                 ]
                                 (Ui.html
                                     (Html.img
@@ -464,17 +534,17 @@ view windowSize model =
                         (Json.Decode.field "offsetX" Json.Decode.float)
                         (Json.Decode.field "offsetY" Json.Decode.float)
                         |> Html.Events.preventDefaultOn "mousedown"
-                        |> MyUi.htmlStyle
+                        |> Ui.htmlAttribute
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
 
                       else
                         Json.Decode.map2 (\x_ y_ -> ( MovedImageEditor x_ y_, True ))
                             (Json.Decode.field "offsetX" Json.Decode.float)
                             (Json.Decode.field "offsetY" Json.Decode.float)
                             |> Html.Events.preventDefaultOn "mousemove"
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
                     , Html.Events.Extra.Touch.onStart
                         (\event ->
                             case List.reverse event.touches |> List.head of
@@ -484,11 +554,11 @@ view windowSize model =
                                 Nothing ->
                                     MouseDownImageEditor 0 0
                         )
-                        |> MyUi.htmlStyle
-                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> MyUi.htmlStyle
+                        |> Ui.htmlAttribute
+                    , Html.Events.Extra.Touch.onEnd (\_ -> TouchEndImageEditor) |> Ui.htmlAttribute
                     , if dragState == Nothing then
                         Html.Events.on "" (Json.Decode.succeed (MovedImageEditor 0 0))
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
 
                       else
                         Html.Events.Extra.Touch.onMove
@@ -500,7 +570,7 @@ view windowSize model =
                                     Nothing ->
                                         MovedImageEditor 0 0
                             )
-                            |> MyUi.htmlStyle
+                            |> Ui.htmlAttribute
                     , drawNode x y
                     , drawNode (x + size) y
                     , drawNode x (y + size)
@@ -516,7 +586,19 @@ view windowSize model =
                     }
                 , Ui.row
                     [ Ui.spacing 16 ]
-                    [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") [] PressedCancel "Cancel"
+                    [ MyUi.secondaryButton (Dom.id "imageEditor_cancel") PressedCancel "Cancel"
                     , MyUi.primaryButton (Dom.id "imageEditor_confirm") PressedConfirmImage "Confirm"
+                    , case model.status of
+                        Cropping ->
+                            Ui.text "Uploading..."
+
+                        Uploading _ ->
+                            Ui.text "Uploading..."
+
+                        UploadingError ->
+                            Ui.el [ Ui.Font.color MyUi.errorColor ] (Ui.text "Upload failed")
+
+                        NotUploaded ->
+                            Ui.none
                     ]
                 ]

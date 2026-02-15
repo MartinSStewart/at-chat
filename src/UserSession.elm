@@ -13,11 +13,12 @@ module UserSession exposing
     , toFrontend
     )
 
+import Discord.Id
 import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
-import Id exposing (ChannelId, ChannelMessageId, GuildId, GuildOrDmIdNoThread(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import Route exposing (ChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
@@ -28,7 +29,7 @@ type alias UserSession =
     { userId : Id UserId
     , notificationMode : NotificationMode
     , pushSubscription : PushSubscription
-    , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     , sessionIdHash : SessionIdHash
     }
@@ -36,7 +37,7 @@ type alias UserSession =
 
 type alias FrontendUserSession =
     { notificationMode : NotificationMode
-    , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+    , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
     , userAgent : UserAgent
     }
 
@@ -58,27 +59,39 @@ type NotificationMode
 
 
 type SetViewing
-    = ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
-    | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
-    | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId)))
-    | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId)))
+    = ViewDm (Id UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewDmThread (Id UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordDm (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | ViewChannel (Id GuildId) (Id ChannelId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Id UserId))))
+    | ViewChannelThread (Id GuildId) (Id ChannelId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Id UserId))))
+    | ViewDiscordChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Discord.Id.Id Discord.Id.UserId) (ToBeFilledInByBackend (SeqDict (Id ChannelMessageId) (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))))
+    | ViewDiscordChannelThread (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Discord.Id.Id Discord.Id.UserId) (Id ChannelMessageId) (ToBeFilledInByBackend (SeqDict (Id ThreadMessageId) (Message ThreadMessageId (Discord.Id.Id Discord.Id.UserId))))
     | StopViewingChannel
 
 
-setViewingToCurrentlyViewing : SetViewing -> Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+setViewingToCurrentlyViewing : SetViewing -> Maybe ( AnyGuildOrDmId, ThreadRoute )
 setViewingToCurrentlyViewing viewing =
     case viewing of
         ViewDm otherUserId _ ->
-            Just ( GuildOrDmId_Dm otherUserId, NoThread )
+            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, NoThread )
 
         ViewDmThread otherUserId threadId _ ->
-            Just ( GuildOrDmId_Dm otherUserId, ViewThread threadId )
+            Just ( GuildOrDmId_Dm otherUserId |> GuildOrDmId, ViewThread threadId )
+
+        ViewDiscordDm currentUserId channelId _ ->
+            Just ( DiscordGuildOrDmId_Dm { currentUserId = currentUserId, channelId = channelId } |> DiscordGuildOrDmId, NoThread )
 
         ViewChannel guildId channelId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId, NoThread )
+            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, NoThread )
 
         ViewChannelThread guildId channelId threadId _ ->
-            Just ( GuildOrDmId_Guild guildId channelId, ViewThread threadId )
+            Just ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId, ViewThread threadId )
+
+        ViewDiscordChannel guildId channelId discordUserId _ ->
+            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, NoThread )
+
+        ViewDiscordChannelThread guildId channelId discordUserId threadId _ ->
+            Just ( DiscordGuildOrDmId_Guild discordUserId guildId channelId |> DiscordGuildOrDmId, ViewThread threadId )
 
         StopViewingChannel ->
             Nothing
@@ -89,7 +102,7 @@ type ToBeFilledInByBackend a
     | FilledInByBackend a
 
 
-init : SessionId -> Id UserId -> Maybe ( GuildOrDmIdNoThread, ThreadRoute ) -> UserAgent -> UserSession
+init : SessionId -> Id UserId -> Maybe ( AnyGuildOrDmId, ThreadRoute ) -> UserAgent -> UserSession
 init sessionId userId currentlyViewing userAgent =
     { userId = userId
     , notificationMode = NoNotifications
@@ -101,9 +114,9 @@ init sessionId userId currentlyViewing userAgent =
 
 
 setCurrentlyViewing :
-    Maybe ( GuildOrDmIdNoThread, ThreadRoute )
-    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
-    -> { a | currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute ) }
+    Maybe ( AnyGuildOrDmId, ThreadRoute )
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
+    -> { a | currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute ) }
 setCurrentlyViewing viewing session =
     { session | currentlyViewing = viewing }
 
@@ -146,10 +159,29 @@ routeToViewing route =
                 EditChannelRoute _ ->
                     StopViewingChannel
 
-                InviteLinkCreatorRoute ->
+                GuildSettingsRoute ->
                     StopViewingChannel
 
                 JoinRoute _ ->
+                    StopViewingChannel
+
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
+            case channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    case threadRoute of
+                        NoThreadWithFriends _ _ ->
+                            ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder
+
+                        ViewThreadWithFriends threadId _ _ ->
+                            ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
+
+                DiscordChannel_NewChannelRoute ->
+                    StopViewingChannel
+
+                DiscordChannel_EditChannelRoute _ ->
+                    StopViewingChannel
+
+                DiscordChannel_GuildSettingsRoute ->
                     StopViewingChannel
 
         DmRoute otherUserId threadRoute ->
@@ -159,6 +191,9 @@ routeToViewing route =
 
                 ViewThreadWithFriends threadId _ _ ->
                     ViewDmThread otherUserId threadId EmptyPlaceholder
+
+        DiscordDmRoute data ->
+            ViewDiscordDm data.currentDiscordUserId data.channelId EmptyPlaceholder
 
         AiChatRoute ->
             StopViewingChannel

@@ -417,7 +417,7 @@ chatToMessage text =
             []
 
 
-richTextToMessage : String -> List Message -> Nonempty RichText -> ( String, List Message )
+richTextToMessage : String -> List Message -> Nonempty (RichText a) -> ( String, List Message )
 richTextToMessage previousText previousList nonempty =
     List.foldl
         (\a ( currentText, list ) ->
@@ -1372,6 +1372,9 @@ openRouterRequest openRouterKey aiModel message =
             Json.Encode.object
                 [ ( "model", Json.Encode.string aiModel )
                 , message
+                , ( "reasoning"
+                  , Json.Encode.object [ ( "effort", Json.Encode.string "high" ), ( "enabled", Json.Encode.bool True ) ]
+                  )
                 ]
                 |> Http.jsonBody
         , resolver =

@@ -11,14 +11,16 @@ module MessageMenu exposing
     , width
     )
 
+import Array exposing (Array)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
+import Discord.Id
 import DmChannel
 import Duration exposing (Seconds)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Html exposing (Html)
 import Icons
-import Id exposing (GuildOrDmIdNoThread(..), ThreadRoute, ThreadRouteWithMessage(..))
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, ThreadRouteWithMessage(..), UserId)
 import LocalState exposing (LocalState)
 import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
@@ -26,6 +28,7 @@ import MyUi
 import Quantity exposing (Quantity, Rate)
 import RichText
 import SeqDict
+import SeqSet
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Font
@@ -98,7 +101,7 @@ mobileMenuMaxHeightHelper itemCount =
 
 
 mobileMenuOpeningOffset :
-    GuildOrDmIdNoThread
+    AnyGuildOrDmId
     -> ThreadRouteWithMessage
     -> LocalState
     -> LoadedFrontend
@@ -118,7 +121,7 @@ messageMenuSpeed =
 
 
 desktopMenuHeight :
-    { a | guildOrDmId : GuildOrDmIdNoThread, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
+    { a | guildOrDmId : AnyGuildOrDmId, threadRoute : ThreadRouteWithMessage, position : Coord CssPixels }
     -> LocalState
     -> LoadedFrontend
     -> Int
@@ -309,7 +312,7 @@ view model extraOptions local loggedIn =
             )
 
 
-editMessageTextInputConfig : GuildOrDmIdNoThread -> ThreadRoute -> MsgConfig FrontendMsg
+editMessageTextInputConfig : AnyGuildOrDmId -> ThreadRoute -> MsgConfig FrontendMsg
 editMessageTextInputConfig guildOrDmId threadRoute =
     { gotPingUserPosition = GotPingUserPositionForEditMessage
     , textInputGotFocus = TextInputGotFocus
@@ -332,9 +335,10 @@ editMessageTextInputId =
     Dom.id "editMessageTextInput"
 
 
-menuItems : Bool -> GuildOrDmIdNoThread -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
+menuItems : Bool -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Bool -> Coord CssPixels -> LocalState -> LoadedFrontend -> List (Element FrontendMsg)
 menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model =
     let
+        helper : Id messageId -> { a | messages : Array (MessageState messageId (Id UserId)) } -> Maybe ( Bool, String )
         helper messageId thread =
             case DmChannel.getArray messageId thread.messages of
                 Just (MessageLoaded message) ->
@@ -344,25 +348,34 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                         _ ->
                             False
-                    , case message of
-                        UserTextMessage a ->
-                            RichText.toString (LocalState.allUsers local) a.content
-
-                        UserJoinedMessage _ userId _ ->
-                            User.toString userId (LocalState.allUsers local)
-                                ++ " joined!"
-
-                        DeletedMessage _ ->
-                            "Message deleted"
+                    , LocalState.messageToString (LocalState.allUsers local) message
                     )
                         |> Just
 
                 _ ->
                     Nothing
 
+        discordHelper : Id messageId -> { a | messages : Array (MessageState messageId (Discord.Id.Id Discord.Id.UserId)) } -> Maybe ( Bool, String )
+        discordHelper messageId thread =
+            case DmChannel.getArray messageId thread.messages of
+                Just (MessageLoaded message) ->
+                    ( case message of
+                        UserTextMessage data ->
+                            SeqDict.member data.createdBy local.localUser.linkedDiscordUsers
+
+                        _ ->
+                            False
+                    , LocalState.messageToString (LocalState.allDiscordUsers2 local.localUser) message
+                    )
+                        |> Just
+
+                _ ->
+                    Nothing
+
+        maybeData : Maybe ( Bool, String )
         maybeData =
             case guildOrDmId of
-                GuildOrDmId_Guild guildId channelId ->
+                GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
                     case LocalState.getGuildAndChannel guildId channelId local of
                         Just ( _, channel ) ->
                             case threadRoute of
@@ -380,7 +393,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         Nothing ->
                             Nothing
 
-                GuildOrDmId_Dm otherUserId ->
+                GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
                     case SeqDict.get otherUserId local.dmChannels of
                         Just dmChannel ->
                             case threadRoute of
@@ -394,6 +407,37 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
 
                                 NoThreadWithMessage messageId ->
                                     helper messageId dmChannel
+
+                        Nothing ->
+                            Nothing
+
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                        Just ( _, channel ) ->
+                            case threadRoute of
+                                ViewThreadWithMessage threadMessageIndex messageId ->
+                                    case SeqDict.get threadMessageIndex channel.threads of
+                                        Just thread ->
+                                            discordHelper messageId thread
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    discordHelper messageId channel
+
+                        Nothing ->
+                            Nothing
+
+                DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+                    case SeqDict.get data.channelId local.discordDmChannels of
+                        Just channel ->
+                            case threadRoute of
+                                ViewThreadWithMessage _ _ ->
+                                    Nothing
+
+                                NoThreadWithMessage messageId ->
+                                    discordHelper messageId channel
 
                         Nothing ->
                             Nothing
@@ -429,8 +473,11 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                     "Reply to"
                     (MessageMenu_PressedReply threadRoute)
                     |> Just
-            , case threadRoute of
-                NoThreadWithMessage messageId ->
+            , case ( threadRoute, guildOrDmId ) of
+                ( _, DiscordGuildOrDmId _ ) ->
+                    Nothing
+
+                ( NoThreadWithMessage messageId, _ ) ->
                     button
                         isMobile
                         (Dom.id "messageMenu_openThread")
@@ -439,7 +486,7 @@ menuItems isMobile guildOrDmId threadRoute isThreadStarter position local model 
                         (MessageMenu_PressedOpenThread messageId)
                         |> Just
 
-                ViewThreadWithMessage _ _ ->
+                ( ViewThreadWithMessage _ _, _ ) ->
                     Nothing
             , button
                 isMobile

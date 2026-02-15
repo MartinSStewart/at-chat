@@ -19,7 +19,7 @@ type alias VisibleMessages messageId =
     { oldest : Id messageId, count : Int }
 
 
-init : Bool -> { a | messages : Array (Message messageId) } -> VisibleMessages messageId
+init : Bool -> { a | messages : Array (Message messageId userId) } -> VisibleMessages messageId
 init preloadMessages channel =
     if preloadMessages then
         { oldest = Array.length channel.messages - pageSize |> max 0 |> Id.fromInt
@@ -64,8 +64,8 @@ firstLoad channel =
 
 
 slice :
-    { a | visibleMessages : VisibleMessages messageId, messages : Array (MessageState messageId) }
-    -> Array (MessageState messageId)
+    { a | visibleMessages : VisibleMessages messageId, messages : Array (MessageState messageId userId) }
+    -> Array (MessageState messageId userId)
 slice { visibleMessages, messages } =
     Array.slice
         (Id.toInt visibleMessages.oldest)

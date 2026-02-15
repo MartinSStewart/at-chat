@@ -1,4 +1,13 @@
-module Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply, addReactionEmoji, removeReactionEmoji)
+module Message exposing
+    ( Message(..)
+    , MessageNoReply(..)
+    , MessageState(..)
+    , MessageStateNoReply(..)
+    , UserTextMessageData
+    , UserTextMessageDataNoReply
+    , addReactionEmoji
+    , removeReactionEmoji
+    )
 
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileId)
@@ -11,50 +20,50 @@ import SeqSet
 import Time
 
 
-type Message messageId
-    = UserTextMessage (UserTextMessageData messageId)
-    | UserJoinedMessage Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
+type Message messageId userId
+    = UserTextMessage (UserTextMessageData messageId userId)
+    | UserJoinedMessage Time.Posix userId (SeqDict Emoji (NonemptySet userId))
     | DeletedMessage Time.Posix
 
 
-type MessageState messageId
-    = MessageLoaded (Message messageId)
+type MessageState messageId userId
+    = MessageLoaded (Message messageId userId)
     | MessageUnloaded
 
 
-type alias UserTextMessageData messageId =
+type alias UserTextMessageData messageId userId =
     { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , content : Nonempty RichText
-    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , createdBy : userId
+    , content : Nonempty (RichText userId)
+    , reactions : SeqDict Emoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , repliedTo : Maybe (Id messageId)
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
-type MessageStateNoReply
-    = MessageLoaded_NoReply MessageNoReply
+type MessageStateNoReply userId
+    = MessageLoaded_NoReply (MessageNoReply userId)
     | MessageUnloaded_NoReply
 
 
-type MessageNoReply
-    = UserTextMessage_NoReply UserTextMessageDataNoReply
-    | UserJoinedMessage_NoReply Time.Posix (Id UserId) (SeqDict Emoji (NonemptySet (Id UserId)))
+type MessageNoReply userId
+    = UserTextMessage_NoReply (UserTextMessageDataNoReply userId)
+    | UserJoinedMessage_NoReply Time.Posix userId (SeqDict Emoji (NonemptySet userId))
     | DeletedMessage_NoReply Time.Posix
 
 
-type alias UserTextMessageDataNoReply =
+type alias UserTextMessageDataNoReply userId =
     { createdAt : Time.Posix
-    , createdBy : Id UserId
-    , content : Nonempty RichText
-    , reactions : SeqDict Emoji (NonemptySet (Id UserId))
+    , createdBy : userId
+    , content : Nonempty (RichText userId)
+    , reactions : SeqDict Emoji (NonemptySet userId)
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
     }
 
 
-addReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
+addReactionEmoji : userId -> Emoji -> Message messageId userId -> Message messageId userId
 addReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->
@@ -99,7 +108,7 @@ addReactionEmoji userId emoji message =
             message
 
 
-removeReactionEmoji : Id UserId -> Emoji -> Message messageId -> Message messageId
+removeReactionEmoji : userId -> Emoji -> Message messageId userId -> Message messageId userId
 removeReactionEmoji userId emoji message =
     case message of
         UserTextMessage message2 ->

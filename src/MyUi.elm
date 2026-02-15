@@ -44,6 +44,7 @@ module MyUi exposing
     , insetTop
     , isMobile
     , label
+    , lazyChangedValue
     , mentionColor
     , montserrat
     , noPointerEvents
@@ -89,6 +90,7 @@ import Ui.Anim
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Lazy
 import Ui.Shadow
 
 
@@ -608,8 +610,8 @@ prewrap =
     htmlStyle "white-space" "pre-wrap"
 
 
-container : Bool -> String -> List (Element msg) -> Element msg
-container isMobile2 label2 contents =
+container : Ui.Color -> Bool -> String -> List (Element msg) -> Element msg
+container backgroundColor isMobile2 label2 contents =
     let
         paddingX =
             if isMobile2 then
@@ -636,7 +638,7 @@ container isMobile2 label2 contents =
                     }
                 , Ui.paddingXY 2 0
                 , Ui.width Ui.shrink
-                , Ui.background background1
+                , Ui.background backgroundColor
                 ]
             |> Ui.inFront
         ]
@@ -818,7 +820,7 @@ heightAttr height =
     Html.Attributes.style "height" (String.fromInt height ++ "px")
 
 
-userLabelHtml : Id UserId -> SeqDict (Id UserId) { a | name : PersonName } -> Html msg
+userLabelHtml : userId -> SeqDict userId { a | name : PersonName } -> Html msg
 userLabelHtml userId allUsers =
     case SeqDict.get userId allUsers of
         Just user ->
@@ -1017,3 +1019,17 @@ hoverAndMentionColor =
 alertColor : Ui.Color
 alertColor =
     Ui.rgb 255 10 40
+
+
+lazyChangedValue : String -> b -> Element msg
+lazyChangedValue name value =
+    Ui.Lazy.lazy2 lazyChangedValueHelper name value
+
+
+lazyChangedValueHelper : String -> b -> Element msg
+lazyChangedValueHelper name value =
+    let
+        _ =
+            Debug.log ("Lazy change: " ++ name) ()
+    in
+    Ui.none

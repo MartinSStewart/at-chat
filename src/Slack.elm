@@ -28,6 +28,7 @@ module Slack exposing
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
+    , ngrokPath
     , redirectUri
     , teamInfo
     )
@@ -123,7 +124,7 @@ redirectUri =
 
 ngrokPath : String
 ngrokPath =
-    "https://181c7d3c0e1f.ngrok-free.app"
+    "https://dd86c7f06998.ngrok-free.app"
 
 
 exchangeCodeForToken : ClientSecret -> String -> OAuthCode -> Task restriction Http.Error TokenResponse

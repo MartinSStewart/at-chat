@@ -8,6 +8,7 @@ import OneToOne exposing (OneToOne)
 import RichText exposing (RichText(..))
 import Test exposing (Test)
 import UInt64
+import Unsafe
 
 
 test : Test
@@ -37,9 +38,9 @@ users =
         ]
 
 
-fromDiscordHelper : String -> List RichText
+fromDiscordHelper : String -> List (RichText (Discord.Id.Id Discord.Id.UserId))
 fromDiscordHelper text =
-    RichText.fromDiscord users text |> List.Nonempty.toList
+    RichText.fromDiscord text |> List.Nonempty.toList
 
 
 basicFormattingTests : Test
@@ -101,6 +102,11 @@ basicFormattingTests =
         ]
 
 
+userId : Discord.Id.Id Discord.Id.UserId
+userId =
+    Unsafe.uint64 "137748026084163580" |> Discord.Id.fromUInt64
+
+
 discordSpecificTests : Test
 discordSpecificTests =
     Test.describe
@@ -108,13 +114,13 @@ discordSpecificTests =
         [ Test.test "user ping" <|
             \_ ->
                 fromDiscordHelper "<@!137748026084163580>"
-                    |> Expect.equal [ UserMention (Id.fromInt 0) ]
+                    |> Expect.equal [ UserMention userId ]
         , Test.test "user ping with text" <|
             \_ ->
                 fromDiscordHelper "Hello <@!137748026084163580> how are you?"
                     |> Expect.equal
                         [ NormalText 'H' "ello "
-                        , UserMention (Id.fromInt 0)
+                        , UserMention userId
                         , NormalText ' ' "how are you?"
                         ]
 

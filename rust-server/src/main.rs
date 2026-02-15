@@ -10,11 +10,13 @@ use axum::{
     routing::post,
 };
 
+use http::HeaderMap;
 use image::metadata::Orientation;
 use image::{self, GenericImageView, ImageReader};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha224};
 use std::fs;
+use std::str::FromStr;
 use web_push::SubscriptionInfo;
 mod content_types;
 
@@ -28,6 +30,10 @@ async fn main() {
         .route(
             "/file/push-notification",
             post(push_notification_endpoint).options(options_endpoint),
+        )
+        .route(
+            "/file/custom-request",
+            post(custom_request_endpoint).options(options_endpoint),
         )
         .route("/file/vapid", get(vapid_endpoint))
         .route("/file/{content_type}/{filename}", get(get_file_endpoint))
@@ -67,6 +73,81 @@ async fn vapid_endpoint(_request: Request) -> Response<String> {
             StatusCode::BAD_REQUEST,
             String::from("Failed to generate keys"),
         ),
+    }
+}
+
+fn vec_to_headermap(
+    headers: Vec<Header>,
+) -> Result<HeaderMap<http::HeaderValue>, Box<dyn std::error::Error>> {
+    let mut header_map = HeaderMap::new();
+
+    for header in headers {
+        let header_name = http::HeaderName::from_str(&header.key)?;
+        let header_value = http::HeaderValue::from_str(&header.value)?;
+
+        header_map.insert(header_name, header_value);
+    }
+
+    Ok(header_map)
+}
+
+async fn custom_request_endpoint(
+    Json(CustomRequest {
+        method,
+        url,
+        headers,
+        body,
+    }): Json<CustomRequest>,
+) -> Response<String> {
+    let headers2 = match vec_to_headermap(headers) {
+        Ok(ok) => ok,
+        Err(error) => {
+            return response_with_headers(StatusCode::BAD_REQUEST, format!("Error 1: {error:?}"));
+        }
+    };
+
+    let client = reqwest::Client::new();
+
+    let request = match method.as_str() {
+        "GET" => client.get(url),
+        "POST" => client.post(url),
+        "PUT" => client.put(url),
+        "PATCH" => client.patch(url),
+        "DELETE" => client.delete(url),
+        "HEAD" => client.head(url),
+        _ => {
+            return response_with_headers(
+                StatusCode::BAD_REQUEST,
+                format!("Invalid method: {method}"),
+            );
+        }
+    };
+
+    let request2 = request.headers(headers2);
+
+    let request3 = match body {
+        Some(body2) => request2.body(body2),
+        None => request2,
+    };
+
+    match request3.send().await {
+        Ok(response) => {
+            let status = response.status();
+            let response_text = match response.text().await {
+                Ok(text) => text,
+                Err(error) => {
+                    return response_with_headers(
+                        StatusCode::BAD_REQUEST,
+                        format!("Error 2: {error:?}"),
+                    );
+                }
+            };
+
+            response_with_headers(status, response_text)
+        }
+        Err(error) => {
+            response_with_headers(StatusCode::BAD_REQUEST, format!("Error 3:  {error:?}"))
+        }
     }
 }
 
@@ -692,4 +773,18 @@ pub struct PushNotification {
     pub icon: String,
     pub navigate: String,
     pub data: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<Header>,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Header {
+    key: String,
+    value: String,
 }

@@ -4,9 +4,10 @@ import Editable
 import Effect.Browser.Dom as Dom
 import Env
 import Icons
-import Id exposing (GuildOrDmIdNoThread, ThreadRoute)
+import Id exposing (AnyGuildOrDmId, GuildOrDmId, ThreadRoute)
+import ImageEditor
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (AdminStatus(..), DiscordBotToken(..), LocalState, PrivateVapidKey(..))
+import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
 import MyUi
 import PersonName
@@ -15,9 +16,11 @@ import SessionIdHash
 import Slack
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Font
+import Ui.Input
+import User
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -25,11 +28,12 @@ import UserSession exposing (NotificationMode(..), PushSubscription(..))
 init : UserOptionsModel
 init =
     { name = Editable.init
-    , botToken = Editable.init
     , slackClientSecret = Editable.init
     , publicVapidKey = Editable.init
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
+    , showLinkDiscordSetup = False
+    , linkDiscordSubmit = LinkDiscordNotSubmitted { attemptCount = 0 }
     }
 
 
@@ -38,7 +42,7 @@ viewConnectedDevice :
     ->
         { a
             | notificationMode : NotificationMode
-            , currentlyViewing : Maybe ( GuildOrDmIdNoThread, ThreadRoute )
+            , currentlyViewing : Maybe ( AnyGuildOrDmId, ThreadRoute )
             , userAgent : UserAgent
         }
     -> Element FrontendMsg
@@ -126,8 +130,8 @@ viewConnectedDevice isCurrentSession session =
         ]
 
 
-view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> UserOptionsModel -> Element FrontendMsg
-view isMobile time local loggedIn model =
+view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
+view isMobile time local loggedIn loaded model =
     Ui.el
         [ Ui.height Ui.fill
         , Ui.heightMin 0
@@ -180,33 +184,10 @@ view isMobile time local loggedIn model =
             [ case local.adminData of
                 IsAdmin adminData2 ->
                     MyUi.container
+                        MyUi.background1
                         isMobile
                         "Admin"
                         [ Editable.view
-                            (Dom.id "userOptions_botToken")
-                            True
-                            "Discord bot token"
-                            (\text ->
-                                let
-                                    text2 =
-                                        String.trim text
-                                in
-                                if text2 == "" then
-                                    Ok Nothing
-
-                                else
-                                    Just (DiscordBotToken text2) |> Ok
-                            )
-                            BotTokenEditableMsg
-                            (case adminData2.botToken of
-                                Just (DiscordBotToken a) ->
-                                    a
-
-                                Nothing ->
-                                    ""
-                            )
-                            model.botToken
-                        , Editable.view
                             (Dom.id "userOptions_slackClientSecret")
                             True
                             "Slack client secret"
@@ -277,6 +258,7 @@ view isMobile time local loggedIn model =
             , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
             , MyUi.container
+                MyUi.background1
                 isMobile
                 "Miscellaneous"
                 [ Editable.view
@@ -287,6 +269,18 @@ view isMobile time local loggedIn model =
                     UserNameEditableMsg
                     (PersonName.toString local.localUser.user.name)
                     model.name
+                , Ui.column
+                    [ Ui.spacing 8 ]
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color (Ui.rgb 128 128 128) ] (Ui.text "Profile Picture")
+                    , Ui.row
+                        [ Ui.spacing 12, Ui.alignLeft ]
+                        [ User.profileImage local.localUser.user.icon
+                        , ImageEditor.view
+                            loaded.windowSize
+                            loggedIn.profilePictureEditor
+                            |> Ui.map ProfilePictureEditorMsg
+                        ]
+                    ]
                 , Ui.column
                     [ Ui.spacing 8 ]
                     [ MyUi.radioColumn
@@ -355,8 +349,99 @@ view isMobile time local loggedIn model =
                         )
                     ]
                     (Ui.text "Link Slack account")
+
+                --, Ui.column
+                --    []
+                --    (SeqDict.toList local.localUser.user.linkedDiscordUsers
+                --        |> List.map
+                --            (\( _, data ) ->
+                --                Ui.text data.name
+                --            )
+                --    )
+                , if model.showLinkDiscordSetup then
+                    Ui.column
+                        [ Ui.spacing 16, Ui.widthMax 400 ]
+                        [ Ui.row
+                            [ Ui.border 1
+                            , Ui.borderColor MyUi.border1
+                            , Ui.rounded 2
+                            , Ui.spacing 8
+                            , Ui.Font.color MyUi.font3
+                            ]
+                            [ Ui.el
+                                [ Ui.clipWithEllipsis
+                                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                                ]
+                                (Ui.text bookmarklet)
+                            , MyUi.elButton
+                                (Dom.id "userOptions_copyBookmarklet")
+                                (PressedCopyText bookmarklet)
+                                [ Ui.width Ui.shrink
+                                , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+                                , Ui.borderColor MyUi.border1
+                                , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+                                , Ui.spacing 4
+                                ]
+                                (case loaded.lastCopied of
+                                    Just copied ->
+                                        if copied.copiedText == bookmarklet then
+                                            Ui.text "Copied!"
+
+                                        else
+                                            Ui.html Icons.copy
+
+                                    Nothing ->
+                                        Ui.html Icons.copy
+                                )
+                            ]
+                        , Ui.Input.multiline
+                            [ Ui.inFront
+                                (Ui.el
+                                    [ Ui.centerX
+                                    , Ui.centerY
+                                    , Ui.Font.center
+                                    , MyUi.noPointerEvents
+                                    , Ui.paddingXY 16 8
+                                    ]
+                                    (case model.linkDiscordSubmit of
+                                        LinkDiscordNotSubmitted { attemptCount } ->
+                                            Ui.text "After running the bookmarklet, paste the contents of your clipboard here."
+
+                                        LinkDiscordSubmitting ->
+                                            Ui.text "Submitting..."
+
+                                        LinkDiscordSubmitted ->
+                                            Ui.text "Linked!"
+                                    )
+                                )
+                            , Ui.height (Ui.px 150)
+                            , Ui.background MyUi.inputBackground
+                            , Ui.borderColor MyUi.inputBorder
+                            ]
+                            { onChange = TypedBookmarkletData
+                            , text = ""
+                            , placeholder = Nothing
+                            , label = Ui.Input.labelHidden "userOptions_pasteBookmarkletData"
+                            , spellcheck = False
+                            }
+                        ]
+
+                  else
+                    MyUi.elButton
+                        (Dom.id "userOptions_linkDiscord")
+                        PressedLinkDiscord
+                        [ Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        , Ui.background MyUi.buttonBackground
+                        , Ui.Font.color MyUi.font1
+                        , Ui.width Ui.shrink
+                        , Ui.paddingXY 16 8
+                        , Ui.rounded 4
+                        ]
+                        (Ui.text "Link Discord account")
                 ]
             , MyUi.container
+                MyUi.background1
                 isMobile
                 "Connected devices"
                 (viewConnectedDevice True local.localUser.session :: List.map (viewConnectedDevice False) (SeqDict.values local.otherSessions))
@@ -374,3 +459,26 @@ view isMobile time local loggedIn model =
                 )
             ]
         )
+
+
+bookmarklet : String
+bookmarklet =
+    """javascript:(function()
+{
+    location.reload();
+    var i = document.createElement('iframe');
+    document.body.appendChild(i);
+    stop();
+    const data = JSON.stringify(
+        { token: i.contentWindow.localStorage.token.replaceAll("\\"", "")
+        , userAgent: window.navigator.userAgent
+        , xSuperProperties: "eyJvcyI6IkxpbnV4IiwiYnJvd3NlciI6IkZpcmVmb3giLCJkZXZpY2UiOiIiLCJzeXN0ZW1fbG9jYWxlIjoiZW4tVVMiLCJoYXNfY2xpZW50X21vZHMiOmZhbHNlLCJicm93c2VyX3VzZXJfYWdlbnQiOiJNb3ppbGxhLzUuMCAoWDExOyBVYnVudHU7IExpbnV4IHg4Nl82NDsgcnY6MTQzLjApIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTQzLjAiLCJicm93c2VyX3ZlcnNpb24iOiIxNDMuMCIsIm9zX3ZlcnNpb24iOiIiLCJyZWZlcnJlciI6Imh0dHBzOi8vd3d3Lmdvb2dsZS5jb20vIiwicmVmZXJyaW5nX2RvbWFpbiI6Ind3dy5nb29nbGUuY29tIiwic2VhcmNoX2VuZ2luZSI6Imdvb2dsZSIsInJlZmVycmVyX2N1cnJlbnQiOiIiLCJyZWZlcnJpbmdfZG9tYWluX2N1cnJlbnQiOiIiLCJyZWxlYXNlX2NoYW5uZWwiOiJzdGFibGUiLCJjbGllbnRfYnVpbGRfbnVtYmVyIjo0NTMyNDgsImNsaWVudF9ldmVudF9zb3VyY2UiOm51bGwsImNsaWVudF9sYXVuY2hfaWQiOiI4NzBkNjM4MC0wZDViLTQwNjYtYmI3Zi0zNThkYjRiYmI2NzgiLCJsYXVuY2hfc2lnbmF0dXJlIjoiOGY1MTYzNjItNTBlMS00NmNmLThiMjQtMmNiZDI4M2IwMjQ3IiwiY2xpZW50X2hlYXJ0YmVhdF9zZXNzaW9uX2lkIjoiNGYwNzU4YmItNjNjZS00Njk2LWFiNDUtYTA0NmNlZGIzNTk5IiwiY2xpZW50X2FwcF9zdGF0ZSI6InVuZm9jdXNlZCJ9"
+        });
+    navigator.clipboard.writeText(data);
+
+    alert("Data copied to clipboard. Go back to at-chat and paste it there.");
+})()"""
+        |> String.replace "\n" " "
+        |> String.replace "  " " "
+        |> String.replace "  " " "
+        |> String.replace "  " " "

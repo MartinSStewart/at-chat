@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lamdera make src/Frontend.elm src/Backend.elm)",
+      "Bash(elm-format src/ --yes)",
+      "Bash(elm-test-rs --compiler `which lamdera`)"
+    ],
+    "deny": []
+  }
+}

@@ -1,9 +1,11 @@
 module Id exposing
-    ( ChannelId(..)
+    ( AnyGuildOrDmId(..)
+    , ChannelId(..)
     , ChannelMessageId(..)
+    , DiscordGuildOrDmId(..)
+    , DiscordGuildOrDmId_DmData
     , GuildId(..)
-    , GuildOrDmId
-    , GuildOrDmIdNoThread(..)
+    , GuildOrDmId(..)
     , Id(..)
     , InviteLinkId(..)
     , ThreadMessageId(..)
@@ -12,6 +14,7 @@ module Id exposing
     , ThreadRouteWithMessage(..)
     , UserId(..)
     , changeType
+    , codec
     , fromInt
     , fromString
     , nextId
@@ -22,17 +25,31 @@ module Id exposing
     , toString
     )
 
+import Codec exposing (Codec)
+import Discord.Id
 import List.Extra
 import SeqDict exposing (SeqDict)
 
 
-type alias GuildOrDmId =
-    ( GuildOrDmIdNoThread, ThreadRoute )
-
-
-type GuildOrDmIdNoThread
+type GuildOrDmId
     = GuildOrDmId_Guild (Id GuildId) (Id ChannelId)
     | GuildOrDmId_Dm (Id UserId)
+
+
+type DiscordGuildOrDmId
+    = DiscordGuildOrDmId_Guild (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | DiscordGuildOrDmId_Dm DiscordGuildOrDmId_DmData
+
+
+type alias DiscordGuildOrDmId_DmData =
+    { currentUserId : Discord.Id.Id Discord.Id.UserId
+    , channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    }
+
+
+type AnyGuildOrDmId
+    = GuildOrDmId GuildOrDmId
+    | DiscordGuildOrDmId DiscordGuildOrDmId
 
 
 type ThreadRoute
@@ -141,3 +158,8 @@ toString (Id a) =
 changeType : Id a -> Id b
 changeType (Id a) =
     Id a
+
+
+codec : Codec (Id a)
+codec =
+    Codec.map fromInt toInt Codec.int

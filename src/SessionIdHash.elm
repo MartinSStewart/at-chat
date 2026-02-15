@@ -1,6 +1,6 @@
 module SessionIdHash exposing (SessionIdHash(..), fromSessionId, fromString, toString)
 
-import Effect.Lamdera
+import Effect.Lamdera as Lamdera
 import Sha256
 
 
@@ -13,9 +13,9 @@ toString (SessionIdHash a) =
     a
 
 
-fromSessionId : Effect.Lamdera.SessionId -> SessionIdHash
+fromSessionId : Lamdera.SessionId -> SessionIdHash
 fromSessionId sessionId =
-    Effect.Lamdera.sessionIdToString sessionId |> Sha256.sha224 |> SessionIdHash
+    Lamdera.sessionIdToString sessionId |> Sha256.sha224 |> SessionIdHash
 
 
 fromString : String -> SessionIdHash

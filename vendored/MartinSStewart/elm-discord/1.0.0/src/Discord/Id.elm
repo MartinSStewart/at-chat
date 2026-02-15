@@ -8,12 +8,17 @@ module Discord.Id exposing
     , Id(..)
     , MessageId
     , OverwriteId
+    , PrivateChannelId
     , RoleId
+    , StickerId
+    , StickerPackId
+    , TagId
     , TeamId
     , UserId
     , WebhookId
     , decodeId
     , encodeId
+    , fromString
     , fromUInt64
     , toString
     , toUInt64
@@ -45,6 +50,12 @@ type RoleId
 
 type ChannelId
     = ChannelId Never
+
+
+{-| Only for user tokens. Bots can't access private channels
+-}
+type PrivateChannelId
+    = PrivateChannelId Never
 
 
 type GuildId
@@ -79,6 +90,18 @@ type AchievementId
     = AchievementId Never
 
 
+type StickerId
+    = StickerId Never
+
+
+type StickerPackId
+    = StickerPackId Never
+
+
+type TagId
+    = TagId Never
+
+
 encodeId : Id idType -> JE.Value
 encodeId id =
     JE.string (toString id)
@@ -87,16 +110,30 @@ encodeId id =
 decodeId : JD.Decoder (Id idType)
 decodeId =
     JD.andThen
-        (UInt64.fromString
-            >> Maybe.map (Id >> JD.succeed)
-            >> Maybe.withDefault (JD.fail "Invalid snowflake ID.")
+        (\text ->
+            case fromString text of
+                Just id ->
+                    JD.succeed id
+
+                Nothing ->
+                    JD.fail "Invalid snowflake ID."
         )
         JD.string
 
 
 toString : Id idType -> String
-toString =
-    toUInt64 >> UInt64.toString
+toString id =
+    toUInt64 id |> UInt64.toString
+
+
+fromString : String -> Maybe (Id idType)
+fromString text =
+    case UInt64.fromString text of
+        Just uint ->
+            Id uint |> Just
+
+        Nothing ->
+            Nothing
 
 
 toUInt64 : Id idType -> UInt64

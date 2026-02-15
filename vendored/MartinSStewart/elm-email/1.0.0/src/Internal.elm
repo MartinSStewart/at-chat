@@ -1,9 +1,9 @@
 module Internal exposing (Attribute(..), Html(..), ImageType(..), cid, imageExtension, inlineImageName, mimeType, toHtml, toString)
 
+import Base64
 import Bytes exposing (Bytes)
 import Html
 import Html.Attributes
-import VendoredBase64
 
 
 type Html
@@ -26,7 +26,7 @@ toHtml html =
         InlineImage { content, imageType } attributes children ->
             Html.img
                 (Html.Attributes.src
-                    ("data:" ++ mimeType imageType ++ ";base64," ++ Maybe.withDefault "" (VendoredBase64.fromBytes content))
+                    ("data:" ++ mimeType imageType ++ ";base64," ++ Maybe.withDefault "" (Base64.fromBytes content))
                     :: List.map toHtmlAttribute attributes
                 )
                 (List.map toHtml children)
