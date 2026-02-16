@@ -1,5 +1,6 @@
 module UserOptions exposing (init, view)
 
+import Discord exposing (HttpError(..))
 import Editable
 import Effect.Browser.Dom as Dom
 import Env
@@ -412,6 +413,43 @@ view isMobile time local loggedIn loaded model =
 
                                         LinkDiscordSubmitted ->
                                             Ui.text "Linked!"
+
+                                        LinkDiscordSubmitError httpError ->
+                                            (case httpError of
+                                                NotModified304 errorCode ->
+                                                    "NotModified304 " ++ Discord.errorCodeToString errorCode
+
+                                                Unauthorized401 errorCode ->
+                                                    "Unauthorized401 " ++ Discord.errorCodeToString errorCode
+
+                                                Forbidden403 errorCode ->
+                                                    "Forbidden403 " ++ Discord.errorCodeToString errorCode
+
+                                                NotFound404 errorCode ->
+                                                    "NotFound404 " ++ Discord.errorCodeToString errorCode
+
+                                                TooManyRequests429 rateLimit ->
+                                                    "TooManyRequests429"
+
+                                                GatewayUnavailable502 errorCode ->
+                                                    "GatewayUnavailable502 " ++ Discord.errorCodeToString errorCode
+
+                                                ServerError5xx record ->
+                                                    "ServerError"
+                                                        ++ String.fromInt record.statusCode
+                                                        ++ " "
+                                                        ++ Discord.errorCodeToString record.errorCode
+
+                                                NetworkError ->
+                                                    "NetworkError"
+
+                                                Timeout ->
+                                                    "Timeout"
+
+                                                UnexpectedError string ->
+                                                    "UnexpectedError " ++ string
+                                            )
+                                                |> Ui.text
                                     )
                                 )
                             , Ui.height (Ui.px 150)

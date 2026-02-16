@@ -7032,16 +7032,32 @@ updateLoadedFromBackend msg model =
                     logout model
 
         LinkDiscordResponse result ->
-            case result of
-                Ok ok ->
-                    ( model, Command.none )
+            updateLoggedIn
+                (\loggedIn ->
+                    case loggedIn.userOptions of
+                        Just userOptions ->
+                            ( { loggedIn
+                                | userOptions =
+                                    (case result of
+                                        Ok _ ->
+                                            { userOptions | linkDiscordSubmit = LinkDiscordSubmitted }
 
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "err" error
-                    in
-                    ( model, Command.none )
+                                        Err error ->
+                                            let
+                                                _ =
+                                                    Debug.log "err" error
+                                            in
+                                            { userOptions | linkDiscordSubmit = LinkDiscordSubmitError error }
+                                    )
+                                        |> Just
+                              }
+                            , Command.none
+                            )
+
+                        Nothing ->
+                            ( loggedIn, Command.none )
+                )
+                model
 
         ProfilePictureEditorToFrontend imageEditorToFrontend ->
             updateLoggedIn

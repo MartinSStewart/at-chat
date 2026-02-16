@@ -213,6 +213,7 @@ type LinkDiscordSubmitStatus
     = LinkDiscordNotSubmitted { attemptCount : Int }
     | LinkDiscordSubmitting
     | LinkDiscordSubmitted
+    | LinkDiscordSubmitError Discord.HttpError
 
 
 type ChannelSidebarMode
