@@ -73,7 +73,7 @@ import Image
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendChannel, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -639,7 +639,7 @@ type ToFrontend
     | AiChatToFrontend AiChat.ToFrontend
     | YouConnected
     | ReloadDataResponse (Result () LoginData)
-    | LinkDiscordResponse (Result Discord.HttpError Discord.User)
+    | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
     | ExportGuildResponse (Id GuildId) BackendGuild
     | ExportDiscordGuildResponse DiscordExport
@@ -716,7 +716,9 @@ type ServerChange
     | Server_LoggedOut SessionIdHash
     | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
-    | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) String
+    | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
+    | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
 
 
 type LocalChange

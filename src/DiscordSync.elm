@@ -10,7 +10,7 @@ module DiscordSync exposing
 import Array exposing (Array)
 import Array.Extra
 import Broadcast
-import ChannelName
+import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
@@ -32,7 +32,7 @@ import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
-import NonemptySet
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
 import Route exposing (Route(..))
@@ -1272,7 +1272,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( handleReadySupplementalData readySupplementalData model2, cmds )
 
                         Discord.UserOutMsg_ChannelCreated channel ->
-                            ( model2, cmds )
+                            let
+                                ( model3, cmd2 ) =
+                                    handleChannelCreated channel model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1288,6 +1292,115 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleChannelCreated channel model =
+    case channel.guildId of
+        Missing ->
+            case channel.recipients of
+                Included (head :: rest) ->
+                    let
+                        channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                        channelId =
+                            Discord.Id.toUInt64 channel.id |> Discord.Id.fromUInt64
+
+                        members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+                        members =
+                            NonemptySet.fromNonemptyList
+                                (Nonempty head.id (List.map .id rest))
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | discordDmChannels =
+                                    SeqDict.update
+                                        channelId
+                                        (\maybeChannel ->
+                                            case maybeChannel of
+                                                Just _ ->
+                                                    maybeChannel
+
+                                                Nothing ->
+                                                    { messages = Array.empty
+                                                    , lastTypedAt = SeqDict.empty
+                                                    , linkedMessageIds = OneToOne.empty
+                                                    , members = members
+                                                    }
+                                                        |> Just
+                                        )
+                                        model.discordDmChannels
+                                , discordUsers =
+                                    List.map
+                                        (\user ->
+                                            { id = user.id
+                                            , username = user.username
+                                            , avatar = user.avatar
+                                            , discriminator = user.discriminator
+                                            }
+                                        )
+                                        (head :: rest)
+                                        |> List.foldl addDiscordUserData model.discordUsers
+                            }
+                    in
+                    ( model2
+                    , Command.batch
+                        [ Broadcast.toDiscordDmChannel
+                            channelId
+                            (Server_DiscordDmChannelCreated channelId members |> ServerChange)
+                            model2
+                        , getUserAvatars (head :: rest)
+                        ]
+                    )
+
+                _ ->
+                    ( model, Command.none )
+
+        Included guildId ->
+            let
+                name : ChannelName
+                name =
+                    case channel.name of
+                        Included name2 ->
+                            ChannelName.fromStringLossy name2
+
+                        Missing ->
+                            ChannelName.fromStringLossy "New channel"
+            in
+            ( { model
+                | discordGuilds =
+                    SeqDict.updateIfExists
+                        guildId
+                        (\guild ->
+                            { guild
+                                | channels =
+                                    SeqDict.update
+                                        channel.id
+                                        (\maybeChannel ->
+                                            case maybeChannel of
+                                                Just _ ->
+                                                    maybeChannel
+
+                                                Nothing ->
+                                                    { name = name
+                                                    , messages = Array.empty
+                                                    , status = ChannelActive
+                                                    , lastTypedAt = SeqDict.empty
+                                                    , linkedMessageIds = OneToOne.empty
+                                                    , threads = SeqDict.empty
+                                                    }
+                                                        |> Just
+                                        )
+                                        guild.channels
+                            }
+                        )
+                        model.discordGuilds
+              }
+            , Broadcast.toDiscordGuild
+                guildId
+                (Server_DiscordChannelCreated guildId channel.id name |> ServerChange)
+                model
+            )
 
 
 handleReadySupplementalData : Discord.ReadySupplementalData -> BackendModel -> BackendModel

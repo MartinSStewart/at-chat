@@ -6161,6 +6161,57 @@ changeUpdate localMsg local =
                     in
                     local
 
+                Server_DiscordChannelCreated guildId channelId channelName ->
+                    { local
+                        | discordGuilds =
+                            SeqDict.updateIfExists
+                                guildId
+                                (\guild ->
+                                    { guild
+                                        | channels =
+                                            SeqDict.update
+                                                channelId
+                                                (\maybeChannel ->
+                                                    case maybeChannel of
+                                                        Just _ ->
+                                                            maybeChannel
+
+                                                        Nothing ->
+                                                            { name = channelName
+                                                            , messages = Array.empty
+                                                            , visibleMessages = VisibleMessages.empty
+                                                            , lastTypedAt = SeqDict.empty
+                                                            , threads = SeqDict.empty
+                                                            }
+                                                                |> Just
+                                                )
+                                                guild.channels
+                                    }
+                                )
+                                local.discordGuilds
+                    }
+
+                Server_DiscordDmChannelCreated channelId members ->
+                    { local
+                        | discordDmChannels =
+                            SeqDict.update
+                                channelId
+                                (\maybeChannel ->
+                                    case maybeChannel of
+                                        Just _ ->
+                                            maybeChannel
+
+                                        Nothing ->
+                                            { messages = Array.empty
+                                            , visibleMessages = VisibleMessages.empty
+                                            , lastTypedAt = SeqDict.empty
+                                            , members = members
+                                            }
+                                                |> Just
+                                )
+                                local.discordDmChannels
+                    }
+
 
 memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmId, ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =

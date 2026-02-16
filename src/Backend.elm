@@ -63,7 +63,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, LastDmViewed(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -514,35 +514,38 @@ update msg model =
         LinkDiscordUserStep1 clientId userId auth result ->
             case result of
                 Ok discordUser ->
-                    ( { model
-                        | discordUsers =
-                            SeqDict.insert
-                                discordUser.id
-                                (FullData
-                                    { auth = auth
-                                    , user = discordUser
-                                    , connection = Discord.init
-                                    , linkedTo = userId
-                                    , icon = Nothing
-                                    }
-                                )
-                                model.discordUsers
-                      }
+                    let
+                        backendUser : DiscordFullUserData
+                        backendUser =
+                            { auth = auth
+                            , user = discordUser
+                            , connection = Discord.init
+                            , linkedTo = userId
+                            , icon = Nothing
+                            }
+                    in
+                    ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
                     , Command.batch
-                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
+                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
                         , Broadcast.toUser
                             Nothing
                             Nothing
                             userId
-                            (Server_LinkDiscordUser discordUser.id discordUser.username |> ServerChange)
+                            (Server_LinkDiscordUser
+                                discordUser.id
+                                (discordFullDataUserToFrontendCurrentUser backendUser)
+                                |> ServerChange
+                            )
                             model
-                        , Websocket.createHandle (WebsocketCreatedHandleForUser discordUser.id) Discord.websocketGatewayUrl
+                        , Websocket.createHandle
+                            (WebsocketCreatedHandleForUser discordUser.id)
+                            Discord.websocketGatewayUrl
                         ]
                     )
 
-                Err _ ->
+                Err error ->
                     ( model
-                    , Lamdera.sendToFrontend clientId (LinkDiscordResponse result)
+                    , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
                     )
 
         HandleReadyDataStep2 discordUserId result ->
@@ -624,6 +627,25 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
+discordFullDataUserToFrontendCurrentUser : DiscordFullUserData -> DiscordFrontendCurrentUser
+discordFullDataUserToFrontendCurrentUser data =
+    { name = PersonName.fromStringLossy data.user.username
+    , icon = data.icon
+    , email =
+        case data.user.email of
+            Included maybeText ->
+                case maybeText of
+                    Just text ->
+                        EmailAddress.fromString text
+
+                    Nothing ->
+                        Nothing
+
+            Missing ->
+                Nothing
+    }
+
+
 getLoginData :
     SessionId
     -> UserSession
@@ -642,21 +664,7 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    { name = PersonName.fromStringLossy data.user.username
-                                    , icon = data.icon
-                                    , email =
-                                        case data.user.email of
-                                            Included maybeText ->
-                                                case maybeText of
-                                                    Just text ->
-                                                        EmailAddress.fromString text
-
-                                                    Nothing ->
-                                                        Nothing
-
-                                            Missing ->
-                                                Nothing
-                                    }
+                                    (discordFullDataUserToFrontendCurrentUser data)
                                     linkedDiscordUsers2
                                 )
 
