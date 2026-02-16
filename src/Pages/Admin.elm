@@ -766,14 +766,16 @@ deleteUserButtonId userTableId =
 view : Time.Zone -> AdminData -> BackendUser -> Model -> Element Msg
 view timezone adminData user model =
     Ui.el
-        (if Env.isProduction then
-            [ Ui.borderWith { left = 6, right = 0, top = 0, bottom = 0 }, Ui.borderColor MyUi.errorColor ]
+        (Ui.scrollable
+            :: (if Env.isProduction then
+                    [ Ui.borderWith { left = 6, right = 0, top = 0, bottom = 0 }, Ui.borderColor MyUi.errorColor ]
 
-         else
-            []
+                else
+                    []
+               )
         )
         (MyUi.column
-            [ Ui.scrollable, Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
+            [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
             , logSection timezone user model
             ]
