@@ -3,7 +3,9 @@ module UserOptions exposing (init, view)
 import Discord exposing (HttpError(..))
 import Editable
 import Effect.Browser.Dom as Dom
+import EmailAddress
 import Env
+import FileStatus
 import Icons
 import Id exposing (AnyGuildOrDmId, GuildOrDmId, ThreadRoute)
 import ImageEditor
@@ -272,7 +274,7 @@ view isMobile time local loggedIn loaded model =
                     model.name
                 , Ui.column
                     [ Ui.spacing 8 ]
-                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color (Ui.rgb 128 128 128) ] (Ui.text "Profile Picture")
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Profile Picture")
                     , Ui.row
                         [ Ui.spacing 12, Ui.alignLeft ]
                         [ User.profileImage local.localUser.user.icon
@@ -350,15 +352,31 @@ view isMobile time local loggedIn loaded model =
                         )
                     ]
                     (Ui.text "Link Slack account")
+                , Ui.column
+                    []
+                    [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
+                    , Ui.column
+                        []
+                        (List.map
+                            (\( _, data ) ->
+                                Ui.row
+                                    [ Ui.spacing 4 ]
+                                    [ User.profileImage data.icon
+                                    , Ui.column
+                                        []
+                                        [ Ui.text (PersonName.toString data.name)
+                                        , case data.email of
+                                            Just email ->
+                                                Ui.text (EmailAddress.toString email)
 
-                --, Ui.column
-                --    []
-                --    (SeqDict.toList local.localUser.user.linkedDiscordUsers
-                --        |> List.map
-                --            (\( _, data ) ->
-                --                Ui.text data.name
-                --            )
-                --    )
+                                            Nothing ->
+                                                Ui.none
+                                        ]
+                                    ]
+                            )
+                            (SeqDict.toList local.localUser.linkedDiscordUsers)
+                        )
+                    ]
                 , if model.showLinkDiscordSetup then
                     Ui.column
                         [ Ui.spacing 16, Ui.widthMax 400 ]
