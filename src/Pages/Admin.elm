@@ -773,7 +773,7 @@ view timezone adminData user model =
             []
         )
         (MyUi.column
-            [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
+            [ Ui.scrollable, Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
             , logSection timezone user model
             ]
