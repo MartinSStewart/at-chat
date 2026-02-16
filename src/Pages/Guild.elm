@@ -24,7 +24,7 @@ import ChannelName
 import Coord
 import Date exposing (Date)
 import Discord.Id
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
@@ -39,7 +39,7 @@ import Icons
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMessage(..), UserId)
 import Json.Decode
 import List.Extra
-import List.Nonempty exposing (Nonempty(..))
+import List.Nonempty
 import LocalState exposing (DiscordFrontendChannel, DiscordFrontendGuild, FrontendChannel, FrontendGuild, LocalState, LocalUser)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
@@ -1519,7 +1519,7 @@ discordChannelView routeData guild loggedIn local model =
 
         DiscordChannel_EditChannelRoute channelId ->
             case SeqDict.get channelId guild.channels of
-                Just channel ->
+                Just _ ->
                     pageMissing "Editing Discord channels not supported yet"
 
                 Nothing ->
@@ -3076,10 +3076,6 @@ conversationView :
     -> Element FrontendMsg
 conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn model local name channel =
     let
-        guildOrDmId : ( GuildOrDmId, ThreadRoute )
-        guildOrDmId =
-            ( guildOrDmIdNoThread, NoThread )
-
         allUsers : SeqDict (Id UserId) FrontendUser
         allUsers =
             LocalState.allUsers local
@@ -3568,7 +3564,7 @@ threadConversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId thr
                             privateChatWithYourself
 
                          else
-                            privateChatWithYourself
+                            privateChatWith name
                         )
 
                 GuildOrDmId_Guild _ _ ->

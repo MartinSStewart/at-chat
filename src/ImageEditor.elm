@@ -17,7 +17,7 @@ import Html
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Touch
-import Image exposing (Image)
+import Image
 import Json.Decode
 import List.Extra as List
 import MyUi
@@ -44,7 +44,7 @@ type Msg
 
 
 type ToBackend
-    = ChangeUserAvatarRequest FileStatus.FileHash
+    = ChangeUserAvatarRequest FileHash
 
 
 type ToFrontend
@@ -122,7 +122,7 @@ isPressMsg msg =
         PressedCancel ->
             True
 
-        UploadedImage result ->
+        UploadedImage _ ->
             False
 
 
@@ -280,7 +280,7 @@ update sessionIdHash windowSize msg model =
                     , Lamdera.sendToBackend (ChangeUserAvatarRequest uploaded.fileHash)
                     )
 
-                Err error ->
+                Err _ ->
                     ( { model | status = UploadingError }, Command.none )
 
 

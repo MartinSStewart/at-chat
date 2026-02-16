@@ -35,12 +35,11 @@ import Discord.Id
 import Effect.Time as Time
 import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
-import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, GuildOrDmId, Id, ThreadMessageId, ThreadRoute, UserId)
+import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
-import Route exposing (ShowMembersTab)
 import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)

@@ -35,7 +35,6 @@ module LocalState exposing
     , createChannelMessageFrontend
     , createDiscordChannelMessageBackend
     , createDiscordDmChannelMessageBackend
-    , createDiscordMessageBackend
     , createDiscordThreadMessageBackend
     , createGuild
     , createThreadMessageBackend
@@ -86,12 +85,11 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
-import Duration
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -99,8 +97,7 @@ import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
-import Quantity
-import RichText exposing (RichText(..))
+import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)

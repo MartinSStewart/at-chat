@@ -28,9 +28,7 @@ import Message exposing (Message, MessageState(..))
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
-import UInt64
 import VisibleMessages exposing (VisibleMessages)
 
 

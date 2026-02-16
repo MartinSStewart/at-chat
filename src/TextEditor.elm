@@ -1,5 +1,6 @@
 module TextEditor exposing
     ( EditChange(..)
+    , EditorState
     , LocalChange(..)
     , LocalState
     , Model
@@ -7,7 +8,6 @@ module TextEditor exposing
     , ServerChange
     , backendChangeUpdate
     , changeUpdate
-    , getEditorState
     , init
     , initLocalState
     , inputId
@@ -269,7 +269,7 @@ redoChange userId local =
 getNextUndoPoint : Id UserId -> Int -> Array ( Id UserId, EditChange ) -> Maybe Int
 getNextUndoPoint userId index history =
     case Array.get index history of
-        Just ( changeBy, edit ) ->
+        Just ( changeBy, _ ) ->
             if changeBy == userId then
                 Just index
 
@@ -535,7 +535,7 @@ view isMobile currentUserId local =
                             ]
                             (Ui.text
                                 (case edit of
-                                    Edit_TypedText range string ->
+                                    Edit_TypedText _ string ->
                                         "Typed \"" ++ string ++ "\""
                                 )
                             )
@@ -550,10 +550,10 @@ view isMobile currentUserId local =
 isPress : Msg -> Bool
 isPress msg =
     case msg of
-        TypedText string ->
+        TypedText _ ->
             False
 
-        MovedCursor range ->
+        MovedCursor _ ->
             False
 
         PressedReset ->
@@ -639,7 +639,7 @@ textarea local currentUserId placeholderText editorState =
                 )
             ]
             (case String.Nonempty.fromString editorState.text of
-                Just nonempty ->
+                Just _ ->
                     highlightText editorState.text currentUserId editorState local ++ [ Html.text "\n" ]
 
                 Nothing ->
@@ -659,7 +659,7 @@ type RangeType
     | EndRange
 
 
-userIdColor : Id UserId -> Color.Color
+userIdColor : Id UserId -> Color
 userIdColor userId =
     case modBy 6 (Id.toInt userId) of
         0 ->

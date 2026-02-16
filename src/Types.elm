@@ -15,7 +15,6 @@ module Types exposing
     , EmojiSelector(..)
     , FrontendModel(..)
     , FrontendMsg(..)
-    , GuildChannelAndMessageId
     , GuildChannelNameHover(..)
     , LastRequest(..)
     , LinkDiscordSubmitStatus(..)
@@ -48,10 +47,9 @@ import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
 import ChannelName exposing (ChannelName)
-import Codec exposing (Codec)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord exposing (CaptchaChallengeData)
+import Discord
 import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
@@ -69,11 +67,10 @@ import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileDataWithImage, FileHash, FileId, FileStatus)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrDmId, DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId, Id, InviteLinkId, ThreadMessageId, ThreadRoute, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
-import Image
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendChannel, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -82,7 +79,6 @@ import MessageInput exposing (MentionUserDropdown)
 import MessageView
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
-import OneOrGreater exposing (OneOrGreater)
 import OneToOne exposing (OneToOne)
 import Pages.Admin exposing (AdminChange, InitAdminData)
 import PersonName exposing (PersonName)
@@ -93,7 +89,6 @@ import RichText exposing (RichText)
 import Route exposing (Route)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
 import String.Nonempty exposing (NonemptyString)
@@ -537,10 +532,6 @@ type alias NewGuildForm =
     { name : String
     , pressedSubmit : Bool
     }
-
-
-type alias GuildChannelAndMessageId =
-    { guildId : Id GuildId, channelId : Id ChannelId, threadRoute : ThreadRouteWithMessage }
 
 
 type ToBackend

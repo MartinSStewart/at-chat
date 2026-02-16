@@ -2,12 +2,9 @@ module DiscordMarkdownTests exposing (test)
 
 import Discord.Id
 import Expect
-import Id
 import List.Nonempty exposing (Nonempty(..))
-import OneToOne exposing (OneToOne)
 import RichText exposing (RichText(..))
 import Test exposing (Test)
-import UInt64
 import Unsafe
 
 
@@ -21,20 +18,6 @@ test =
         --, codeTests
         --, edgeCaseTests
         --, fuzzTests
-        ]
-
-
-users : OneToOne (Discord.Id.Id idType) (Id.Id a)
-users =
-    OneToOne.fromList
-        [ ( case UInt64.fromString "137748026084163580" of
-                Just uint ->
-                    Discord.Id.fromUInt64 uint
-
-                Nothing ->
-                    Debug.todo "Invalid ID"
-          , Id.fromInt 0
-          )
         ]
 
 

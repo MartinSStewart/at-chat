@@ -40,6 +40,7 @@ import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId)
 import LocalState exposing (PrivateVapidKey(..))
 import NonemptyDict
+import NonemptySet
 import PersonName
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
@@ -58,44 +59,55 @@ adminUserId =
 
 
 toGuildExcludingOne : ClientId -> Id GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toGuildExcludingOne clientToSkip _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.filterMap
-                    (\otherClientId ->
-                        if clientToSkip == otherClientId then
-                            Nothing
-
-                        else
-                            ChangeBroadcast msg
-                                |> Lamdera.sendToFrontend otherClientId
-                                |> Just
-                    )
-        )
-        (SeqDict.toList model.connections)
-        |> Command.batch
-
-
-toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordGuildExcludingOne clientToSkip guildId msg model =
+toGuildExcludingOne clientToSkip guildId msg model =
     List.filterMap
-        (\otherClientId ->
-            if clientToSkip == otherClientId then
+        (\clientId ->
+            if clientToSkip == clientId then
                 Nothing
 
             else
                 ChangeBroadcast msg
-                    |> Lamdera.sendToFrontend otherClientId
+                    |> Lamdera.sendToFrontend clientId
                     |> Just
         )
         (guildConnections guildId model)
         |> Command.batch
 
 
-guildConnections : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> List ClientId
+toDiscordGuildExcludingOne : ClientId -> Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordGuildExcludingOne clientToSkip guildId msg model =
+    List.filterMap
+        (\clientId ->
+            if clientToSkip == clientId then
+                Nothing
+
+            else
+                ChangeBroadcast msg
+                    |> Lamdera.sendToFrontend clientId
+                    |> Just
+        )
+        (discordGuildConnections guildId model)
+        |> Command.batch
+
+
+guildConnections : Id GuildId -> BackendModel -> List ClientId
 guildConnections guildId model =
+    case SeqDict.get guildId model.guilds of
+        Just guild ->
+            List.concatMap
+                (\member ->
+                    List.concatMap
+                        (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                        (userConnections member model)
+                )
+                (guild.owner :: SeqDict.keys guild.members)
+
+        Nothing ->
+            []
+
+
+discordGuildConnections : Discord.Id.Id Discord.Id.GuildId -> BackendModel -> List ClientId
+discordGuildConnections guildId model =
     case SeqDict.get guildId model.discordGuilds of
         Just guild ->
             List.concatMap
@@ -115,65 +127,64 @@ guildConnections guildId model =
             []
 
 
-toDiscordDmChannelExcludingOne : ClientId -> Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordDmChannelExcludingOne clientToSkip _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.filterMap
-                    (\otherClientId ->
-                        if clientToSkip == otherClientId then
-                            Nothing
+discordDmConnections : Discord.Id.Id Discord.Id.PrivateChannelId -> BackendModel -> List ClientId
+discordDmConnections guildId model =
+    case SeqDict.get guildId model.discordDmChannels of
+        Just channel ->
+            List.concatMap
+                (\member ->
+                    case SeqDict.get member model.discordUsers of
+                        Just (FullData discordUser) ->
+                            List.concatMap
+                                (\( _, clientIds ) -> List.Nonempty.toList clientIds)
+                                (userConnections discordUser.linkedTo model)
 
-                        else
-                            ChangeBroadcast msg
-                                |> Lamdera.sendToFrontend otherClientId
-                                |> Just
-                    )
+                        _ ->
+                            []
+                )
+                (NonemptySet.toList channel.members)
+
+        Nothing ->
+            []
+
+
+toDiscordDmChannelExcludingOne : ClientId -> Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
+toDiscordDmChannelExcludingOne clientToSkip channelId msg model =
+    List.filterMap
+        (\clientId ->
+            if clientToSkip == clientId then
+                Nothing
+
+            else
+                ChangeBroadcast msg
+                    |> Lamdera.sendToFrontend clientId
+                    |> Just
         )
-        (SeqDict.toList model.connections)
+        (discordDmConnections channelId model)
         |> Command.batch
 
 
 toDiscordDmChannel : Discord.Id.Id Discord.Id.PrivateChannelId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toDiscordDmChannel _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.filterMap
-                    (\otherClientId ->
-                        ChangeBroadcast msg
-                            |> Lamdera.sendToFrontend otherClientId
-                            |> Just
-                    )
-        )
-        (SeqDict.toList model.connections)
+toDiscordDmChannel channelId msg model =
+    List.map
+        (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
+        (discordDmConnections channelId model)
         |> Command.batch
 
 
 toGuild : Id GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
-toGuild _ msg model =
-    List.concatMap
-        (\( _, otherClientIds ) ->
-            NonemptyDict.keys otherClientIds
-                |> List.Nonempty.toList
-                |> List.map
-                    (\otherClientId ->
-                        ChangeBroadcast msg
-                            |> Lamdera.sendToFrontend otherClientId
-                    )
-        )
-        (SeqDict.toList model.connections)
+toGuild guildId msg model =
+    List.map
+        (\clientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend clientId)
+        (guildConnections guildId model)
         |> Command.batch
 
 
 toDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> LocalMsg -> BackendModel -> Command BackendOnly ToFrontend msg
 toDiscordGuild guildId msg model =
-    List.filterMap
-        (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId |> Just)
-        (guildConnections guildId model)
+    List.map
+        (\otherClientId -> ChangeBroadcast msg |> Lamdera.sendToFrontend otherClientId)
+        (discordGuildConnections guildId model)
         |> Command.batch
 
 
@@ -203,7 +214,7 @@ toEveryone clientToSkip serverChange model =
             ChangeBroadcast (ServerChange serverChange)
     in
     SeqDict.filterMap
-        (\sessionId otherUserSession ->
+        (\sessionId _ ->
             case SeqDict.get sessionId model.connections of
                 Just clientIds ->
                     List.filterMap
@@ -414,7 +425,7 @@ discordRichTextToString : Nonempty (RichText userId) -> SeqDict userId DiscordUs
 discordRichTextToString content discordUsers =
     RichText.toString
         (SeqDict.map
-            (\userId user ->
+            (\_ user ->
                 { name =
                     case user of
                         BasicData data ->

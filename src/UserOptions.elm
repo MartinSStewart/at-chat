@@ -5,9 +5,8 @@ import Editable
 import Effect.Browser.Dom as Dom
 import EmailAddress
 import Env
-import FileStatus
 import Icons
-import Id exposing (AnyGuildOrDmId, GuildOrDmId, ThreadRoute)
+import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
 import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
@@ -423,7 +422,7 @@ view isMobile time local loggedIn loaded model =
                                     , Ui.paddingXY 16 8
                                     ]
                                     (case model.linkDiscordSubmit of
-                                        LinkDiscordNotSubmitted { attemptCount } ->
+                                        LinkDiscordNotSubmitted _ ->
                                             Ui.text "After running the bookmarklet, paste the contents of your clipboard here."
 
                                         LinkDiscordSubmitting ->
@@ -446,7 +445,7 @@ view isMobile time local loggedIn loaded model =
                                                 NotFound404 errorCode ->
                                                     "NotFound404 " ++ Discord.errorCodeToString errorCode
 
-                                                TooManyRequests429 rateLimit ->
+                                                TooManyRequests429 _ ->
                                                     "TooManyRequests429"
 
                                                 GatewayUnavailable502 errorCode ->

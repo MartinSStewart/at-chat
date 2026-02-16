@@ -17,7 +17,6 @@ import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, Thre
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
-import UInt64 exposing (UInt64)
 import Url exposing (Url)
 import Url.Builder
 

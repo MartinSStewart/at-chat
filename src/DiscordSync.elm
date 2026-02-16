@@ -3,8 +3,6 @@ module DiscordSync exposing
     , addDiscordGuilds
     , discordUserWebsocketMsg
     , http
-    , loadImage
-    , messagesAndLinks
     )
 
 import Array exposing (Array)
@@ -13,7 +11,7 @@ import Broadcast
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
-import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -25,22 +23,20 @@ import Emoji exposing (Emoji)
 import Env
 import FileStatus
 import GuildName
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
-import Route exposing (Route(..))
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Thread exposing (DiscordBackendThread)
 import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
-import User exposing (BackendUser)
+import User
 
 
 addOrRemoveDiscordReaction :
@@ -883,7 +879,7 @@ handleDiscordCreateMessage message model =
                                       --        Command.none
                                     )
 
-                                Err error ->
+                                Err _ ->
                                     ( model, Command.none )
 
                         Nothing ->
@@ -1113,28 +1109,6 @@ handleDiscordCreateGuildMessage discordGuildId message model =
 
         _ ->
             ( model, Command.none )
-
-
-discordGatewayIntents : Discord.Intents
-discordGatewayIntents =
-    let
-        a =
-            Discord.noIntents
-    in
-    { a
-        | guild = True
-        , guildMembers = True
-        , guildModeration = True
-        , guildExpressions = True
-        , guildVoiceStates = True
-        , guildMessages = True
-        , guildMessageReactions = True
-        , guildMessageTyping = True
-        , directMessages = True
-        , directMessageReactions = True
-        , directMessageTyping = True
-        , messageContent = True
-    }
 
 
 discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

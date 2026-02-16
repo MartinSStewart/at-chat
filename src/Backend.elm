@@ -2,7 +2,6 @@ module Backend exposing
     ( adminUser
     , app
     , app_
-    , asDiscordGuildOwner
     , emailToNotifyWhenErrorsAreLogged
     , loginEmailContent
     , loginEmailSubject
@@ -37,14 +36,13 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import OneOrGreater
-import OneToOne exposing (OneToOne)
+import OneToOne
 import Pages.Admin exposing (InitAdminData)
 import Pagination
 import PersonName
@@ -54,16 +52,16 @@ import RichText exposing (RichText)
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
-import Slack exposing (Channel(..))
+import Slack
 import String.Nonempty exposing (NonemptyString(..))
 import TOTP.Key
 import TextEditor
-import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
+import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, LastDmViewed(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -295,9 +293,9 @@ update msg model =
         DiscordUserWebsocketMsg discordUserId discordMsg ->
             DiscordSync.discordUserWebsocketMsg discordUserId discordMsg model
 
-        GotSlackChannels time userId result ->
+        GotSlackChannels _ _ result ->
             case result of
-                Ok data ->
+                Ok _ ->
                     ( model
                     , Command.none
                     )
@@ -309,18 +307,18 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        SentDiscordGuildMessage time changeId sessionId clientId guildId channelId threadRouteWithMaybeReplyTo text attachedFiles discordUserId result ->
+        SentDiscordGuildMessage _ changeId _ clientId _ _ _ _ _ _ result ->
             case result of
-                Ok message ->
+                Ok _ ->
                     -- Wait until the Discord.UserOutMsg_UserCreatedMessage websocket event instead. This simplifies the code since we don't have two places that handle messages being created
                     ( model, Command.none )
 
                 Err _ ->
                     ( model, invalidChangeResponse changeId clientId )
 
-        SentDiscordDmMessage posix changeId sessionId clientId discordDmChannelId nonempty seqDict id result ->
+        SentDiscordDmMessage _ changeId _ clientId _ _ _ _ result ->
             case result of
-                Ok message ->
+                Ok _ ->
                     -- Wait until the websocket event instead. This simplifies the code since we don't have two places that handle messages being created
                     ( model, Command.none )
 
@@ -739,7 +737,7 @@ getLoginData sessionId session user requestMessagesFor model =
                 if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
                     DmChannel.discordDmChannelToFrontend
                         (case requestMessagesFor of
-                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), threadRoute ) ->
+                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
                                 dmChannelId == data.channelId
 
                             _ ->
@@ -1164,7 +1162,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session discordUser user guild ->
+                                (\_ discordUser _ guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             let
@@ -1289,7 +1287,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session discordUser currentUser dmChannel ->
+                                (\_ discordUser _ dmChannel ->
                                     let
                                         attachedFiles2 : SeqDict (Id FileId) FileData
                                         attachedFiles2 =
@@ -1330,7 +1328,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
                                             )
 
-                                        ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                                        ViewThreadWithMaybeMessage _ _ ->
                                             -- Not supported for Discord DM changes
                                             ( model2
                                             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
@@ -1579,7 +1577,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session _ discordUser dmChannel ->
+                                (\session _ _ dmChannel ->
                                     ( { model2
                                         | discordDmChannels =
                                             SeqDict.insert
@@ -1670,7 +1668,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentUserId
-                                (\userSession userData user guild ->
+                                (\_ userData _ guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model2
@@ -1729,7 +1727,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\userSession userData user channel ->
+                                (\_ userData _ channel ->
                                     case threadRoute of
                                         NoThreadWithMessage messageId ->
                                             ( { model2
@@ -1858,7 +1856,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentUserId
-                                (\userSession userData user guild ->
+                                (\_ userData _ guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model2
@@ -1922,7 +1920,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\userSession userData user channel ->
+                                (\_ userData _ channel ->
                                     case threadRoute of
                                         NoThreadWithMessage messageId ->
                                             ( { model2
@@ -2069,7 +2067,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         sessionId
                         guildId
                         currentUserId
-                        (\session userData _ guild ->
+                        (\_ userData _ guild ->
                             case SeqDict.get channelId guild.channels of
                                 Just channel ->
                                     case
@@ -2153,7 +2151,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         dmData
-                        (\session userData _ channel ->
+                        (\_ userData _ channel ->
                             case
                                 LocalState.editMessageHelperNoThread
                                     time
@@ -2322,7 +2320,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 data
-                                (\session userData user channel ->
+                                (\session _ _ channel ->
                                     case threadRoute of
                                         ViewThreadWithMessage _ _ ->
                                             ( model2
@@ -2476,7 +2474,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentUserId
-                                (\session userData _ guild ->
+                                (\_ userData _ guild ->
                                     case LocalState.deleteMessageBackend currentUserId channelId threadRoute guild of
                                         Ok ( guild2, channel ) ->
                                             ( { model2 | discordGuilds = SeqDict.insert guildId guild2 model2.discordGuilds }
@@ -2784,7 +2782,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session discordData user guild ->
+                                (\session _ user guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model2
@@ -2817,7 +2815,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session discordUser user guild ->
+                                (\session _ user guild ->
                                     case SeqDict.get channelId guild.channels of
                                         Just channel ->
                                             ( { model2
@@ -3020,7 +3018,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     )
                                 )
 
-                        DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
+                        DiscordGuildOrDmId_Dm _ ->
                             ( model2, LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId )
 
                 --asUser
@@ -3112,7 +3110,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     asUser
                         model2
                         sessionId
-                        (\session user ->
+                        (\session _ ->
                             let
                                 ( textEditor, serverChange ) =
                                     TextEditor.backendChangeUpdate session.userId localChange model.textEditor
@@ -3178,7 +3176,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asUser
                 model2
                 sessionId
-                (\session user ->
+                (\session _ ->
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> DiscordSync.http
@@ -3214,7 +3212,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 guildId
-                (\session user guild ->
+                (\_ _ guild ->
                     ( model2, Lamdera.sendToFrontend clientId (ExportGuildResponse guildId guild) )
                 )
 
@@ -3222,7 +3220,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asAdmin
                 model2
                 sessionId
-                (\session user ->
+                (\_ _ ->
                     case SeqDict.get guildId model.discordGuilds of
                         Just guild ->
                             ( model2
@@ -3264,7 +3262,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asAdmin
                 model2
                 sessionId
-                (\session user ->
+                (\_ _ ->
                     let
                         newGuildId : Id GuildId
                         newGuildId =
@@ -3282,7 +3280,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
             asAdmin
                 model2
                 sessionId
-                (\session user ->
+                (\_ _ ->
                     ( { model2
                         | discordGuilds = SeqDict.insert guildId guild model2.discordGuilds
                         , discordUsers =
@@ -3459,15 +3457,6 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
             ( model2
             , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
             )
-
-
-toDiscordContent :
-    BackendModel
-    -> SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-    -> String
-toDiscordContent model attachedFiles content =
-    Discord.Markdown.toString (RichText.toDiscord attachedFiles content)
 
 
 joinGuildByInvite :
@@ -4190,27 +4179,6 @@ asGuildOwner model sessionId guildId func =
         (\{ userId } user guild ->
             if userId == guild.owner then
                 func userId user guild
-
-            else
-                ( model, Command.none )
-        )
-
-
-asDiscordGuildOwner :
-    BackendModel
-    -> SessionId
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.UserId
-    -> (UserSession -> DiscordFullUserData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
-    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-asDiscordGuildOwner model sessionId guildId discordUserId func =
-    asDiscordGuildMember model
-        sessionId
-        guildId
-        discordUserId
-        (\session discordUser user guild ->
-            if discordUserId == guild.owner then
-                func session discordUser user guild
 
             else
                 ( model, Command.none )

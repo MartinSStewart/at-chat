@@ -28,7 +28,6 @@ module Slack exposing
     , listUsers
     , loadMessages
     , loadWorkspaceChannels
-    , ngrokPath
     , redirectUri
     , teamInfo
     )

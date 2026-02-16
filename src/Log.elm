@@ -64,19 +64,19 @@ shouldNotifyAdmin log =
         FailedToEditDiscordDmMessage _ _ _ _ ->
             Nothing
 
-        FailedToAddReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+        FailedToAddReactionToDiscordGuildMessage _ _ _ _ _ _ ->
             Nothing
 
-        FailedToAddReactionToDiscordDmMessage id _ _ emoji httpError ->
+        FailedToAddReactionToDiscordDmMessage _ _ _ _ _ ->
             Nothing
 
-        FailedToRemoveReactionToDiscordGuildMessage id _ threadRouteWithMessage _ emoji httpError ->
+        FailedToRemoveReactionToDiscordGuildMessage _ _ _ _ _ _ ->
             Nothing
 
-        FailedToRemoveReactionToDiscordDmMessage id _ _ emoji httpError ->
+        FailedToRemoveReactionToDiscordDmMessage _ _ _ _ _ ->
             Nothing
 
-        FailedToCreateDiscordPrivateChannel id _ httpError ->
+        FailedToCreateDiscordPrivateChannel _ _ _ ->
             Nothing
 
 
@@ -231,7 +231,7 @@ logContent log =
                 , fieldRow "Error" (Ui.text (httpErrorToString error))
                 ]
 
-        FailedToDeleteDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
+        FailedToDeleteDiscordGuildMessage guildId channelId _ discordMessageId httpError ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord guild message delete failed"
@@ -251,7 +251,7 @@ logContent log =
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
-        FailedToEditDiscordGuildMessage guildId channelId threadRoute discordMessageId httpError ->
+        FailedToEditDiscordGuildMessage guildId channelId _ discordMessageId httpError ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Discord guild message edit failed"
@@ -271,7 +271,7 @@ logContent log =
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
-        FailedToAddReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+        FailedToAddReactionToDiscordGuildMessage guildId channelId _ discordMessageId emoji httpError ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Adding Discord guild reaction failed"
@@ -293,7 +293,7 @@ logContent log =
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 
-        FailedToRemoveReactionToDiscordGuildMessage guildId channelId threadRoute discordMessageId emoji httpError ->
+        FailedToRemoveReactionToDiscordGuildMessage guildId channelId _ discordMessageId emoji httpError ->
             Ui.column
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Removing Discord guild reaction failed"

@@ -8,7 +8,6 @@ import ChannelName
 import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
-import Discord
 import Discord.Id
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
@@ -35,16 +34,14 @@ import GuildName
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
-import Image
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
-import Json.Encode
 import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), ChangeAttachments(..), DiscordFrontendChannel, FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -53,7 +50,6 @@ import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import OneToOne exposing (OneToOne)
 import Pages.Admin
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
@@ -64,10 +60,9 @@ import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
-import SessionIdHash
 import String.Nonempty
 import TextEditor
-import Thread exposing (DiscordFrontendThread, FrontendGenericThread, FrontendThread)
+import Thread exposing (FrontendGenericThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -76,7 +71,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (BackendUser, FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
+import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -1295,25 +1290,25 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
-        TypedBookmarkletData string ->
+        TypedBookmarkletData _ ->
             False
 
-        MouseEnteredDiscordChannelName id _ threadRoute ->
+        MouseEnteredDiscordChannelName _ _ _ ->
             False
 
-        MouseExitedDiscordChannelName id _ threadRoute ->
+        MouseExitedDiscordChannelName _ _ _ ->
             False
 
-        PressedDiscordGuildMemberLabel id ->
+        PressedDiscordGuildMemberLabel _ ->
             True
 
-        PressedDiscordFriendLabel id ->
+        PressedDiscordFriendLabel _ ->
             True
 
-        PressedExportGuild id ->
+        PressedExportGuild _ ->
             True
 
-        PressedExportDiscordGuild id ->
+        PressedExportDiscordGuild _ ->
             True
 
         PressedImportGuild ->
@@ -2568,7 +2563,7 @@ updateLoaded msg model =
                         _ ->
                             ( model, Command.none )
 
-                ( DiscordDmRoute _, LoggedIn loggedIn ) ->
+                ( DiscordDmRoute _, LoggedIn _ ) ->
                     ( model, Command.none )
 
                 _ ->
@@ -2905,7 +2900,7 @@ updateLoaded msg model =
                                         )
                                             |> Just
 
-                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) as guildOrDmId2) ->
+                                    DiscordGuildOrDmId ((DiscordGuildOrDmId_Guild _ guildId channelId) as guildOrDmId2) ->
                                         case LocalState.getDiscordGuildAndChannel guildId channelId local of
                                             Just ( _, channel ) ->
                                                 (case threadRoute of
@@ -3667,7 +3662,7 @@ updateLoaded msg model =
                                     |> DiscordGuildRoute
                                 )
 
-                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }), NoThreadWithMessage messageId ) ->
+                        ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }), NoThreadWithMessage _ ) ->
                             routePush
                                 model
                                 (DiscordDmRoute
@@ -3824,7 +3819,7 @@ updateLoaded msg model =
                 Nothing ->
                     ( model, Command.none )
 
-        VisualViewportResized height ->
+        VisualViewportResized _ ->
             ( model, Command.none )
 
         TextEditorMsg textEditorMsg ->
@@ -3944,7 +3939,7 @@ updateLoaded msg model =
                                 maybeCurrentDiscordUser : Maybe (Discord.Id.Id Discord.Id.UserId)
                                 maybeCurrentDiscordUser =
                                     List.Extra.findMap
-                                        (\( userId, user ) ->
+                                        (\( userId, _ ) ->
                                             if NonemptySet.member userId channel.members then
                                                 Just userId
 
@@ -3993,7 +3988,7 @@ updateLoaded msg model =
                 Ok guild ->
                     ( model, Lamdera.sendToBackend (ImportGuildRequest guild) )
 
-                Err error ->
+                Err _ ->
                     -- Could show an error message to the user
                     ( model, Command.none )
 
@@ -4012,7 +4007,7 @@ updateLoaded msg model =
                 Ok guild ->
                     ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest guild) )
 
-                Err error ->
+                Err _ ->
                     -- Could show an error message to the user
                     ( model, Command.none )
 
@@ -4980,7 +4975,7 @@ changeUpdate localMsg local =
                                             SeqDict.insert
                                                 channelId
                                                 (case threadRouteWithRepliedTo of
-                                                    ViewThreadWithMaybeMessage threadId maybeReplyTo ->
+                                                    ViewThreadWithMaybeMessage _ _ ->
                                                         -- Not supported for a Discord DM channel
                                                         dmChannel
 
@@ -5271,7 +5266,7 @@ changeUpdate localMsg local =
                         StopViewingChannel ->
                             { local | localUser = { localUser | session = session } }
 
-                        ViewDiscordChannel guildId channelId currentDiscordUserId messagesLoaded ->
+                        ViewDiscordChannel guildId channelId _ messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -5290,7 +5285,7 @@ changeUpdate localMsg local =
                                         local.discordGuilds
                             }
 
-                        ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId messagesLoaded ->
+                        ViewDiscordChannelThread guildId channelId _ threadId messagesLoaded ->
                             { local
                                 | localUser =
                                     { localUser
@@ -5397,7 +5392,7 @@ changeUpdate localMsg local =
 
                 Local_Discord_LoadChannelMessages guildOrDmId previousOldestVisibleMessage messagesLoaded ->
                     case guildOrDmId of
-                        DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId ->
+                        DiscordGuildOrDmId_Guild _ guildId channelId ->
                             { local
                                 | discordGuilds =
                                     SeqDict.updateIfExists
@@ -5443,7 +5438,7 @@ changeUpdate localMsg local =
                                         local.discordGuilds
                             }
 
-                        DiscordGuildOrDmId_Dm { currentUserId, channelId } ->
+                        DiscordGuildOrDmId_Dm _ ->
                             local
 
                 Local_SetGuildNotificationLevel guildId notificationLevel ->
@@ -6153,13 +6148,15 @@ changeUpdate localMsg local =
                 Server_TextEditor serverChange2 ->
                     { local | textEditor = TextEditor.changeUpdate serverChange2 local.textEditor }
 
-                Server_LinkDiscordUser userId name ->
+                Server_LinkDiscordUser userId user ->
                     let
-                        localUser : LocalUser
                         localUser =
                             local.localUser
                     in
-                    local
+                    { local
+                        | localUser =
+                            { localUser | linkedDiscordUsers = SeqDict.insert userId user localUser.linkedDiscordUsers }
+                    }
 
                 Server_DiscordChannelCreated guildId channelId channelName ->
                     { local
@@ -7145,7 +7142,7 @@ updateLoadedFromBackend msg model =
 
         ImportGuildResponse result ->
             case result of
-                Ok guildId ->
+                Ok _ ->
                     updateLoggedIn
                         (\loggedIn ->
                             ( { loggedIn | newGuildForm = Nothing }
@@ -7154,7 +7151,7 @@ updateLoadedFromBackend msg model =
                         )
                         model
 
-                Err error ->
+                Err _ ->
                     ( model, Command.none )
 
         ImportDiscordGuildResponse result ->
@@ -7168,7 +7165,7 @@ updateLoadedFromBackend msg model =
                         )
                         model
 
-                Err error ->
+                Err _ ->
                     -- Could show error message to user
                     ( model, Command.none )
 
@@ -7426,10 +7423,10 @@ pendingChangesText localChange =
         Local_SendEditMessage _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditGuildMessage posix _ _ _ threadRouteWithMessage nonempty ->
+        Local_Discord_SendEditGuildMessage _ _ _ _ _ _ ->
             "Edit message"
 
-        Local_Discord_SendEditDmMessage posix _ _ _ ->
+        Local_Discord_SendEditDmMessage _ _ _ _ ->
             "Edit message"
 
         Local_MemberEditTyping _ _ _ ->

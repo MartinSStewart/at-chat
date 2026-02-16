@@ -6,7 +6,6 @@ module MessageMenu exposing
     , messageMenuSpeed
     , mobileMenuMaxHeight
     , mobileMenuOpeningOffset
-    , showEdit
     , view
     , width
     )
@@ -26,13 +25,10 @@ import Message exposing (Message(..), MessageState(..))
 import MessageInput exposing (MsgConfig)
 import MyUi
 import Quantity exposing (Quantity, Rate)
-import RichText
 import SeqDict
-import SeqSet
 import Types exposing (EditMessage, FrontendMsg(..), LoadedFrontend, LoggedIn2, MessageHover(..), MessageHoverMobileMode(..), MessageMenuExtraOptions)
 import Ui exposing (Element)
 import Ui.Font
-import User
 
 
 width : number

@@ -17,7 +17,6 @@ import Html.Attributes
 import Icons
 import Id exposing (Id, UserId)
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (FrontendGuild)
 import MyUi
 import OneOrGreater exposing (OneOrGreater)
 import Ui exposing (Element)
@@ -214,7 +213,7 @@ view userAgent mode isDiscord guild =
         )
 
 
-userView : UserAgent -> ChannelNotificationType -> Maybe FileStatus.FileHash -> Id UserId -> Element msg
+userView : UserAgent -> ChannelNotificationType -> Maybe FileHash -> Id UserId -> Element msg
 userView userAgent notification maybeIcon userId =
     Ui.el
         [ notificationView userAgent 0 -3 MyUi.background1 notification
@@ -242,7 +241,7 @@ userView userAgent notification maybeIcon userId =
         )
 
 
-iconView : Mode -> FileStatus.FileHash -> Element msg
+iconView : Mode -> FileHash -> Element msg
 iconView mode icon =
     Html.img
         [ Html.Attributes.style

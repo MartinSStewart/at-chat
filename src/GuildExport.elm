@@ -3,23 +3,21 @@ module GuildExport exposing (backendGuildCodec, discordExportCodec)
 {-| Module for encoding and decoding guild data for export/import functionality
 -}
 
-import ChannelName exposing (ChannelName(..))
+import ChannelName
 import Codec exposing (Codec)
 import CodecExtra
 import Discord
-import Discord.Id
-import Emoji exposing (Emoji(..))
-import FileName exposing (FileName)
-import FileStatus exposing (ContentType(..), FileData, FileHash(..), FileId, ImageMetadata)
-import GuildName exposing (GuildName(..))
-import Id exposing (ChannelId, Id(..), InviteLinkId, ThreadMessageId, UserId)
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild)
-import Message exposing (Message(..), UserTextMessageData)
-import RichText exposing (Language(..), RichText(..))
-import SecretId exposing (SecretId(..))
-import SeqDict exposing (SeqDict)
+import Emoji exposing (Emoji)
+import FileName
+import FileStatus exposing (ContentType(..), FileData, ImageMetadata)
+import GuildName
+import Id
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild)
+import Message exposing (Message, UserTextMessageData)
+import RichText
+import SecretId
 import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
-import Types exposing (DiscordBasicUserData, DiscordExport, DiscordFullUserDataExport, DiscordUserData, DiscordUserDataExport(..))
+import Types exposing (DiscordBasicUserData, DiscordExport, DiscordFullUserDataExport, DiscordUserDataExport(..))
 import User
 
 
@@ -280,7 +278,7 @@ discordUserDataCodec =
         |> Codec.buildCustom
 
 
-discordBasicUserDataCodec : Codec Types.DiscordBasicUserData
+discordBasicUserDataCodec : Codec DiscordBasicUserData
 discordBasicUserDataCodec =
     Codec.object Types.DiscordBasicUserData
         |> Codec.field "user" .user partialUserCodec
