@@ -1,5 +1,6 @@
 module TextEditor exposing
-    ( LocalChange(..)
+    ( EditChange(..)
+    , LocalChange(..)
     , LocalState
     , Model
     , Msg
@@ -61,6 +62,8 @@ type ServerChange
     | Server_MovedCursor (Id UserId) Range
 
 
+{-| Opaque
+-}
 type EditChange
     = Edit_TypedText Range String
 

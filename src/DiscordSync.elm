@@ -1272,7 +1272,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( handleReadySupplementalData readySupplementalData model2, cmds )
 
                         Discord.UserOutMsg_ChannelCreated channel ->
-                            Debug.todo ""
+                            ( model2, cmds )
                 )
                 ( { model
                     | discordUsers =
