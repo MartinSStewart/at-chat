@@ -203,3 +203,6 @@ routeToViewing route =
 
         TextEditorRoute ->
             StopViewingChannel
+
+        LinkDiscord _ ->
+            StopViewingChannel

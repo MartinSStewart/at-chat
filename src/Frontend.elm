@@ -887,6 +887,15 @@ routeRequest previousRoute newRoute model =
         TextEditorRoute ->
             ( model2, Command.none )
 
+        LinkDiscord result ->
+            ( model2
+            , --case result of
+              --                Ok userData ->
+              --                    LinkDiscordRequest userData |> Lamdera.sendToBackend
+              --                Err () -> Command.none
+              Debug.todo ""
+            )
+
 
 openChannelCmds :
     ThreadRouteWithFriends
@@ -951,6 +960,9 @@ routeRequiresLogin route =
             False
 
         DiscordDmRoute _ ->
+            True
+
+        LinkDiscord result ->
             True
 
 
@@ -7851,6 +7863,17 @@ view model =
                     DiscordDmRoute routeData ->
                         requiresLogin
                             (Pages.Guild.homePageLoggedInView (SelectedDiscordDmChannel routeData) loaded)
+
+                    LinkDiscord result ->
+                        requiresLogin
+                            (\_ _ ->
+                                case result of
+                                    Ok ok ->
+                                        Ui.text "Linking..."
+
+                                    Err () ->
+                                        Ui.text "Something went wrong while linking your Discord account"
+                            )
         ]
     }
 

@@ -8,10 +8,14 @@ module Route exposing
     , ThreadRouteWithFriends(..)
     , decode
     , encode
+    , linkDiscordPath
+    , linkDiscordQueryParam
     )
 
 import AppUrl
+import Codec
 import Dict
+import Discord
 import Discord.Id
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
 import SecretId exposing (SecretId)
@@ -19,6 +23,7 @@ import SessionIdHash exposing (SessionIdHash)
 import Slack
 import Url exposing (Url)
 import Url.Builder
+import User
 
 
 type Route
@@ -31,6 +36,7 @@ type Route
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
+    | LinkDiscord (Result () Discord.UserAuth)
 
 
 type alias DiscordDmRouteData =
@@ -281,6 +287,14 @@ decode url =
         [ "text-editor" ] ->
             TextEditorRoute
 
+        [ "link-discord" ] ->
+            case Dict.get linkDiscordQueryParam url2.queryParameters of
+                Just [ data ] ->
+                    Codec.decodeString User.linkDiscordDataCodec data |> Result.mapError (\_ -> ()) |> LinkDiscord
+
+                _ ->
+                    LinkDiscord (Err ())
+
         _ ->
             HomePageRoute
 
@@ -428,8 +442,21 @@ encode route =
 
                 TextEditorRoute ->
                     ( [ "text-editor" ], [] )
+
+                LinkDiscord _ ->
+                    ( [ linkDiscordPath ], [] )
     in
     Url.Builder.absolute path query
+
+
+linkDiscordPath : String
+linkDiscordPath =
+    "link-discord"
+
+
+linkDiscordQueryParam : String
+linkDiscordQueryParam =
+    "data"
 
 
 encodeShowMembers : ShowMembersTab -> List Url.Builder.QueryParameter
