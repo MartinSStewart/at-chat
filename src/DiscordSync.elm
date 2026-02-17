@@ -1147,7 +1147,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                         )
                                         model2.discordUsers
                               }
-                            , cmds
+                            , Broadcast.toUser
+                                Nothing
+                                Nothing
+                                userData.linkedTo
+                                (Server_DiscordNeedsAuthAgain discordUserId)
+                                :: cmds
                             )
 
                         Discord.UserOutMsg_SendWebsocketData connection data ->

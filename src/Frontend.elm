@@ -6209,6 +6209,22 @@ changeUpdate localMsg local =
                                 local.discordDmChannels
                     }
 
+                Server_DiscordNeedsAuthAgain userId ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | linkedDiscordUsers =
+                                    SeqDict.updateIfExists
+                                        userId
+                                        (\user -> { user | needsAuthAgain = True })
+                                        localUser.linkedDiscordUsers
+                            }
+                    }
+
 
 memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmId, ThreadRoute ) -> LocalState -> LocalState
 memberTyping time userId ( guildOrDmId, threadRoute ) local =

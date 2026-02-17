@@ -728,6 +728,7 @@ type ServerChange
     | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
     | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
+    | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
 
 
 type LocalChange
