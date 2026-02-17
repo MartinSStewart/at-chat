@@ -1151,7 +1151,8 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 Nothing
                                 Nothing
                                 userData.linkedTo
-                                (Server_DiscordNeedsAuthAgain discordUserId)
+                                (Server_DiscordNeedsAuthAgain discordUserId |> ServerChange)
+                                model2
                                 :: cmds
                             )
 
