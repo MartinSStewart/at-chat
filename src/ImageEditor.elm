@@ -1,4 +1,4 @@
-module ImageEditor exposing (DragPart, DragState, Model, Msg(..), ToBackend(..), ToFrontend(..), UploadStatus, init, isPressMsg, subscriptions, update, view)
+module ImageEditor exposing (DragPart(..), DragState, Model, Msg(..), ToBackend(..), ToFrontend(..), UploadStatus(..), init, isPressMsg, subscriptions, update, view)
 
 import Base64
 import Coord exposing (Coord)
@@ -60,6 +60,8 @@ type alias DragState =
     }
 
 
+{-| OpaqueVariants
+-}
 type DragPart
     = TopLeft
     | TopRight
@@ -79,6 +81,8 @@ type alias Model =
     }
 
 
+{-| OpaqueVariants
+-}
 type UploadStatus
     = NotUploaded
     | Cropping

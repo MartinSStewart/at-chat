@@ -4,8 +4,8 @@ module TextEditor exposing
     , LocalChange(..)
     , LocalState
     , Model
-    , Msg
-    , ServerChange
+    , Msg(..)
+    , ServerChange(..)
     , backendChangeUpdate
     , changeUpdate
     , init
@@ -38,6 +38,8 @@ import Ui exposing (Element)
 import Ui.Font
 
 
+{-| OpaqueVariants
+-}
 type Msg
     = TypedText String
     | MovedCursor Range
@@ -54,6 +56,8 @@ type LocalChange
     | Local_MovedCursor Range
 
 
+{-| OpaqueVariants
+-}
 type ServerChange
     = Server_EditChange (Id UserId) EditChange
     | Server_Reset
