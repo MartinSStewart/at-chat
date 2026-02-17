@@ -266,6 +266,7 @@ createMessage authentication data =
 createMessagePayload : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> HttpRequest Message
 createMessagePayload authentication { channelId, content, replyTo } =
     httpPost
+        (Just "eyJsb2NhdGlvbiI6ImNoYXRfaW5wdXQifQ==")
         authentication
         decodeMessage
         [ "channels", Discord.Id.toString channelId, "messages" ]
@@ -577,6 +578,7 @@ createChannelInvitePayload :
     -> HttpRequest Invite
 createChannelInvitePayload authentication channelId { maxAge, maxUses, temporaryMembership, unique, targetUser } =
     httpPost
+        Nothing
         authentication
         decodeInvite
         [ "channels", Discord.Id.toString channelId, "invites" ]
@@ -648,6 +650,7 @@ triggerTypingIndicator authentication channelId =
 triggerTypingIndicatorPayload : Authentication -> Id ChannelId -> HttpRequest ()
 triggerTypingIndicatorPayload authentication channelId =
     httpPost
+        Nothing
         authentication
         (JD.succeed ())
         [ "channels", Discord.Id.toString channelId, "typing" ]
@@ -770,6 +773,7 @@ createGuildEmojiPayload :
     -> HttpRequest EmojiData
 createGuildEmojiPayload authentication { guildId, emojiName, image, roles } =
     httpPost
+        Nothing
         authentication
         decodeEmoji
         [ "guilds", Discord.Id.toString guildId, "emojis" ]
@@ -808,6 +812,7 @@ modifyGuildEmojiPayload :
     -> HttpRequest EmojiData
 modifyGuildEmojiPayload authentication { guildId, emojiId, emojiName, roles } =
     httpPost
+        Nothing
         authentication
         decodeEmoji
         [ "guilds", Discord.Id.toString guildId, "emojis" ]
@@ -989,6 +994,7 @@ createGuildTextChannel authentication config =
 createGuildTextChannelPayload : Authentication -> CreateGuildTextChannel -> HttpRequest Channel
 createGuildTextChannelPayload authentication config =
     httpPost
+        Nothing
         authentication
         decodeChannel
         [ "guilds", Discord.Id.toString config.guildId, "channels" ]
@@ -1015,6 +1021,7 @@ createGuildVoiceChannel authentication config =
 createGuildVoiceChannelPayload : Authentication -> CreateGuildVoiceChannel -> HttpRequest Channel
 createGuildVoiceChannelPayload authentication config =
     httpPost
+        Nothing
         authentication
         decodeChannel
         [ "guilds", Discord.Id.toString config.guildId, "channels" ]
@@ -1043,6 +1050,7 @@ createGuildCategoryChannel authentication config =
 createGuildCategoryChannelPayload : Authentication -> CreateGuildCategoryChannel -> HttpRequest Channel
 createGuildCategoryChannelPayload authentication config =
     httpPost
+        Nothing
         authentication
         decodeChannel
         [ "guilds", Discord.Id.toString config.guildId, "channels" ]
@@ -1238,6 +1246,7 @@ startThreadFromMessagePayload :
     -> HttpRequest Channel
 startThreadFromMessagePayload authentication { channelId, messageId, name, autoArchiveDuration, rateLimitPerUser } =
     httpPost
+        Nothing
         authentication
         decodeChannel
         [ "channels", Discord.Id.toString channelId, "messages", Discord.Id.toString messageId, "threads" ]
@@ -1526,7 +1535,9 @@ createDmChannel authentication userId =
 
 createDmChannelPayload : Authentication -> Id UserId -> HttpRequest Channel
 createDmChannelPayload authentication userId =
-    httpPost authentication
+    httpPost
+        Nothing
+        authentication
         decodeChannel
         [ "users", "@me", "channels" ]
         []
@@ -1746,29 +1757,29 @@ rawHash (ImageHash hash) =
     hash
 
 
-httpPost : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> HttpRequest a
-httpPost authentication decoder path queryParameters body =
-    http authentication "POST" decoder path queryParameters (Just body)
+httpPost : Maybe String -> Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> HttpRequest a
+httpPost maybeXContextProperties authentication decoder path queryParameters body =
+    http maybeXContextProperties authentication "POST" decoder path queryParameters (Just body)
 
 
 httpPut : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> HttpRequest a
 httpPut authentication decoder path queryParameters body =
-    http authentication "PUT" decoder path queryParameters (Just body)
+    http Nothing authentication "PUT" decoder path queryParameters (Just body)
 
 
 httpPatch : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> HttpRequest a
 httpPatch authentication decoder path queryParameters body =
-    http authentication "PATCH" decoder path queryParameters (Just body)
+    http Nothing authentication "PATCH" decoder path queryParameters (Just body)
 
 
 httpDelete : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> JE.Value -> HttpRequest a
 httpDelete authentication decoder path queryParameters body =
-    http authentication "DELETE" decoder path queryParameters (Just body)
+    http Nothing authentication "DELETE" decoder path queryParameters (Just body)
 
 
 httpGet : Authentication -> JD.Decoder a -> List String -> List QueryParameter -> HttpRequest a
 httpGet authentication decoder path queryParameters =
-    http authentication "GET" decoder path queryParameters Nothing
+    http Nothing authentication "GET" decoder path queryParameters Nothing
 
 
 type alias HttpRequest a =
@@ -1786,8 +1797,8 @@ header key value =
     ( key, value )
 
 
-http : Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Maybe JE.Value -> HttpRequest a
-http authentication requestType decoder path queryParameters body =
+http : Maybe String -> Authentication -> String -> JD.Decoder a -> List String -> List QueryParameter -> Maybe JE.Value -> HttpRequest a
+http maybeXContextProperties authentication requestType decoder path queryParameters body =
     { method = requestType
     , headers =
         header "Authorization"
@@ -1803,14 +1814,28 @@ http authentication requestType decoder path queryParameters body =
             )
             :: (case authentication of
                     UserToken data ->
-                        [ header "User-Agent" data.userAgent
-                        , header
-                            "X-Super-Properties"
-                            (Base64.fromString (SafeJson.toString 0 data.xSuperProperties) |> Maybe.withDefault "")
-                        , header "X-Discord-Timezone" "Europe/Stockholm"
-                        , header "X-Discord-Locale" "en-US"
-                        , header "Host" "discord.com"
+                        [ header "Host" "discord.com"
+                        , header "Pragma" "no-cache"
+                        , header "Referer" "https://discord.com/"
+                        , header "Sec-Fetch-Dest" "empty"
+                        , header "Sec-Fetch-Mode" "cors"
+                        , header "Sec-Fetch-Site" "same-origin"
+                        , header "User-Agent" data.userAgent
                         ]
+                            ++ (case maybeXContextProperties of
+                                    Just xContextProperties ->
+                                        [ header "X-Context-Properties" xContextProperties ]
+
+                                    Nothing ->
+                                        []
+                               )
+                            ++ [ header "X-Debug-Options" "bugReporterEnabled"
+                               , header "X-Discord-Locale" "en-US"
+                               , header "X-Discord-Timezone" "Europe/Stockholm"
+                               , header
+                                    "X-Super-Properties"
+                                    (Base64.fromString (SafeJson.toString 0 data.xSuperProperties) |> Maybe.withDefault "")
+                               ]
 
                     _ ->
                         [ header "User-Agent" "DiscordBot (no website sorry, 1.0.0)" ]
@@ -5660,6 +5685,7 @@ Trying to start a new DM channel is probably too similar to spam bot behavior.
 createPrivateChannelPayload : UserAuth -> List (Id UserId) -> HttpRequest Channel
 createPrivateChannelPayload auth recipients =
     httpPost
+        (Just "eyJsb2NhdGlvbiI6Ik5ldyBHcm91cCBETSJ9")
         (userToken auth)
         decodeChannel
         [ "users", "@me", "channels" ]
