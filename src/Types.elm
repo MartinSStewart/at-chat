@@ -8,6 +8,7 @@ module Types exposing
     , DiscordExport
     , DiscordFullUserData
     , DiscordFullUserDataExport
+    , DiscordNeedsAuthAgainExport
     , DiscordUserData(..)
     , DiscordUserDataExport(..)
     , Drag(..)
@@ -31,6 +32,7 @@ module Types exposing
     , MessageHover(..)
     , MessageHoverMobileMode(..)
     , MessageMenuExtraOptions
+    , NeedsAuthAgainData
     , NewChannelForm
     , NewGuildForm
     , RevealedSpoilers
@@ -315,12 +317,20 @@ type alias BackendModel =
 type DiscordUserData
     = BasicData DiscordBasicUserData
     | FullData DiscordFullUserData
+    | NeedsAuthAgain NeedsAuthAgainData
 
 
 type alias DiscordFullUserData =
     { auth : Discord.UserAuth
     , user : Discord.User
     , connection : Discord.Model Websocket.Connection
+    , linkedTo : Id UserId
+    , icon : Maybe FileHash
+    }
+
+
+type alias NeedsAuthAgainData =
+    { user : Discord.User
     , linkedTo : Id UserId
     , icon : Maybe FileHash
     }
@@ -340,11 +350,19 @@ type alias DiscordExport =
 type DiscordUserDataExport
     = BasicDataExport DiscordBasicUserData
     | FullDataExport DiscordFullUserDataExport
+    | NeedsAuthAgainExport DiscordNeedsAuthAgainExport
 
 
 type alias DiscordFullUserDataExport =
     { auth : Discord.UserAuth
     , user : Discord.User
+    , linkedTo : Id UserId
+    , icon : Maybe FileHash
+    }
+
+
+type alias DiscordNeedsAuthAgainExport =
+    { user : Discord.User
     , linkedTo : Id UserId
     , icon : Maybe FileHash
     }

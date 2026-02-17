@@ -1134,6 +1134,22 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 :: cmds
                             )
 
+                        Discord.UserOutMsg_AuthenticationIsNoLongerValid ->
+                            ( { model2
+                                | discordUsers =
+                                    SeqDict.insert
+                                        discordUserId
+                                        (NeedsAuthAgain
+                                            { user = userData.user
+                                            , icon = userData.icon
+                                            , linkedTo = userData.linkedTo
+                                            }
+                                        )
+                                        model2.discordUsers
+                              }
+                            , cmds
+                            )
+
                         Discord.UserOutMsg_SendWebsocketData connection data ->
                             ( model2
                             , Task.attempt (WebsocketSentDataForUser discordUserId) (Websocket.sendString connection data)
@@ -1683,6 +1699,21 @@ addDiscordUserData user discordUsers =
 
                 Just (BasicData data) ->
                     BasicData { data | user = user }
+
+                Just (NeedsAuthAgain data) ->
+                    let
+                        fullUser =
+                            data.user
+                    in
+                    NeedsAuthAgain
+                        { data
+                            | user =
+                                { fullUser
+                                    | username = user.username
+                                    , avatar = user.avatar
+                                    , discriminator = user.discriminator
+                                }
+                        }
 
                 Nothing ->
                     BasicData { user = user, icon = Nothing }

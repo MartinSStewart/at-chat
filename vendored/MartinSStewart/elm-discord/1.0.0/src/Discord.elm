@@ -5193,6 +5193,7 @@ encodeUserGatewayCommand gatewayCommand =
 type OutMsg connection
     = CloseAndReopenHandle connection
     | OpenHandle
+    | AuthenticationIsNoLongerValid
     | SendWebsocketData connection String
     | SendWebsocketDataWithDelay connection Duration String
     | UserCreatedMessage ChannelType Message
@@ -5209,6 +5210,7 @@ type OutMsg connection
 type UserOutMsg connection
     = UserOutMsg_CloseAndReopenHandle connection
     | UserOutMsg_OpenHandle
+    | UserOutMsg_AuthenticationIsNoLongerValid
     | UserOutMsg_SendWebsocketData connection String
     | UserOutMsg_SendWebsocketDataWithDelay connection Duration String
     | UserOutMsg_UserCreatedMessage ChannelType Message
@@ -5244,7 +5246,7 @@ init =
 
 type Msg
     = GotWebsocketData String
-    | WebsocketClosed
+    | WebsocketClosed String
 
 
 websocketGatewayUrl : String
@@ -5257,7 +5259,7 @@ createdHandle connection model =
     { model | websocketHandle = Just connection }
 
 
-subscription : (connection -> (String -> Msg) -> Msg -> sub) -> Model connection -> Maybe sub
+subscription : (connection -> (String -> Msg) -> (String -> Msg) -> sub) -> Model connection -> Maybe sub
 subscription listen model =
     case model.websocketHandle of
         Just handle ->
@@ -5273,12 +5275,16 @@ update authToken intents msg model =
         GotWebsocketData data ->
             handleGateway authToken intents data model
 
-        WebsocketClosed ->
+        WebsocketClosed reason ->
             let
                 _ =
                     Debug.log "WebsocketClosed" ()
             in
-            ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
+            if reason == "Authentication failed." then
+                ( { model | websocketHandle = Nothing }, [ AuthenticationIsNoLongerValid ] )
+
+            else
+                ( { model | websocketHandle = Nothing }, [ OpenHandle ] )
 
 
 userUpdate : UserAuth -> Intents -> Msg -> Model connection -> ( Model connection, List (UserOutMsg connection) )
@@ -5287,12 +5293,16 @@ userUpdate authToken intents msg model =
         GotWebsocketData data ->
             handleUserGateway authToken intents data model
 
-        WebsocketClosed ->
+        WebsocketClosed reason ->
             let
                 _ =
                     Debug.log "WebsocketClosed" ()
             in
-            ( { model | websocketHandle = Nothing }, [ UserOutMsg_OpenHandle ] )
+            if reason == "Authentication failed." then
+                ( { model | websocketHandle = Nothing }, [ UserOutMsg_AuthenticationIsNoLongerValid ] )
+
+            else
+                ( { model | websocketHandle = Nothing }, [ UserOutMsg_OpenHandle ] )
 
 
 handleGateway : Authentication -> Intents -> String -> Model connection -> ( Model connection, List (OutMsg connection) )

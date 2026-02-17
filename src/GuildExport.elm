@@ -17,7 +17,7 @@ import Message exposing (Message, UserTextMessageData)
 import RichText
 import SecretId
 import Thread exposing (BackendThread, DiscordBackendThread, LastTypedAt)
-import Types exposing (DiscordBasicUserData, DiscordExport, DiscordFullUserDataExport, DiscordUserDataExport(..))
+import Types exposing (DiscordBasicUserData, DiscordExport, DiscordFullUserDataExport, DiscordNeedsAuthAgainExport, DiscordUserDataExport(..))
 import User
 
 
@@ -265,16 +265,20 @@ discordExportCodec =
 discordUserDataCodec : Codec DiscordUserDataExport
 discordUserDataCodec =
     Codec.custom
-        (\basicDataEncoder fullDataEncoder value ->
+        (\basicDataEncoder fullDataEncoder needsAuthAgainEncoder value ->
             case value of
                 BasicDataExport arg0 ->
                     basicDataEncoder arg0
 
                 FullDataExport arg0 ->
                     fullDataEncoder arg0
+
+                NeedsAuthAgainExport arg0 ->
+                    needsAuthAgainEncoder arg0
         )
         |> Codec.variant1 "BasicData" BasicDataExport discordBasicUserDataCodec
         |> Codec.variant1 "FullData" FullDataExport discordFullUserDataCodec
+        |> Codec.variant1 "NeedsAuthAgain" NeedsAuthAgainExport discordNeedsAuthAgainCodec
         |> Codec.buildCustom
 
 
@@ -324,6 +328,15 @@ discordFullUserDataCodec : Codec DiscordFullUserDataExport
 discordFullUserDataCodec =
     Codec.object Types.DiscordFullUserDataExport
         |> Codec.field "auth" .auth User.linkDiscordDataCodec
+        |> Codec.field "user" .user userCodec
+        |> Codec.field "linkedTo" .linkedTo Id.codec
+        |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.buildObject
+
+
+discordNeedsAuthAgainCodec : Codec DiscordNeedsAuthAgainExport
+discordNeedsAuthAgainCodec =
+    Codec.object DiscordNeedsAuthAgainExport
         |> Codec.field "user" .user userCodec
         |> Codec.field "linkedTo" .linkedTo Id.codec
         |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)

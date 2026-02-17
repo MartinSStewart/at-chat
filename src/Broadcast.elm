@@ -433,6 +433,9 @@ discordRichTextToString content discordUsers =
 
                         FullData data ->
                             PersonName.fromStringLossy data.user.username
+
+                        NeedsAuthAgain data ->
+                            PersonName.fromStringLossy data.user.username
                 }
             )
             discordUsers

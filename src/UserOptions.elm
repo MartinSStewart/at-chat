@@ -355,22 +355,32 @@ view isMobile time local loggedIn loaded model =
                     []
                     [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
                     , Ui.column
-                        []
+                        [ Ui.spacing 8 ]
                         (List.map
                             (\( _, data ) ->
-                                Ui.row
-                                    [ Ui.spacing 4 ]
-                                    [ User.profileImage data.icon
-                                    , Ui.column
-                                        []
-                                        [ Ui.text (PersonName.toString data.name)
-                                        , case data.email of
-                                            Just email ->
-                                                Ui.text (EmailAddress.toString email)
+                                Ui.column
+                                    [ Ui.spacing 2 ]
+                                    [ Ui.row
+                                        [ Ui.spacing 8 ]
+                                        [ User.profileImage data.icon
+                                        , Ui.column
+                                            []
+                                            [ Ui.text (PersonName.toString data.name)
+                                            , case data.email of
+                                                Just email ->
+                                                    Ui.text (EmailAddress.toString email)
 
-                                            Nothing ->
-                                                Ui.none
+                                                Nothing ->
+                                                    Ui.none
+                                            ]
                                         ]
+                                    , if data.needsAuthAgain then
+                                        Ui.el
+                                            [ Ui.Font.color MyUi.errorColor ]
+                                            (Ui.text "This account needs to be linked again before you can use it")
+
+                                      else
+                                        Ui.none
                                     ]
                             )
                             (SeqDict.toList local.localUser.linkedDiscordUsers)

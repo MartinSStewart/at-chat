@@ -330,6 +330,7 @@ type alias DiscordFrontendCurrentUser =
     { name : PersonName
     , icon : Maybe FileHash
     , email : Maybe EmailAddress
+    , needsAuthAgain : Bool
     }
 
 

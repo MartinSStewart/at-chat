@@ -59,7 +59,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -205,11 +205,16 @@ subscriptions model =
                 case data of
                     FullData data2 ->
                         Discord.subscription
-                            (\connection onData onClose -> Websocket.listen connection onData (\_ -> onClose))
+                            (\connection onData onClose ->
+                                Websocket.listen connection onData (\data3 -> onClose data3.reason)
+                            )
                             data2.connection
                             |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
 
                     BasicData _ ->
+                        Nothing
+
+                    NeedsAuthAgain _ ->
                         Nothing
             )
             (SeqDict.toList model.discordUsers)
@@ -416,6 +421,9 @@ update msg model =
 
                                                 BasicData data ->
                                                     BasicData { data | icon = Maybe.map .fileHash maybeAvatar }
+
+                                                NeedsAuthAgain data ->
+                                                    NeedsAuthAgain { data | icon = Maybe.map .fileHash maybeAvatar }
                                         )
                                         discordUsers
                                 )
@@ -531,7 +539,7 @@ update msg model =
                             userId
                             (Server_LinkDiscordUser
                                 discordUser.id
-                                (discordFullDataUserToFrontendCurrentUser backendUser)
+                                (discordFullDataUserToFrontendCurrentUser False backendUser)
                                 |> ServerChange
                             )
                             model
@@ -587,6 +595,9 @@ update msg model =
 
                                 BasicData _ ->
                                     userData
+
+                                NeedsAuthAgain _ ->
+                                    userData
                         )
                         model.discordUsers
               }
@@ -625,8 +636,8 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-discordFullDataUserToFrontendCurrentUser : DiscordFullUserData -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser data =
+discordFullDataUserToFrontendCurrentUser : Bool -> { a | user : Discord.User, icon : Maybe FileHash } -> DiscordFrontendCurrentUser
+discordFullDataUserToFrontendCurrentUser needsAuthAgain data =
     { name = PersonName.fromStringLossy data.user.username
     , icon = data.icon
     , email =
@@ -641,6 +652,7 @@ discordFullDataUserToFrontendCurrentUser data =
 
             Missing ->
                 Nothing
+    , needsAuthAgain = needsAuthAgain
     }
 
 
@@ -662,7 +674,7 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser data)
+                                    (discordFullDataUserToFrontendCurrentUser False data)
                                     linkedDiscordUsers2
                                 )
 
@@ -681,6 +693,23 @@ getLoginData sessionId session user requestMessagesFor model =
                                 otherDiscordUsers2
                             , linkedDiscordUsers2
                             )
+
+                        NeedsAuthAgain data ->
+                            if data.linkedTo == session.userId then
+                                ( otherDiscordUsers2
+                                , SeqDict.insert
+                                    discordUserId
+                                    (discordFullDataUserToFrontendCurrentUser True data)
+                                    linkedDiscordUsers2
+                                )
+
+                            else
+                                ( SeqDict.insert
+                                    discordUserId
+                                    { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
+                                    otherDiscordUsers2
+                                , linkedDiscordUsers2
+                                )
                 )
                 ( SeqDict.empty, SeqDict.empty )
                 model.discordUsers
@@ -835,6 +864,9 @@ discordStartThread discordUser channel channelId threadId messageId model =
                                     user2.user.username ++ " joined!"
 
                                 Just (BasicData user2) ->
+                                    user2.user.username ++ " joined!"
+
+                                Just (NeedsAuthAgain user2) ->
                                     user2.user.username ++ " joined!"
 
                                 Nothing ->
@@ -2661,7 +2693,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordDm currentUserId dmChannelId _ ->
-                            asDiscordDmUser
+                            asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model2
                                 sessionId
                                 { currentUserId = currentUserId, channelId = dmChannelId }
@@ -2777,7 +2809,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordChannel guildId channelId currentDiscordUserId _ ->
-                            asDiscordGuildMember
+                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model2
                                 sessionId
                                 guildId
@@ -2810,7 +2842,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId _ ->
-                            asDiscordGuildMember
+                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model2
                                 sessionId
                                 guildId
@@ -2959,7 +2991,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 Local_Discord_LoadChannelMessages guildOrDmId oldestVisibleMessage _ ->
                     case guildOrDmId of
                         DiscordGuildOrDmId_Guild currentUserId guildId channelId ->
-                            asDiscordGuildMember
+                            asDiscordGuildMember_AllowUserThatNeedsAuthAgain
                                 model2
                                 sessionId
                                 guildId
@@ -2980,7 +3012,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 )
 
                         DiscordGuildOrDmId_Dm data ->
-                            asDiscordDmUser
+                            asDiscordDmUser_AllowUserThatNeedsAuthAgain
                                 model2
                                 sessionId
                                 data
@@ -3247,6 +3279,14 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 |> FullDataExport
                                                                 |> Just
 
+                                                        Just (NeedsAuthAgain data) ->
+                                                            { user = data.user
+                                                            , linkedTo = data.linkedTo
+                                                            , icon = data.icon
+                                                            }
+                                                                |> NeedsAuthAgainExport
+                                                                |> Just
+
                                                         Nothing ->
                                                             Nothing
                                                 )
@@ -3302,6 +3342,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 { auth = data.auth
                                                                 , user = data.user
                                                                 , connection = Discord.init
+                                                                , linkedTo = data.linkedTo
+                                                                , icon = data.icon
+                                                                }
+
+                                                        NeedsAuthAgainExport data ->
+                                                            NeedsAuthAgain
+                                                                { user = data.user
                                                                 , linkedTo = data.linkedTo
                                                                 , icon = data.icon
                                                                 }
@@ -4120,6 +4167,55 @@ asDiscordDmUser model sessionId { currentUserId, channelId } func =
             ( model, Command.none )
 
 
+asDiscordDmUser_AllowUserThatNeedsAuthAgain :
+    BackendModel
+    -> SessionId
+    -> DiscordGuildOrDmId_DmData
+    ->
+        (UserSession
+         -> NeedsAuthAgainData
+         -> BackendUser
+         -> DiscordDmChannel
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, channelId } func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case
+                ( NonemptyDict.get session.userId model.users
+                , SeqDict.get currentUserId model.discordUsers
+                , SeqDict.get channelId model.discordDmChannels
+                )
+            of
+                ( Just user, Just (FullData discordUser), Just dmChannel ) ->
+                    if discordUser.linkedTo == session.userId then
+                        func
+                            session
+                            { user = discordUser.user
+                            , linkedTo = discordUser.linkedTo
+                            , icon = discordUser.icon
+                            }
+                            user
+                            dmChannel
+
+                    else
+                        ( model, Command.none )
+
+                ( Just user, Just (NeedsAuthAgain discordUser), Just dmChannel ) ->
+                    if discordUser.linkedTo == session.userId then
+                        func session discordUser user dmChannel
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
 asGuildMember :
     BackendModel
     -> SessionId
@@ -4157,6 +4253,42 @@ asDiscordGuildMember model sessionId guildId discordUserId func =
                 )
             of
                 ( Just user, Just guild, Just (FullData discordUser) ) ->
+                    func session discordUser user guild
+
+                _ ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+asDiscordGuildMember_AllowUserThatNeedsAuthAgain :
+    BackendModel
+    -> SessionId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.UserId
+    -> (UserSession -> NeedsAuthAgainData -> BackendUser -> DiscordBackendGuild -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg ))
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discordUserId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case
+                ( NonemptyDict.get session.userId model.users
+                , SeqDict.get guildId model.discordGuilds
+                , SeqDict.get discordUserId model.discordUsers
+                )
+            of
+                ( Just user, Just guild, Just (FullData discordUser) ) ->
+                    func
+                        session
+                        { user = discordUser.user
+                        , linkedTo = discordUser.linkedTo
+                        , icon = discordUser.icon
+                        }
+                        user
+                        guild
+
+                ( Just user, Just guild, Just (NeedsAuthAgain discordUser) ) ->
                     func session discordUser user guild
 
                 _ ->
