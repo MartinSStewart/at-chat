@@ -3419,41 +3419,63 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
 
                 Nothing ->
                     Ui.none
-            , MessageInput.view
-                (Dom.id "messageMenu_channelInput")
-                (replyTo == Nothing)
-                (MyUi.isMobile model)
-                (messageInputConfig guildOrDmId)
-                channelTextInputId
-                (case guildOrDmIdNoThread of
-                    DiscordGuildOrDmId_Guild _ _ _ ->
-                        "Write a message in #" ++ name
+            , case LocalState.canSendDiscordMessage local guildOrDmIdNoThread of
+                Ok () ->
+                    MessageInput.view
+                        (Dom.id "messageMenu_channelInput")
+                        (replyTo == Nothing)
+                        (MyUi.isMobile model)
+                        (messageInputConfig guildOrDmId)
+                        channelTextInputId
+                        (case guildOrDmIdNoThread of
+                            DiscordGuildOrDmId_Guild _ _ _ ->
+                                "Write a message in #" ++ name
 
-                    DiscordGuildOrDmId_Dm data ->
-                        "Write a message to "
-                            ++ (if chattingWithYourself data local then
-                                    "yourself"
+                            DiscordGuildOrDmId_Dm data ->
+                                "Write a message to "
+                                    ++ (if chattingWithYourself data local then
+                                            "yourself"
 
-                                else
-                                    name
-                               )
-                )
-                (case SeqDict.get guildOrDmId loggedIn.drafts of
-                    Just text ->
-                        String.Nonempty.toString text
+                                        else
+                                            name
+                                       )
+                        )
+                        (case SeqDict.get guildOrDmId loggedIn.drafts of
+                            Just text ->
+                                String.Nonempty.toString text
 
-                    Nothing ->
-                        ""
-                )
-                (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
-                    Just attachedFiles ->
-                        NonemptyDict.toSeqDict attachedFiles
+                            Nothing ->
+                                ""
+                        )
+                        (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                            Just attachedFiles ->
+                                NonemptyDict.toSeqDict attachedFiles
 
-                    Nothing ->
-                        SeqDict.empty
-                )
-                loggedIn.pingUser
-                local
+                            Nothing ->
+                                SeqDict.empty
+                        )
+                        loggedIn.pingUser
+                        local
+
+                Err error ->
+                    MessageInput.disabledView
+                        (replyTo == Nothing)
+                        error
+                        (case SeqDict.get guildOrDmId loggedIn.drafts of
+                            Just text ->
+                                String.Nonempty.toString text
+
+                            Nothing ->
+                                ""
+                        )
+                        (case SeqDict.get guildOrDmId loggedIn.filesToUpload of
+                            Just attachedFiles ->
+                                NonemptyDict.toSeqDict attachedFiles
+
+                            Nothing ->
+                                SeqDict.empty
+                        )
+                        local
             , peopleAreTypingView allUsers channel currentDiscordUserId model
             ]
         ]

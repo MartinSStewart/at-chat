@@ -889,11 +889,11 @@ routeRequest previousRoute newRoute model =
 
         LinkDiscord result ->
             ( model2
-            , case result of
-                Ok userData ->
+            , case ( model.loginStatus, result ) of
+                ( LoggedIn _, Ok userData ) ->
                     LinkDiscordRequest userData |> Lamdera.sendToBackend
 
-                Err () ->
+                _ ->
                     Command.none
             )
 
@@ -1490,13 +1490,7 @@ updateLoaded msg model =
                 ( model3, routeCmd ) =
                     routePush model2 route
             in
-            ( model3
-            , Command.batch
-                [ cmd
-                , routeCmd
-                , notificationRequest
-                ]
-            )
+            ( model3, Command.batch [ cmd, Debug.log "routeCmd" routeCmd, notificationRequest ] )
 
         TypedMessage guildOrDmId text ->
             updateLoggedIn
@@ -1563,69 +1557,82 @@ updateLoaded msg model =
                                 local : LocalState
                                 local =
                                     Local.model loggedIn.localState
+
+                                safeToSend : Bool
+                                safeToSend =
+                                    case guildOrDmId of
+                                        GuildOrDmId _ ->
+                                            True
+
+                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                            LocalState.canSendDiscordMessage local guildOrDmId2 == Ok ()
                             in
-                            handleLocalChange
-                                model.time
-                                ((case guildOrDmId of
-                                    GuildOrDmId guildOrDmId2 ->
-                                        Local_SendMessage
-                                            model.time
-                                            guildOrDmId2
-                                            (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
-                                            (case threadRoute of
-                                                ViewThread threadId ->
-                                                    ViewThreadWithMaybeMessage
-                                                        threadId
-                                                        (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                            if safeToSend then
+                                handleLocalChange
+                                    model.time
+                                    ((case guildOrDmId of
+                                        GuildOrDmId guildOrDmId2 ->
+                                            Local_SendMessage
+                                                model.time
+                                                guildOrDmId2
+                                                (RichText.fromNonemptyString (LocalState.allUsers local) nonempty)
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMaybeMessage
+                                                            threadId
+                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
 
-                                                NoThread ->
-                                                    NoThreadWithMaybeMessage
-                                                        (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                            )
-                                            (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                Just dict ->
-                                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                    NoThread ->
+                                                        NoThreadWithMaybeMessage
+                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                )
+                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                    Just dict ->
+                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                                                Nothing ->
-                                                    SeqDict.empty
-                                            )
+                                                    Nothing ->
+                                                        SeqDict.empty
+                                                )
 
-                                    DiscordGuildOrDmId guildOrDmId2 ->
-                                        Local_Discord_SendMessage
-                                            model.time
-                                            guildOrDmId2
-                                            (RichText.fromNonemptyString (LocalState.allDiscordUsers2 local.localUser) nonempty)
-                                            (case threadRoute of
-                                                ViewThread threadId ->
-                                                    ViewThreadWithMaybeMessage
-                                                        threadId
-                                                        (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
+                                        DiscordGuildOrDmId guildOrDmId2 ->
+                                            Local_Discord_SendMessage
+                                                model.time
+                                                guildOrDmId2
+                                                (RichText.fromNonemptyString (LocalState.allDiscordUsers2 local.localUser) nonempty)
+                                                (case threadRoute of
+                                                    ViewThread threadId ->
+                                                        ViewThreadWithMaybeMessage
+                                                            threadId
+                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo |> Maybe.map Id.changeType)
 
-                                                NoThread ->
-                                                    NoThreadWithMaybeMessage
-                                                        (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
-                                            )
-                                            (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
-                                                Just dict ->
-                                                    NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
+                                                    NoThread ->
+                                                        NoThreadWithMaybeMessage
+                                                            (SeqDict.get guildOrDmIdWithThread loggedIn.replyTo)
+                                                )
+                                                (case SeqDict.get guildOrDmIdWithThread loggedIn.filesToUpload of
+                                                    Just dict ->
+                                                        NonemptyDict.toSeqDict dict |> FileStatus.onlyUploadedFiles
 
-                                                Nothing ->
-                                                    SeqDict.empty
-                                            )
-                                 )
-                                    |> Just
-                                )
-                                { loggedIn
-                                    | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
-                                    , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
-                                    , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
-                                }
-                                (if MyUi.isMobile model then
-                                    smoothScrollToBottomOfChannel
+                                                    Nothing ->
+                                                        SeqDict.empty
+                                                )
+                                     )
+                                        |> Just
+                                    )
+                                    { loggedIn
+                                        | drafts = SeqDict.remove guildOrDmIdWithThread loggedIn.drafts
+                                        , replyTo = SeqDict.remove guildOrDmIdWithThread loggedIn.replyTo
+                                        , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
+                                    }
+                                    (if MyUi.isMobile model then
+                                        smoothScrollToBottomOfChannel
 
-                                 else
-                                    scrollToBottomOfChannel
-                                )
+                                     else
+                                        scrollToBottomOfChannel
+                                    )
+
+                            else
+                                ( loggedIn, Command.none )
 
                         Nothing ->
                             ( loggedIn, Command.none )
@@ -7111,8 +7118,8 @@ updateLoadedFromBackend msg model =
         LinkDiscordResponse result ->
             updateLoggedIn
                 (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
+                    case ( model.route, loggedIn.userOptions ) of
+                        ( _, Just userOptions ) ->
                             ( { loggedIn
                                 | userOptions =
                                     (case result of
@@ -7131,7 +7138,10 @@ updateLoadedFromBackend msg model =
                             , Command.none
                             )
 
-                        Nothing ->
+                        ( LinkDiscord _, Nothing ) ->
+                            ( loggedIn, routeReplace model HomePageRoute )
+
+                        _ ->
                             ( loggedIn, Command.none )
                 )
                 model
@@ -7800,9 +7810,7 @@ view model =
                                                 Ui.text "User not found"
 
                                     _ ->
-                                        Ui.el
-                                            [ Ui.centerY, Ui.centerX, Ui.width Ui.shrink ]
-                                            (Ui.text "Admin access required to view this page")
+                                        errorPage loaded "Admin access required to view this page"
                             )
 
                     AiChatRoute ->
@@ -7869,15 +7877,50 @@ view model =
                         layout
                             loaded
                             [ Ui.contentCenterX, Ui.contentCenterY ]
-                            (case result of
-                                Ok ok ->
+                            (case ( loaded.loginStatus, result ) of
+                                ( NotLoggedIn notLoggedIn, Ok ok ) ->
+                                    Ui.column
+                                        [ Ui.spacing 32 ]
+                                        [ Ui.el
+                                            [ Ui.Font.size 20, Ui.Font.center, Ui.widthMax 400, Ui.centerX ]
+                                            (Ui.text "You aren't logged in here. Please log in and then we can link your Discord account.")
+                                        , LoginForm.view
+                                            loaded.userAgent
+                                            (Maybe.withDefault LoginForm.init notLoggedIn.loginForm)
+                                            (MyUi.isMobile loaded)
+                                            -- Don't show PWA warning on this login screen
+                                            InstalledPwa
+                                            |> Ui.map LoginFormMsg
+                                        ]
+
+                                ( LoggedIn loggedIn, Ok ok ) ->
                                     Ui.text "Linking..."
 
-                                Err () ->
-                                    Ui.text "Something went wrong while linking your Discord account"
+                                ( _, Err _ ) ->
+                                    errorPage loaded "Something went wrong when linking your Discord account"
                             )
         ]
     }
+
+
+errorPage : LoadedFrontend -> String -> Element FrontendMsg
+errorPage model text =
+    Ui.el
+        [ Ui.inFront (Pages.Home.header (MyUi.isMobile model) model.loginStatus)
+        , Ui.height Ui.fill
+        ]
+        (Ui.column
+            [ Ui.centerY, Ui.spacing 16 ]
+            [ Ui.el [ Ui.width Ui.shrink, Ui.centerX ] (Ui.text text)
+            , Ui.el
+                [ Ui.width Ui.shrink, Ui.centerX ]
+                (MyUi.simpleButton
+                    (Dom.id "frontend_goToHomepage")
+                    (PressedLink HomePageRoute)
+                    (Ui.text "Go to homepage")
+                )
+            ]
+        )
 
 
 guildOrDmIdToMessage :

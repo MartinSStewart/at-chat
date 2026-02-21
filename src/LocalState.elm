@@ -29,6 +29,7 @@ module LocalState exposing
     , allUsers
     , allUsers2
     , announcementChannel
+    , canSendDiscordMessage
     , createChannel
     , createChannelFrontend
     , createChannelMessageBackend
@@ -89,7 +90,7 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -1945,3 +1946,51 @@ repliedToUserIdFrontend maybeRepliedTo channel =
 
         Nothing ->
             Nothing
+
+
+{-| False if Discord's spam bot heuristics is likely to get triggered by sending a message
+-}
+canSendDiscordMessage : LocalState -> DiscordGuildOrDmId -> Result String ()
+canSendDiscordMessage local guildOrDmId =
+    case guildOrDmId of
+        DiscordGuildOrDmId_Guild _ _ _ ->
+            Ok ()
+
+        DiscordGuildOrDmId_Dm data ->
+            case SeqDict.get data.currentUserId local.localUser.linkedDiscordUsers of
+                Just linkedUser ->
+                    if linkedUser.needsAuthAgain then
+                        Err "Please link your Discord account again"
+
+                    else
+                        case SeqDict.get data.channelId local.discordDmChannels of
+                            Just channel ->
+                                let
+                                    messagesSent =
+                                        Array.foldl
+                                            (\message count ->
+                                                case message of
+                                                    MessageLoaded (UserTextMessage message2) ->
+                                                        if message2.createdBy == data.currentUserId then
+                                                            count + 1
+
+                                                        else
+                                                            count
+
+                                                    _ ->
+                                                        count
+                                            )
+                                            0
+                                            channel.messages
+                                in
+                                if messagesSent > 4 then
+                                    Ok ()
+
+                                else
+                                    Err "Send at least 4 messages using Discord first"
+
+                            Nothing ->
+                                Err "This Discord user isn't linked to your account"
+
+                Nothing ->
+                    Err "Channel not found"

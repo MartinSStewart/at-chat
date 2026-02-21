@@ -2,6 +2,7 @@ module MessageInput exposing
     ( MentionUserDropdown
     , MentionUserTarget(..)
     , MsgConfig
+    , disabledView
     , editView
     , multilineUpdate
     , pingDropdownView
@@ -155,6 +156,70 @@ textarea isMobileKeyboard msgConfig channelTextInputId placeholderText text atta
                         )
             , Html.Events.onInput msgConfig.typedMessage
             , Html.Attributes.value text
+            ]
+            []
+        , Html.div
+            [ Html.Attributes.style "pointer-events" "none"
+            , Html.Attributes.style "padding" "0 9px 0 9px"
+            , Html.Attributes.style "transform" "translateX(-1px) translateY(8px)"
+            , Html.Attributes.style "white-space" "pre-wrap"
+            , Html.Attributes.style "overflow-wrap" "anywhere"
+            , Html.Attributes.style "height" "fit-content"
+            , Html.Attributes.style "min-height" "100%"
+            , Html.Attributes.style "color"
+                (if text == "" then
+                    "rgb(180,180,180)"
+
+                 else
+                    "rgb(255,255,255)"
+                )
+            ]
+            (case String.Nonempty.fromString text of
+                Just nonempty ->
+                    let
+                        users =
+                            LocalState.allUsers local
+                    in
+                    RichText.textInputView users attachedFiles (RichText.fromNonemptyString users nonempty)
+                        ++ [ Html.text "\n" ]
+
+                Nothing ->
+                    [ if placeholderText == "" then
+                        Html.text " "
+
+                      else
+                        Html.text placeholderText
+                    ]
+            )
+        ]
+
+
+disabledTextarea : String -> String -> SeqDict (Id FileId) a -> LocalState -> Html msg
+disabledTextarea placeholderText text attachedFiles local =
+    Html.div
+        [ Html.Attributes.style "display" "flex"
+        , Html.Attributes.style "position" "relative"
+        , Html.Attributes.style "min-height" "min-content"
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "height" "fit-content"
+        ]
+        [ Html.textarea
+            [ Html.Attributes.style "color" "rgba(255,0,0,1)"
+            , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.style "font-size" "inherit"
+            , Html.Attributes.style "font-family" "inherit"
+            , Html.Attributes.style "line-height" "inherit"
+            , Html.Attributes.style "width" "calc(100% - 18px)"
+            , Html.Attributes.style "height" "100%"
+            , Html.Attributes.style "background-color" "transparent"
+            , Html.Attributes.style "border" "0"
+            , Html.Attributes.style "resize" "none"
+            , Html.Attributes.style "overflow" "hidden"
+            , Html.Attributes.style "caret-color" "white"
+            , Html.Attributes.style "padding" "8px"
+            , Html.Attributes.style "outline" "none"
+            , Html.Attributes.value text
+            , Html.Attributes.disabled True
             ]
             []
         , Html.div
@@ -354,6 +419,64 @@ view htmlId roundTopCorners isMobileKeyboard msgConfig channelTextInputId placeh
                             }
                         )
                         |> Ui.htmlAttribute
+                    ]
+                    (Ui.html Icons.sendMessage)
+                )
+            ]
+
+
+disabledView :
+    Bool
+    -> String
+    -> String
+    -> SeqDict (Id FileId) a
+    -> LocalState
+    -> Element msg
+disabledView roundTopCorners placeholderText text attachedFiles local =
+    disabledTextarea placeholderText text attachedFiles local
+        |> Ui.html
+        |> Ui.el
+            [ Ui.paddingWith { left = 0, right = 0, top = 0, bottom = 19 }
+            , Ui.scrollable
+            , Ui.border 1
+            , Ui.borderColor MyUi.border1
+            , if roundTopCorners then
+                Ui.rounded 8
+
+              else
+                Ui.roundedWith { topLeft = 0, topRight = 0, bottomLeft = 8, bottomRight = 8 }
+            , Ui.heightMin 0
+            , Ui.heightMax 400
+            , MyUi.htmlStyle "scrollbar-color" "black"
+            , Ui.background MyUi.background2
+            ]
+        |> Ui.el
+            [ Ui.paddingWith { left = 40, right = 36, top = 0, bottom = 0 }
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.alignLeft
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 6 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.disabledButtonBackground
+                    , Ui.move { x = 2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
+                    ]
+                    (Ui.html Icons.attachment)
+                )
+            , Ui.inFront
+                (Ui.el
+                    [ Ui.alignRight
+                    , Ui.width Ui.shrink
+                    , Ui.rounded 4
+                    , Ui.paddingXY 4 0
+                    , Ui.height (Ui.px 38)
+                    , Ui.background MyUi.disabledButtonBackground
+                    , Ui.move { x = -2, y = 0, z = 0 }
+                    , Ui.contentCenterY
+                    , Ui.centerY
                     ]
                     (Ui.html Icons.sendMessage)
                 )
