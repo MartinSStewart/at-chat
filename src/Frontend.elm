@@ -2001,7 +2001,7 @@ updateLoaded msg model =
 
                   else
                     Ports.fixCursorPosition htmlId
-                , if htmlId == Dom.id "userOptions_discordLinkBookmarklet" then
+                , if htmlId == UserOptions.discordBookmarkletId then
                     Ports.textInputSelectAll htmlId
 
                   else
