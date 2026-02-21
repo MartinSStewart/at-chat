@@ -394,6 +394,9 @@ update msg model =
                 Err error ->
                     addLog time (Log.FailedToRemoveReactionToDiscordDmMessage channelId messageId discordMessageId emoji error) model
 
+        DiscordTypingIndicatorSent ->
+            ( model, Command.none )
+
         CreatedDiscordPrivateChannel time currentUserId otherUserId result ->
             case result of
                 Ok _ ->
@@ -1577,7 +1580,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session _ _ guild ->
+                                (\session userData _ guild ->
                                     ( { model2
                                         | discordGuilds =
                                             SeqDict.insert
@@ -1600,6 +1603,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> ServerChange
                                             )
                                             model2
+                                        , Discord.triggerTypingIndicatorPayload
+                                            (Discord.userToken userData.auth)
+                                            channelId
+                                            |> DiscordSync.http
+                                            |> Task.attempt (\_ -> DiscordTypingIndicatorSent)
                                         ]
                                     )
                                 )
@@ -1609,7 +1617,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session _ _ dmChannel ->
+                                (\session userData discordUser dmChannel ->
                                     ( { model2
                                         | discordDmChannels =
                                             SeqDict.insert
@@ -1631,6 +1639,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> ServerChange
                                             )
                                             model2
+                                        , Discord.triggerTypingIndicatorPayload
+                                            (Discord.userToken userData.auth)
+                                            (Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64)
+                                            |> DiscordSync.http
+                                            |> Task.attempt (\_ -> DiscordTypingIndicatorSent)
                                         ]
                                     )
                                 )

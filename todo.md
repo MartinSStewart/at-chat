@@ -1,2 +1,2 @@
 Add :emoji: text input support
-Make it possible to show a message to a channel while in a thread
+Have a minimum number of DM messages that have to be sent (3) before the DM can be used in at-chat (same as endcord does it to avoid account being blocked due to spam bot heuristics)

@@ -591,6 +591,7 @@ type BackendMsg
     | DiscordAddedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
+    | DiscordTypingIndicatorSent
     | CreatedDiscordPrivateChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Channel)
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse )))

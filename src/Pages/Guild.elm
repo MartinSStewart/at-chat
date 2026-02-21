@@ -15,6 +15,7 @@ module Pages.Guild exposing
     , messageViewEncode
     , newGuildFormInit
     , threadMessageHtmlId
+    , typingDebouncerDelay
     )
 
 import Array exposing (Array)
@@ -25,7 +26,7 @@ import Coord
 import Date exposing (Date)
 import Discord.Id
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
-import Duration
+import Duration exposing (Duration)
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Emoji exposing (Emoji)
 import Env
@@ -3458,6 +3459,11 @@ discordConversationView lastViewedIndex currentDiscordUserId guildOrDmIdNoThread
         ]
 
 
+typingDebouncerDelay : Duration
+typingDebouncerDelay =
+    Duration.seconds 7
+
+
 peopleAreTypingView :
     SeqDict userId { a | name : PersonName }
     -> { b | lastTypedAt : SeqDict userId (LastTypedAt messageId) }
@@ -3468,7 +3474,7 @@ peopleAreTypingView allUsers channel currentUserId model =
     (case
         SeqDict.filter
             (\_ a ->
-                (Duration.from a.time model.time |> Quantity.lessThan (Duration.seconds 3))
+                (Duration.from a.time model.time |> Quantity.lessThan (Quantity.plus Duration.second typingDebouncerDelay))
                     && (a.messageIndex == Nothing)
             )
             (SeqDict.remove currentUserId channel.lastTypedAt)
