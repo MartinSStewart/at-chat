@@ -1143,6 +1143,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                             { user = userData.user
                                             , icon = userData.icon
                                             , linkedTo = userData.linkedTo
+                                            , linkedAt = userData.linkedAt
                                             }
                                         )
                                         model2.discordUsers

@@ -325,6 +325,7 @@ type alias DiscordFullUserData =
     , connection : Discord.Model Websocket.Connection
     , linkedTo : Id UserId
     , icon : Maybe FileHash
+    , linkedAt : Time.Posix
     }
 
 
@@ -332,6 +333,7 @@ type alias NeedsAuthAgainData =
     { user : Discord.User
     , linkedTo : Id UserId
     , icon : Maybe FileHash
+    , linkedAt : Time.Posix
     }
 
 
@@ -357,6 +359,7 @@ type alias DiscordFullUserDataExport =
     , user : Discord.User
     , linkedTo : Id UserId
     , icon : Maybe FileHash
+    , linkedAt : Time.Posix
     }
 
 
@@ -364,6 +367,7 @@ type alias DiscordNeedsAuthAgainExport =
     { user : Discord.User
     , linkedTo : Id UserId
     , icon : Maybe FileHash
+    , linkedAt : Time.Posix
     }
 
 
@@ -608,7 +612,7 @@ type BackendMsg
             }
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
-    | LinkDiscordUserStep1 ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
+    | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
         (Discord.Id.Id Discord.Id.UserId)
         (Result

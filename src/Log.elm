@@ -1,4 +1,4 @@
-module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, view)
+module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, timeToString, view)
 
 import Array exposing (Array)
 import Discord

@@ -331,6 +331,7 @@ discordFullUserDataCodec =
         |> Codec.field "user" .user userCodec
         |> Codec.field "linkedTo" .linkedTo Id.codec
         |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.field "linkedAt" .linkedAt CodecExtra.timePosix
         |> Codec.buildObject
 
 
@@ -340,6 +341,7 @@ discordNeedsAuthAgainCodec =
         |> Codec.field "user" .user userCodec
         |> Codec.field "linkedTo" .linkedTo Id.codec
         |> Codec.field "icon" .icon (Codec.nullable FileStatus.fileHashCodec)
+        |> Codec.field "linkedAt" .linkedAt CodecExtra.timePosix
         |> Codec.buildObject
 
 

@@ -352,35 +352,59 @@ view isMobile time local loggedIn loaded model =
                     ]
                     (Ui.text "Link Slack account")
                 , Ui.column
-                    []
+                    [ Ui.spacing 8 ]
                     [ Ui.el [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ] (Ui.text "Linked Discord users")
                     , Ui.column
                         [ Ui.spacing 8 ]
                         (List.map
                             (\( _, data ) ->
                                 Ui.column
-                                    [ Ui.spacing 2 ]
+                                    [ Ui.spacing 8
+                                    , Ui.padding 12
+                                    , Ui.border 1
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.rounded 8
+                                    , Ui.widthMax 400
+                                    ]
                                     [ Ui.row
-                                        [ Ui.spacing 8 ]
+                                        [ Ui.spacing 8, Ui.width Ui.fill ]
                                         [ User.profileImage data.icon
                                         , Ui.column
-                                            []
+                                            [ Ui.spacing 2 ]
                                             [ Ui.text (PersonName.toString data.name)
                                             , case data.email of
                                                 Just email ->
-                                                    Ui.text (EmailAddress.toString email)
+                                                    Ui.el
+                                                        [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+                                                        (Ui.text (EmailAddress.toString email))
 
                                                 Nothing ->
                                                     Ui.none
                                             ]
                                         ]
+                                    , Ui.el
+                                        [ Ui.Font.size 13, Ui.Font.color MyUi.font3 ]
+                                        (Ui.text ("Linked " ++ Log.timeToString loaded.timezone True data.linkedAt))
                                     , if data.needsAuthAgain then
                                         Ui.el
-                                            [ Ui.Font.color MyUi.errorColor ]
+                                            [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14 ]
                                             (Ui.text "This account needs to be linked again before you can use it")
 
                                       else
                                         Ui.none
+                                    , MyUi.elButton
+                                        (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
+                                        PressedLinkDiscord
+                                        [ Ui.borderColor MyUi.buttonBorder
+                                        , Ui.border 1
+                                        , Ui.background MyUi.buttonBackground
+                                        , Ui.Font.color MyUi.font1
+                                        , Ui.width Ui.shrink
+                                        , Ui.paddingXY 12 6
+                                        , Ui.rounded 4
+                                        , Ui.Font.size 14
+                                        ]
+                                        (Ui.text "Relink account")
                                     ]
                             )
                             (SeqDict.toList local.localUser.linkedDiscordUsers)
@@ -394,6 +418,14 @@ view isMobile time local loggedIn loaded model =
                     Ui.column
                         [ Ui.spacing 16, Ui.widthMax 400 ]
                         [ Ui.column
+                            [ Ui.spacing 4, Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+                            [ Ui.text "To link your Discord account:"
+                            , Ui.text "1. Copy the bookmarklet URL below"
+                            , Ui.text "2. Create a new bookmark in your browser"
+                            , Ui.text "3. Paste the URL as the bookmark address"
+                            , Ui.text "4. Open Discord in your browser and click the bookmark"
+                            ]
+                        , Ui.column
                             [ Ui.spacing 2 ]
                             [ bookmarkletLabel.element
                             , Ui.row
@@ -401,7 +433,7 @@ view isMobile time local loggedIn loaded model =
                                 [ Ui.Input.text
                                     [ Ui.clipWithEllipsis
                                     , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-                                    , Ui.htmlAttribute (Html.Attributes.disabled True)
+                                    , Ui.htmlAttribute (Html.Attributes.readonly True)
                                     , Ui.background MyUi.background1
                                     , Ui.border 1
                                     , Ui.borderColor MyUi.border1

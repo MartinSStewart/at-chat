@@ -1995,11 +1995,18 @@ updateLoaded msg model =
 
         TextInputGotFocus htmlId ->
             ( { model | textInputFocus = Just htmlId }
-            , if model.userAgent.device == UserAgent.Desktop || model.textInputFocus == Just htmlId then
-                Command.none
+            , Command.batch
+                [ if model.userAgent.device == UserAgent.Desktop || model.textInputFocus == Just htmlId then
+                    Command.none
 
-              else
-                Ports.fixCursorPosition htmlId
+                  else
+                    Ports.fixCursorPosition htmlId
+                , if htmlId == Dom.id "userOptions_discordLinkBookmarklet" then
+                    Ports.textInputSelectAll htmlId
+
+                  else
+                    Command.none
+                ]
             )
 
         TextInputLostFocus htmlId ->

@@ -520,7 +520,7 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        LinkDiscordUserStep1 clientId userId auth result ->
+        LinkDiscordUserStep1 linkedAt clientId userId auth result ->
             case result of
                 Ok discordUser ->
                     let
@@ -531,6 +531,7 @@ update msg model =
                             , connection = Discord.init
                             , linkedTo = userId
                             , icon = Nothing
+                            , linkedAt = linkedAt
                             }
                     in
                     ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
@@ -639,7 +640,7 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-discordFullDataUserToFrontendCurrentUser : Bool -> { a | user : Discord.User, icon : Maybe FileHash } -> DiscordFrontendCurrentUser
+discordFullDataUserToFrontendCurrentUser : Bool -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix } -> DiscordFrontendCurrentUser
 discordFullDataUserToFrontendCurrentUser needsAuthAgain data =
     { name = PersonName.fromStringLossy data.user.username
     , icon = data.icon
@@ -656,6 +657,7 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data =
             Missing ->
                 Nothing
     , needsAuthAgain = needsAuthAgain
+    , linkedAt = data.linkedAt
     }
 
 
@@ -3225,7 +3227,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     ( model2
                     , Discord.getCurrentUserPayload (Discord.userToken data)
                         |> DiscordSync.http
-                        |> Task.attempt (LinkDiscordUserStep1 clientId session.userId data)
+                        |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId data)
                     )
                 )
 
@@ -3288,6 +3290,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             , user = data.user
                                                             , linkedTo = data.linkedTo
                                                             , icon = data.icon
+                                                            , linkedAt = data.linkedAt
                                                             }
                                                                 |> FullDataExport
                                                                 |> Just
@@ -3296,6 +3299,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { user = data.user
                                                             , linkedTo = data.linkedTo
                                                             , icon = data.icon
+                                                            , linkedAt = data.linkedAt
                                                             }
                                                                 |> NeedsAuthAgainExport
                                                                 |> Just
@@ -3357,6 +3361,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 , connection = Discord.init
                                                                 , linkedTo = data.linkedTo
                                                                 , icon = data.icon
+                                                                , linkedAt = data.linkedAt
                                                                 }
 
                                                         NeedsAuthAgainExport data ->
@@ -3364,6 +3369,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 { user = data.user
                                                                 , linkedTo = data.linkedTo
                                                                 , icon = data.icon
+                                                                , linkedAt = data.linkedAt
                                                                 }
                                                     )
                                                         |> Just
@@ -4208,6 +4214,7 @@ asDiscordDmUser_AllowUserThatNeedsAuthAgain model sessionId { currentUserId, cha
                             { user = discordUser.user
                             , linkedTo = discordUser.linkedTo
                             , icon = discordUser.icon
+                            , linkedAt = discordUser.linkedAt
                             }
                             user
                             dmChannel
@@ -4297,6 +4304,7 @@ asDiscordGuildMember_AllowUserThatNeedsAuthAgain model sessionId guildId discord
                         { user = discordUser.user
                         , linkedTo = discordUser.linkedTo
                         , icon = discordUser.icon
+                        , linkedAt = discordUser.linkedAt
                         }
                         user
                         guild
