@@ -3874,14 +3874,7 @@ updateLoaded msg model =
         PressedLinkDiscord ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | userOptions =
-                            Maybe.map
-                                (\userOptions -> { userOptions | showLinkDiscordSetup = True })
-                                loggedIn.userOptions
-                      }
-                    , Command.none
-                    )
+                    Debug.todo ""
                 )
                 model
 
