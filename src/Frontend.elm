@@ -1303,6 +1303,9 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
+        PressedUnlinkDiscord _ ->
+            True
+
         MouseEnteredDiscordChannelName _ _ _ ->
             False
 
@@ -3878,6 +3881,9 @@ updateLoaded msg model =
                 )
                 model
 
+        PressedUnlinkDiscord discordUserId ->
+            ( model, UnlinkDiscordRequest discordUserId |> Lamdera.sendToBackend )
+
         PressedDiscordGuildMemberLabel data ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
@@ -6146,6 +6152,16 @@ changeUpdate localMsg local =
                     { local
                         | localUser =
                             { localUser | linkedDiscordUsers = SeqDict.insert userId user localUser.linkedDiscordUsers }
+                    }
+
+                Server_UnlinkDiscordUser userId ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers }
                     }
 
                 Server_DiscordChannelCreated guildId channelId channelName ->

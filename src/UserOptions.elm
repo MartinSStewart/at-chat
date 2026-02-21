@@ -363,7 +363,7 @@ view isMobile time local loggedIn loaded model =
                         , Ui.column
                             [ Ui.spacing 8 ]
                             (List.map
-                                (\( _, data ) ->
+                                (\( discordUserId, data ) ->
                                     Ui.column
                                         [ Ui.spacing 8
                                         , Ui.padding 12
@@ -398,19 +398,35 @@ view isMobile time local loggedIn loaded model =
 
                                           else
                                             Ui.none
-                                        , MyUi.elButton
-                                            (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
-                                            PressedLinkDiscord
-                                            [ Ui.borderColor MyUi.buttonBorder
-                                            , Ui.border 1
-                                            , Ui.background MyUi.buttonBackground
-                                            , Ui.Font.color MyUi.font1
-                                            , Ui.width Ui.shrink
-                                            , Ui.paddingXY 12 6
-                                            , Ui.rounded 4
-                                            , Ui.Font.size 14
+                                        , Ui.row
+                                            [ Ui.spacing 8 ]
+                                            [ MyUi.elButton
+                                                (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
+                                                PressedLinkDiscord
+                                                [ Ui.borderColor MyUi.buttonBorder
+                                                , Ui.border 1
+                                                , Ui.background MyUi.buttonBackground
+                                                , Ui.Font.color MyUi.font1
+                                                , Ui.width Ui.shrink
+                                                , Ui.paddingXY 12 6
+                                                , Ui.rounded 4
+                                                , Ui.Font.size 14
+                                                ]
+                                                (Ui.text "Relink")
+                                            , MyUi.elButton
+                                                (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
+                                                (PressedUnlinkDiscord discordUserId)
+                                                [ Ui.border 1
+                                                , Ui.borderColor (Ui.rgb 180 50 40)
+                                                , Ui.background MyUi.deleteButtonBackground
+                                                , Ui.Font.color MyUi.deleteButtonFont
+                                                , Ui.width Ui.shrink
+                                                , Ui.paddingXY 12 6
+                                                , Ui.rounded 4
+                                                , Ui.Font.size 14
+                                                ]
+                                                (Ui.text "Unlink")
                                             ]
-                                            (Ui.text "Relink account")
                                         ]
                                 )
                                 (SeqDict.toList local.localUser.linkedDiscordUsers)

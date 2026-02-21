@@ -3231,6 +3231,54 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        UnlinkDiscordRequest discordUserId ->
+            asUser
+                model2
+                sessionId
+                (\session _ ->
+                    case SeqDict.get discordUserId model2.discordUsers of
+                        Just (FullData discordUser) ->
+                            if discordUser.linkedTo == session.userId then
+                                ( { model2 | discordUsers = SeqDict.remove discordUserId model2.discordUsers }
+                                , Command.batch
+                                    [ Broadcast.toUser
+                                        Nothing
+                                        Nothing
+                                        session.userId
+                                        (Server_UnlinkDiscordUser discordUserId |> ServerChange)
+                                        model2
+                                    , case discordUser.connection.websocketHandle of
+                                        Just connection ->
+                                            Task.perform
+                                                (\() -> WebsocketClosedByBackendForUser discordUserId False)
+                                                (Websocket.close connection)
+
+                                        Nothing ->
+                                            Command.none
+                                    ]
+                                )
+
+                            else
+                                ( model2, Command.none )
+
+                        Just (NeedsAuthAgain discordUser) ->
+                            if discordUser.linkedTo == session.userId then
+                                ( { model2 | discordUsers = SeqDict.remove discordUserId model2.discordUsers }
+                                , Broadcast.toUser
+                                    Nothing
+                                    Nothing
+                                    session.userId
+                                    (Server_UnlinkDiscordUser discordUserId |> ServerChange)
+                                    model2
+                                )
+
+                            else
+                                ( model2, Command.none )
+
+                        _ ->
+                            ( model2, Command.none )
+                )
+
         ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest fileHash) ->
             asUser
                 model2

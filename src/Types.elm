@@ -521,6 +521,7 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
+    | PressedUnlinkDiscord (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordGuildMemberLabel
         { currentUserId : Discord.Id.Id Discord.Id.UserId
         , otherUserId : Discord.Id.Id Discord.Id.UserId
@@ -570,6 +571,7 @@ type ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
+    | UnlinkDiscordRequest (Discord.Id.Id Discord.Id.UserId)
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | ExportGuildRequest (Id GuildId)
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
@@ -730,6 +732,7 @@ type ServerChange
     | Server_CurrentlyViewing SessionIdHash (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | Server_TextEditor TextEditor.ServerChange
     | Server_LinkDiscordUser (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    | Server_UnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
     | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
     | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
