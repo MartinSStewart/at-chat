@@ -3,6 +3,7 @@ module Route exposing
     , DiscordChannelRoute(..)
     , DiscordDmRouteData
     , DiscordGuildRouteData
+    , LinkDiscordError(..)
     , Route(..)
     , ShowMembersTab(..)
     , ThreadRouteWithFriends(..)
@@ -36,7 +37,13 @@ type Route
     | AiChatRoute
     | SlackOAuthRedirect (Result () ( Slack.OAuthCode, SessionIdHash ))
     | TextEditorRoute
-    | LinkDiscord (Result () Discord.UserAuth)
+    | LinkDiscord (Result LinkDiscordError Discord.UserAuth)
+
+
+type LinkDiscordError
+    = LinkDiscordExpired
+    | LinkDiscordServerError
+    | LinkDiscordInvalidData
 
 
 type alias DiscordDmRouteData =
@@ -290,10 +297,10 @@ decode url =
         [ "link-discord" ] ->
             case Dict.get linkDiscordQueryParam url2.queryParameters of
                 Just [ data ] ->
-                    Codec.decodeString User.linkDiscordDataCodec data |> Result.mapError (\_ -> ()) |> LinkDiscord
+                    Codec.decodeString User.linkDiscordDataCodec data |> Result.mapError (\_ -> LinkDiscordInvalidData) |> LinkDiscord
 
                 _ ->
-                    LinkDiscord (Err ())
+                    LinkDiscord (Err LinkDiscordExpired)
 
         _ ->
             HomePageRoute

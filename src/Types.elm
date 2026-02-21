@@ -202,7 +202,6 @@ type alias UserOptionsModel =
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
     , showLinkDiscordSetup : Bool
-    , linkDiscordSubmit : LinkDiscordSubmitStatus
     }
 
 
@@ -518,7 +517,6 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
-    | TypedBookmarkletData String
     | PressedDiscordGuildMemberLabel
         { currentUserId : Discord.Id.Id Discord.Id.UserId
         , otherUserId : Discord.Id.Id Discord.Id.UserId
@@ -532,6 +530,7 @@ type FrontendMsg
     | PressedImportDiscordGuild
     | DiscordGuildImportFileSelected File
     | GotDiscordGuildImportFileContent String
+    | TypedDiscordLinkBookmarklet
 
 
 type ScrollPosition

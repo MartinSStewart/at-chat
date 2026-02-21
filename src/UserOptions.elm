@@ -1,10 +1,10 @@
 module UserOptions exposing (init, view)
 
-import Discord exposing (HttpError(..))
 import Editable
 import Effect.Browser.Dom as Dom
 import EmailAddress
 import Env
+import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
@@ -36,7 +36,6 @@ init =
     , privateVapidKey = Editable.init
     , openRouterKey = Editable.init
     , showLinkDiscordSetup = False
-    , linkDiscordSubmit = LinkDiscordNotSubmitted { attemptCount = 0 }
     }
 
 
@@ -388,108 +387,56 @@ view isMobile time local loggedIn loaded model =
                         )
                     ]
                 , if model.showLinkDiscordSetup then
+                    let
+                        bookmarkletLabel =
+                            Ui.Input.label "userOptions_discordLinkBookmarklet" [] (Ui.text "Bookmarklet URL")
+                    in
                     Ui.column
                         [ Ui.spacing 16, Ui.widthMax 400 ]
-                        [ Ui.row
-                            [ Ui.border 1
-                            , Ui.borderColor MyUi.border1
-                            , Ui.rounded 2
-                            , Ui.spacing 8
-                            , Ui.Font.color MyUi.font3
-                            ]
-                            [ Ui.el
-                                [ Ui.clipWithEllipsis
-                                , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
-                                ]
-                                (Ui.text bookmarklet)
-                            , MyUi.elButton
-                                (Dom.id "userOptions_copyBookmarklet")
-                                (PressedCopyText bookmarklet)
-                                [ Ui.width Ui.shrink
-                                , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
-                                , Ui.borderColor MyUi.border1
-                                , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
-                                , Ui.spacing 4
-                                ]
-                                (case loaded.lastCopied of
-                                    Just copied ->
-                                        if copied.copiedText == bookmarklet then
-                                            Ui.text "Copied!"
-
-                                        else
-                                            Ui.html Icons.copy
-
-                                    Nothing ->
-                                        Ui.html Icons.copy
-                                )
-                            ]
-                        , Ui.Input.multiline
-                            [ Ui.inFront
-                                (Ui.el
-                                    [ Ui.centerX
-                                    , Ui.centerY
-                                    , Ui.Font.center
-                                    , MyUi.noPointerEvents
-                                    , Ui.paddingXY 16 8
+                        [ Ui.column
+                            [ Ui.spacing 2 ]
+                            [ bookmarkletLabel.element
+                            , Ui.row
+                                []
+                                [ Ui.Input.text
+                                    [ Ui.clipWithEllipsis
+                                    , Ui.paddingWith { left = 8, right = 0, top = 2, bottom = 2 }
+                                    , Ui.htmlAttribute (Html.Attributes.disabled True)
+                                    , Ui.background MyUi.background1
+                                    , Ui.border 1
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.roundedWith { topLeft = 2, topRight = 0, bottomLeft = 2, bottomRight = 0 }
+                                    , Ui.Font.color MyUi.font3
+                                    , Ui.height Ui.fill
                                     ]
-                                    (case model.linkDiscordSubmit of
-                                        LinkDiscordNotSubmitted _ ->
-                                            Ui.text "After running the bookmarklet, paste the contents of your clipboard here."
+                                    { onChange = \_ -> TypedDiscordLinkBookmarklet
+                                    , text = bookmarklet
+                                    , placeholder = Nothing
+                                    , label = bookmarkletLabel.id
+                                    }
+                                , MyUi.elButton
+                                    (Dom.id "userOptions_copyBookmarklet")
+                                    (PressedCopyText bookmarklet)
+                                    [ Ui.width Ui.shrink
+                                    , Ui.paddingWith { left = 4, right = 4, top = 2, bottom = 2 }
+                                    , Ui.borderColor MyUi.border1
+                                    , Ui.borderWith { left = 0, right = 1, top = 1, bottom = 1 }
+                                    , Ui.roundedWith { topLeft = 0, topRight = 2, bottomLeft = 0, bottomRight = 2 }
+                                    , Ui.spacing 4
+                                    ]
+                                    (case loaded.lastCopied of
+                                        Just copied ->
+                                            if copied.copiedText == bookmarklet then
+                                                Ui.text "Copied!"
 
-                                        LinkDiscordSubmitting ->
-                                            Ui.text "Submitting..."
+                                            else
+                                                Ui.html Icons.copy
 
-                                        LinkDiscordSubmitted ->
-                                            Ui.text "Linked!"
-
-                                        LinkDiscordSubmitError httpError ->
-                                            (case httpError of
-                                                NotModified304 errorCode ->
-                                                    "NotModified304 " ++ Discord.errorCodeToString errorCode
-
-                                                Unauthorized401 errorCode ->
-                                                    "Unauthorized401 " ++ Discord.errorCodeToString errorCode
-
-                                                Forbidden403 errorCode ->
-                                                    "Forbidden403 " ++ Discord.errorCodeToString errorCode
-
-                                                NotFound404 errorCode ->
-                                                    "NotFound404 " ++ Discord.errorCodeToString errorCode
-
-                                                TooManyRequests429 _ ->
-                                                    "TooManyRequests429"
-
-                                                GatewayUnavailable502 errorCode ->
-                                                    "GatewayUnavailable502 " ++ Discord.errorCodeToString errorCode
-
-                                                ServerError5xx record ->
-                                                    "ServerError"
-                                                        ++ String.fromInt record.statusCode
-                                                        ++ " "
-                                                        ++ Discord.errorCodeToString record.errorCode
-
-                                                NetworkError ->
-                                                    "NetworkError"
-
-                                                Timeout ->
-                                                    "Timeout"
-
-                                                UnexpectedError string ->
-                                                    "UnexpectedError " ++ string
-                                            )
-                                                |> Ui.text
+                                        Nothing ->
+                                            Ui.html Icons.copy
                                     )
-                                )
-                            , Ui.height (Ui.px 150)
-                            , Ui.background MyUi.inputBackground
-                            , Ui.borderColor MyUi.inputBorder
+                                ]
                             ]
-                            { onChange = TypedBookmarkletData
-                            , text = ""
-                            , placeholder = Nothing
-                            , label = Ui.Input.labelHidden "userOptions_pasteBookmarkletData"
-                            , spellcheck = False
-                            }
                         ]
 
                   else

@@ -57,7 +57,7 @@ import Pagination
 import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
@@ -1303,9 +1303,6 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
-        TypedBookmarkletData _ ->
-            False
-
         MouseEnteredDiscordChannelName _ _ _ ->
             False
 
@@ -1340,6 +1337,9 @@ isPressMsg msg =
             False
 
         GotDiscordGuildImportFileContent _ ->
+            False
+
+        TypedDiscordLinkBookmarklet ->
             False
 
 
@@ -3878,39 +3878,6 @@ updateLoaded msg model =
                 )
                 model
 
-        TypedBookmarkletData text ->
-            updateLoggedIn
-                (\loggedIn ->
-                    case loggedIn.userOptions of
-                        Just userOptions ->
-                            case ( userOptions.linkDiscordSubmit, Codec.decodeString User.linkDiscordDataCodec text ) of
-                                ( LinkDiscordNotSubmitted _, Ok ok ) ->
-                                    ( { loggedIn
-                                        | userOptions = Just { userOptions | linkDiscordSubmit = LinkDiscordSubmitting }
-                                      }
-                                    , Lamdera.sendToBackend (LinkDiscordRequest ok)
-                                    )
-
-                                ( LinkDiscordNotSubmitted { attemptCount }, Err _ ) ->
-                                    ( { loggedIn
-                                        | userOptions =
-                                            { userOptions
-                                                | linkDiscordSubmit =
-                                                    LinkDiscordNotSubmitted { attemptCount = attemptCount + 1 }
-                                            }
-                                                |> Just
-                                      }
-                                    , Command.none
-                                    )
-
-                                _ ->
-                                    ( loggedIn, Command.none )
-
-                        Nothing ->
-                            ( loggedIn, Command.none )
-                )
-                model
-
         PressedDiscordGuildMemberLabel data ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
@@ -4030,6 +3997,9 @@ updateLoaded msg model =
                 Err _ ->
                     -- Could show an error message to the user
                     ( model, Command.none )
+
+        TypedDiscordLinkBookmarklet ->
+            ( model, Command.none )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
@@ -7119,27 +7089,13 @@ updateLoadedFromBackend msg model =
             updateLoggedIn
                 (\loggedIn ->
                     case ( model.route, loggedIn.userOptions ) of
-                        ( _, Just userOptions ) ->
-                            ( { loggedIn
-                                | userOptions =
-                                    (case result of
-                                        Ok _ ->
-                                            { userOptions | linkDiscordSubmit = LinkDiscordSubmitted }
-
-                                        Err error ->
-                                            let
-                                                _ =
-                                                    Debug.log "err" error
-                                            in
-                                            { userOptions | linkDiscordSubmit = LinkDiscordSubmitError error }
-                                    )
-                                        |> Just
-                              }
-                            , Command.none
-                            )
-
                         ( LinkDiscord _, Nothing ) ->
-                            ( loggedIn, routeReplace model HomePageRoute )
+                            case result of
+                                Ok () ->
+                                    ( loggedIn, routeReplace model HomePageRoute )
+
+                                Err _ ->
+                                    ( loggedIn, routeReplace model (LinkDiscord (Err LinkDiscordServerError)) )
 
                         _ ->
                             ( loggedIn, Command.none )
@@ -7896,8 +7852,19 @@ view model =
                                 ( LoggedIn loggedIn, Ok ok ) ->
                                     Ui.text "Linking..."
 
-                                ( _, Err _ ) ->
-                                    errorPage loaded "Something went wrong when linking your Discord account"
+                                ( _, Err error ) ->
+                                    errorPage
+                                        loaded
+                                        (case error of
+                                            LinkDiscordExpired ->
+                                                "This Discord link has expired"
+
+                                            LinkDiscordServerError ->
+                                                "Failed to link your Discord account due to a server error"
+
+                                            LinkDiscordInvalidData ->
+                                                "Failed to link your Discord account due to some problem with the bookmarklet"
+                                        )
                             )
         ]
     }
