@@ -351,7 +351,12 @@ view isMobile time local loggedIn loaded model =
                 --        )
                 --    ]
                 --    (Ui.text "Link Slack account")
-                , if SeqDict.isEmpty local.localUser.linkedDiscordUsers then
+                ]
+            , MyUi.container
+                MyUi.background1
+                isMobile
+                "Discord integration"
+                [ if SeqDict.isEmpty local.localUser.linkedDiscordUsers then
                     Ui.none
 
                   else
@@ -400,7 +405,7 @@ view isMobile time local loggedIn loaded model =
                                             [ Ui.spacing 8 ]
                                             [ MyUi.elButton
                                                 (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
-                                                PressedLinkDiscord
+                                                (PressedReloadDiscordUser discordUserId)
                                                 [ Ui.borderColor MyUi.buttonBorder
                                                 , Ui.border 1
                                                 , Ui.background MyUi.buttonBackground
@@ -410,7 +415,7 @@ view isMobile time local loggedIn loaded model =
                                                 , Ui.rounded 4
                                                 , Ui.Font.size 14
                                                 ]
-                                                (Ui.text "Relink")
+                                                (Ui.text "Reload user data")
                                             , MyUi.elButton
                                                 (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
                                                 (PressedUnlinkDiscordUser discordUserId)
@@ -423,7 +428,7 @@ view isMobile time local loggedIn loaded model =
                                                 , Ui.rounded 4
                                                 , Ui.Font.size 14
                                                 ]
-                                                (Ui.text "Unlink")
+                                                (Ui.text "Unlink user")
                                             ]
                                         ]
                                 )
@@ -496,12 +501,15 @@ view isMobile time local loggedIn loaded model =
                                     )
                                 ]
                             ]
+                        , Ui.el
+                            [ Ui.Font.italic ]
+                            (Ui.text "⚠️ Linking your Discord account can lead it getting temporarily locked or even permanently banned, use at your own risk!")
                         ]
 
                   else
                     MyUi.elButton
                         (Dom.id "userOptions_linkDiscord")
-                        PressedLinkDiscord
+                        PressedLinkDiscordUser
                         [ Ui.borderColor MyUi.buttonBorder
                         , Ui.border 1
                         , Ui.background MyUi.buttonBackground

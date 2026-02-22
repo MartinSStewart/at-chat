@@ -512,7 +512,8 @@ type FrontendMsg
     | GotServiceWorkerMessage String
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
-    | PressedLinkDiscord
+    | PressedLinkDiscordUser
+    | PressedReloadDiscordUser (Discord.Id.Id Discord.Id.UserId)
     | PressedUnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordGuildMemberLabel
         { currentUserId : Discord.Id.Id Discord.Id.UserId

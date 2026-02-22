@@ -1300,7 +1300,10 @@ isPressMsg msg =
         TextEditorMsg textEditorMsg ->
             TextEditor.isPress textEditorMsg
 
-        PressedLinkDiscord ->
+        PressedLinkDiscordUser ->
+            True
+
+        PressedReloadDiscordUser _ ->
             True
 
         PressedUnlinkDiscordUser _ ->
@@ -3874,7 +3877,21 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedLinkDiscord ->
+        PressedLinkDiscordUser ->
+            updateLoggedIn
+                (\loggedIn ->
+                    ( { loggedIn
+                        | userOptions =
+                            Maybe.map
+                                (\userOptions -> { userOptions | showLinkDiscordSetup = True })
+                                loggedIn.userOptions
+                      }
+                    , Command.none
+                    )
+                )
+                model
+
+        PressedReloadDiscordUser discordUserId ->
             updateLoggedIn
                 (\_ ->
                     Debug.todo ""
