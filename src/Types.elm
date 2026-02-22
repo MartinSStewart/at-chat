@@ -18,7 +18,6 @@ module Types exposing
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
     , LastRequest(..)
-    , LinkDiscordSubmitStatus(..)
     , LoadStatus(..)
     , LoadedFrontend
     , LoadingFrontend
@@ -203,13 +202,6 @@ type alias UserOptionsModel =
     , openRouterKey : Editable.Model
     , showLinkDiscordSetup : Bool
     }
-
-
-type LinkDiscordSubmitStatus
-    = LinkDiscordNotSubmitted { attemptCount : Int }
-    | LinkDiscordSubmitting
-    | LinkDiscordSubmitted
-    | LinkDiscordSubmitError Discord.HttpError
 
 
 type ChannelSidebarMode
@@ -596,7 +588,6 @@ type BackendMsg
     | DiscordRemovedReactionToGuildMessage Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordTypingIndicatorSent
-    | CreatedDiscordPrivateChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.Channel)
     | AiChatBackendMsg AiChat.BackendMsg
     | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse )))
     | SentNotification SessionId (Id UserId) Time.Posix (Result Http.Error ())
@@ -615,7 +606,6 @@ type BackendMsg
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
-        (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
             ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
@@ -722,7 +712,6 @@ type ServerChange
     | Server_DiscordDeleteDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId)
     | Server_SetName (Id UserId) PersonName
     | Server_SetUserIcon (Id UserId) FileHash
-    | Server_DiscordDirectMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Discord.Id.Id Discord.Id.UserId) (Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))) (Maybe (Id ChannelMessageId))
     | Server_PushNotificationsReset String
     | Server_SetGuildNotificationLevel (Id GuildId) NotificationLevel
     | Server_PushNotificationFailed Http.Error

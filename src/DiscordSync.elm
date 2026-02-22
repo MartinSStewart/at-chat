@@ -648,11 +648,10 @@ messagesAndLinks messages =
 
 
 addDiscordDms :
-    Discord.Id.Id Discord.Id.UserId
-    -> List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
+    List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
     -> BackendModel
     -> BackendModel
-addDiscordDms currentUserId dmChannels model =
+addDiscordDms dmChannels model =
     { model
         | discordDmChannels =
             List.foldl
@@ -1618,7 +1617,7 @@ handleReadyData userAuth readyData model =
                 --)
                 |> Task.sequence
             )
-            |> Task.attempt (HandleReadyDataStep2 readyData.user.id)
+            |> Task.attempt HandleReadyDataStep2
         ]
     )
 

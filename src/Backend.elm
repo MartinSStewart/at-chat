@@ -397,14 +397,6 @@ update msg model =
         DiscordTypingIndicatorSent ->
             ( model, Command.none )
 
-        CreatedDiscordPrivateChannel time currentUserId otherUserId result ->
-            case result of
-                Ok _ ->
-                    ( model, Command.none )
-
-                Err error ->
-                    addLog time (Log.FailedToCreateDiscordPrivateChannel currentUserId otherUserId error) model
-
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
@@ -558,25 +550,12 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
                     )
 
-        HandleReadyDataStep2 discordUserId result ->
+        HandleReadyDataStep2 result ->
             case result of
                 Ok ( dmData, guildData ) ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList guildData) model
-                        |> DiscordSync.addDiscordDms discordUserId dmData
+                        |> DiscordSync.addDiscordDms dmData
                     , Command.none
-                      --, case SeqDict.get discordUserId model.discordUsers of
-                      --    Just (FullData user) ->
-                      --        Discord.requestGuildMembers
-                      --            (\connection data2 ->
-                      --                Websocket.sendString connection data2
-                      --                    |> Task.attempt (WebsocketSentDataForUser discordUserId)
-                      --            )
-                      --            (List.map Tuple.first data)
-                      --            user.connection
-                      --            |> Result.withDefault Command.none
-                      --
-                      --    _ ->
-                      --        Command.none
                     )
 
                 Err error ->
@@ -1209,12 +1188,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             in
                                             case threadRouteWithMaybeReplyTo of
                                                 NoThreadWithMaybeMessage maybeReplyTo ->
-                                                    ( { model
+                                                    ( { model2
                                                         | pendingDiscordCreateMessages =
                                                             SeqDict.insert
                                                                 ( currentDiscordUserId, channelId )
                                                                 ( clientId, changeId )
-                                                                model.pendingDiscordCreateMessages
+                                                                model2.pendingDiscordCreateMessages
                                                       }
                                                     , Discord.createMarkdownMessagePayload
                                                         (Discord.userToken discordUser.auth)
@@ -1260,12 +1239,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 discordThreadId =
                                                                     Discord.Id.toUInt64 messageId |> Discord.Id.fromUInt64
                                                             in
-                                                            ( { model
+                                                            ( { model2
                                                                 | pendingDiscordCreateMessages =
                                                                     SeqDict.insert
                                                                         ( currentDiscordUserId, discordThreadId )
                                                                         ( clientId, changeId )
-                                                                        model.pendingDiscordCreateMessages
+                                                                        model2.pendingDiscordCreateMessages
                                                               }
                                                             , (case SeqDict.get threadId channel.threads of
                                                                 Just _ ->
@@ -1278,7 +1257,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         channelId
                                                                         threadId
                                                                         messageId
-                                                                        model
+                                                                        model2
                                                                         |> Task.map (\_ -> ())
                                                               )
                                                                 |> Task.andThen
@@ -1313,10 +1292,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             )
 
                                                         _ ->
-                                                            ( model, invalidChangeResponse changeId clientId )
+                                                            ( model2, invalidChangeResponse changeId clientId )
 
                                         Nothing ->
-                                            ( model, invalidChangeResponse changeId clientId )
+                                            ( model2, invalidChangeResponse changeId clientId )
                                 )
 
                         DiscordGuildOrDmId_Dm data ->
@@ -1619,7 +1598,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model2
                                 sessionId
                                 data
-                                (\session userData discordUser dmChannel ->
+                                (\session userData _ dmChannel ->
                                     ( { model2
                                         | discordDmChannels =
                                             SeqDict.insert
@@ -1763,7 +1742,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                         Nothing ->
-                                            ( model
+                                            ( model2
                                             , invalidChangeResponse changeId clientId
                                             )
                                 )
@@ -1955,7 +1934,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                         Nothing ->
-                                            ( model
+                                            ( model2
                                             , invalidChangeResponse changeId clientId
                                             )
                                 )
@@ -2154,11 +2133,11 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         |> ServerChange
                                                     )
                                                     model2
-                                                , case threadRouteToDiscordMessageId channelId channel threadRoute of
-                                                    Just ( channelId2, discordMessageId ) ->
+                                                , case threadRouteToDiscordMessageId channelId channel2 threadRoute of
+                                                    Just ( discordChannelId, discordMessageId ) ->
                                                         Discord.editMessagePayload
                                                             (Discord.userToken userData.auth)
-                                                            { channelId = channelId2
+                                                            { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             , content =
                                                                 RichText.toDiscord SeqDict.empty newContent
@@ -2331,7 +2310,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentUserId guildId channelId) ->
                             asDiscordGuildMember
-                                model
+                                model2
                                 sessionId
                                 guildId
                                 currentUserId
@@ -2361,7 +2340,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                         DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
                             asDiscordDmUser
-                                model
+                                model2
                                 sessionId
                                 data
                                 (\session _ _ channel ->
@@ -2372,9 +2351,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             )
 
                                         NoThreadWithMessage messageId ->
-                                            case LocalState.memberIsEditTypingBackendHelperNoThread time data.currentUserId messageId channel of
+                                            case
+                                                LocalState.memberIsEditTypingBackendHelperNoThread
+                                                    time
+                                                    data.currentUserId
+                                                    messageId
+                                                    channel
+                                            of
                                                 Ok channel2 ->
-                                                    ( { model | discordDmChannels = SeqDict.insert data.channelId channel2 model.discordDmChannels }
+                                                    ( { model2
+                                                        | discordDmChannels =
+                                                            SeqDict.insert data.channelId channel2 model2.discordDmChannels
+                                                      }
                                                     , Command.batch
                                                         [ Local_MemberEditTyping time guildOrDmId threadRoute
                                                             |> LocalChangeResponse changeId
@@ -2394,7 +2382,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     )
 
                                                 Err () ->
-                                                    ( model
+                                                    ( model2
                                                     , invalidChangeResponse changeId clientId
                                                     )
                                 )
@@ -2525,10 +2513,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                     model2
                                                 , case threadRouteToDiscordMessageId channelId channel threadRoute of
-                                                    Just ( channelId2, discordMessageId ) ->
+                                                    Just ( discordChannelId, discordMessageId ) ->
                                                         Discord.deleteMessagePayload
                                                             (Discord.userToken userData.auth)
-                                                            { channelId = channelId2, messageId = discordMessageId }
+                                                            { channelId = discordChannelId
+                                                            , messageId = discordMessageId
+                                                            }
                                                             |> DiscordSync.http
                                                             |> Task.attempt
                                                                 (DeletedDiscordGuildMessage
@@ -2558,6 +2548,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 (\_ userData _ channel ->
                                     case threadRoute of
                                         NoThreadWithMessage messageId ->
+                                            let
+                                                oldChannel =
+                                                    channel
+                                            in
                                             case LocalState.deleteMessageBackendHelperNoThread data.currentUserId messageId channel of
                                                 Ok channel2 ->
                                                     ( { model2
@@ -2573,7 +2567,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             data.channelId
                                                             (Server_DeleteMessage guildOrDmId threadRoute |> ServerChange)
                                                             model2
-                                                        , case OneToOne.first messageId channel.linkedMessageIds of
+                                                        , case OneToOne.first messageId oldChannel.linkedMessageIds of
                                                             Just discordMessageId ->
                                                                 Discord.deleteMessagePayload
                                                                     (Discord.userToken userData.auth)
@@ -3071,7 +3065,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         model2
                         sessionId
                         (\{ userId } user ->
-                            ( { model
+                            ( { model2
                                 | users =
                                     NonemptyDict.insert
                                         userId
@@ -3142,12 +3136,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         (\session _ ->
                             let
                                 ( textEditor, serverChange ) =
-                                    TextEditor.backendChangeUpdate session.userId localChange model.textEditor
+                                    TextEditor.backendChangeUpdate session.userId localChange model2.textEditor
                             in
-                            ( { model | textEditor = textEditor }
+                            ( { model2 | textEditor = textEditor }
                             , Command.batch
                                 [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
-                                , Broadcast.toEveryone clientId (Server_TextEditor serverChange) model
+                                , Broadcast.toEveryone clientId (Server_TextEditor serverChange) model2
                                 ]
                             )
                         )
@@ -3313,7 +3307,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                 model2
                 sessionId
                 (\_ _ ->
-                    case SeqDict.get guildId model.discordGuilds of
+                    case SeqDict.get guildId model2.discordGuilds of
                         Just guild ->
                             ( model2
                             , Lamdera.sendToFrontend
@@ -3326,7 +3320,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             |> SeqDict.insert guild.owner ()
                                             |> SeqDict.filterMap
                                                 (\userId () ->
-                                                    case SeqDict.get userId model.discordUsers of
+                                                    case SeqDict.get userId model2.discordUsers of
                                                         Just (BasicData data) ->
                                                             BasicDataExport data |> Just
 
@@ -3357,7 +3351,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
 
                         Nothing ->
-                            ( model, Command.none )
+                            ( model2, Command.none )
                 )
 
         ImportGuildRequest importedGuild ->

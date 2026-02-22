@@ -1,6 +1,5 @@
-module SafeJson exposing (SafeJson(..), codec, decoder, encoder, toString)
+module SafeJson exposing (SafeJson(..), decoder, encoder, toString)
 
-import Codec exposing (Codec)
 import Dict exposing (Dict)
 import Json.Decode
 import Json.Encode
@@ -54,8 +53,3 @@ encoder safeJson =
 toString : Int -> SafeJson -> String
 toString indentation json =
     encoder json |> Json.Encode.encode indentation
-
-
-codec : Codec SafeJson
-codec =
-    Codec.build encoder decoder

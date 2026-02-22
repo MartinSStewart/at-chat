@@ -7,9 +7,9 @@ import ChannelName
 import Codec exposing (Codec)
 import CodecExtra
 import Discord
-import Emoji exposing (Emoji)
+import Emoji
 import FileName
-import FileStatus exposing (ContentType(..), FileData, ImageMetadata)
+import FileStatus exposing (FileData, ImageMetadata)
 import GuildName
 import Id
 import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild)
@@ -75,8 +75,8 @@ messageCodec userId =
                 Message.UserTextMessage arg0 ->
                     userTextMessageEncoder arg0
 
-                Message.UserJoinedMessage arg0 arg1 arg2 ->
-                    userJoinedMessageEncoder arg0 arg1 arg2
+                Message.UserJoinedMessage argA argB argC ->
+                    userJoinedMessageEncoder argA argB argC
 
                 Message.DeletedMessage arg0 ->
                     deletedMessageEncoder arg0
@@ -87,7 +87,7 @@ messageCodec userId =
             Message.UserJoinedMessage
             CodecExtra.timePosix
             userId
-            (CodecExtra.seqDict emojiCodec (CodecExtra.nonemptySet userId))
+            (CodecExtra.seqDict Emoji.codec (CodecExtra.nonemptySet userId))
         |> Codec.variant1 "DeletedMessage" Message.DeletedMessage CodecExtra.timePosix
         |> Codec.buildCustom
 
@@ -98,23 +98,11 @@ userTextMessageDataCodec userId =
         |> Codec.field "createdAt" .createdAt CodecExtra.timePosix
         |> Codec.field "createdBy" .createdBy userId
         |> Codec.field "content" .content (CodecExtra.nonempty (RichText.codec userId))
-        |> Codec.field "reactions" .reactions (CodecExtra.seqDict emojiCodec (CodecExtra.nonemptySet userId))
+        |> Codec.field "reactions" .reactions (CodecExtra.seqDict Emoji.codec (CodecExtra.nonemptySet userId))
         |> Codec.field "editedAt" .editedAt (Codec.nullable CodecExtra.timePosix)
         |> Codec.field "repliedTo" .repliedTo (Codec.nullable Id.codec)
         |> Codec.field "attachedFiles" .attachedFiles (CodecExtra.seqDict Id.codec fileDataCodec)
         |> Codec.buildObject
-
-
-emojiCodec : Codec Emoji
-emojiCodec =
-    Codec.custom
-        (\unicodeEmojiEncoder value ->
-            case value of
-                Emoji.UnicodeEmoji arg0 ->
-                    unicodeEmojiEncoder arg0
-        )
-        |> Codec.variant1 "UnicodeEmoji" Emoji.UnicodeEmoji Codec.string
-        |> Codec.buildCustom
 
 
 fileDataCodec : Codec FileData
@@ -123,7 +111,7 @@ fileDataCodec =
         |> Codec.field "fileName" .fileName FileName.codec
         |> Codec.field "fileSize" .fileSize Codec.int
         |> Codec.field "imageMetadata" .imageMetadata (Codec.nullable imageMetadataCodec)
-        |> Codec.field "contentType" .contentType contentTypeCodec
+        |> Codec.field "contentType" .contentType FileStatus.contentTypeCodec
         |> Codec.field "fileHash" .fileHash FileStatus.fileHashCodec
         |> Codec.buildObject
 
@@ -200,18 +188,6 @@ exposureTimeCodec =
         |> Codec.field "numerator" .numerator Codec.int
         |> Codec.field "denominator" .denominator Codec.int
         |> Codec.buildObject
-
-
-contentTypeCodec : Codec ContentType
-contentTypeCodec =
-    Codec.custom
-        (\contentTypeEncoder value ->
-            case value of
-                FileStatus.ContentType arg0 ->
-                    contentTypeEncoder arg0
-        )
-        |> Codec.variant1 "ContentType" ContentType Codec.int
-        |> Codec.buildCustom
 
 
 channelStatusCodec : Codec ChannelStatus

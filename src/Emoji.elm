@@ -1,5 +1,6 @@
-module Emoji exposing (Emoji(..), emojis, fromDiscord, toString, view)
+module Emoji exposing (Emoji(..), codec, emojis, fromDiscord, toString, view)
 
+import Codec exposing (Codec)
 import Discord
 import Ui
 import Ui.Font
@@ -40,3 +41,15 @@ fromDiscord emoji =
 
         Discord.CustomEmojiType _ ->
             UnicodeEmoji "❓"
+
+
+codec : Codec Emoji
+codec =
+    Codec.custom
+        (\unicodeEmojiEncoder value ->
+            case value of
+                UnicodeEmoji arg0 ->
+                    unicodeEmojiEncoder arg0
+        )
+        |> Codec.variant1 "UnicodeEmoji" UnicodeEmoji Codec.string
+        |> Codec.buildCustom

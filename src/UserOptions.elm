@@ -8,18 +8,16 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
-import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
 import Log
 import MyUi
 import PersonName
 import Route
 import SeqDict
-import SessionIdHash
 import Slack
 import Time
 import TwoFactorAuthentication
-import Types exposing (FrontendMsg(..), LinkDiscordSubmitStatus(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
+import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Events
 import Ui.Font

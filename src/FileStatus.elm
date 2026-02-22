@@ -13,6 +13,7 @@ module FileStatus exposing
     , UploadResponse
     , addFileHash
     , contentType
+    , contentTypeCodec
     , domain
     , fileHash
     , fileHashCodec
@@ -188,6 +189,18 @@ fileHash =
 -}
 type ContentType
     = ContentType Int
+
+
+contentTypeCodec : Codec ContentType
+contentTypeCodec =
+    Codec.custom
+        (\contentTypeEncoder value ->
+            case value of
+                ContentType arg0 ->
+                    contentTypeEncoder arg0
+        )
+        |> Codec.variant1 "ContentType" ContentType Codec.int
+        |> Codec.buildCustom
 
 
 contentType : String -> ContentType

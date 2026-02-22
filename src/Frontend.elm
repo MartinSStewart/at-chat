@@ -65,7 +65,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread, FrontendThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LinkDiscordSubmitStatus(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -889,7 +889,7 @@ routeRequest previousRoute newRoute model =
 
         LinkDiscord result ->
             ( model2
-            , case ( model.loginStatus, result ) of
+            , case ( model2.loginStatus, result ) of
                 ( LoggedIn _, Ok userData ) ->
                     LinkDiscordRequest userData |> Lamdera.sendToBackend
 
@@ -963,7 +963,7 @@ routeRequiresLogin route =
         DiscordDmRoute _ ->
             True
 
-        LinkDiscord result ->
+        LinkDiscord _ ->
             False
 
 
@@ -2445,7 +2445,7 @@ updateLoaded msg model =
                                             ( { loggedIn
                                                 | editMessage =
                                                     SeqDict.insert
-                                                        ( guildOrDmId, threadRoute )
+                                                        ( GuildOrDmId guildOrDmId2, threadRoute )
                                                         { messageIndex = index
                                                         , text =
                                                             RichText.toString (LocalState.allUsers local) message.content
@@ -2531,7 +2531,7 @@ updateLoaded msg model =
                                             ( { loggedIn
                                                 | editMessage =
                                                     SeqDict.insert
-                                                        ( guildOrDmId, threadRoute )
+                                                        ( DiscordGuildOrDmId guildOrDmId2, threadRoute )
                                                         { messageIndex = index
                                                         , text =
                                                             RichText.toString
@@ -3876,7 +3876,7 @@ updateLoaded msg model =
 
         PressedLinkDiscord ->
             updateLoggedIn
-                (\loggedIn ->
+                (\_ ->
                     Debug.todo ""
                 )
                 model
@@ -6069,32 +6069,6 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordDirectMessage time channelId sender richText replyTo ->
-                    case SeqDict.get channelId local.discordDmChannels of
-                        Just channel ->
-                            { local
-                                | discordDmChannels =
-                                    SeqDict.insert
-                                        channelId
-                                        (LocalState.createChannelMessageFrontend
-                                            (UserTextMessage
-                                                { createdAt = time
-                                                , createdBy = sender
-                                                , content = richText
-                                                , reactions = SeqDict.empty
-                                                , editedAt = Nothing
-                                                , repliedTo = replyTo
-                                                , attachedFiles = SeqDict.empty
-                                                }
-                                            )
-                                            channel
-                                        )
-                                        local.discordDmChannels
-                            }
-
-                        Nothing ->
-                            local
-
                 Server_PushNotificationsReset publicVapidKey ->
                     { local | publicVapidKey = publicVapidKey }
 
@@ -7234,6 +7208,7 @@ smoothScrollToBottomOfChannel =
         |> Task.attempt (\_ -> SetScrollToBottom)
 
 
+smoothScrollDuration : number
 smoothScrollDuration =
     20
 
@@ -7869,7 +7844,7 @@ view model =
                             loaded
                             [ Ui.contentCenterX, Ui.contentCenterY ]
                             (case ( loaded.loginStatus, result ) of
-                                ( NotLoggedIn notLoggedIn, Ok ok ) ->
+                                ( NotLoggedIn notLoggedIn, Ok _ ) ->
                                     Ui.column
                                         [ Ui.spacing 32 ]
                                         [ Ui.el
@@ -7884,7 +7859,7 @@ view model =
                                             |> Ui.map LoginFormMsg
                                         ]
 
-                                ( LoggedIn loggedIn, Ok ok ) ->
+                                ( LoggedIn _, Ok _ ) ->
                                     Ui.text "Linking..."
 
                                 ( _, Err error ) ->

@@ -17,12 +17,12 @@ import Html
 import Html.Attributes
 import Html.Events
 import Html.Events.Extra.Touch
-import Image
 import Json.Decode
 import List.Extra as List
 import MyUi
-import Pixels
+import Pixels exposing (Pixels)
 import Ports exposing (CropImageDataResponse)
+import Quantity exposing (Quantity)
 import SessionIdHash exposing (SessionIdHash)
 import Ui exposing (Element)
 import Ui.Font
@@ -225,8 +225,8 @@ update sessionIdHash windowSize msg model =
                         , imageUrl = imageUrl
                         , cropX = model.x * toFloat w |> round |> Pixels.pixels
                         , cropY = model.y * toFloat w |> round |> Pixels.pixels
-                        , cropWidth = Image.defaultSize
-                        , cropHeight = Image.defaultSize
+                        , cropWidth = defaultSize
+                        , cropHeight = defaultSize
                         , width = toFloat w * model.size |> round |> Pixels.pixels
                         , height = toFloat w * model.size |> round |> Pixels.pixels
                         }
@@ -286,6 +286,11 @@ update sessionIdHash windowSize msg model =
 
                 Err _ ->
                     ( { model | status = UploadingError }, Command.none )
+
+
+defaultSize : Quantity Int Pixels
+defaultSize =
+    Pixels.pixels 80
 
 
 subscriptions : Subscription FrontendOnly Msg

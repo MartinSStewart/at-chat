@@ -590,10 +590,26 @@ guildColumnLazy isMobile model local =
             local.discordGuilds
 
 
+guildColumnCanScroll :
+    Bool
+    -> Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg
 guildColumnCanScroll isMobile route localUser dmChannels guilds discordGuilds =
     guildColumn isMobile route localUser dmChannels guilds discordGuilds True
 
 
+guildColumnCannotScroll :
+    Bool
+    -> Route
+    -> LocalUser
+    -> SeqDict (Id UserId) FrontendDmChannel
+    -> SeqDict (Id GuildId) FrontendGuild
+    -> SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+    -> Element FrontendMsg
 guildColumnCannotScroll isMobile route localUser dmChannels guilds discordGuilds =
     guildColumn isMobile route localUser dmChannels guilds discordGuilds False
 
@@ -3252,8 +3268,8 @@ conversationView lastViewedIndex guildOrDmIdNoThread maybeUrlMessageId loggedIn 
 
 
 chattingWithYourself : DiscordGuildOrDmId_DmData -> LocalState -> Bool
-chattingWithYourself { currentUserId, channelId } local =
-    case SeqDict.get channelId local.discordDmChannels of
+chattingWithYourself data local =
+    case SeqDict.get data.channelId local.discordDmChannels of
         Just channel ->
             NonemptySet.all (\userId -> SeqDict.member userId local.localUser.linkedDiscordUsers) channel.members
 
