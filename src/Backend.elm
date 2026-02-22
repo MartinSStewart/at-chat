@@ -527,46 +527,76 @@ update msg model =
             case result of
                 Ok discordUser ->
                     let
-                        backendUser : DiscordFullUserData
-                        backendUser =
-                            { auth = auth
-                            , user = discordUser
-                            , connection = Discord.init
-                            , linkedTo = userId
-                            , icon = Nothing
-                            , linkedAt = linkedAt
-                            }
+                        isAlreadyLoading =
+                            case SeqDict.get discordUser.id model.discordUsers of
+                                Just (FullData discordUser2) ->
+                                    discordUser2.isLoadingData /= Nothing
+
+                                _ ->
+                                    False
                     in
-                    ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
-                    , Command.batch
-                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
-                        , Broadcast.toUser
-                            Nothing
-                            Nothing
-                            userId
-                            (Server_LinkDiscordUser
-                                discordUser.id
-                                (discordFullDataUserToFrontendCurrentUser False backendUser)
-                                |> ServerChange
-                            )
-                            model
-                        , Websocket.createHandle
-                            (WebsocketCreatedHandleForUser discordUser.id)
-                            Discord.websocketGatewayUrl
-                        ]
-                    )
+                    if isAlreadyLoading then
+                        ( model, Command.none )
+
+                    else
+                        let
+                            backendUser : DiscordFullUserData
+                            backendUser =
+                                { auth = auth
+                                , user = discordUser
+                                , connection = Discord.init
+                                , linkedTo = userId
+                                , icon = Nothing
+                                , linkedAt = linkedAt
+                                , isLoadingData = Just linkedAt
+                                }
+                        in
+                        ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
+                        , Command.batch
+                            [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
+                            , Broadcast.toUser
+                                Nothing
+                                Nothing
+                                userId
+                                (Server_LinkDiscordUser
+                                    discordUser.id
+                                    (discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                    |> ServerChange
+                                )
+                                model
+                            , Websocket.createHandle
+                                (WebsocketCreatedHandleForUser discordUser.id)
+                                Discord.websocketGatewayUrl
+                            ]
+                        )
 
                 Err error ->
                     ( model
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
                     )
 
-        HandleReadyDataStep2 result ->
+        HandleReadyDataStep2 discordUserId result ->
             case result of
                 Ok ( dmData, guildData ) ->
                     ( DiscordSync.addDiscordGuilds (SeqDict.fromList guildData) model
                         |> DiscordSync.addDiscordDms dmData
-                    , Command.none
+                    , case SeqDict.get discordUserId model.discordUsers of
+                        Just (FullData discordUser) ->
+                            Broadcast.toUser
+                                Nothing
+                                Nothing
+                                discordUser.linkedTo
+                                (Server_DiscordUserLoadingDataIsDone discordUserId |> ServerChange)
+                                model
+
+                        Just (NeedsAuthAgain _) ->
+                            Command.none
+
+                        Just (BasicData _) ->
+                            Command.none
+
+                        Nothing ->
+                            Command.none
                     )
 
                 Err error ->
@@ -630,8 +660,12 @@ updateFromFrontend sessionId clientId msg model =
     ( model, Task.perform (BackendGotTime sessionId clientId msg) Time.now )
 
 
-discordFullDataUserToFrontendCurrentUser : Bool -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix } -> DiscordFrontendCurrentUser
-discordFullDataUserToFrontendCurrentUser needsAuthAgain data =
+discordFullDataUserToFrontendCurrentUser :
+    Bool
+    -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
+    -> Maybe Time.Posix
+    -> DiscordFrontendCurrentUser
+discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
     { name = PersonName.fromStringLossy data.user.username
     , icon = data.icon
     , email =
@@ -648,6 +682,7 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data =
                 Nothing
     , needsAuthAgain = needsAuthAgain
     , linkedAt = data.linkedAt
+    , isLoadingData = isLoadingData
     }
 
 
@@ -669,7 +704,7 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser False data)
+                                    (discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
                                     linkedDiscordUsers2
                                 )
 
@@ -694,7 +729,7 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser True data)
+                                    (discordFullDataUserToFrontendCurrentUser True data Nothing)
                                     linkedDiscordUsers2
                                 )
 
@@ -3401,6 +3436,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 , linkedTo = data.linkedTo
                                                                 , icon = data.icon
                                                                 , linkedAt = data.linkedAt
+                                                                , isLoadingData = Nothing
                                                                 }
 
                                                         NeedsAuthAgainExport data ->
@@ -3419,6 +3455,19 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 users
                       }
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
+                    )
+                )
+
+        ReloadDiscordUserRequest discordUserId ->
+            asDiscordUser
+                model
+                sessionId
+                discordUserId
+                (\session discordUser _ ->
+                    ( model
+                    , Discord.getCurrentUserPayload (Discord.userToken discordUser.auth)
+                        |> DiscordSync.http
+                        |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId discordUser.auth)
                     )
                 )
 
@@ -4184,6 +4233,35 @@ asUser model sessionId func =
                     func session user
 
                 Nothing ->
+                    ( model, Command.none )
+
+        Nothing ->
+            ( model, Command.none )
+
+
+asDiscordUser :
+    BackendModel
+    -> SessionId
+    -> Discord.Id.Id Discord.Id.UserId
+    ->
+        (UserSession
+         -> DiscordFullUserData
+         -> BackendUser
+         -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+        )
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+asDiscordUser model sessionId discordUserId func =
+    case SeqDict.get sessionId model.sessions of
+        Just session ->
+            case ( NonemptyDict.get session.userId model.users, SeqDict.get discordUserId model.discordUsers ) of
+                ( Just user, Just (FullData discordUser) ) ->
+                    if discordUser.linkedTo == session.userId then
+                        func session discordUser user
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
                     ( model, Command.none )
 
         Nothing ->

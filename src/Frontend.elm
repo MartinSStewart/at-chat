@@ -3893,8 +3893,8 @@ updateLoaded msg model =
 
         PressedReloadDiscordUser discordUserId ->
             updateLoggedIn
-                (\_ ->
-                    Debug.todo ""
+                (\loggedIn ->
+                    ( loggedIn, ReloadDiscordUserRequest discordUserId |> Lamdera.sendToBackend )
                 )
                 model
 
@@ -6222,6 +6222,22 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         userId
                                         (\user -> { user | needsAuthAgain = True })
+                                        localUser.linkedDiscordUsers
+                            }
+                    }
+
+                Server_DiscordUserLoadingDataIsDone discordUserId ->
+                    let
+                        localUser =
+                            local.localUser
+                    in
+                    { local
+                        | localUser =
+                            { localUser
+                                | linkedDiscordUsers =
+                                    SeqDict.updateIfExists
+                                        discordUserId
+                                        (\user -> { user | isLoadingData = Nothing })
                                         localUser.linkedDiscordUsers
                             }
                     }

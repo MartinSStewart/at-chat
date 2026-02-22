@@ -1,5 +1,6 @@
 module UserOptions exposing (discordBookmarkletId, init, view)
 
+import Discord.Id
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import EmailAddress
@@ -22,7 +23,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User
+import User exposing (DiscordFrontendCurrentUser)
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -366,72 +367,7 @@ view isMobile time local loggedIn loaded model =
                         , Ui.column
                             [ Ui.spacing 8 ]
                             (List.map
-                                (\( discordUserId, data ) ->
-                                    Ui.column
-                                        [ Ui.spacing 8
-                                        , Ui.padding 12
-                                        , Ui.border 1
-                                        , Ui.borderColor MyUi.border1
-                                        , Ui.rounded 8
-                                        , Ui.widthMax 400
-                                        ]
-                                        [ Ui.row
-                                            [ Ui.spacing 8, Ui.width Ui.fill ]
-                                            [ User.profileImage data.icon
-                                            , Ui.column
-                                                [ Ui.spacing 2 ]
-                                                [ Ui.text (PersonName.toString data.name)
-                                                , case data.email of
-                                                    Just email ->
-                                                        Ui.el
-                                                            [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
-                                                            (Ui.text (EmailAddress.toString email))
-
-                                                    Nothing ->
-                                                        Ui.none
-                                                ]
-                                            ]
-                                        , Ui.el
-                                            [ Ui.Font.size 13, Ui.Font.color MyUi.font3 ]
-                                            (Ui.text ("Linked " ++ Log.timeToString loaded.timezone True data.linkedAt))
-                                        , if data.needsAuthAgain then
-                                            Ui.el
-                                                [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14 ]
-                                                (Ui.text "This account needs to be linked again before you can use it")
-
-                                          else
-                                            Ui.none
-                                        , Ui.row
-                                            [ Ui.spacing 8 ]
-                                            [ MyUi.elButton
-                                                (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
-                                                (PressedReloadDiscordUser discordUserId)
-                                                [ Ui.borderColor MyUi.buttonBorder
-                                                , Ui.border 1
-                                                , Ui.background MyUi.buttonBackground
-                                                , Ui.Font.color MyUi.font1
-                                                , Ui.width Ui.shrink
-                                                , Ui.paddingXY 12 6
-                                                , Ui.rounded 4
-                                                , Ui.Font.size 14
-                                                ]
-                                                (Ui.text "Reload user data")
-                                            , MyUi.elButton
-                                                (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
-                                                (PressedUnlinkDiscordUser discordUserId)
-                                                [ Ui.border 1
-                                                , Ui.borderColor (Ui.rgb 180 50 40)
-                                                , Ui.background MyUi.deleteButtonBackground
-                                                , Ui.Font.color MyUi.deleteButtonFont
-                                                , Ui.width Ui.shrink
-                                                , Ui.paddingXY 12 6
-                                                , Ui.rounded 4
-                                                , Ui.Font.size 14
-                                                ]
-                                                (Ui.text "Unlink user")
-                                            ]
-                                        ]
-                                )
+                                (\( discordUserId, data ) -> discordUserCard loaded discordUserId data)
                                 (SeqDict.toList local.localUser.linkedDiscordUsers)
                             )
                         ]
@@ -501,9 +437,13 @@ view isMobile time local loggedIn loaded model =
                                     )
                                 ]
                             ]
-                        , Ui.el
-                            [ Ui.Font.italic ]
-                            (Ui.text "⚠️ Linking your Discord account can lead it getting temporarily locked or even permanently banned, use at your own risk!")
+                        , Ui.row
+                            [ Ui.spacing 8 ]
+                            [ Ui.html Icons.warning
+                            , Ui.el
+                                [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
+                                (Ui.text "Using your Discord account with 3rd party clients can lead to it getting temporarily locked or even permanently banned. Do this at your own risk!")
+                            ]
                         ]
 
                   else
@@ -539,6 +479,82 @@ view isMobile time local loggedIn loaded model =
                 )
             ]
         )
+
+
+discordUserCard : LoadedFrontend -> Discord.Id.Id Discord.Id.UserId -> DiscordFrontendCurrentUser -> Element FrontendMsg
+discordUserCard loaded discordUserId data =
+    Ui.column
+        [ Ui.spacing 8
+        , Ui.padding 12
+        , Ui.border 1
+        , Ui.borderColor MyUi.border1
+        , Ui.rounded 8
+        , Ui.widthMax 400
+        ]
+        [ Ui.row
+            [ Ui.spacing 8, Ui.width Ui.fill ]
+            [ User.profileImage data.icon
+            , Ui.column
+                [ Ui.spacing 2 ]
+                [ Ui.text (PersonName.toString data.name)
+                , case data.email of
+                    Just email ->
+                        Ui.el
+                            [ Ui.Font.size 14, Ui.Font.color MyUi.font3 ]
+                            (Ui.text (EmailAddress.toString email))
+
+                    Nothing ->
+                        Ui.none
+                ]
+            ]
+        , Ui.el
+            [ Ui.Font.size 13, Ui.Font.color MyUi.font3 ]
+            (Ui.text ("Linked " ++ Log.timeToString loaded.timezone True data.linkedAt))
+        , if data.needsAuthAgain then
+            Ui.el
+                [ Ui.Font.color MyUi.errorColor, Ui.Font.size 14 ]
+                (Ui.text "This account needs to be linked again before you can use it")
+
+          else
+            Ui.none
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ case ( data.needsAuthAgain, data.isLoadingData ) of
+                ( False, Nothing ) ->
+                    MyUi.elButton
+                        (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
+                        (PressedReloadDiscordUser discordUserId)
+                        [ Ui.borderColor MyUi.buttonBorder
+                        , Ui.border 1
+                        , Ui.background MyUi.buttonBackground
+                        , Ui.Font.color MyUi.font1
+                        , Ui.width Ui.shrink
+                        , Ui.paddingXY 12 6
+                        , Ui.rounded 4
+                        , Ui.Font.size 14
+                        ]
+                        (Ui.text "Reload user data")
+
+                ( False, Just _ ) ->
+                    Ui.text "Loading user data..."
+
+                ( True, _ ) ->
+                    Ui.none
+            , MyUi.elButton
+                (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
+                (PressedUnlinkDiscordUser discordUserId)
+                [ Ui.border 1
+                , Ui.borderColor (Ui.rgb 180 50 40)
+                , Ui.background MyUi.deleteButtonBackground
+                , Ui.Font.color MyUi.deleteButtonFont
+                , Ui.width Ui.shrink
+                , Ui.paddingXY 12 6
+                , Ui.rounded 4
+                , Ui.Font.size 14
+                ]
+                (Ui.text "Unlink user")
+            ]
+        ]
 
 
 discordBookmarkletId : HtmlId

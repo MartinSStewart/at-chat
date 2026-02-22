@@ -318,6 +318,7 @@ type alias DiscordFullUserData =
     , linkedTo : Id UserId
     , icon : Maybe FileHash
     , linkedAt : Time.Posix
+    , isLoadingData : Maybe Time.Posix
     }
 
 
@@ -569,6 +570,7 @@ type ToBackend
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
     | ImportDiscordGuildRequest DiscordExport
+    | ReloadDiscordUserRequest (Discord.Id.Id Discord.Id.UserId)
 
 
 type BackendMsg
@@ -607,6 +609,7 @@ type BackendMsg
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
+        (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
             ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
@@ -725,6 +728,7 @@ type ServerChange
     | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
     | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
+    | Server_DiscordUserLoadingDataIsDone (Discord.Id.Id Discord.Id.UserId)
 
 
 type LocalChange

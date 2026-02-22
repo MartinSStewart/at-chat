@@ -1617,7 +1617,7 @@ handleReadyData userAuth readyData model =
                 --)
                 |> Task.sequence
             )
-            |> Task.attempt HandleReadyDataStep2
+            |> Task.attempt (HandleReadyDataStep2 readyData.user.id)
         ]
     )
 

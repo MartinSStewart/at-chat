@@ -332,6 +332,7 @@ type alias DiscordFrontendCurrentUser =
     , email : Maybe EmailAddress
     , needsAuthAgain : Bool
     , linkedAt : Time.Posix
+    , isLoadingData : Maybe Time.Posix
     }
 
 
