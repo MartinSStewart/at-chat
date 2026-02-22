@@ -3,6 +3,7 @@ module User exposing
     , BackendUser
     , DiscordFrontendCurrentUser
     , DiscordFrontendUser
+    , DiscordUserLoadingData(..)
     , EmailNotifications(..)
     , FrontendCurrentUser
     , FrontendUser
@@ -332,8 +333,14 @@ type alias DiscordFrontendCurrentUser =
     , email : Maybe EmailAddress
     , needsAuthAgain : Bool
     , linkedAt : Time.Posix
-    , isLoadingData : Maybe Time.Posix
+    , isLoadingData : DiscordUserLoadingData
     }
+
+
+type DiscordUserLoadingData
+    = DiscordUserLoadedSuccessfully
+    | DiscordUserLoadingData Time.Posix
+    | DiscordUserLoadingFailed Time.Posix
 
 
 discordCurrentUserToFrontend : DiscordFrontendCurrentUser -> DiscordFrontendUser

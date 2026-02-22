@@ -61,7 +61,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser, LastDmViewed(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -530,7 +530,15 @@ update msg model =
                         isAlreadyLoading =
                             case SeqDict.get discordUser.id model.discordUsers of
                                 Just (FullData discordUser2) ->
-                                    discordUser2.isLoadingData /= Nothing
+                                    case discordUser2.isLoadingData of
+                                        DiscordUserLoadedSuccessfully ->
+                                            False
+
+                                        DiscordUserLoadingData posix ->
+                                            True
+
+                                        DiscordUserLoadingFailed posix ->
+                                            False
 
                                 _ ->
                                     False
@@ -548,7 +556,7 @@ update msg model =
                                 , linkedTo = userId
                                 , icon = Nothing
                                 , linkedAt = linkedAt
-                                , isLoadingData = Just linkedAt
+                                , isLoadingData = DiscordUserLoadingData linkedAt
                                 }
                         in
                         ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
@@ -575,36 +583,53 @@ update msg model =
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
                     )
 
-        HandleReadyDataStep2 discordUserId result ->
-            case result of
-                Ok ( dmData, guildData ) ->
-                    ( DiscordSync.addDiscordGuilds (SeqDict.fromList guildData) model
-                        |> DiscordSync.addDiscordDms dmData
-                    , case SeqDict.get discordUserId model.discordUsers of
-                        Just (FullData discordUser) ->
-                            Broadcast.toUser
+        HandleReadyDataStep2 time discordUserId result ->
+            case SeqDict.get discordUserId model.discordUsers of
+                Just (FullData discordUser) ->
+                    case result of
+                        Ok ( dmData, guildData ) ->
+                            ( DiscordSync.addDiscordGuilds
+                                (SeqDict.fromList guildData)
+                                { model
+                                    | discordUsers =
+                                        SeqDict.insert
+                                            discordUserId
+                                            (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
+                                            model.discordUsers
+                                }
+                                |> DiscordSync.addDiscordDms dmData
+                            , Broadcast.toUser
                                 Nothing
                                 Nothing
                                 discordUser.linkedTo
-                                (Server_DiscordUserLoadingDataIsDone discordUserId |> ServerChange)
+                                (Server_DiscordUserLoadingDataIsDone discordUserId (Ok ()) |> ServerChange)
                                 model
+                            )
 
-                        Just (NeedsAuthAgain _) ->
-                            Command.none
+                        Err error ->
+                            addLogWithCmd
+                                time
+                                (Log.FailedToLoadDiscordUserData discordUserId error)
+                                { model
+                                    | discordUsers =
+                                        SeqDict.insert
+                                            discordUserId
+                                            (FullData { discordUser | isLoadingData = DiscordUserLoadingFailed time })
+                                            model.discordUsers
+                                }
+                                (Broadcast.toUser
+                                    Nothing
+                                    Nothing
+                                    discordUser.linkedTo
+                                    (Server_DiscordUserLoadingDataIsDone discordUserId (Err time) |> ServerChange)
+                                    model
+                                )
 
-                        Just (BasicData _) ->
-                            Command.none
-
-                        Nothing ->
-                            Command.none
-                    )
-
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "GotDiscordGuilds" error
-                    in
-                    ( model, Command.none )
+                _ ->
+                    addLog
+                        time
+                        (Log.FailedToLoadDiscordUserData discordUserId (Discord.UnexpectedError "Couldn't find FullData Discord user"))
+                        model
 
         WebsocketCreatedHandleForUser discordUserId connection ->
             ( { model
@@ -663,7 +688,7 @@ updateFromFrontend sessionId clientId msg model =
 discordFullDataUserToFrontendCurrentUser :
     Bool
     -> { a | user : Discord.User, icon : Maybe FileHash, linkedAt : Time.Posix }
-    -> Maybe Time.Posix
+    -> DiscordUserLoadingData
     -> DiscordFrontendCurrentUser
 discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
     { name = PersonName.fromStringLossy data.user.username
@@ -729,7 +754,7 @@ getLoginData sessionId session user requestMessagesFor model =
                                 ( otherDiscordUsers2
                                 , SeqDict.insert
                                     discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser True data Nothing)
+                                    (discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
                                     linkedDiscordUsers2
                                 )
 
@@ -3436,7 +3461,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 , linkedTo = data.linkedTo
                                                                 , icon = data.icon
                                                                 , linkedAt = data.linkedAt
-                                                                , isLoadingData = Nothing
+                                                                , isLoadingData = DiscordUserLoadedSuccessfully
                                                                 }
 
                                                         NeedsAuthAgainExport data ->

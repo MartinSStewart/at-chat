@@ -98,7 +98,7 @@ import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorAuthentication, TwoFactorAuthenticationSetup, TwoFactorState)
 import Ui.Anim
 import Url exposing (Url)
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser, NotificationLevel)
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData, FrontendCurrentUser, FrontendUser, NotificationLevel)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, NotificationMode, SetViewing, SubscribeData, ToBeFilledInByBackend, UserSession)
 
@@ -318,7 +318,7 @@ type alias DiscordFullUserData =
     , linkedTo : Id UserId
     , icon : Maybe FileHash
     , linkedAt : Time.Posix
-    , isLoadingData : Maybe Time.Posix
+    , isLoadingData : DiscordUserLoadingData
     }
 
 
@@ -609,6 +609,7 @@ type BackendMsg
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
+        Time.Posix
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
@@ -728,7 +729,7 @@ type ServerChange
     | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
     | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
-    | Server_DiscordUserLoadingDataIsDone (Discord.Id.Id Discord.Id.UserId)
+    | Server_DiscordUserLoadingDataIsDone (Discord.Id.Id Discord.Id.UserId) (Result Time.Posix ())
 
 
 type LocalChange

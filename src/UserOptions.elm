@@ -23,7 +23,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
-import User exposing (DiscordFrontendCurrentUser)
+import User exposing (DiscordFrontendCurrentUser, DiscordUserLoadingData(..))
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
 
@@ -519,27 +519,38 @@ discordUserCard loaded discordUserId data =
             Ui.none
         , Ui.row
             [ Ui.spacing 8 ]
-            [ case ( data.needsAuthAgain, data.isLoadingData ) of
-                ( False, Nothing ) ->
-                    MyUi.elButton
-                        (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
-                        (PressedReloadDiscordUser discordUserId)
-                        [ Ui.borderColor MyUi.buttonBorder
-                        , Ui.border 1
-                        , Ui.background MyUi.buttonBackground
-                        , Ui.Font.color MyUi.font1
-                        , Ui.width Ui.shrink
-                        , Ui.paddingXY 12 6
-                        , Ui.rounded 4
-                        , Ui.Font.size 14
-                        ]
-                        (Ui.text "Reload user data")
+            [ if data.needsAuthAgain then
+                Ui.none
 
-                ( False, Just _ ) ->
-                    Ui.text "Loading user data..."
+              else
+                case data.isLoadingData of
+                    DiscordUserLoadingData _ ->
+                        Ui.el
+                            [ Ui.borderColor MyUi.buttonBorder
+                            , Ui.border 1
+                            , Ui.background MyUi.disabledButtonBackground
+                            , Ui.Font.color MyUi.font1
+                            , Ui.width Ui.shrink
+                            , Ui.paddingXY 12 6
+                            , Ui.rounded 4
+                            , Ui.Font.size 14
+                            ]
+                            (Ui.text "Loading user data...")
 
-                ( True, _ ) ->
-                    Ui.none
+                    _ ->
+                        MyUi.elButton
+                            (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
+                            (PressedReloadDiscordUser discordUserId)
+                            [ Ui.borderColor MyUi.buttonBorder
+                            , Ui.border 1
+                            , Ui.background MyUi.buttonBackground
+                            , Ui.Font.color MyUi.font1
+                            , Ui.width Ui.shrink
+                            , Ui.paddingXY 12 6
+                            , Ui.rounded 4
+                            , Ui.Font.size 14
+                            ]
+                            (Ui.text "Reload user data")
             , MyUi.elButton
                 (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
                 (PressedUnlinkDiscordUser discordUserId)
@@ -554,6 +565,15 @@ discordUserCard loaded discordUserId data =
                 ]
                 (Ui.text "Unlink user")
             ]
+        , case data.isLoadingData of
+            DiscordUserLoadingFailed _ ->
+                MyUi.errorBox (Dom.id "userOptions_failedToLoadDiscordUserData") PressedCopyText "Failed to load user data"
+
+            DiscordUserLoadedSuccessfully ->
+                Ui.none
+
+            DiscordUserLoadingData posix ->
+                Ui.none
         ]
 
 

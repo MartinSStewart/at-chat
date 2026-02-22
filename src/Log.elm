@@ -31,6 +31,7 @@ type Log
     | FailedToAddReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
+    | FailedToLoadDiscordUserData (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -73,6 +74,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToRemoveReactionToDiscordDmMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToLoadDiscordUserData _ _ ->
             Nothing
 
 
@@ -308,6 +312,14 @@ logContent log =
                 , fieldRow "Message id" (Ui.text (Id.toString messageId))
                 , fieldRow "Discord message id" (Ui.text (Discord.Id.toString discordMessageId))
                 , fieldRow "Emoji" (Ui.text (Emoji.toString emoji))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToLoadDiscordUserData discordUserId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Loading Discord user data failed"
+                , fieldRow "Discord user id" (Ui.text (Discord.Id.toString discordUserId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

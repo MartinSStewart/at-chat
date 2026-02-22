@@ -71,7 +71,7 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
+import User exposing (DiscordUserLoadingData(..), FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -6226,7 +6226,7 @@ changeUpdate localMsg local =
                             }
                     }
 
-                Server_DiscordUserLoadingDataIsDone discordUserId ->
+                Server_DiscordUserLoadingDataIsDone discordUserId result ->
                     let
                         localUser =
                             local.localUser
@@ -6237,7 +6237,17 @@ changeUpdate localMsg local =
                                 | linkedDiscordUsers =
                                     SeqDict.updateIfExists
                                         discordUserId
-                                        (\user -> { user | isLoadingData = Nothing })
+                                        (\user ->
+                                            { user
+                                                | isLoadingData =
+                                                    case result of
+                                                        Ok _ ->
+                                                            DiscordUserLoadedSuccessfully
+
+                                                        Err time ->
+                                                            DiscordUserLoadingFailed time
+                                            }
+                                        )
                                         localUser.linkedDiscordUsers
                             }
                     }
