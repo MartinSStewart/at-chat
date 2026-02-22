@@ -1303,7 +1303,7 @@ isPressMsg msg =
         PressedLinkDiscord ->
             True
 
-        PressedUnlinkDiscord _ ->
+        PressedUnlinkDiscordUser _ ->
             True
 
         MouseEnteredDiscordChannelName _ _ _ ->
@@ -3881,8 +3881,16 @@ updateLoaded msg model =
                 )
                 model
 
-        PressedUnlinkDiscord discordUserId ->
-            ( model, UnlinkDiscordRequest discordUserId |> Lamdera.sendToBackend )
+        PressedUnlinkDiscordUser discordUserId ->
+            updateLoggedIn
+                (\loggedIn ->
+                    handleLocalChange
+                        model.time
+                        (Local_UnlinkDiscordUser discordUserId |> Just)
+                        loggedIn
+                        Command.none
+                )
+                model
 
         PressedDiscordGuildMemberLabel data ->
             case model.loginStatus of
@@ -5486,6 +5494,9 @@ changeUpdate localMsg local =
                             TextEditor.localChangeUpdate local.localUser.session.userId localChange2 local.textEditor
                     }
 
+                Local_UnlinkDiscordUser userId ->
+                    unlinkDiscordUser userId local
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -6155,14 +6166,7 @@ changeUpdate localMsg local =
                     }
 
                 Server_UnlinkDiscordUser userId ->
-                    let
-                        localUser =
-                            local.localUser
-                    in
-                    { local
-                        | localUser =
-                            { localUser | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers }
-                    }
+                    unlinkDiscordUser userId local
 
                 Server_DiscordChannelCreated guildId channelId channelName ->
                     { local
@@ -6230,6 +6234,18 @@ changeUpdate localMsg local =
                                         localUser.linkedDiscordUsers
                             }
                     }
+
+
+unlinkDiscordUser : Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
+unlinkDiscordUser userId local =
+    let
+        localUser =
+            local.localUser
+    in
+    { local
+        | localUser =
+            { localUser | linkedDiscordUsers = SeqDict.remove userId localUser.linkedDiscordUsers }
+    }
 
 
 memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmId, ThreadRoute ) -> LocalState -> LocalState
@@ -7483,6 +7499,9 @@ pendingChangesText localChange =
 
         Local_TextEditor _ ->
             "Text editor change"
+
+        Local_UnlinkDiscordUser _ ->
+            "Unlink Discord user"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

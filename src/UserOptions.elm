@@ -415,7 +415,7 @@ view isMobile time local loggedIn loaded model =
                                                 (Ui.text "Relink")
                                             , MyUi.elButton
                                                 (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
-                                                (PressedUnlinkDiscord discordUserId)
+                                                (PressedUnlinkDiscordUser discordUserId)
                                                 [ Ui.border 1
                                                 , Ui.borderColor (Ui.rgb 180 50 40)
                                                 , Ui.background MyUi.deleteButtonBackground

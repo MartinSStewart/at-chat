@@ -59,7 +59,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -1368,7 +1368,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         ViewThreadWithMaybeMessage _ _ ->
                                             -- Not supported for Discord DM changes
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -1764,8 +1764,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -1957,8 +1956,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model
-                                            , LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2098,13 +2096,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err () ->
                                                     ( model2
-                                                    , LocalChangeResponse changeId Local_Invalid
-                                                        |> Lamdera.sendToFrontend clientId
+                                                    , invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2184,12 +2181,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
 
                                 Nothing ->
                                     ( model2
-                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    , invalidChangeResponse changeId clientId
                                     )
                         )
 
@@ -2249,7 +2246,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                 Err () ->
                                     ( model2
-                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                    , invalidChangeResponse changeId clientId
                                     )
                         )
 
@@ -2280,7 +2277,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2323,12 +2320,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 _ ->
                                                     ( model2
-                                                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                                    , invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2358,7 +2355,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err () ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2371,7 +2368,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     case threadRoute of
                                         ViewThreadWithMessage _ _ ->
                                             ( model2
-                                            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                                            , invalidChangeResponse changeId clientId
                                             )
 
                                         NoThreadWithMessage messageId ->
@@ -2398,8 +2395,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err () ->
                                                     ( model
-                                                    , LocalChangeResponse changeId Local_Invalid
-                                                        |> Lamdera.sendToFrontend clientId
+                                                    , invalidChangeResponse changeId clientId
                                                     )
                                 )
 
@@ -2462,9 +2458,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err _ ->
                                             ( model2
-                                            , Lamdera.sendToFrontend
-                                                clientId
-                                                (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2502,16 +2496,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err _ ->
                                                     ( model2
-                                                    , Lamdera.sendToFrontend
-                                                        clientId
-                                                        (LocalChangeResponse changeId Local_Invalid)
+                                                    , invalidChangeResponse changeId clientId
                                                     )
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend
-                                                clientId
-                                                (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2556,9 +2546,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Err _ ->
                                             ( model2
-                                            , Lamdera.sendToFrontend
-                                                clientId
-                                                (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2610,9 +2598,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                 Err _ ->
                                                     ( model2
-                                                    , Lamdera.sendToFrontend
-                                                        clientId
-                                                        (LocalChangeResponse changeId Local_Invalid)
+                                                    , invalidChangeResponse changeId clientId
                                                     )
 
                                         ViewThreadWithMessage _ _ ->
@@ -2666,7 +2652,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2703,7 +2689,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2760,7 +2746,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2805,7 +2791,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing ->
                                             ( model2
                                             , Command.batch
-                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                                [ invalidChangeResponse changeId clientId
                                                 , broadcastCmd session
                                                 ]
                                             )
@@ -2852,7 +2838,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                         Nothing ->
                                             ( model2
-                                            , Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                            , invalidChangeResponse changeId clientId
                                             )
                                 )
 
@@ -2899,7 +2885,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         Nothing ->
                                             ( model2
                                             , Command.batch
-                                                [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId Local_Invalid)
+                                                [ invalidChangeResponse changeId clientId
                                                 , broadcastCmd session
                                                 ]
                                             )
@@ -2941,8 +2927,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -2980,8 +2965,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -3021,8 +3005,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            invalidChangeResponse changeId clientId
                                     )
                                 )
 
@@ -3060,13 +3043,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 |> Lamdera.sendToFrontend clientId
 
                                         Nothing ->
-                                            LocalChangeResponse changeId Local_Invalid
-                                                |> Lamdera.sendToFrontend clientId
+                                            invalidChangeResponse changeId clientId
                                     )
                                 )
 
                         DiscordGuildOrDmId_Dm _ ->
-                            ( model2, LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId )
+                            ( model2, invalidChangeResponse changeId clientId )
 
                 --asUser
                 --    model2
@@ -3170,6 +3152,69 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             )
                         )
 
+                Local_UnlinkDiscordUser discordUserId ->
+                    asUser
+                        model2
+                        sessionId
+                        (\session _ ->
+                            let
+                                helper :
+                                    Id UserId
+                                    -> DiscordBasicUserData
+                                    -> Maybe Websocket.Connection
+                                    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+                                helper linkedTo basicData maybeConnection =
+                                    if linkedTo == session.userId then
+                                        ( { model2
+                                            | discordUsers =
+                                                SeqDict.insert discordUserId (BasicData basicData) model2.discordUsers
+                                          }
+                                        , Command.batch
+                                            [ Lamdera.sendToFrontend clientId (LocalChangeResponse changeId localMsg)
+                                            , Broadcast.toUser
+                                                (Just clientId)
+                                                Nothing
+                                                session.userId
+                                                (Server_UnlinkDiscordUser discordUserId |> ServerChange)
+                                                model2
+                                            , case maybeConnection of
+                                                Just connection ->
+                                                    Task.perform
+                                                        (\() -> WebsocketClosedByBackendForUser discordUserId False)
+                                                        (Websocket.close connection)
+
+                                                Nothing ->
+                                                    Command.none
+                                            ]
+                                        )
+
+                                    else
+                                        ( model2, invalidChangeResponse changeId clientId )
+                            in
+                            case SeqDict.get discordUserId model2.discordUsers of
+                                Just (FullData discordUser) ->
+                                    helper
+                                        discordUser.linkedTo
+                                        { user = DiscordSync.discordUserToPartialUser discordUser.user
+                                        , icon = discordUser.icon
+                                        }
+                                        discordUser.connection.websocketHandle
+
+                                Just (NeedsAuthAgain discordUser) ->
+                                    helper
+                                        discordUser.linkedTo
+                                        { user = DiscordSync.discordUserToPartialUser discordUser.user
+                                        , icon = discordUser.icon
+                                        }
+                                        Nothing
+
+                                Just (BasicData _) ->
+                                    ( model2, invalidChangeResponse changeId clientId )
+
+                                Nothing ->
+                                    ( model2, invalidChangeResponse changeId clientId )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model2
@@ -3229,54 +3274,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         |> DiscordSync.http
                         |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId data)
                     )
-                )
-
-        UnlinkDiscordRequest discordUserId ->
-            asUser
-                model2
-                sessionId
-                (\session _ ->
-                    case SeqDict.get discordUserId model2.discordUsers of
-                        Just (FullData discordUser) ->
-                            if discordUser.linkedTo == session.userId then
-                                ( { model2 | discordUsers = SeqDict.remove discordUserId model2.discordUsers }
-                                , Command.batch
-                                    [ Broadcast.toUser
-                                        Nothing
-                                        Nothing
-                                        session.userId
-                                        (Server_UnlinkDiscordUser discordUserId |> ServerChange)
-                                        model2
-                                    , case discordUser.connection.websocketHandle of
-                                        Just connection ->
-                                            Task.perform
-                                                (\() -> WebsocketClosedByBackendForUser discordUserId False)
-                                                (Websocket.close connection)
-
-                                        Nothing ->
-                                            Command.none
-                                    ]
-                                )
-
-                            else
-                                ( model2, Command.none )
-
-                        Just (NeedsAuthAgain discordUser) ->
-                            if discordUser.linkedTo == session.userId then
-                                ( { model2 | discordUsers = SeqDict.remove discordUserId model2.discordUsers }
-                                , Broadcast.toUser
-                                    Nothing
-                                    Nothing
-                                    session.userId
-                                    (Server_UnlinkDiscordUser discordUserId |> ServerChange)
-                                    model2
-                                )
-
-                            else
-                                ( model2, Command.none )
-
-                        _ ->
-                            ( model2, Command.none )
                 )
 
         ProfilePictureEditorToBackend (ImageEditor.ChangeUserAvatarRequest fileHash) ->
@@ -3564,12 +3561,12 @@ sendEditMessage clientId changeId time newContent attachedFiles2 guildId channel
 
                 Err () ->
                     ( model2
-                    , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+                    , invalidChangeResponse changeId clientId
                     )
 
         Nothing ->
             ( model2
-            , LocalChangeResponse changeId Local_Invalid |> Lamdera.sendToFrontend clientId
+            , invalidChangeResponse changeId clientId
             )
 
 

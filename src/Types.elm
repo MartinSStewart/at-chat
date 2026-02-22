@@ -521,7 +521,7 @@ type FrontendMsg
     | VisualViewportResized Float
     | TextEditorMsg TextEditor.Msg
     | PressedLinkDiscord
-    | PressedUnlinkDiscord (Discord.Id.Id Discord.Id.UserId)
+    | PressedUnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
     | PressedDiscordGuildMemberLabel
         { currentUserId : Discord.Id.Id Discord.Id.UserId
         , otherUserId : Discord.Id.Id Discord.Id.UserId
@@ -571,7 +571,6 @@ type ToBackend
     | ReloadDataRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
-    | UnlinkDiscordRequest (Discord.Id.Id Discord.Id.UserId)
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
     | ExportGuildRequest (Id GuildId)
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
@@ -767,3 +766,4 @@ type LocalChange
     | Local_SetNotificationMode NotificationMode
     | Local_RegisterPushSubscription SubscribeData
     | Local_TextEditor TextEditor.LocalChange
+    | Local_UnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)

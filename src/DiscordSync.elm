@@ -1,6 +1,7 @@
 module DiscordSync exposing
     ( addDiscordDms
     , addDiscordGuilds
+    , discordUserToPartialUser
     , discordUserWebsocketMsg
     , http
     )
@@ -1730,6 +1731,22 @@ addDiscordUserData user discordUsers =
         discordUsers
 
 
+discordUserToPartialUser :
+    { a
+        | id : Discord.Id.Id Discord.Id.UserId
+        , username : String
+        , avatar : Maybe (Discord.ImageHash Discord.AvatarHash)
+        , discriminator : Discord.UserDiscriminator
+    }
+    -> Discord.PartialUser
+discordUserToPartialUser user =
+    { id = user.id
+    , username = user.username
+    , avatar = user.avatar
+    , discriminator = user.discriminator
+    }
+
+
 handleListGuildMembersResponse :
     Discord.GuildMembersChunkData
     -> BackendModel
@@ -1738,15 +1755,7 @@ handleListGuildMembersResponse chunkData model =
     ( { model
         | discordUsers =
             List.foldl
-                (\member discordUsers ->
-                    addDiscordUserData
-                        { id = member.user.id
-                        , username = member.user.username
-                        , avatar = member.user.avatar
-                        , discriminator = member.user.discriminator
-                        }
-                        discordUsers
-                )
+                (\member discordUsers -> addDiscordUserData (discordUserToPartialUser member.user) discordUsers)
                 model.discordUsers
                 chunkData.members
         , discordGuilds =
