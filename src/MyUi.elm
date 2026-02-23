@@ -79,7 +79,6 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events.Extra.Touch
 import Icons
-import Id exposing (Id, UserId)
 import Json.Decode
 import PersonName exposing (PersonName)
 import Quantity

@@ -4971,11 +4971,15 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 messageIdView : Id messageId -> Element msg
 messageIdView messageId =
-    if Env.isProduction then
-        Ui.none
+    Ui.none
 
-    else
-        Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
+
+
+--if Env.isProduction then
+--    Ui.none
+--
+--else
+--    Ui.el [ Ui.Font.size 14, Ui.width Ui.shrink, Ui.paddingLeft 4 ] (Ui.text (Id.toString messageId))
 
 
 deletedMessageContent : HighlightMessage -> Time.Posix -> Time.Zone -> Element msg

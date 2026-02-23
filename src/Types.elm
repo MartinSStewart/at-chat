@@ -729,7 +729,15 @@ type ServerChange
     | Server_DiscordChannelCreated (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ChannelName
     | Server_DiscordDmChannelCreated (Discord.Id.Id Discord.Id.PrivateChannelId) (NonemptySet (Discord.Id.Id Discord.Id.UserId))
     | Server_DiscordNeedsAuthAgain (Discord.Id.Id Discord.Id.UserId)
-    | Server_DiscordUserLoadingDataIsDone (Discord.Id.Id Discord.Id.UserId) (Result Time.Posix ())
+    | Server_DiscordUserLoadingDataIsDone
+        (Discord.Id.Id Discord.Id.UserId)
+        (Result
+            Time.Posix
+            { discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordFrontendGuild
+            , discordDms : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
+            , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+            }
+        )
 
 
 type LocalChange

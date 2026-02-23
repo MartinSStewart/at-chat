@@ -14,7 +14,7 @@ import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
 import DiscordSync
-import DmChannel exposing (DiscordDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -61,7 +61,7 @@ import Toop exposing (T4(..))
 import TwoFactorAuthentication
 import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordUserLoadingData(..), LastDmViewed(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
@@ -588,21 +588,74 @@ update msg model =
                 Just (FullData discordUser) ->
                     case result of
                         Ok ( dmData, guildData ) ->
-                            ( DiscordSync.addDiscordGuilds
-                                (SeqDict.fromList guildData)
-                                { model
-                                    | discordUsers =
-                                        SeqDict.insert
-                                            discordUserId
-                                            (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
-                                            model.discordUsers
-                                }
-                                |> DiscordSync.addDiscordDms dmData
+                            let
+                                guildDataDict :
+                                    SeqDict
+                                        (Discord.Id.Id Discord.Id.GuildId)
+                                        { guild : Discord.GatewayGuild
+                                        , channels : List ( Discord.Channel, List Discord.Message )
+                                        , icon : Maybe FileStatus.UploadResponse
+                                        , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+                                        }
+                                guildDataDict =
+                                    SeqDict.fromList guildData
+
+                                model2 =
+                                    DiscordSync.addDiscordGuilds
+                                        guildDataDict
+                                        { model
+                                            | discordUsers =
+                                                SeqDict.insert
+                                                    discordUserId
+                                                    (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
+                                                    model.discordUsers
+                                        }
+                                        |> DiscordSync.addDiscordDms dmData
+
+                                ( otherDiscordUsers, linkedDiscordUsers ) =
+                                    getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
+                            in
+                            ( model2
                             , Broadcast.toUser
                                 Nothing
                                 Nothing
                                 discordUser.linkedTo
-                                (Server_DiscordUserLoadingDataIsDone discordUserId (Ok ()) |> ServerChange)
+                                (Server_DiscordUserLoadingDataIsDone
+                                    discordUserId
+                                    (Ok
+                                        { discordGuilds =
+                                            SeqDict.filterMap
+                                                (\guildId _ ->
+                                                    case SeqDict.get guildId model2.discordGuilds of
+                                                        Just guild ->
+                                                            discordGuildToFrontendForUser Nothing guild linkedDiscordUsers
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                                guildDataDict
+                                        , discordDms =
+                                            List.filterMap
+                                                (\( channelId, _, _ ) ->
+                                                    case SeqDict.get channelId model2.discordDmChannels of
+                                                        Just dmChannel ->
+                                                            case discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
+                                                                Just dmChannel2 ->
+                                                                    Just ( channelId, dmChannel2 )
+
+                                                                Nothing ->
+                                                                    Nothing
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                                dmData
+                                                |> SeqDict.fromList
+                                        , discordUsers = otherDiscordUsers
+                                        }
+                                    )
+                                    |> ServerChange
+                                )
                                 model
                             )
 
@@ -711,6 +764,63 @@ discordFullDataUserToFrontendCurrentUser needsAuthAgain data isLoadingData =
     }
 
 
+getLinkedDiscordUsersAndOtherUsers :
+    Id UserId
+    -> BackendModel
+    ->
+        ( SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
+        , SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+        )
+getLinkedDiscordUsersAndOtherUsers userId model =
+    SeqDict.foldl
+        (\discordUserId userData ( otherDiscordUsers2, linkedDiscordUsers2 ) ->
+            case userData of
+                FullData data ->
+                    if data.linkedTo == userId then
+                        ( otherDiscordUsers2
+                        , SeqDict.insert
+                            discordUserId
+                            (discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
+                            linkedDiscordUsers2
+                        )
+
+                    else
+                        ( SeqDict.insert
+                            discordUserId
+                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
+                            otherDiscordUsers2
+                        , linkedDiscordUsers2
+                        )
+
+                BasicData data ->
+                    ( SeqDict.insert
+                        discordUserId
+                        { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
+                        otherDiscordUsers2
+                    , linkedDiscordUsers2
+                    )
+
+                NeedsAuthAgain data ->
+                    if data.linkedTo == userId then
+                        ( otherDiscordUsers2
+                        , SeqDict.insert
+                            discordUserId
+                            (discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
+                            linkedDiscordUsers2
+                        )
+
+                    else
+                        ( SeqDict.insert
+                            discordUserId
+                            { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
+                            otherDiscordUsers2
+                        , linkedDiscordUsers2
+                        )
+        )
+        ( SeqDict.empty, SeqDict.empty )
+        model.discordUsers
+
+
 getLoginData :
     SessionId
     -> UserSession
@@ -721,53 +831,7 @@ getLoginData :
 getLoginData sessionId session user requestMessagesFor model =
     let
         ( otherDiscordUsers, linkedDiscordUsers ) =
-            SeqDict.foldl
-                (\discordUserId userData ( otherDiscordUsers2, linkedDiscordUsers2 ) ->
-                    case userData of
-                        FullData data ->
-                            if data.linkedTo == session.userId then
-                                ( otherDiscordUsers2
-                                , SeqDict.insert
-                                    discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser False data data.isLoadingData)
-                                    linkedDiscordUsers2
-                                )
-
-                            else
-                                ( SeqDict.insert
-                                    discordUserId
-                                    { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                                    otherDiscordUsers2
-                                , linkedDiscordUsers2
-                                )
-
-                        BasicData data ->
-                            ( SeqDict.insert
-                                discordUserId
-                                { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                                otherDiscordUsers2
-                            , linkedDiscordUsers2
-                            )
-
-                        NeedsAuthAgain data ->
-                            if data.linkedTo == session.userId then
-                                ( otherDiscordUsers2
-                                , SeqDict.insert
-                                    discordUserId
-                                    (discordFullDataUserToFrontendCurrentUser True data DiscordUserLoadedSuccessfully)
-                                    linkedDiscordUsers2
-                                )
-
-                            else
-                                ( SeqDict.insert
-                                    discordUserId
-                                    { name = PersonName.fromStringLossy data.user.username, icon = data.icon }
-                                    otherDiscordUsers2
-                                , linkedDiscordUsers2
-                                )
-                )
-                ( SeqDict.empty, SeqDict.empty )
-                model.discordUsers
+            getLinkedDiscordUsersAndOtherUsers session.userId model
     in
     { session = session
     , adminData =
@@ -800,7 +864,7 @@ getLoginData sessionId session user requestMessagesFor model =
     , discordGuilds =
         SeqDict.filterMap
             (\guildId guild ->
-                LocalState.discordGuildToFrontendForUser
+                discordGuildToFrontendForUser
                     (case requestMessagesFor of
                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId), threadRoute ) ->
                             if requestedGuildId == guildId then
@@ -813,25 +877,22 @@ getLoginData sessionId session user requestMessagesFor model =
                             Nothing
                     )
                     guild
+                    linkedDiscordUsers
             )
             model.discordGuilds
     , discordDmChannels =
         SeqDict.filterMap
             (\dmChannelId dmChannel ->
-                if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
-                    DmChannel.discordDmChannelToFrontend
-                        (case requestMessagesFor of
-                            Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
-                                dmChannelId == data.channelId
+                discordDmChannelToFrontend
+                    (case requestMessagesFor of
+                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
+                            dmChannelId == data.channelId
 
-                            _ ->
-                                False
-                        )
-                        dmChannel
-                        |> Just
-
-                else
-                    Nothing
+                        _ ->
+                            False
+                    )
+                    dmChannel
+                    linkedDiscordUsers
             )
             model.discordDmChannels
     , dmChannels =
@@ -891,6 +952,56 @@ getLoginData sessionId session user requestMessagesFor model =
     , publicVapidKey = model.publicVapidKey
     , textEditor = model.textEditor
     }
+
+
+discordGuildToFrontendForUser :
+    Maybe ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
+    -> DiscordBackendGuild
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    -> Maybe DiscordFrontendGuild
+discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
+    { name = guild.name
+    , icon = guild.icon
+    , channels =
+        SeqDict.filterMap
+            (\channelId channel ->
+                LocalState.discordChannelToFrontend
+                    (case requestMessagesFor of
+                        Just ( channelIdB, threadRoute ) ->
+                            if channelId == channelIdB then
+                                Just threadRoute
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+                    )
+                    channel
+            )
+            guild.channels
+    , members = guild.members
+    , owner = guild.owner
+    }
+        |> Just
+
+
+discordDmChannelToFrontend :
+    Bool
+    -> DiscordDmChannel
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
+    -> Maybe DiscordFrontendDmChannel
+discordDmChannelToFrontend preloadMessages dmChannel linkedDiscordUsers =
+    if List.any (\( linkedId, _ ) -> NonemptySet.member linkedId dmChannel.members) (SeqDict.toList linkedDiscordUsers) then
+        { messages = DmChannel.toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
+        , visibleMessages = VisibleMessages.init preloadMessages dmChannel
+        , lastTypedAt = dmChannel.lastTypedAt
+        , members = dmChannel.members
+        }
+            |> Just
+
+    else
+        Nothing
 
 
 discordStartThread :

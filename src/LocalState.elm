@@ -49,7 +49,7 @@ module LocalState exposing
     , deleteMessageFrontendHelper
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
-    , discordGuildToFrontendForUser
+    , discordChannelToFrontend
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -225,37 +225,6 @@ guildToFrontendForUser requestMessagesFor userId guild =
 
     else
         Nothing
-
-
-discordGuildToFrontendForUser :
-    Maybe ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute )
-    -> DiscordBackendGuild
-    -> Maybe DiscordFrontendGuild
-discordGuildToFrontendForUser requestMessagesFor guild =
-    { name = guild.name
-    , icon = guild.icon
-    , channels =
-        SeqDict.filterMap
-            (\channelId channel ->
-                discordChannelToFrontend
-                    (case requestMessagesFor of
-                        Just ( channelIdB, threadRoute ) ->
-                            if channelId == channelIdB then
-                                Just threadRoute
-
-                            else
-                                Nothing
-
-                        _ ->
-                            Nothing
-                    )
-                    channel
-            )
-            guild.channels
-    , members = guild.members
-    , owner = guild.owner
-    }
-        |> Just
 
 
 guildToFrontend : Maybe ( Id ChannelId, ThreadRoute ) -> BackendGuild -> FrontendGuild

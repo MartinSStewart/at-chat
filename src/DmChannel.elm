@@ -7,7 +7,6 @@ module DmChannel exposing
     , backendInit
     , channelIdFromUserIds
     , discordBackendInit
-    , discordDmChannelToFrontend
     , frontendInit
     , getArray
     , latestMessageId
@@ -141,15 +140,6 @@ toFrontendHelper preloadMessages channel =
         )
         (Thread.loadMessages preloadMessages channel.messages)
         channel.threads
-
-
-discordDmChannelToFrontend : Bool -> DiscordDmChannel -> DiscordFrontendDmChannel
-discordDmChannelToFrontend preloadMessages dmChannel =
-    { messages = toDiscordFrontendHelper preloadMessages { messages = dmChannel.messages, threads = SeqDict.empty }
-    , visibleMessages = VisibleMessages.init preloadMessages dmChannel
-    , lastTypedAt = dmChannel.lastTypedAt
-    , members = dmChannel.members
-    }
 
 
 toDiscordFrontendHelper :
