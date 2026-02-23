@@ -124,7 +124,7 @@ config =
             []
         , modules =
             [ [ "Backend" ]
-            , [ "EmailViewer" ]
+            , [ "UiViewer" ]
             , [ "TwoFactorAuthentication" ]
             ]
         }

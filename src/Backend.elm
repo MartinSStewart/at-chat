@@ -677,7 +677,7 @@ update msg model =
                                     )
                                     |> ServerChange
                                 )
-                                model
+                                model2
                             )
 
                         Err error ->
@@ -981,30 +981,37 @@ discordGuildToFrontendForUser :
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendCurrentUser
     -> Maybe DiscordFrontendGuild
 discordGuildToFrontendForUser requestMessagesFor guild linkedDiscordUsers =
-    { name = guild.name
-    , icon = guild.icon
-    , channels =
-        SeqDict.filterMap
-            (\channelId channel ->
-                LocalState.discordChannelToFrontend
-                    (case requestMessagesFor of
-                        Just ( channelIdB, threadRoute ) ->
-                            if channelId == channelIdB then
-                                Just threadRoute
+    if
+        SeqDict.member guild.owner linkedDiscordUsers
+            || not (SeqDict.isEmpty (SeqDict.intersect guild.members linkedDiscordUsers))
+    then
+        { name = guild.name
+        , icon = guild.icon
+        , channels =
+            SeqDict.filterMap
+                (\channelId channel ->
+                    LocalState.discordChannelToFrontend
+                        (case requestMessagesFor of
+                            Just ( channelIdB, threadRoute ) ->
+                                if channelId == channelIdB then
+                                    Just threadRoute
 
-                            else
+                                else
+                                    Nothing
+
+                            _ ->
                                 Nothing
+                        )
+                        channel
+                )
+                guild.channels
+        , members = guild.members
+        , owner = guild.owner
+        }
+            |> Just
 
-                        _ ->
-                            Nothing
-                    )
-                    channel
-            )
-            guild.channels
-    , members = guild.members
-    , owner = guild.owner
-    }
-        |> Just
+    else
+        Nothing
 
 
 discordDmChannelToFrontend :
