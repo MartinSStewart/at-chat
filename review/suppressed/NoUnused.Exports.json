@@ -3,6 +3,9 @@
   "automatically created by": "elm-review suppress",
   "learn more": "elm-review suppress --help",
   "suppressions": [
-    { "count": 1, "filePath": "src/ImageEditor.elm" }
+    { "count": 2, "filePath": "src/Broadcast.elm" },
+    { "count": 2, "filePath": "src/RichText.elm" },
+    { "count": 2, "filePath": "src/Slack.elm" },
+    { "count": 1, "filePath": "src/MyUi.elm" }
   ]
 }

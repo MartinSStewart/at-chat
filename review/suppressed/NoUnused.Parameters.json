@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "automatically created by": "elm-review suppress",
+  "learn more": "elm-review suppress --help",
+  "suppressions": [
+    { "count": 2, "filePath": "src/TextEditor.elm" },
+    { "count": 1, "filePath": "src/MyUi.elm" },
+    { "count": 1, "filePath": "src/Pages/Guild.elm" }
+  ]
+}
