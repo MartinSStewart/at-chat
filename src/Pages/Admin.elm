@@ -912,7 +912,7 @@ discordUsersSection : BackendUser -> AdminData -> Element Msg
 discordUsersSection user adminData =
     section
         user.expandedSections
-        DiscordDmChannelsSection
+        DiscordUsersSection
         [ if SeqDict.isEmpty adminData.discordUsers then
             Ui.text "No Discord user"
 
