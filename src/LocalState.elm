@@ -11,6 +11,7 @@ module LocalState exposing
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
+    , DiscordUserData_ForAdmin(..)
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
@@ -84,6 +85,7 @@ module LocalState exposing
 import Array exposing (Array)
 import Array.Extra
 import ChannelName exposing (ChannelName)
+import Discord
 import Discord.Id
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Time as Time
@@ -109,7 +111,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread, DiscordFrontendThread, FrontendGenericThread, FrontendThread, LastTypedAt)
 import UInt64
 import Unsafe
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, FrontendCurrentUser, FrontendUser)
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
 import UserSession exposing (FrontendUserSession, UserSession)
 import VisibleMessages exposing (VisibleMessages)
@@ -396,7 +398,25 @@ type alias AdminData =
         SeqDict
             (Discord.Id.Id Discord.Id.PrivateChannelId)
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
+    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     }
+
+
+type DiscordUserData_ForAdmin
+    = BasicData_ForAdmin { user : Discord.PartialUser, icon : Maybe FileHash }
+    | FullData_ForAdmin
+        { user : Discord.User
+        , linkedTo : Id UserId
+        , icon : Maybe FileHash
+        , linkedAt : Time.Posix
+        , isLoadingData : DiscordUserLoadingData
+        }
+    | NeedsAuthAgain_ForAdmin
+        { user : Discord.User
+        , linkedTo : Id UserId
+        , icon : Maybe FileHash
+        , linkedAt : Time.Posix
+        }
 
 
 type PrivateVapidKey

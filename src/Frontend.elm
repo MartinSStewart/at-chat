@@ -444,6 +444,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , slackClientSecret = adminData.slackClientSecret
                     , openRouterKey = adminData.openRouterKey
                     , discordDmChannels = adminData.discordDmChannels
+                    , discordUsers = adminData.discordUsers
                     }
 
             IsNotAdminLoginData ->

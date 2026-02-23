@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -200,6 +200,26 @@ adminData model lastLogPageViewed =
                 }
             )
             model.discordDmChannels
+    , discordUsers =
+        SeqDict.map
+            (\_ discordUser ->
+                case discordUser of
+                    FullData data ->
+                        FullData_ForAdmin
+                            { user = data.user
+                            , linkedTo = data.linkedTo
+                            , icon = data.icon
+                            , linkedAt = data.linkedAt
+                            , isLoadingData = data.isLoadingData
+                            }
+
+                    BasicData data ->
+                        BasicData_ForAdmin data
+
+                    NeedsAuthAgain data ->
+                        NeedsAuthAgain_ForAdmin data
+            )
+            model.discordUsers
     }
 
 

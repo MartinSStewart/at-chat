@@ -22,6 +22,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Discord
 import Discord.Id
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -30,11 +31,12 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
+import FileStatus exposing (FileHash)
 import Html.Events
 import Icons
 import Id exposing (Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminStatus(..), LocalState, LogWithTime, PrivateVapidKey)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey)
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -56,7 +58,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser)
+import User exposing (AdminUiSection(..), BackendUser, DiscordUserLoadingData)
 
 
 type Msg
@@ -130,6 +132,7 @@ type alias InitAdminData =
         SeqDict
             (Discord.Id.Id Discord.Id.PrivateChannelId)
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
+    , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     }
 
 
@@ -784,6 +787,7 @@ view timezone adminData user model =
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
             , discordDmChannelsSection user adminData
+            , discordUsersSection user adminData
             , logSection timezone user model
             ]
         )
@@ -870,11 +874,7 @@ discordDmChannelsSection user adminData =
     section
         user.expandedSections
         DiscordDmChannelsSection
-        [ let
-            channels =
-                SeqDict.toList adminData.discordDmChannels
-          in
-          if List.isEmpty channels then
+        [ if SeqDict.isEmpty adminData.discordDmChannels then
             Ui.text "No Discord DM channels"
 
           else
@@ -885,19 +885,103 @@ discordDmChannelsSection user adminData =
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
                             [ Ui.text (Discord.Id.toString channelId)
-                            , Ui.text
-                                ("Members: "
-                                    ++ (NonemptySet.toList channel.members
-                                            |> List.map Discord.Id.toString
-                                            |> String.join ", "
-                                       )
-                                )
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text "Members:"
+                                , NonemptySet.toList channel.members
+                                    |> List.map
+                                        (\discordUserId ->
+                                            case SeqDict.get discordUserId adminData.discordUsers of
+                                                Just discordUser ->
+                                                    discordUserLabel discordUser
+
+                                                Nothing ->
+                                                    Ui.text (Discord.Id.toString discordUserId)
+                                        )
+                                    |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
+                                ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                             ]
                     )
-                    channels
+                    (SeqDict.toList adminData.discordDmChannels)
                 )
         ]
+
+
+discordUsersSection : BackendUser -> AdminData -> Element Msg
+discordUsersSection user adminData =
+    section
+        user.expandedSections
+        DiscordDmChannelsSection
+        [ if SeqDict.isEmpty adminData.discordUsers then
+            Ui.text "No Discord user"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( discordUserId, discordUser ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ Ui.el [ Ui.width (Ui.px 150) ] (Ui.text (Discord.Id.toString discordUserId))
+                            , discordUserLabel discordUser
+                            , Ui.el
+                                [ Ui.width (Ui.px 200) ]
+                                (case discordUser of
+                                    FullData_ForAdmin data ->
+                                        linkedToView adminData data.linkedTo
+
+                                    BasicData_ForAdmin data ->
+                                        Ui.none
+
+                                    NeedsAuthAgain_ForAdmin data ->
+                                        linkedToView adminData data.linkedTo
+                                )
+                            ]
+                    )
+                    (SeqDict.toList adminData.discordUsers)
+                )
+        ]
+
+
+discordUserLabel : DiscordUserData_ForAdmin -> Element msg
+discordUserLabel discordUser =
+    Ui.row
+        [ Ui.spacing 8, Ui.width Ui.shrink ]
+        [ User.profileImage
+            (case discordUser of
+                FullData_ForAdmin data ->
+                    data.icon
+
+                BasicData_ForAdmin data ->
+                    data.icon
+
+                NeedsAuthAgain_ForAdmin data ->
+                    data.icon
+            )
+        , Ui.el
+            [ Ui.width Ui.shrink ]
+            (case discordUser of
+                FullData_ForAdmin data ->
+                    Ui.text data.user.username
+
+                BasicData_ForAdmin data ->
+                    Ui.text data.user.username
+
+                NeedsAuthAgain_ForAdmin data ->
+                    Ui.text data.user.username
+            )
+        ]
+
+
+linkedToView : AdminData -> Id UserId -> Element msg
+linkedToView adminData userId =
+    case NonemptyDict.get userId adminData.users of
+        Just user ->
+            Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ] [ User.profileImage user.icon, Ui.text (PersonName.toString user.name) ]
+
+        Nothing ->
+            Ui.none
 
 
 addUserRowButtonId : HtmlId
