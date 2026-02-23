@@ -534,40 +534,33 @@ discordUserCard loaded discordUserId data =
                 Ui.none
 
               else
-                case data.isLoadingData of
-                    DiscordUserLoadingData _ ->
-                        Ui.el
-                            [ Ui.borderColor MyUi.buttonBorder
-                            , Ui.border 1
-                            , Ui.background MyUi.disabledButtonBackground
-                            , Ui.Font.color MyUi.font1
-                            , Ui.width Ui.shrink
-                            , Ui.paddingXY 12 6
-                            , Ui.rounded 4
-                            , Ui.Font.size 14
-                            ]
-                            (Ui.text "Loading user data...")
+                MyUi.elButton
+                    (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
+                    (case data.isLoadingData of
+                        DiscordUserLoadingData _ ->
+                            FrontendNoOp
 
-                    _ ->
-                        MyUi.elButton
-                            (Dom.id ("userOptions_relinkDiscord_" ++ PersonName.toString data.name))
-                            (PressedReloadDiscordUser discordUserId)
-                            [ Ui.borderColor MyUi.buttonBorder
-                            , Ui.border 1
-                            , Ui.background MyUi.buttonBackground
-                            , Ui.Font.color MyUi.font1
-                            , Ui.width Ui.shrink
-                            , Ui.paddingXY 12 6
-                            , Ui.rounded 4
-                            , Ui.Font.size 14
-                            ]
-                            (Ui.text "Reload user data")
+                        _ ->
+                            PressedReloadDiscordUser discordUserId
+                    )
+                    [ Ui.background MyUi.buttonBackground
+                    , Ui.Font.color MyUi.font1
+                    , Ui.width Ui.shrink
+                    , Ui.paddingXY 12 6
+                    , Ui.rounded 4
+                    , Ui.Font.size 14
+                    ]
+                    (case data.isLoadingData of
+                        DiscordUserLoadingData _ ->
+                            Ui.text "Loading user data..."
+
+                        _ ->
+                            Ui.text "Reload user data"
+                    )
             , MyUi.elButton
                 (Dom.id ("userOptions_unlinkDiscord_" ++ PersonName.toString data.name))
                 (PressedUnlinkDiscordUser discordUserId)
-                [ Ui.border 1
-                , Ui.borderColor (Ui.rgb 180 50 40)
-                , Ui.background MyUi.deleteButtonBackground
+                [ Ui.background MyUi.deleteButtonBackground
                 , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.width Ui.shrink
                 , Ui.paddingXY 12 6

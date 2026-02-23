@@ -570,7 +570,6 @@ type ToBackend
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
     | ImportDiscordGuildRequest DiscordExport
-    | ReloadDiscordUserRequest (Discord.Id.Id Discord.Id.UserId)
 
 
 type BackendMsg
@@ -608,6 +607,7 @@ type BackendMsg
         )
     | GotSlackOAuth Time.Posix (Id UserId) (Result Http.Error Slack.TokenResponse)
     | LinkDiscordUserStep1 Time.Posix ClientId (Id UserId) Discord.UserAuth (Result Discord.HttpError Discord.User)
+    | ReloadDiscordUserStep1 Time.Posix ClientId (Id UserId) (Discord.Id.Id Discord.Id.UserId) (Result Discord.HttpError Discord.User)
     | HandleReadyDataStep2
         Time.Posix
         (Discord.Id.Id Discord.Id.UserId)
@@ -738,6 +738,7 @@ type ServerChange
             , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordFrontendUser
             }
         )
+    | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
 
 
 type LocalChange
@@ -770,3 +771,4 @@ type LocalChange
     | Local_RegisterPushSubscription SubscribeData
     | Local_TextEditor TextEditor.LocalChange
     | Local_UnlinkDiscordUser (Discord.Id.Id Discord.Id.UserId)
+    | Local_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)

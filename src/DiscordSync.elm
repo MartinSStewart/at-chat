@@ -901,9 +901,6 @@ discordGetGuildChannel message guild =
                 replyTo : Maybe (Id ChannelMessageId)
                 replyTo =
                     referencedMessageToMessageId message channel
-
-                _ =
-                    Debug.log "discord msg created" ( message.referencedMessage, replyTo )
             in
             Just ( message.channelId, channel, NoThreadWithMaybeMessage replyTo )
 
@@ -921,9 +918,6 @@ discordGetGuildChannel message guild =
 
                                         Nothing ->
                                             Nothing
-
-                                _ =
-                                    Debug.log "discord msg created2" ( message.referencedMessage, replyTo )
                             in
                             ( channelId2
                             , channel
@@ -1175,9 +1169,6 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_UserCreatedMessage _ message ->
                             let
-                                _ =
-                                    Debug.log "message" (Discord.Id.toString message.channelId)
-
                                 ( model3, cmd2 ) =
                                     handleDiscordCreateMessage message model2
                             in
@@ -1605,9 +1596,7 @@ getDiscordGuildData auth gatewayGuild =
                     let
                         allThreads : List Discord.Channel
                         allThreads =
-                            gatewayGuild.threads
-                                ++ Debug.log "public" publicArchivedThreads
-                                ++ Debug.log "private" privateArchivedThreads
+                            gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
                     in
                     List.filterMap
                         (\thread ->

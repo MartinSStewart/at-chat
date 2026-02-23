@@ -3894,7 +3894,11 @@ updateLoaded msg model =
         PressedReloadDiscordUser discordUserId ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( loggedIn, ReloadDiscordUserRequest discordUserId |> Lamdera.sendToBackend )
+                    handleLocalChange
+                        model.time
+                        (Local_StartReloadingDiscordUser model.time discordUserId |> Just)
+                        loggedIn
+                        Command.none
                 )
                 model
 
@@ -5514,6 +5518,9 @@ changeUpdate localMsg local =
                 Local_UnlinkDiscordUser userId ->
                     unlinkDiscordUser userId local
 
+                Local_StartReloadingDiscordUser time discordUserId ->
+                    startReloadingDiscordUser time discordUserId local
+
         ServerChange serverChange ->
             case serverChange of
                 Server_SendMessage userId createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -6268,6 +6275,28 @@ changeUpdate localMsg local =
                                                 localUser.linkedDiscordUsers
                                     }
                             }
+
+                Server_StartReloadingDiscordUser time discordUserId ->
+                    startReloadingDiscordUser time discordUserId local
+
+
+startReloadingDiscordUser : Time.Posix -> Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
+startReloadingDiscordUser time discordUserId local =
+    let
+        localUser : LocalUser
+        localUser =
+            local.localUser
+    in
+    { local
+        | localUser =
+            { localUser
+                | linkedDiscordUsers =
+                    SeqDict.updateIfExists
+                        discordUserId
+                        (\user -> { user | isLoadingData = DiscordUserLoadingData time })
+                        localUser.linkedDiscordUsers
+            }
+    }
 
 
 unlinkDiscordUser : Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
@@ -7537,6 +7566,9 @@ pendingChangesText localChange =
 
         Local_UnlinkDiscordUser _ ->
             "Unlink Discord user"
+
+        Local_StartReloadingDiscordUser _ _ ->
+            "Reload Discord user"
 
 
 layout : LoadedFrontend -> List (Ui.Attribute FrontendMsg) -> Element FrontendMsg -> Html FrontendMsg

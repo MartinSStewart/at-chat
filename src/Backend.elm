@@ -317,10 +317,6 @@ update msg model =
                     )
 
                 Err error ->
-                    let
-                        _ =
-                            Debug.log "GotSlackChannels" error
-                    in
                     ( model, Command.none )
 
         SentDiscordGuildMessage _ changeId _ clientId _ _ _ _ _ _ result ->
@@ -527,61 +523,86 @@ update msg model =
             case result of
                 Ok discordUser ->
                     let
-                        isAlreadyLoading =
-                            case SeqDict.get discordUser.id model.discordUsers of
-                                Just (FullData discordUser2) ->
-                                    case discordUser2.isLoadingData of
-                                        DiscordUserLoadedSuccessfully ->
-                                            False
-
-                                        DiscordUserLoadingData posix ->
-                                            True
-
-                                        DiscordUserLoadingFailed posix ->
-                                            False
-
-                                _ ->
-                                    False
+                        backendUser : DiscordFullUserData
+                        backendUser =
+                            { auth = auth
+                            , user = discordUser
+                            , connection = Discord.init
+                            , linkedTo = userId
+                            , icon = Nothing
+                            , linkedAt = linkedAt
+                            , isLoadingData = DiscordUserLoadingData linkedAt
+                            }
                     in
-                    if isAlreadyLoading then
-                        ( model, Command.none )
-
-                    else
-                        let
-                            backendUser : DiscordFullUserData
-                            backendUser =
-                                { auth = auth
-                                , user = discordUser
-                                , connection = Discord.init
-                                , linkedTo = userId
-                                , icon = Nothing
-                                , linkedAt = linkedAt
-                                , isLoadingData = DiscordUserLoadingData linkedAt
-                                }
-                        in
-                        ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
-                        , Command.batch
-                            [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
-                            , Broadcast.toUser
-                                Nothing
-                                Nothing
-                                userId
-                                (Server_LinkDiscordUser
-                                    discordUser.id
-                                    (discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
-                                    |> ServerChange
-                                )
-                                model
-                            , Websocket.createHandle
-                                (WebsocketCreatedHandleForUser discordUser.id)
-                                Discord.websocketGatewayUrl
-                            ]
-                        )
+                    ( { model | discordUsers = SeqDict.insert discordUser.id (FullData backendUser) model.discordUsers }
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
+                        , Broadcast.toUser
+                            Nothing
+                            Nothing
+                            userId
+                            (Server_LinkDiscordUser
+                                discordUser.id
+                                (discordFullDataUserToFrontendCurrentUser False backendUser backendUser.isLoadingData)
+                                |> ServerChange
+                            )
+                            model
+                        , Websocket.createHandle
+                            (WebsocketCreatedHandleForUser discordUser.id)
+                            Discord.websocketGatewayUrl
+                        ]
+                    )
 
                 Err error ->
                     ( model
                     , Lamdera.sendToFrontend clientId (LinkDiscordResponse (Err error))
                     )
+
+        ReloadDiscordUserStep1 time clientId userId discordUserId result ->
+            case ( SeqDict.get discordUserId model.discordUsers, result ) of
+                ( Just (FullData discordUser), Ok discordUserData ) ->
+                    let
+                        discordUser2 : DiscordFullUserData
+                        discordUser2 =
+                            { discordUser | user = discordUserData }
+                    in
+                    ( { model | discordUsers = SeqDict.insert discordUserId (FullData discordUser2) model.discordUsers }
+                    , Command.batch
+                        [ Lamdera.sendToFrontend clientId (LinkDiscordResponse (Ok ()))
+                        , Broadcast.toUser
+                            Nothing
+                            Nothing
+                            userId
+                            (Server_LinkDiscordUser
+                                discordUserId
+                                (discordFullDataUserToFrontendCurrentUser False discordUser2 discordUser2.isLoadingData)
+                                |> ServerChange
+                            )
+                            model
+                        , Websocket.createHandle
+                            (WebsocketCreatedHandleForUser discordUserId)
+                            Discord.websocketGatewayUrl
+                        ]
+                    )
+
+                ( Just (FullData discordUser), Err _ ) ->
+                    ( { model
+                        | discordUsers =
+                            SeqDict.insert
+                                discordUserId
+                                (FullData { discordUser | isLoadingData = DiscordUserLoadingFailed time })
+                                model.discordUsers
+                      }
+                    , Broadcast.toUser
+                        Nothing
+                        Nothing
+                        userId
+                        (Server_DiscordUserLoadingDataIsDone discordUserId (Err time) |> ServerChange)
+                        model
+                    )
+
+                _ ->
+                    ( model, Command.none )
 
         HandleReadyDataStep2 time discordUserId result ->
             case SeqDict.get discordUserId model.discordUsers of
@@ -685,26 +706,26 @@ update msg model =
                         model
 
         WebsocketCreatedHandleForUser discordUserId connection ->
-            ( { model
-                | discordUsers =
-                    SeqDict.updateIfExists
-                        discordUserId
-                        (\userData ->
-                            case userData of
-                                FullData userData2 ->
-                                    { userData2 | connection = Discord.createdHandle connection userData2.connection }
-                                        |> FullData
+            case SeqDict.get discordUserId model.discordUsers of
+                Just (FullData data) ->
+                    ( { model
+                        | discordUsers =
+                            SeqDict.insert
+                                discordUserId
+                                (FullData { data | connection = Discord.createdHandle connection data.connection })
+                                model.discordUsers
+                      }
+                    , case data.connection.websocketHandle of
+                        Just connection2 ->
+                            Websocket.close connection2
+                                |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
 
-                                BasicData _ ->
-                                    userData
+                        Nothing ->
+                            Command.none
+                    )
 
-                                NeedsAuthAgain _ ->
-                                    userData
-                        )
-                        model.discordUsers
-              }
-            , Command.none
-            )
+                _ ->
+                    ( model, Command.none )
 
         WebsocketClosedByBackendForUser discordUserId reopen ->
             ( model
@@ -1402,9 +1423,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 thread =
                                                                     SeqDict.get threadId channel.threads
                                                                         |> Maybe.withDefault Thread.discordBackendInit
-
-                                                                _ =
-                                                                    Debug.log "messageId" (Discord.Id.toString messageId)
 
                                                                 discordThreadId : Discord.Id.Id Discord.Id.ChannelId
                                                                 discordThreadId =
@@ -3380,6 +3398,56 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     ( model, invalidChangeResponse changeId clientId )
                         )
 
+                Local_StartReloadingDiscordUser _ discordUserId ->
+                    asDiscordUser
+                        model
+                        sessionId
+                        discordUserId
+                        (\session discordUser _ ->
+                            let
+                                isAlreadyLoading : Bool
+                                isAlreadyLoading =
+                                    case SeqDict.get discordUserId model.discordUsers of
+                                        Just (FullData discordUser2) ->
+                                            case discordUser2.isLoadingData of
+                                                DiscordUserLoadedSuccessfully ->
+                                                    False
+
+                                                DiscordUserLoadingData posix ->
+                                                    True
+
+                                                DiscordUserLoadingFailed posix ->
+                                                    False
+
+                                        _ ->
+                                            False
+                            in
+                            if isAlreadyLoading then
+                                ( model, invalidChangeResponse changeId clientId )
+
+                            else
+                                let
+                                    backendUser : DiscordFullUserData
+                                    backendUser =
+                                        { discordUser | isLoadingData = DiscordUserLoadingData time }
+                                in
+                                ( { model | discordUsers = SeqDict.insert discordUserId (FullData backendUser) model.discordUsers }
+                                , Command.batch
+                                    [ LocalChangeResponse changeId (Local_StartReloadingDiscordUser time discordUserId)
+                                        |> Lamdera.sendToFrontend clientId
+                                    , Broadcast.toUser
+                                        (Just clientId)
+                                        Nothing
+                                        session.userId
+                                        (Server_StartReloadingDiscordUser time discordUserId |> ServerChange)
+                                        model
+                                    , Discord.getCurrentUserPayload (Discord.userToken discordUser.auth)
+                                        |> DiscordSync.http
+                                        |> Task.attempt (ReloadDiscordUserStep1 time clientId session.userId discordUserId)
+                                    ]
+                                )
+                        )
+
         TwoFactorToBackend toBackend2 ->
             asUser
                 model
@@ -3591,19 +3659,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 users
                       }
                     , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
-                    )
-                )
-
-        ReloadDiscordUserRequest discordUserId ->
-            asDiscordUser
-                model
-                sessionId
-                discordUserId
-                (\session discordUser _ ->
-                    ( model
-                    , Discord.getCurrentUserPayload (Discord.userToken discordUser.auth)
-                        |> DiscordSync.http
-                        |> Task.attempt (LinkDiscordUserStep1 time clientId session.userId discordUser.auth)
                     )
                 )
 
