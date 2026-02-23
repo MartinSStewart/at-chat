@@ -6,9 +6,7 @@ module CodecExtra exposing
     , oneToOne
     , quantityInt
     , seqDict
-    , seqSet
     , timePosix
-    , uint64
     )
 
 import Codec exposing (Codec)
@@ -19,7 +17,6 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import Quantity exposing (Quantity)
 import SeqDict exposing (SeqDict)
-import SeqSet exposing (SeqSet)
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64 exposing (UInt64)
 
@@ -75,11 +72,6 @@ seqDict keyCodec valueCodec =
         SeqDict.fromList
         SeqDict.toList
         (Codec.list (Codec.tuple keyCodec valueCodec))
-
-
-seqSet : Codec a -> Codec (SeqSet a)
-seqSet itemCodec =
-    Codec.map SeqSet.fromList SeqSet.toList (Codec.list itemCodec)
 
 
 nonempty : Codec a -> Codec (Nonempty a)

@@ -316,7 +316,7 @@ update msg model =
                     , Command.none
                     )
 
-                Err error ->
+                Err _ ->
                     ( model, Command.none )
 
         SentDiscordGuildMessage _ changeId _ clientId _ _ _ _ _ _ result ->
@@ -3413,10 +3413,10 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 DiscordUserLoadedSuccessfully ->
                                                     False
 
-                                                DiscordUserLoadingData posix ->
+                                                DiscordUserLoadingData _ ->
                                                     True
 
-                                                DiscordUserLoadingFailed posix ->
+                                                DiscordUserLoadingFailed _ ->
                                                     False
 
                                         _ ->

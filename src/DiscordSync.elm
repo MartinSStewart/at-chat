@@ -19,7 +19,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task exposing (Task)
-import Effect.Time
+import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (Emoji)
 import Env
@@ -1502,8 +1502,8 @@ handleReadyData userAuth readyData model =
                 |> Task.sequence
             )
             (List.map (getDiscordGuildData auth) readyData.guilds |> Task.sequence)
-            |> Task.andThen (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Effect.Time.now)
-            |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Effect.Time.now)
+            |> Task.andThen (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Time.now)
+            |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Time.now)
             |> Task.perform identity
         ]
     )

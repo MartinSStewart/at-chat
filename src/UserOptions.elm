@@ -576,7 +576,7 @@ discordUserCard loaded discordUserId data =
             DiscordUserLoadedSuccessfully ->
                 Ui.none
 
-            DiscordUserLoadingData posix ->
+            DiscordUserLoadingData _ ->
                 Ui.none
         ]
 
