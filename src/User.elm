@@ -299,6 +299,7 @@ type EmailNotifications
 type AdminUiSection
     = UsersSection
     | LogSection
+    | DiscordDmChannelsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -309,6 +310,9 @@ sectionToString section2 =
 
         LogSection ->
             "Logs"
+
+        DiscordDmChannelsSection ->
+            "Discord DM channels"
 
 
 {-| User containing only publicly visible data

@@ -96,6 +96,7 @@ import Log exposing (Log)
 import Maybe.Extra
 import Message exposing (Message(..), MessageState(..), UserTextMessageData)
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import RichText exposing (RichText)
@@ -391,6 +392,10 @@ type alias AdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , discordDmChannels :
+        SeqDict
+            (Discord.Id.Id Discord.Id.PrivateChannelId)
+            { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     }
 
 

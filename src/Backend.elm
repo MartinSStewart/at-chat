@@ -192,6 +192,14 @@ adminData model lastLogPageViewed =
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
     , openRouterKey = model.openRouterKey
+    , discordDmChannels =
+        SeqDict.map
+            (\_ channel ->
+                { members = channel.members
+                , messageCount = Array.length channel.messages
+                }
+            )
+            model.discordDmChannels
     }
 
 

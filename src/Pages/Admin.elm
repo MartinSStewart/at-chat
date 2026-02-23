@@ -22,6 +22,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Discord.Id
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -37,6 +38,7 @@ import LocalState exposing (AdminData, AdminStatus(..), LocalState, LogWithTime,
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
+import NonemptySet exposing (NonemptySet)
 import Pagination exposing (Pagination)
 import PersonName
 import Ports
@@ -124,6 +126,10 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
+    , discordDmChannels :
+        SeqDict
+            (Discord.Id.Id Discord.Id.PrivateChannelId)
+            { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     }
 
 
@@ -777,6 +783,7 @@ view timezone adminData user model =
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
+            , discordDmChannelsSection user adminData
             , logSection timezone user model
             ]
         )
@@ -855,6 +862,41 @@ userSection user adminData model =
                         ]
                    )
             )
+        ]
+
+
+discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
+discordDmChannelsSection user adminData =
+    section
+        user.expandedSections
+        DiscordDmChannelsSection
+        [ let
+            channels =
+                SeqDict.toList adminData.discordDmChannels
+          in
+          if List.isEmpty channels then
+            Ui.text "No Discord DM channels"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( channelId, channel ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ Ui.text (Discord.Id.toString channelId)
+                            , Ui.text
+                                ("Members: "
+                                    ++ (NonemptySet.toList channel.members
+                                            |> List.map Discord.Id.toString
+                                            |> String.join ", "
+                                       )
+                                )
+                            , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            ]
+                    )
+                    channels
+                )
         ]
 
 
