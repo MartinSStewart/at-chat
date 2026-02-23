@@ -60,6 +60,7 @@ module MyUi exposing
     , secondaryGrayBorder
     , simpleButton
     , textLinkColor
+    , textLinkColorOnDarkBackground
     , timeElapsedView
     , timestamp
     , userLabelHtml
@@ -407,6 +408,11 @@ unselectedGray =
 textLinkColor : Ui.Color
 textLinkColor =
     Ui.rgb 66 93 203
+
+
+textLinkColorOnDarkBackground : Ui.Color
+textLinkColorOnDarkBackground =
+    Ui.rgb 137 157 241
 
 
 emailAddress : EmailAddress -> Element msg

@@ -23,6 +23,7 @@ import Ui exposing (Element)
 import Ui.Events
 import Ui.Font
 import Ui.Input
+import Ui.Prose
 import User exposing (DiscordFrontendCurrentUser, DiscordUserLoadingData(..))
 import UserAgent exposing (Browser(..), Device(..), UserAgent)
 import UserSession exposing (NotificationMode(..), PushSubscription(..))
@@ -383,11 +384,21 @@ view isMobile time local loggedIn loaded model =
                         [ Ui.spacing 16 ]
                         [ Ui.column
                             [ Ui.spacing 4 ]
-                            [ Ui.text "To link your Discord account:"
-                            , Ui.text "1. Copy the bookmarklet URL below"
-                            , Ui.text "2. Create a new bookmark in your browser"
-                            , Ui.text "3. Paste the URL as the bookmark address"
-                            , Ui.text "4. Open Discord in your browser and click the bookmark"
+                            [ Ui.text "To link your Discord account:\n"
+                            , Ui.text "1. Copy the bookmarklet URL below\n"
+                            , Ui.text "2. Create a new bookmark in your browser\n"
+                            , Ui.text "3. Paste the URL as the bookmark address\n"
+                            , Ui.Prose.paragraph
+                                [ Ui.paddingXY 0 5 ]
+                                [ Ui.text "4. Go to "
+                                , Ui.el
+                                    [ Ui.Font.color MyUi.textLinkColorOnDarkBackground
+                                    , Ui.Font.underline
+                                    , Ui.linkNewTab "https://discord.com/app"
+                                    ]
+                                    (Ui.text "discord.com/app")
+                                , Ui.text " in your browser and click the bookmark"
+                                ]
                             ]
                         , Ui.column
                             [ Ui.spacing 2, Ui.widthMax 400 ]
