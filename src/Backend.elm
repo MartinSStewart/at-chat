@@ -4127,6 +4127,18 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.DeleteDiscordDmChannel channelId ->
+            let
+                model2 =
+                    { model | discordDmChannels = SeqDict.remove channelId model.discordDmChannels }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
 
 sendDirectMessage :
     BackendModel

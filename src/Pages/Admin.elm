@@ -83,6 +83,7 @@ type Msg
     | UserTableMsg Table.Msg
     | ToggledEmailNotifications Bool
     | ToggleIsAdmin UserTableId Bool
+    | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
 
 
 type ToBackend
@@ -151,6 +152,7 @@ type AdminChange
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
+    | DeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
 
 
 type alias EditedBackendUser =
@@ -259,6 +261,9 @@ updateAdmin changedBy change adminData local =
 
         SetOpenRouterKey openRouterKey ->
             { local | adminData = IsAdmin { adminData | openRouterKey = openRouterKey } }
+
+        DeleteDiscordDmChannel channelId ->
+            { local | adminData = IsAdmin { adminData | discordDmChannels = SeqDict.remove channelId adminData.discordDmChannels } }
 
 
 update :
@@ -615,6 +620,9 @@ update navigationKey time adminData localState msg model =
                 )
                 model
 
+        PressedDeleteDiscordDmChannel channelId ->
+            ( model, Command.none, Just (DeleteDiscordDmChannel channelId) )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -772,6 +780,11 @@ deleteUserButtonId userTableId =
     "Admin_deleteUserButton_" ++ userTableIdToDomId userTableId |> Dom.id
 
 
+deleteDiscordDmChannelButtonId : Discord.Id.Id Discord.Id.PrivateChannelId -> HtmlId
+deleteDiscordDmChannelButtonId channelId =
+    "Admin_deleteDiscordDmChannelButton_" ++ Discord.Id.toString channelId |> Dom.id
+
+
 view : Time.Zone -> AdminData -> BackendUser -> Model -> Element Msg
 view timezone adminData user model =
     Ui.el
@@ -884,7 +897,8 @@ discordDmChannelsSection user adminData =
                     (\( channelId, channel ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.text (Discord.Id.toString channelId)
+                            [ MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
+                            , Ui.text (Discord.Id.toString channelId)
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
