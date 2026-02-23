@@ -7483,6 +7483,9 @@ pendingChangesText localChange =
                 Pages.Admin.SetOpenRouterKey _ ->
                     "Set OpenRouter key"
 
+                Pages.Admin.DeleteDiscordDmChannel _ ->
+                    "Deleted Discord DM channel"
+
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
 
