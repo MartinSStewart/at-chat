@@ -5160,17 +5160,18 @@ encodeUserGatewayCommand gatewayCommand =
                 [ ( "op", JE.int 2 )
                 , ( "d"
                   , [ ( "token", authToken.token |> JE.string )
-                    , ( "properties", SafeJson.encoder authToken.xSuperProperties )
-                    , ( "presence"
-                      , JE.object
-                            [ ( "status", JE.string "unknown" )
-                            , ( "since", JE.int 0 )
-                            , ( "activities", JE.list identity [] )
-                            , ( "afk", JE.bool False )
-                            ]
-                      )
-                    , ( "client_state", JE.object [ ( "guild_versions", JE.object [] ) ] )
                     , ( "capabilities", JE.int 1734653 )
+                    , ( "properties", SafeJson.encoder authToken.xSuperProperties )
+
+                    --, ( "presence"
+                    --  , JE.object
+                    --        [ ( "status", JE.string "unknown" )
+                    --        , ( "since", JE.int 0 )
+                    --        , ( "activities", JE.list identity [] )
+                    --        , ( "afk", JE.bool False )
+                    --        ]
+                    --  )
+                    , ( "client_state", JE.object [ ( "guild_versions", JE.object [] ) ] )
                     ]
                         |> JE.object
                   )
