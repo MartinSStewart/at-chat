@@ -301,6 +301,7 @@ type AdminUiSection
     | LogSection
     | DiscordDmChannelsSection
     | DiscordUsersSection
+    | DiscordGuildsSection
 
 
 sectionToString : AdminUiSection -> String
@@ -317,6 +318,9 @@ sectionToString section2 =
 
         DiscordUsersSection ->
             "Discord users"
+
+        DiscordGuildsSection ->
+            "Discord guilds"
 
 
 {-| User containing only publicly visible data

@@ -399,6 +399,10 @@ type alias AdminData =
             (Discord.Id.Id Discord.Id.PrivateChannelId)
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
+    , discordGuilds :
+        SeqDict
+            (Discord.Id.Id Discord.Id.GuildId)
+            { name : GuildName, channelCount : Int, memberCount : Int }
     }
 
 

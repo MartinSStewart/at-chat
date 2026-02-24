@@ -32,6 +32,7 @@ import Effect.Time as Time
 import EmailAddress
 import Env
 import FileStatus exposing (FileHash)
+import GuildName
 import Html.Events
 import Icons
 import Id exposing (Id, UserId)
@@ -134,6 +135,10 @@ type alias InitAdminData =
             (Discord.Id.Id Discord.Id.PrivateChannelId)
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
+    , discordGuilds :
+        SeqDict
+            (Discord.Id.Id Discord.Id.GuildId)
+            { name : GuildName.GuildName, channelCount : Int, memberCount : Int }
     }
 
 
@@ -799,6 +804,7 @@ view timezone adminData user model =
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
+            , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
             , logSection timezone user model
@@ -879,6 +885,32 @@ userSection user adminData model =
                         ]
                    )
             )
+        ]
+
+
+discordGuildsSection : BackendUser -> AdminData -> Element Msg
+discordGuildsSection user adminData =
+    section
+        user.expandedSections
+        DiscordGuildsSection
+        [ if SeqDict.isEmpty adminData.discordGuilds then
+            Ui.text "No Discord guilds"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( guildId, guild ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ Ui.text (Discord.Id.toString guildId)
+                            , Ui.text (GuildName.toString guild.name)
+                            , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
+                            , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                            ]
+                    )
+                    (SeqDict.toList adminData.discordGuilds)
+                )
         ]
 
 

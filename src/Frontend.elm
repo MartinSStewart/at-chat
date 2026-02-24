@@ -445,6 +445,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , openRouterKey = adminData.openRouterKey
                     , discordDmChannels = adminData.discordDmChannels
                     , discordUsers = adminData.discordUsers
+                    , discordGuilds = adminData.discordGuilds
                     }
 
             IsNotAdminLoginData ->
