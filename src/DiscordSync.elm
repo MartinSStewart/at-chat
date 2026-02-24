@@ -5,6 +5,7 @@ module DiscordSync exposing
     , discordUserToPartialUser
     , discordUserWebsocketMsg
     , handleDiscordCreateMessage
+    , handleDiscordEditMessage
     , http
     )
 
@@ -175,9 +176,10 @@ handleDiscordRemoveReactionForEmoji _ model =
 
 handleDiscordDmEditMessage :
     Discord.UserMessageUpdate
+    -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordDmEditMessage edit model =
+handleDiscordDmEditMessage edit attachments model =
     let
         channelId =
             Discord.Id.toUInt64 edit.channelId |> Discord.Id.fromUInt64
@@ -189,7 +191,7 @@ handleDiscordDmEditMessage edit model =
                     let
                         richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
                         richText =
-                            RichText.fromDiscord edit.content
+                            RichText.fromDiscord edit.content attachments
                     in
                     case
                         LocalState.editMessageHelperNoThread
@@ -270,13 +272,14 @@ handleDiscordGuildEditMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> DiscordBackendGuild
     -> Discord.UserMessageUpdate
+    -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordGuildEditMessage guildId guild edit model =
+handleDiscordGuildEditMessage guildId guild edit attachments model =
     let
         richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
         richText =
-            RichText.fromDiscord edit.content
+            RichText.fromDiscord edit.content attachments
     in
     case SeqDict.get edit.channelId guild.channels of
         Just channel ->
@@ -635,7 +638,7 @@ messagesAndLinks messages =
             ( UserTextMessage
                 { createdAt = message.timestamp
                 , createdBy = message.author.id
-                , content = RichText.fromDiscord message.content
+                , content = RichText.fromDiscord message.content SeqDict.empty
                 , reactions = SeqDict.empty
                 , editedAt = Nothing
                 , repliedTo = Nothing
@@ -802,9 +805,7 @@ handleDiscordCreateMessage message attachments model =
                             let
                                 richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
                                 richText =
-                                    NonemptyExtra.appendList
-                                        (RichText.fromDiscord message.content)
-                                        (SeqDict.keys attachments |> List.map RichText.AttachedFile)
+                                    RichText.fromDiscord message.content attachments
 
                                 replyTo : Maybe (Id ChannelMessageId)
                                 replyTo =
@@ -900,7 +901,7 @@ handleDiscordCreateMessage message attachments model =
                             ( model, Command.none )
 
                 Included discordGuildId ->
-                    handleDiscordCreateGuildMessage discordGuildId message model
+                    handleDiscordCreateGuildMessage discordGuildId message attachments model
 
 
 discordGetGuildChannel :
@@ -947,9 +948,10 @@ discordGetGuildChannel message guild =
 handleDiscordCreateGuildMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> Discord.Message
+    -> SeqDict (Id FileId) FileData
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleDiscordCreateGuildMessage discordGuildId message model =
+handleDiscordCreateGuildMessage discordGuildId message attachments model =
     case SeqDict.get discordGuildId model.discordGuilds of
         Just guild ->
             case discordGetGuildChannel message guild of
@@ -957,7 +959,7 @@ handleDiscordCreateGuildMessage discordGuildId message model =
                     let
                         richText : Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
                         richText =
-                            RichText.fromDiscord message.content
+                            RichText.fromDiscord message.content attachments
 
                         threadOrChannelId : Discord.Id.Id Discord.Id.ChannelId
                         threadOrChannelId =
@@ -1008,7 +1010,7 @@ handleDiscordCreateGuildMessage discordGuildId message model =
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
                                             , repliedTo = maybeReplyTo
-                                            , attachedFiles = SeqDict.empty
+                                            , attachedFiles = attachments
                                             }
                                         )
                                         channel
@@ -1023,7 +1025,7 @@ handleDiscordCreateGuildMessage discordGuildId message model =
                                             , reactions = SeqDict.empty
                                             , editedAt = Nothing
                                             , repliedTo = maybeReplyTo
-                                            , attachedFiles = SeqDict.empty
+                                            , attachedFiles = attachments
                                             }
                                         )
                                         channel
@@ -1190,22 +1192,10 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     ( model3, cmd2 :: cmds )
 
                                 attachments ->
-                                    let
-                                        cmd2 : Command BackendOnly toMsg BackendMsg
-                                        cmd2 =
-                                            List.map
-                                                (\attachment ->
-                                                    FileStatus.uploadUrl
-                                                        backendSessionIdHash
-                                                        attachment.url
-                                                        |> Task.map (\uploadResponse -> Ok ( attachment, uploadResponse ))
-                                                        |> Task.onError (\error -> Task.succeed (Err error))
-                                                )
-                                                attachments
-                                                |> Task.sequence
-                                                |> Task.perform (DiscordDmAttachmentUploaded message)
-                                    in
-                                    ( model2, cmd2 :: cmds )
+                                    ( model2
+                                    , Task.perform (DiscordMessageCreate_AttachmentsUploaded message) (loadMessageAttachments attachments)
+                                        :: cmds
+                                    )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -1222,21 +1212,19 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserEditedMessage edit ->
-                            let
-                                ( model3, cmd2 ) =
-                                    case edit.guildId of
-                                        Included guildId ->
-                                            case SeqDict.get guildId model2.discordGuilds of
-                                                Just guild ->
-                                                    handleDiscordGuildEditMessage guildId guild edit model2
+                            case edit.attachments of
+                                [] ->
+                                    let
+                                        ( model3, cmd2 ) =
+                                            handleDiscordEditMessage edit SeqDict.empty model2
+                                    in
+                                    ( model3, cmd2 :: cmds )
 
-                                                Nothing ->
-                                                    ( model2, Command.none )
-
-                                        Missing ->
-                                            handleDiscordDmEditMessage edit model2
-                            in
-                            ( model3, cmd2 :: cmds )
+                                attachments ->
+                                    ( model2
+                                    , Task.perform (DiscordMessageUpdate_AttachmentsUploaded edit) (loadMessageAttachments attachments)
+                                        :: cmds
+                                    )
 
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
@@ -1314,6 +1302,41 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleDiscordEditMessage :
+    Discord.UserMessageUpdate
+    -> SeqDict (Id FileId) FileData
+    -> BackendModel
+    -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleDiscordEditMessage edit attachments model2 =
+    case edit.guildId of
+        Included guildId ->
+            case SeqDict.get guildId model2.discordGuilds of
+                Just guild ->
+                    handleDiscordGuildEditMessage guildId guild edit attachments model2
+
+                Nothing ->
+                    ( model2, Command.none )
+
+        Missing ->
+            handleDiscordDmEditMessage edit attachments model2
+
+
+loadMessageAttachments :
+    List Discord.Attachment
+    -> Task BackendOnly x (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
+loadMessageAttachments attachments =
+    List.map
+        (\attachment ->
+            FileStatus.uploadUrl
+                backendSessionIdHash
+                attachment.url
+                |> Task.map (\uploadResponse -> Ok ( attachment, uploadResponse ))
+                |> Task.onError (\error -> Task.succeed (Err error))
+        )
+        attachments
+        |> Task.sequence
 
 
 handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )

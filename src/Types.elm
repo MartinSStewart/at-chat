@@ -627,7 +627,8 @@ type BackendMsg
     | WebsocketCreatedHandleForUser (Discord.Id.Id Discord.Id.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id.Id Discord.Id.UserId) Bool
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
-    | DiscordDmAttachmentUploaded Discord.Message (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
+    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
+    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
 
 
 type LoginResult

@@ -787,41 +787,46 @@ update msg model =
                     in
                     ( model, Command.none )
 
-        DiscordDmAttachmentUploaded message results ->
-            let
-                attachments : SeqDict (Id FileId) FileData
-                attachments =
-                    List.filterMap
-                        (\result ->
-                            case result of
-                                Ok ( attachment, { imageSize, fileHash } ) ->
-                                    { fileName = FileName.fromString attachment.filename
-                                    , fileSize = attachment.size
-                                    , imageMetadata = imageSize
-                                    , contentType =
-                                        case attachment.contentType of
-                                            Included contentType ->
-                                                FileStatus.contentType contentType
+        DiscordMessageCreate_AttachmentsUploaded message results ->
+            DiscordSync.handleDiscordCreateMessage message (attachmentsUploadedHelper results) model
 
-                                            Missing ->
-                                                case imageSize of
-                                                    Just _ ->
-                                                        FileStatus.webpContent
+        DiscordMessageUpdate_AttachmentsUploaded message results ->
+            DiscordSync.handleDiscordEditMessage message (attachmentsUploadedHelper results) model
 
-                                                    Nothing ->
-                                                        FileStatus.unknownContentType
-                                    , fileHash = fileHash
-                                    }
-                                        |> Just
 
-                                Err _ ->
-                                    Nothing
-                        )
-                        results
-                        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
-                        |> SeqDict.fromList
-            in
-            DiscordSync.handleDiscordCreateMessage message attachments model
+attachmentsUploadedHelper :
+    List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse ))
+    -> SeqDict (Id FileId) FileData
+attachmentsUploadedHelper results =
+    List.filterMap
+        (\result ->
+            case result of
+                Ok ( attachment, { imageSize, fileHash } ) ->
+                    { fileName = FileName.fromString attachment.filename
+                    , fileSize = attachment.size
+                    , imageMetadata = imageSize
+                    , contentType =
+                        case attachment.contentType of
+                            Included contentType ->
+                                FileStatus.contentType contentType
+
+                            Missing ->
+                                case imageSize of
+                                    Just _ ->
+                                        FileStatus.webpContent
+
+                                    Nothing ->
+                                        FileStatus.unknownContentType
+                    , fileHash = fileHash
+                    }
+                        |> Just
+
+                Err _ ->
+                    Nothing
+        )
+        results
+        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+        |> SeqDict.fromList
 
 
 updateFromFrontend :

@@ -382,9 +382,15 @@ uploadUrl : SessionIdHash -> String -> Task restriction Http.Error UploadRespons
 uploadUrl sessionId url =
     Http.task
         { method = "POST"
-        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
+        , headers = []
         , url = domain ++ "/file/upload-url"
-        , body = Http.jsonBody (Json.Encode.object [ ( "url", Json.Encode.string url ) ])
+        , body =
+            Http.jsonBody
+                (Json.Encode.object
+                    [ ( "url", Json.Encode.string url )
+                    , ( "sid", Json.Encode.string (SessionIdHash.toString sessionId) )
+                    ]
+                )
         , resolver = resolver uploadResponseCodec
         , timeout = Just (Duration.seconds 30)
         }

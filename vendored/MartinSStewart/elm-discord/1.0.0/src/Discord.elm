@@ -4518,6 +4518,7 @@ type alias UserMessageUpdate =
     , author : User
     , content : String
     , timestamp : Time.Posix
+    , attachments : List Attachment
     }
 
 
@@ -4530,6 +4531,7 @@ decodeUserMessageUpdate =
         |> JD.andMap (JD.field "author" decodeUser)
         |> JD.andMap (JD.field "content" JD.string)
         |> JD.andMap (JD.field "timestamp" Iso8601.decoder)
+        |> JD.andMap (JD.field "attachments" (JD.list decodeAttachment))
 
 
 decodeGatewayEvent : (String -> JD.Decoder event) -> JD.Decoder (GatewayEvent event)
