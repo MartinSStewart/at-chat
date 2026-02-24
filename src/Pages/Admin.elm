@@ -138,7 +138,7 @@ type alias InitAdminData =
     , discordGuilds :
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName.GuildName, channelCount : Int, memberCount : Int }
+            { name : GuildName.GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
     }
 
 
@@ -905,6 +905,16 @@ discordGuildsSection user adminData =
                             [ Ui.spacing 8, Ui.Font.size 14 ]
                             [ Ui.text (Discord.Id.toString guildId)
                             , Ui.text (GuildName.toString guild.name)
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text "Owner:"
+                                , case SeqDict.get guild.owner adminData.discordUsers of
+                                    Just discordUser ->
+                                        discordUserLabel discordUser
+
+                                    Nothing ->
+                                        Ui.text (Discord.Id.toString guild.owner)
+                                ]
                             , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
                             , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
                             ]

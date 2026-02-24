@@ -226,6 +226,7 @@ adminData model lastLogPageViewed =
                 { name = guild.name
                 , channelCount = SeqDict.size guild.channels
                 , memberCount = SeqDict.size guild.members
+                , owner = guild.owner
                 }
             )
             model.discordGuilds

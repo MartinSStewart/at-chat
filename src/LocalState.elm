@@ -402,7 +402,7 @@ type alias AdminData =
     , discordGuilds :
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName, channelCount : Int, memberCount : Int }
+            { name : GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
     }
 
 
