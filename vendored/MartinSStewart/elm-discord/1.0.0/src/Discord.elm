@@ -2784,6 +2784,7 @@ type alias Attachment =
     , proxyUrl : String
     , height : Maybe Int
     , width : Maybe Int
+    , contentType : OptionalData String
     }
 
 
@@ -3399,6 +3400,7 @@ decodeAttachment =
             (decodeOptionalData "width" (JD.nullable JD.int)
                 |> JD.map flattenMaybeOptional
             )
+        |> JD.andMap (decodeOptionalData "content_type" JD.string)
 
 
 flattenMaybeOptional : OptionalData (Maybe a) -> Maybe a

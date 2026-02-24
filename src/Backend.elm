@@ -28,6 +28,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
+import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -785,6 +786,42 @@ update msg model =
                             Debug.log "WebsocketSentDataForUser" ( discordUserId, "ConnectionClosed" )
                     in
                     ( model, Command.none )
+
+        DiscordDmAttachmentUploaded message results ->
+            let
+                attachments : SeqDict (Id FileId) FileData
+                attachments =
+                    List.filterMap
+                        (\result ->
+                            case result of
+                                Ok ( attachment, { imageSize, fileHash } ) ->
+                                    { fileName = FileName.fromString attachment.filename
+                                    , fileSize = attachment.size
+                                    , imageMetadata = imageSize
+                                    , contentType =
+                                        case attachment.contentType of
+                                            Included contentType ->
+                                                FileStatus.contentType contentType
+
+                                            Missing ->
+                                                case imageSize of
+                                                    Just _ ->
+                                                        FileStatus.webpContent
+
+                                                    Nothing ->
+                                                        FileStatus.unknownContentType
+                                    , fileHash = fileHash
+                                    }
+                                        |> Just
+
+                                Err _ ->
+                                    Nothing
+                        )
+                        results
+                        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+                        |> SeqDict.fromList
+            in
+            DiscordSync.handleDiscordCreateMessage message attachments model
 
 
 updateFromFrontend :

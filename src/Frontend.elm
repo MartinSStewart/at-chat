@@ -4363,7 +4363,7 @@ gotFiles guildOrDmId files model =
                                                 ++ Id.toString id
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.upload
+                                    , FileStatus.uploadFile
                                         (GotFileHashName guildOrDmId id)
                                         local.localUser.session.sessionIdHash
                                         guildOrDmId
@@ -4398,7 +4398,7 @@ gotFiles guildOrDmId files model =
                                         id =
                                             Id.fromInt (index + 1)
                                     in
-                                    FileStatus.upload
+                                    FileStatus.uploadFile
                                         (GotFileHashName guildOrDmId id)
                                         local.localUser.session.sessionIdHash
                                         guildOrDmId
@@ -4472,7 +4472,7 @@ editMessage_gotFiles guildOrDmId files model =
                                                 ++ Id.toString fileId
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.upload
+                                    , FileStatus.uploadFile
                                         (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
                                         (Local.model loggedIn.localState).localUser.session.sessionIdHash
                                         guildOrDmId
