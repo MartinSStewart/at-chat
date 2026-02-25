@@ -528,11 +528,12 @@ handleDiscordDeleteDmMessage discordChannelId discordMessageId model =
 
 
 addDiscordChannel :
-    SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
+    SeqDict String DiscordAttachmentData
+    -> SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
     -> Discord.Channel
     -> List Discord.Message
     -> Maybe DiscordBackendChannel
-addDiscordChannel threads discordChannel messages =
+addDiscordChannel discordAttachments threads discordChannel messages =
     let
         isTextChannel : Bool
         isTextChannel =
@@ -579,7 +580,7 @@ addDiscordChannel threads discordChannel messages =
     if isTextChannel then
         let
             ( channelMessages, channelLinks ) =
-                messagesAndLinks messages
+                messagesAndLinks messages discordAttachments
         in
         { name =
             case discordChannel.name of
@@ -601,7 +602,7 @@ addDiscordChannel threads discordChannel messages =
                                 Just channelMessageIndex ->
                                     let
                                         ( messages2, links ) =
-                                            messagesAndLinks threadMessages
+                                            messagesAndLinks threadMessages discordAttachments
                                     in
                                     ( channelMessageIndex
                                     , { messages = messages2
@@ -1623,21 +1624,16 @@ handleReadyData userAuth readyData model =
                             |> Task.onError (\_ -> Task.succeed [])
                             |> Task.andThen
                                 (\messages ->
-                                    List.concatMap
-                                        (\message -> List.map (\attachment -> ( attachment.url, attachment )) message.attachments)
-                                        messages
-                                        |> SeqDict.fromList
-                                        |> SeqDict.toList
-                                        |> List.map
-                                            (\( _, attachment ) ->
-                                                FileStatus.uploadUrl backendSessionIdHash attachment.url
-                                                    |> Task.map (\uploadResponse -> Ok ( attachment.url, uploadResponse ))
-                                                    |> Task.onError (\error -> Task.succeed (Err error))
-                                            )
-                                        |> Task.sequence
-                                        |> Task.map (Tuple.pair messages)
+                                    Task.map
+                                        (\uploadResponses ->
+                                            { dmChannelId = dmChannelId
+                                            , dmChannel = dmChannel
+                                            , messages = List.reverse messages
+                                            , uploadResponses = uploadResponses
+                                            }
+                                        )
+                                        (uploadAttachmentsForMessages messages)
                                 )
-                            |> Task.map (\( a, uploadResponses ) -> { dmChannelId = dmChannelId, dmChannel = dmChannel, messages = List.reverse a, uploadResponses = uploadResponses })
                             |> Just
                 )
                 (SeqDict.toList discordDmChannels)
@@ -1649,6 +1645,22 @@ handleReadyData userAuth readyData model =
             |> Task.perform identity
         ]
     )
+
+
+uploadAttachmentsForMessages : List Discord.Message -> Task restriction x (List (Result Http.Error ( String, FileStatus.UploadResponse )))
+uploadAttachmentsForMessages messages =
+    List.concatMap
+        (\message -> List.map (\attachment -> ( attachment.url, attachment )) message.attachments)
+        messages
+        |> SeqDict.fromList
+        |> SeqDict.toList
+        |> List.map
+            (\( _, attachment ) ->
+                FileStatus.uploadUrl backendSessionIdHash attachment.url
+                    |> Task.map (\uploadResponse -> Ok ( attachment.url, uploadResponse ))
+                    |> Task.onError (\error -> Task.succeed (Err error))
+            )
+        |> Task.sequence
 
 
 getDiscordGuildData :
