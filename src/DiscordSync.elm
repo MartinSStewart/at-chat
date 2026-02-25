@@ -43,7 +43,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordUserData(..), DmChannelReadyData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordDmChannelReadyData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -663,28 +663,34 @@ messagesAndLinks messages discordAttachments =
            )
 
 
-addDiscordDms : List DmChannelReadyData -> BackendModel -> BackendModel
+addUploadResponsesToDiscordAttachments :
+    List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    -> SeqDict String DiscordAttachmentData
+    -> SeqDict String DiscordAttachmentData
+addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachments =
+    List.foldl
+        (\result dict2 ->
+            case result of
+                Ok ( attachmentUrl, uploadResponse ) ->
+                    SeqDict.insert
+                        attachmentUrl
+                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                        dict2
+
+                Err _ ->
+                    dict2
+        )
+        existingDiscordAttachments
+        uploadResponses
+
+
+addDiscordDms : List DiscordDmChannelReadyData -> BackendModel -> BackendModel
 addDiscordDms dmChannels model =
     let
         discordAttachments : SeqDict String DiscordAttachmentData
         discordAttachments =
             List.foldl
-                (\dmChannel dict ->
-                    List.foldl
-                        (\result dict2 ->
-                            case result of
-                                Ok ( attachmentUrl, uploadResponse ) ->
-                                    SeqDict.insert
-                                        attachmentUrl
-                                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
-                                        dict2
-
-                                Err _ ->
-                                    dict2
-                        )
-                        dict
-                        dmChannel.uploadResponses
-                )
+                (\dmChannel dict -> addUploadResponsesToDiscordAttachments dmChannel.uploadResponses dict)
                 model.discordAttachments
                 dmChannels
     in
@@ -723,13 +729,38 @@ addDiscordGuilds :
     SeqDict
         (Discord.Id.Id Discord.Id.GuildId)
         { guild : Discord.GatewayGuild
-        , channels : List ( Discord.Channel, List Discord.Message )
+        , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
         , icon : Maybe FileStatus.UploadResponse
-        , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+        , threads : List DiscordThreadReadyData
         }
     -> BackendModel
     -> BackendModel
 addDiscordGuilds guilds model =
+    let
+        attachments : SeqDict String DiscordAttachmentData
+        attachments =
+            SeqDict.foldl
+                (\_ guild dict ->
+                    let
+                        dict3 : SeqDict String DiscordAttachmentData
+                        dict3 =
+                            List.foldl
+                                (\data dict2 ->
+                                    addUploadResponsesToDiscordAttachments data.uploadResponses dict2
+                                )
+                                dict
+                                guild.threads
+                    in
+                    List.foldl
+                        (\( _, _, uploadResponses ) dict4 ->
+                            addUploadResponsesToDiscordAttachments uploadResponses dict4
+                        )
+                        dict3
+                        guild.channels
+                )
+                model.discordAttachments
+                guilds
+    in
     { model
         | discordGuilds =
             SeqDict.foldl
@@ -741,16 +772,16 @@ addDiscordGuilds guilds model =
                                 threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
                                 threads =
                                     List.foldl
-                                        (\( parentId, channel, messages ) dict ->
+                                        (\data2 dict ->
                                             SeqDict.update
-                                                parentId
+                                                data2.channelId
                                                 (\maybe2 ->
                                                     case maybe2 of
                                                         Just list ->
-                                                            Just (( channel, messages ) :: list)
+                                                            Just (( data2.channel, data2.messages ) :: list)
 
                                                         Nothing ->
-                                                            Just [ ( channel, messages ) ]
+                                                            Just [ ( data2.channel, data2.messages ) ]
                                                 )
                                                 dict
                                         )
@@ -761,7 +792,7 @@ addDiscordGuilds guilds model =
                             , icon = Maybe.map .fileHash data.icon
                             , channels =
                                 List.foldl
-                                    (\( channel, messages ) channels ->
+                                    (\( channel, messages, _ ) channels ->
                                         SeqDict.update
                                             channel.id
                                             (\maybe ->
@@ -770,7 +801,7 @@ addDiscordGuilds guilds model =
                                                         maybe
 
                                                     Nothing ->
-                                                        addDiscordChannel SeqDict.empty threads channel messages
+                                                        addDiscordChannel attachments threads channel messages
                                             )
                                             channels
                                     )
@@ -784,6 +815,7 @@ addDiscordGuilds guilds model =
                 )
                 model.discordGuilds
                 guilds
+        , discordAttachments = attachments
     }
 
 
@@ -1672,9 +1704,14 @@ getDiscordGuildData :
             Discord.HttpError
             ( Discord.Id.Id Discord.Id.GuildId
             , { guild : Discord.GatewayGuild
-              , channels : List ( Discord.Channel, List Discord.Message )
+              , channels :
+                    List
+                        ( Discord.Channel
+                        , List Discord.Message
+                        , List (Result Http.Error ( String, FileStatus.UploadResponse ))
+                        )
               , icon : Maybe FileStatus.UploadResponse
-              , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+              , threads : List DiscordThreadReadyData
               }
             )
 getDiscordGuildData auth gatewayGuild =
@@ -1692,7 +1729,14 @@ getDiscordGuildData auth gatewayGuild =
             (\channel ->
                 getManyMessages auth { channelId = channel.id, limit = 1000 }
                     |> Task.onError (\_ -> Task.succeed [])
-                    |> Task.map (\a -> ( channel, List.reverse a ))
+                    |> Task.andThen
+                        (\messages ->
+                            Task.map
+                                (\uploadResponses ->
+                                    ( channel, List.reverse messages, uploadResponses )
+                                )
+                                (uploadAttachmentsForMessages messages)
+                        )
             )
             gatewayGuild.channels
             |> Task.sequence
@@ -1758,7 +1802,18 @@ getDiscordGuildData auth gatewayGuild =
                                 Included (Just parentId) ->
                                     getManyMessages auth { channelId = thread.id, limit = 1000 }
                                         |> Task.onError (\_ -> Task.succeed [])
-                                        |> Task.map (\a -> ( parentId, thread, List.reverse a ))
+                                        |> Task.andThen
+                                            (\messages ->
+                                                Task.map
+                                                    (\uploadResponses ->
+                                                        { channelId = parentId
+                                                        , channel = thread
+                                                        , messages = List.reverse messages
+                                                        , uploadResponses = uploadResponses
+                                                        }
+                                                    )
+                                                    (uploadAttachmentsForMessages messages)
+                                            )
                                         |> Just
 
                                 _ ->

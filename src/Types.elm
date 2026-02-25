@@ -6,13 +6,14 @@ module Types exposing
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , DiscordBasicUserData
+    , DiscordDmChannelReadyData
     , DiscordExport
     , DiscordFullUserData
     , DiscordFullUserDataExport
     , DiscordNeedsAuthAgainExport
+    , DiscordThreadReadyData
     , DiscordUserData(..)
     , DiscordUserDataExport(..)
-    , DmChannelReadyData
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -620,13 +621,13 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List DmChannelReadyData
+            ( List DiscordDmChannelReadyData
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
-                  , channels : List ( Discord.Channel, List Discord.Message )
+                  , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
                   , icon : Maybe FileStatus.UploadResponse
-                  , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+                  , threads : List DiscordThreadReadyData
                   }
                 )
             )
@@ -638,9 +639,17 @@ type BackendMsg
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
 
 
-type alias DmChannelReadyData =
+type alias DiscordDmChannelReadyData =
     { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
     , dmChannel : DiscordDmChannel
+    , messages : List Discord.Message
+    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
+
+
+type alias DiscordThreadReadyData =
+    { channelId : Discord.Id.Id Discord.Id.ChannelId
+    , channel : Discord.Channel
     , messages : List Discord.Message
     , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
     }
