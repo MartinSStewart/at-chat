@@ -770,7 +770,7 @@ addDiscordGuilds guilds model =
                                                         maybe
 
                                                     Nothing ->
-                                                        addDiscordChannel threads channel messages
+                                                        addDiscordChannel SeqDict.empty threads channel messages
                                             )
                                             channels
                                     )
