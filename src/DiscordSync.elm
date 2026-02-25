@@ -43,7 +43,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordUserData(..), DmChannelReadyData, LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -629,21 +629,27 @@ addDiscordChannel threads discordChannel messages =
 
 messagesAndLinks :
     List Discord.Message
+    -> SeqDict String DiscordAttachmentData
     ->
         ( Array (Message messageId (Discord.Id.Id Discord.Id.UserId))
         , OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id messageId)
         )
-messagesAndLinks messages =
+messagesAndLinks messages discordAttachments =
     List.indexedMap
         (\index message ->
+            let
+                attachments : SeqDict (Id FileId) FileData
+                attachments =
+                    messageToFileData message discordAttachments
+            in
             ( UserTextMessage
                 { createdAt = message.timestamp
                 , createdBy = message.author.id
-                , content = RichText.fromDiscord message.content SeqDict.empty
+                , content = RichText.fromDiscord message.content attachments
                 , reactions = SeqDict.empty
                 , editedAt = Nothing
                 , repliedTo = Nothing
-                , attachedFiles = SeqDict.empty
+                , attachedFiles = attachments
                 }
             , ( message.id, Id.fromInt index )
             )
@@ -656,17 +662,37 @@ messagesAndLinks messages =
            )
 
 
-addDiscordDms :
-    List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
-    -> BackendModel
-    -> BackendModel
+addDiscordDms : List DmChannelReadyData -> BackendModel -> BackendModel
 addDiscordDms dmChannels model =
+    let
+        discordAttachments : SeqDict String DiscordAttachmentData
+        discordAttachments =
+            List.foldl
+                (\dmChannel dict ->
+                    List.foldl
+                        (\result dict2 ->
+                            case result of
+                                Ok ( attachmentUrl, uploadResponse ) ->
+                                    SeqDict.insert
+                                        attachmentUrl
+                                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                                        dict2
+
+                                Err _ ->
+                                    dict2
+                        )
+                        dict
+                        dmChannel.uploadResponses
+                )
+                model.discordAttachments
+                dmChannels
+    in
     { model
         | discordDmChannels =
             List.foldl
-                (\( dmChannelId, channel, messages ) dmChannels2 ->
+                (\data dmChannels2 ->
                     SeqDict.update
-                        dmChannelId
+                        data.dmChannelId
                         (\maybe ->
                             case maybe of
                                 Just _ ->
@@ -675,12 +701,12 @@ addDiscordDms dmChannels model =
                                 Nothing ->
                                     let
                                         ( messages2, links ) =
-                                            messagesAndLinks messages
+                                            messagesAndLinks data.messages discordAttachments
                                     in
                                     { messages = messages2
                                     , lastTypedAt = SeqDict.empty
                                     , linkedMessageIds = links
-                                    , members = channel.members
+                                    , members = data.dmChannel.members
                                     }
                                         |> Just
                         )
@@ -688,6 +714,7 @@ addDiscordDms dmChannels model =
                 )
                 model.discordDmChannels
                 dmChannels
+        , discordAttachments = discordAttachments
     }
 
 
@@ -1187,7 +1214,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
-                                    messageToFileData message model
+                                    messageToFileData message model.discordAttachments
                             in
                             if SeqDict.size attachments == List.length message.attachments then
                                 let
@@ -1200,7 +1227,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 ( model2
                                 , Task.perform
                                     (DiscordMessageCreate_AttachmentsUploaded message)
-                                    (loadMessageAttachments message.attachments)
+                                    (Task.sequence (List.map loadMessageAttachment message.attachments))
                                     :: cmds
                                 )
 
@@ -1222,7 +1249,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
-                                    messageToFileData edit model
+                                    messageToFileData edit model.discordAttachments
                             in
                             if SeqDict.size attachments == List.length edit.attachments then
                                 let
@@ -1235,7 +1262,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 ( model2
                                 , Task.perform
                                     (DiscordMessageUpdate_AttachmentsUploaded edit)
-                                    (loadMessageAttachments edit.attachments)
+                                    (Task.sequence (List.map loadMessageAttachment edit.attachments))
                                     :: cmds
                                 )
 
@@ -1336,27 +1363,20 @@ handleDiscordEditMessage edit attachments model2 =
             handleDiscordDmEditMessage edit attachments model2
 
 
-loadMessageAttachments :
-    List Discord.Attachment
-    -> Task BackendOnly x (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
-loadMessageAttachments attachments =
-    List.map
-        (\attachment ->
-            FileStatus.uploadUrl
-                backendSessionIdHash
-                attachment.url
-                |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
-                |> Task.onError (\error -> Task.succeed (Err error))
-        )
-        attachments
-        |> Task.sequence
+loadMessageAttachment :
+    Discord.Attachment
+    -> Task restriction x (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
+loadMessageAttachment attachment =
+    FileStatus.uploadUrl backendSessionIdHash attachment.url
+        |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
+        |> Task.onError (\error -> Task.succeed (Err error))
 
 
-messageToFileData : { a | attachments : List Discord.Attachment } -> BackendModel -> SeqDict (Id FileId) FileData
-messageToFileData message model =
+messageToFileData : { a | attachments : List Discord.Attachment } -> SeqDict String DiscordAttachmentData -> SeqDict (Id FileId) FileData
+messageToFileData message discordAttachments =
     List.filterMap
         (\attachment ->
-            case SeqDict.get attachment.url model.discordAttachments of
+            case SeqDict.get attachment.url discordAttachments of
                 Just { fileHash, imageMetadata } ->
                     attachmentsToFileData attachment fileHash imageMetadata |> Just
 
@@ -1364,10 +1384,7 @@ messageToFileData message model =
                     Nothing
         )
         message.attachments
-        |> List.indexedMap
-            (\index fileData ->
-                ( Id.fromInt index, fileData )
-            )
+        |> List.indexedMap (\index fileData -> ( Id.fromInt index, fileData ))
         |> SeqDict.fromList
 
 
@@ -1604,7 +1621,23 @@ handleReadyData userAuth readyData model =
                             }
                             |> http
                             |> Task.onError (\_ -> Task.succeed [])
-                            |> Task.map (\a -> ( dmChannelId, dmChannel, List.reverse a ))
+                            |> Task.andThen
+                                (\messages ->
+                                    List.concatMap
+                                        (\message -> List.map (\attachment -> ( attachment.url, attachment )) message.attachments)
+                                        messages
+                                        |> SeqDict.fromList
+                                        |> SeqDict.toList
+                                        |> List.map
+                                            (\( _, attachment ) ->
+                                                FileStatus.uploadUrl backendSessionIdHash attachment.url
+                                                    |> Task.map (\uploadResponse -> Ok ( attachment.url, uploadResponse ))
+                                                    |> Task.onError (\error -> Task.succeed (Err error))
+                                            )
+                                        |> Task.sequence
+                                        |> Task.map (Tuple.pair messages)
+                                )
+                            |> Task.map (\( a, uploadResponses ) -> { dmChannelId = dmChannelId, dmChannel = dmChannel, messages = List.reverse a, uploadResponses = uploadResponses })
                             |> Just
                 )
                 (SeqDict.toList discordDmChannels)

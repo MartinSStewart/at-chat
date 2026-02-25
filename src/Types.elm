@@ -12,6 +12,7 @@ module Types exposing
     , DiscordNeedsAuthAgainExport
     , DiscordUserData(..)
     , DiscordUserDataExport(..)
+    , DmChannelReadyData
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -619,7 +620,7 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
+            ( List DmChannelReadyData
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
@@ -635,6 +636,14 @@ type BackendMsg
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
+
+
+type alias DmChannelReadyData =
+    { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    , dmChannel : DiscordDmChannel
+    , messages : List Discord.Message
+    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
 
 
 type LoginResult

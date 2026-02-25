@@ -696,12 +696,12 @@ update msg model =
                                                 guildDataDict
                                         , discordDms =
                                             List.filterMap
-                                                (\( channelId, _, _ ) ->
-                                                    case SeqDict.get channelId model2.discordDmChannels of
+                                                (\data ->
+                                                    case SeqDict.get data.dmChannelId model2.discordDmChannels of
                                                         Just dmChannel ->
                                                             case discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
                                                                 Just dmChannel2 ->
-                                                                    Just ( channelId, dmChannel2 )
+                                                                    Just ( data.dmChannelId, dmChannel2 )
 
                                                                 Nothing ->
                                                                     Nothing
