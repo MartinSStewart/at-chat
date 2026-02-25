@@ -1664,14 +1664,14 @@ handleReadyData userAuth readyData model =
                                             , uploadResponses = uploadResponses
                                             }
                                         )
-                                        (uploadAttachmentsForMessages messages)
+                                        (uploadAttachmentsForMessages model messages)
                                 )
                             |> Just
                 )
                 (SeqDict.toList discordDmChannels)
                 |> Task.sequence
             )
-            (List.map (getDiscordGuildData auth) readyData.guilds |> Task.sequence)
+            (List.map (getDiscordGuildData model auth) readyData.guilds |> Task.sequence)
             |> Task.andThen (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Time.now)
             |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Time.now)
             |> Task.perform identity
@@ -1679,10 +1679,20 @@ handleReadyData userAuth readyData model =
     )
 
 
-uploadAttachmentsForMessages : List Discord.Message -> Task restriction x (List (Result Http.Error ( String, FileStatus.UploadResponse )))
-uploadAttachmentsForMessages messages =
+uploadAttachmentsForMessages : BackendModel -> List Discord.Message -> Task restriction x (List (Result Http.Error ( String, FileStatus.UploadResponse )))
+uploadAttachmentsForMessages model messages =
     List.concatMap
-        (\message -> List.map (\attachment -> ( attachment.url, attachment )) message.attachments)
+        (\message ->
+            List.filterMap
+                (\attachment ->
+                    if SeqDict.member attachment.url model.discordAttachments then
+                        Nothing
+
+                    else
+                        Just ( attachment.url, attachment )
+                )
+                message.attachments
+        )
         messages
         |> SeqDict.fromList
         |> SeqDict.toList
@@ -1696,7 +1706,8 @@ uploadAttachmentsForMessages messages =
 
 
 getDiscordGuildData :
-    Discord.Authentication
+    BackendModel
+    -> Discord.Authentication
     -> Discord.GatewayGuild
     ->
         Task
@@ -1714,7 +1725,7 @@ getDiscordGuildData :
               , threads : List DiscordThreadReadyData
               }
             )
-getDiscordGuildData auth gatewayGuild =
+getDiscordGuildData model auth gatewayGuild =
     Task.map3
         (\channels maybeIcon threads ->
             ( gatewayGuild.properties.id
@@ -1735,7 +1746,7 @@ getDiscordGuildData auth gatewayGuild =
                                 (\uploadResponses ->
                                     ( channel, List.reverse messages, uploadResponses )
                                 )
-                                (uploadAttachmentsForMessages messages)
+                                (uploadAttachmentsForMessages model messages)
                         )
             )
             gatewayGuild.channels
@@ -1812,7 +1823,7 @@ getDiscordGuildData auth gatewayGuild =
                                                         , uploadResponses = uploadResponses
                                                         }
                                                     )
-                                                    (uploadAttachmentsForMessages messages)
+                                                    (uploadAttachmentsForMessages model messages)
                                             )
                                         |> Just
 
