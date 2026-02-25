@@ -1545,19 +1545,26 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 ( clientId, changeId )
                                                                 model.pendingDiscordCreateMessages
                                                       }
-                                                    , Discord.createMarkdownMessagePayload
-                                                        (Discord.userToken discordUser.auth)
-                                                        { channelId = channelId
-                                                        , content = RichText.toDiscord attachedFiles2 text
-                                                        , replyTo =
-                                                            case maybeReplyTo of
-                                                                Just replyTo ->
-                                                                    OneToOne.first replyTo channel.linkedMessageIds
+                                                    , List.map
+                                                        (\attachment -> Http.task { url = FileStatus.fileUrl, resolver = Http.bytesResolver })
+                                                        (SeqDict.values attachedFiles2)
+                                                        |> Task.sequence
+                                                        |> Task.andThen
+                                                            (\attachments ->
+                                                                Discord.createMarkdownMessagePayload
+                                                                    (Discord.userToken discordUser.auth)
+                                                                    { channelId = channelId
+                                                                    , content = RichText.toDiscord text
+                                                                    , replyTo =
+                                                                        case maybeReplyTo of
+                                                                            Just replyTo ->
+                                                                                OneToOne.first replyTo channel.linkedMessageIds
 
-                                                                Nothing ->
-                                                                    Nothing
-                                                        }
-                                                        |> DiscordSync.http
+                                                                            Nothing ->
+                                                                                Nothing
+                                                                    }
+                                                                    |> DiscordSync.http
+                                                            )
                                                         |> Task.attempt
                                                             (SentDiscordGuildMessage
                                                                 time

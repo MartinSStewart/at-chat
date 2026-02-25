@@ -1538,10 +1538,9 @@ discordStopOnChar =
 
 
 toDiscord :
-    SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> List (Discord.Markdown.Markdown a)
-toDiscord attachedFiles content =
+toDiscord content =
     List.map
         (\item ->
             case item of
@@ -1552,19 +1551,19 @@ toDiscord attachedFiles content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord nonempty)
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord nonempty)
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord nonempty)
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord nonempty)
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.spoiler (toDiscord nonempty)
 
                 Hyperlink protocol string ->
                     Discord.Markdown.text (hyperlinkToString protocol string)
@@ -1584,19 +1583,7 @@ toDiscord attachedFiles content =
                         string
 
                 AttachedFile fileId ->
-                    (case SeqDict.get fileId attachedFiles of
-                        Just fileData ->
-                            case fileData.imageMetadata of
-                                Just { imageSize } ->
-                                    FileStatus.thumbnailUrl imageSize fileData.contentType fileData.fileHash
-
-                                Nothing ->
-                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
-
-                        Nothing ->
-                            ""
-                    )
-                        |> Discord.Markdown.text
+                    Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)
 
