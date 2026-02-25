@@ -28,7 +28,6 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
-import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -60,7 +59,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -179,6 +178,7 @@ init =
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
+      , discordAttachments = SeqDict.empty
       }
     , Command.none
     )
@@ -788,45 +788,116 @@ update msg model =
                     ( model, Command.none )
 
         DiscordMessageCreate_AttachmentsUploaded message results ->
-            DiscordSync.handleDiscordCreateMessage message (attachmentsUploadedHelper results) model
+            let
+                ( attachments, discordAttachments ) =
+                    attachmentsUploadedHelper model message results
+            in
+            DiscordSync.handleDiscordCreateMessage message attachments { model | discordAttachments = discordAttachments }
 
         DiscordMessageUpdate_AttachmentsUploaded message results ->
-            DiscordSync.handleDiscordEditMessage message (attachmentsUploadedHelper results) model
+            let
+                ( attachments, discordAttachments ) =
+                    attachmentsUploadedHelper model message results
+            in
+            DiscordSync.handleDiscordEditMessage message attachments { model | discordAttachments = discordAttachments }
 
 
 attachmentsUploadedHelper :
-    List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse ))
-    -> SeqDict (Id FileId) FileData
-attachmentsUploadedHelper results =
-    List.filterMap
-        (\result ->
-            case result of
-                Ok ( attachment, { imageSize, fileHash } ) ->
-                    { fileName = FileName.fromString attachment.filename
-                    , fileSize = attachment.size
-                    , imageMetadata = imageSize
-                    , contentType =
-                        case attachment.contentType of
-                            Included contentType ->
-                                FileStatus.contentType contentType
+    BackendModel
+    -> { a | attachments : List Discord.Attachment }
+    -> List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
+    -> ( SeqDict (Id FileId) FileData, SeqDict String DiscordAttachmentData )
+attachmentsUploadedHelper model message results =
+    let
+        uploadResponses : SeqDict (Discord.Id.Id Discord.Id.AttachmentId) FileStatus.UploadResponse
+        uploadResponses =
+            List.filterMap Result.toMaybe results |> SeqDict.fromList
+    in
+    List.foldl
+        (\attachment ( fileDataDict, discordAttachments ) ->
+            let
+                fileId : Id FileId
+                fileId =
+                    SeqDict.size fileDataDict + 1 |> Id.fromInt
+            in
+            case SeqDict.get attachment.url model.discordAttachments of
+                Just { fileHash, imageMetadata } ->
+                    ( SeqDict.insert
+                        fileId
+                        (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
+                        fileDataDict
+                    , discordAttachments
+                    )
 
-                            Missing ->
-                                case imageSize of
-                                    Just _ ->
-                                        FileStatus.webpContent
+                Nothing ->
+                    case SeqDict.get attachment.id uploadResponses of
+                        Just uploadResponse ->
+                            ( SeqDict.insert
+                                fileId
+                                (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
+                                fileDataDict
+                            , SeqDict.insert
+                                attachment.url
+                                { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                                discordAttachments
+                            )
 
-                                    Nothing ->
-                                        FileStatus.unknownContentType
-                    , fileHash = fileHash
-                    }
-                        |> Just
-
-                Err _ ->
-                    Nothing
+                        Nothing ->
+                            ( fileDataDict, discordAttachments )
         )
-        results
-        |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
-        |> SeqDict.fromList
+        ( SeqDict.empty, model.discordAttachments )
+        message.attachments
+
+
+
+--(
+--
+--List.filterMap
+--    (\result ->
+--        case result of
+--            Ok ( attachmentId, { imageSize, fileHash } ) ->
+--                case SeqDict.get attachmentId attachmentsDict of
+--                    Just attachment ->
+--                        { fileName = FileName.fromString attachment.filename
+--                        , fileSize = attachment.size
+--                        , imageMetadata = imageSize
+--                        , contentType =
+--                            case attachment.contentType of
+--                                Included contentType ->
+--                                    FileStatus.contentType contentType
+--
+--                                Missing ->
+--                                    case imageSize of
+--                                        Just _ ->
+--                                            FileStatus.webpContent
+--
+--                                        Nothing ->
+--                                            FileStatus.unknownContentType
+--                        , fileHash = fileHash
+--                        }
+--                            |> Just
+--
+--                    Nothing ->
+--                        Nothing
+--
+--            Err _ ->
+--                Nothing
+--    )
+--    results
+--    |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+--    |> SeqDict.fromList
+--, List.foldl
+--    (\result dict ->
+--        case result of
+--            Ok ( attachment, uploadResponse ) ->
+--                SeqDict.insert attachment.url uploadResponse.fileHash dict
+--
+--            Err _ ->
+--                dict
+--    )
+--    existingDiscordAttachments
+--    results
+--)
 
 
 updateFromFrontend :

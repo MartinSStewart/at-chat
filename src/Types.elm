@@ -4,6 +4,7 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DiscordAttachmentData
     , DiscordBasicUserData
     , DiscordExport
     , DiscordFullUserData
@@ -302,7 +303,12 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
+    , discordAttachments : SeqDict String DiscordAttachmentData
     }
+
+
+type alias DiscordAttachmentData =
+    { fileHash : FileHash, imageMetadata : Maybe FileStatus.ImageMetadata }
 
 
 type DiscordUserData
@@ -627,8 +633,8 @@ type BackendMsg
     | WebsocketCreatedHandleForUser (Discord.Id.Id Discord.Id.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id.Id Discord.Id.UserId) Bool
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
-    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
-    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
+    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
+    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
 
 
 type LoginResult

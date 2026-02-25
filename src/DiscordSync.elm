@@ -1,6 +1,7 @@
 module DiscordSync exposing
     ( addDiscordDms
     , addDiscordGuilds
+    , attachmentsToFileData
     , backendSessionIdHash
     , discordUserToPartialUser
     , discordUserWebsocketMsg
@@ -26,7 +27,8 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (Emoji)
 import Env
-import FileStatus exposing (FileData, FileId)
+import FileName
+import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
 import Json.Encode
@@ -35,7 +37,6 @@ import List.Nonempty exposing (Nonempty(..))
 import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
-import NonemptyExtra
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import RichText exposing (RichText)
@@ -1183,19 +1184,25 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             )
 
                         Discord.UserOutMsg_UserCreatedMessage _ message ->
-                            case message.attachments of
-                                [] ->
-                                    let
-                                        ( model3, cmd2 ) =
-                                            handleDiscordCreateMessage message SeqDict.empty model2
-                                    in
-                                    ( model3, cmd2 :: cmds )
+                            let
+                                attachments : SeqDict (Id FileId) FileData
+                                attachments =
+                                    messageToFileData message model
+                            in
+                            if SeqDict.size attachments == List.length message.attachments then
+                                let
+                                    ( model3, cmd2 ) =
+                                        handleDiscordCreateMessage message attachments model2
+                                in
+                                ( model3, cmd2 :: cmds )
 
-                                attachments ->
-                                    ( model2
-                                    , Task.perform (DiscordMessageCreate_AttachmentsUploaded message) (loadMessageAttachments attachments)
-                                        :: cmds
-                                    )
+                            else
+                                ( model2
+                                , Task.perform
+                                    (DiscordMessageCreate_AttachmentsUploaded message)
+                                    (loadMessageAttachments message.attachments)
+                                    :: cmds
+                                )
 
                         Discord.UserOutMsg_UserDeletedGuildMessage discordGuildId discordChannelId messageId ->
                             let
@@ -1212,19 +1219,25 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_UserEditedMessage edit ->
-                            case edit.attachments of
-                                [] ->
-                                    let
-                                        ( model3, cmd2 ) =
-                                            handleDiscordEditMessage edit SeqDict.empty model2
-                                    in
-                                    ( model3, cmd2 :: cmds )
+                            let
+                                attachments : SeqDict (Id FileId) FileData
+                                attachments =
+                                    messageToFileData edit model
+                            in
+                            if SeqDict.size attachments == List.length edit.attachments then
+                                let
+                                    ( model3, cmd2 ) =
+                                        handleDiscordEditMessage edit attachments model2
+                                in
+                                ( model3, cmd2 :: cmds )
 
-                                attachments ->
-                                    ( model2
-                                    , Task.perform (DiscordMessageUpdate_AttachmentsUploaded edit) (loadMessageAttachments attachments)
-                                        :: cmds
-                                    )
+                            else
+                                ( model2
+                                , Task.perform
+                                    (DiscordMessageUpdate_AttachmentsUploaded edit)
+                                    (loadMessageAttachments edit.attachments)
+                                    :: cmds
+                                )
 
                         Discord.UserOutMsg_FailedToParseWebsocketMessage error ->
                             let
@@ -1325,18 +1338,58 @@ handleDiscordEditMessage edit attachments model2 =
 
 loadMessageAttachments :
     List Discord.Attachment
-    -> Task BackendOnly x (List (Result Http.Error ( Discord.Attachment, FileStatus.UploadResponse )))
+    -> Task BackendOnly x (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
 loadMessageAttachments attachments =
     List.map
         (\attachment ->
             FileStatus.uploadUrl
                 backendSessionIdHash
                 attachment.url
-                |> Task.map (\uploadResponse -> Ok ( attachment, uploadResponse ))
+                |> Task.map (\uploadResponse -> Ok ( attachment.id, uploadResponse ))
                 |> Task.onError (\error -> Task.succeed (Err error))
         )
         attachments
         |> Task.sequence
+
+
+messageToFileData : { a | attachments : List Discord.Attachment } -> BackendModel -> SeqDict (Id FileId) FileData
+messageToFileData message model =
+    List.filterMap
+        (\attachment ->
+            case SeqDict.get attachment.url model.discordAttachments of
+                Just { fileHash, imageMetadata } ->
+                    attachmentsToFileData attachment fileHash imageMetadata |> Just
+
+                Nothing ->
+                    Nothing
+        )
+        message.attachments
+        |> List.indexedMap
+            (\index fileData ->
+                ( Id.fromInt index, fileData )
+            )
+        |> SeqDict.fromList
+
+
+attachmentsToFileData : Discord.Attachment -> FileHash -> Maybe FileStatus.ImageMetadata -> FileData
+attachmentsToFileData attachment fileHash imageSize =
+    { fileName = FileName.fromString attachment.filename
+    , fileSize = attachment.size
+    , imageMetadata = imageSize
+    , contentType =
+        case attachment.contentType of
+            Included contentType ->
+                FileStatus.contentType contentType
+
+            Missing ->
+                case imageSize of
+                    Just _ ->
+                        FileStatus.webpContent
+
+                    Nothing ->
+                        FileStatus.unknownContentType
+    , fileHash = fileHash
+    }
 
 
 handleChannelCreated : Discord.Channel -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
