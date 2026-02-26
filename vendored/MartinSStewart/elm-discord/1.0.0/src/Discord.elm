@@ -5744,6 +5744,7 @@ decodeUploadAttachmentResponse =
         (JD.field "upload_url" JD.string)
         (JD.field "upload_filename" JD.string)
         |> JD.list
+        |> JD.field "attachments"
 
 
 {-| <https://docs.discord.food/reference#uploading-to-google-cloud>

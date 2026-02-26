@@ -2139,11 +2139,6 @@ sendMessage :
     -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
 sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
-    let
-        attachedFiles2 : List FileData
-        attachedFiles2 =
-            SeqDict.values attachedFiles
-    in
     List.map
         (\attachment ->
             Http.task
@@ -2198,9 +2193,9 @@ sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
                     |> http
                     |> Task.andThen
                         (\uploadAttachmentsResponse ->
-                            uploadAttachments uploadAttachmentsResponse
+                            uploadAttachments attachments2 uploadAttachmentsResponse
                                 |> Task.andThen
-                                    (\_ ->
+                                    (\abc ->
                                         Discord.createMarkdownMessagePayload
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
@@ -2230,15 +2225,15 @@ sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
             )
 
 
-uploadAttachments : List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
-uploadAttachments uploadAttachmentsResponses =
-    List.map
-        (\uploadAttachmentsResponse ->
+uploadAttachments : List ( FileData, Bytes ) -> List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
+uploadAttachments files uploadAttachmentsResponses =
+    List.map2
+        (\( _, bytes ) uploadAttachmentsResponse ->
             Http.task
-                { method = "GET"
+                { method = "PUT"
                 , headers = []
                 , url = uploadAttachmentsResponse.uploadUrl
-                , body = Http.emptyBody
+                , body = Http.bytesBody "application/octet-stream" bytes
                 , resolver =
                     Http.bytesResolver
                         (\response ->
@@ -2263,5 +2258,6 @@ uploadAttachments uploadAttachmentsResponses =
                 |> Task.map (\() -> Ok ())
                 |> Task.onError (\() -> Task.succeed (Err ()))
         )
+        files
         uploadAttachmentsResponses
         |> Task.sequence
