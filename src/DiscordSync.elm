@@ -29,7 +29,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (Emoji)
 import Env
-import FileName exposing (FileName)
+import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
@@ -1249,7 +1249,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
-                                    messageToFileData message model.discordAttachments
+                                    messageToFileData message model2.discordAttachments
                             in
                             if SeqDict.size attachments == List.length message.attachments then
                                 let
@@ -1284,7 +1284,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             let
                                 attachments : SeqDict (Id FileId) FileData
                                 attachments =
-                                    messageToFileData edit model.discordAttachments
+                                    messageToFileData edit model2.discordAttachments
                             in
                             if SeqDict.size attachments == List.length edit.attachments then
                                 let
@@ -2160,7 +2160,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                     Http.bytesResolver
                         (\response ->
                             case response of
-                                Http.BadUrl_ url ->
+                                Http.BadUrl_ _ ->
                                     Err ()
 
                                 Http.Timeout_ ->
@@ -2169,10 +2169,10 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                                 Http.NetworkError_ ->
                                     Err ()
 
-                                Http.BadStatus_ metadata body ->
+                                Http.BadStatus_ _ _ ->
                                     Err ()
 
-                                Http.GoodStatus_ metadata body ->
+                                Http.GoodStatus_ _ body ->
                                     Ok body
                         )
                 , timeout = Duration.seconds 30 |> Just
@@ -2205,7 +2205,7 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                         (\uploadAttachmentsResponse ->
                             uploadAttachments attachments2 uploadAttachmentsResponse
                                 |> Task.andThen
-                                    (\abc ->
+                                    (\_ ->
                                         Discord.createMarkdownMessagePayload
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
@@ -2242,7 +2242,7 @@ uploadAttachments files uploadAttachmentsResponses =
                     Http.bytesResolver
                         (\response ->
                             case response of
-                                Http.BadUrl_ url ->
+                                Http.BadUrl_ _ ->
                                     Err ()
 
                                 Http.Timeout_ ->
@@ -2251,10 +2251,10 @@ uploadAttachments files uploadAttachmentsResponses =
                                 Http.NetworkError_ ->
                                     Err ()
 
-                                Http.BadStatus_ metadata body ->
+                                Http.BadStatus_ _ _ ->
                                     Err ()
 
-                                Http.GoodStatus_ metadata body ->
+                                Http.GoodStatus_ _ _ ->
                                     Ok ()
                         )
                 , timeout = Duration.seconds 30 |> Just

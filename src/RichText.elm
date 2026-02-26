@@ -1582,7 +1582,7 @@ toDiscord content =
                         )
                         string
 
-                AttachedFile fileId ->
+                AttachedFile _ ->
                     Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)

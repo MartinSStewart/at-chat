@@ -10,7 +10,6 @@ module Backend exposing
 import AiChat
 import Array exposing (Array)
 import Broadcast
-import Bytes
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -29,7 +28,6 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
-import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -1620,7 +1618,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                                 Nothing ->
                                                                                     Nothing
                                                                             )
-                                                                            attachedFiles
+                                                                            attachedFiles2
                                                                             text
                                                                     )
                                                                 |> Task.attempt
@@ -1675,7 +1673,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     Nothing ->
                                                         Nothing
                                                 )
-                                                attachedFiles
+                                                attachedFiles2
                                                 text
                                                 |> Task.attempt
                                                     (SentDiscordDmMessage

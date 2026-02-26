@@ -22,7 +22,6 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
-import Discord
 import Discord.Id
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -31,7 +30,6 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
-import FileStatus exposing (FileHash)
 import GuildName
 import Html.Events
 import Icons
@@ -59,7 +57,7 @@ import Ui.Input
 import Ui.Lazy
 import Ui.Shadow
 import Ui.Table
-import User exposing (AdminUiSection(..), BackendUser, DiscordUserLoadingData)
+import User exposing (AdminUiSection(..), BackendUser)
 
 
 type Msg
@@ -987,7 +985,7 @@ discordUsersSection user adminData =
                                     FullData_ForAdmin data ->
                                         linkedToView adminData data.linkedTo
 
-                                    BasicData_ForAdmin data ->
+                                    BasicData_ForAdmin _ ->
                                         Ui.none
 
                                     NeedsAuthAgain_ForAdmin data ->

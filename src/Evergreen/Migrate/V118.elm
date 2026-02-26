@@ -22,7 +22,6 @@ See <https://dashboard.lamdera.app/docs/evergreen> for more info.
 import Array
 import Array.Extra
 import Dict
-import Effect.Lamdera
 import Effect.Time as Time
 import Evergreen.V117.AiChat
 import Evergreen.V117.ChannelName

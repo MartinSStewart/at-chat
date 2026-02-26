@@ -25,7 +25,6 @@ module FileStatus exposing
     , onlyUploadedFiles
     , pngContent
     , sizeToString
-    , textContent
     , thumbnailUrl
     , unknownContentType
     , uploadAvatar
@@ -182,11 +181,6 @@ pngContent =
 webpContent : ContentType
 webpContent =
     contentType "image/webp"
-
-
-textContent : ContentType
-textContent =
-    contentType "text/plain"
 
 
 type ContentTypeType

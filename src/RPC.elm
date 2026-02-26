@@ -3,7 +3,6 @@ module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 import Broadcast
 import Coord
 import DiscordSync
-import Env
 import FileStatus
 import Http
 import Json.Encode as Json
