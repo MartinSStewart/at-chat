@@ -1550,8 +1550,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     , DiscordSync.sendMessage
                                                         discordUser
                                                         channelId
-                                                        channel
-                                                        maybeReplyTo
+                                                        (case maybeReplyTo of
+                                                            Just replyTo ->
+                                                                OneToOne.first replyTo channel.linkedMessageIds
+
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
                                                         attachedFiles2
                                                         text
                                                         |> Task.attempt
@@ -1605,20 +1610,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                               )
                                                                 |> Task.andThen
                                                                     (\() ->
-                                                                        Discord.createMarkdownMessagePayload
-                                                                            (Discord.userToken discordUser.auth)
-                                                                            { channelId = discordThreadId
-                                                                            , content = RichText.toDiscord text
-                                                                            , replyTo =
-                                                                                case maybeReplyTo of
-                                                                                    Just replyTo ->
-                                                                                        OneToOne.first replyTo thread.linkedMessageIds
+                                                                        DiscordSync.sendMessage
+                                                                            discordUser
+                                                                            channelId
+                                                                            (case maybeReplyTo of
+                                                                                Just replyTo ->
+                                                                                    OneToOne.first replyTo thread.linkedMessageIds
 
-                                                                                    Nothing ->
-                                                                                        Nothing
-                                                                            , attachments = []
-                                                                            }
-                                                                            |> DiscordSync.http
+                                                                                Nothing ->
+                                                                                    Nothing
+                                                                            )
+                                                                            attachedFiles
+                                                                            text
                                                                     )
                                                                 |> Task.attempt
                                                                     (SentDiscordGuildMessage
@@ -1662,20 +1665,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         ( clientId, changeId )
                                                         model.pendingDiscordCreateDmMessages
                                               }
-                                            , Discord.createMarkdownMessagePayload
-                                                (Discord.userToken discordUser.auth)
-                                                { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
-                                                , content = RichText.toDiscord text
-                                                , replyTo =
-                                                    case maybeReplyTo of
-                                                        Just replyTo ->
-                                                            OneToOne.first replyTo dmChannel.linkedMessageIds
+                                            , DiscordSync.sendMessage
+                                                discordUser
+                                                (Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64)
+                                                (case maybeReplyTo of
+                                                    Just replyTo ->
+                                                        OneToOne.first replyTo dmChannel.linkedMessageIds
 
-                                                        Nothing ->
-                                                            Nothing
-                                                , attachments = []
-                                                }
-                                                |> DiscordSync.http
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                attachedFiles
+                                                text
                                                 |> Task.attempt
                                                     (SentDiscordDmMessage
                                                         time

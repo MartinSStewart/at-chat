@@ -2124,21 +2124,14 @@ http request =
         }
 
 
-
---type SendMessageError
---    = SendMessage_DiscordError Discord.HttpError
---    | SendMessage_HttpError Http.Error
-
-
 sendMessage :
     DiscordFullUserData
     -> Discord.Id.Id Discord.Id.ChannelId
-    -> DiscordBackendChannel
-    -> Maybe (Id ChannelMessageId)
+    -> Maybe (Discord.Id.Id Discord.Id.MessageId)
     -> SeqDict (Id FileId) FileData
     -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> Task BackendOnly Discord.HttpError Discord.Message
-sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
+sendMessage discordUser channelId maybeReplyTo attachedFiles text =
     List.map
         (\attachment ->
             Http.task
@@ -2170,7 +2163,7 @@ sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
                 |> Task.map (\bytes -> Ok ( attachment, bytes ))
                 |> Task.onError (\() -> Task.succeed (Err ()))
         )
-        attachedFiles2
+        (SeqDict.values attachedFiles)
         |> Task.sequence
         |> Task.andThen
             (\attachments ->
@@ -2200,13 +2193,7 @@ sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
                                             (Discord.userToken discordUser.auth)
                                             { channelId = channelId
                                             , content = RichText.toDiscord text
-                                            , replyTo =
-                                                case maybeReplyTo of
-                                                    Just replyTo ->
-                                                        OneToOne.first replyTo channel.linkedMessageIds
-
-                                                    Nothing ->
-                                                        Nothing
+                                            , replyTo = maybeReplyTo
                                             , attachments =
                                                 List.map2
                                                     (\a ( fileData, _ ) ->
