@@ -77,6 +77,7 @@ module LocalState exposing
     , removeReactionEmojiFrontend
     , removeReactionEmojiFrontendHelper
     , removeReactionEmojiHelper
+    , routeToViewing
     , updateChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
@@ -102,6 +103,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import PersonName exposing (PersonName)
 import RichText exposing (RichText)
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -113,7 +115,7 @@ import UInt64
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData, FrontendCurrentUser, FrontendUser)
 import UserAgent exposing (UserAgent)
-import UserSession exposing (FrontendUserSession, UserSession)
+import UserSession exposing (FrontendUserSession, SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -1992,3 +1994,93 @@ canSendDiscordMessage local guildOrDmId =
 
                 Nothing ->
                     Err "Channel not found"
+
+
+routeToViewing : Route -> LocalState -> SetViewing
+routeToViewing route local =
+    case route of
+        HomePageRoute ->
+            StopViewingChannel
+
+        AdminRoute _ ->
+            StopViewingChannel
+
+        GuildRoute guildId channelRoute ->
+            if SeqDict.member guildId local.guilds then
+                case channelRoute of
+                    ChannelRoute channelId threadRoute ->
+                        case threadRoute of
+                            NoThreadWithFriends _ _ ->
+                                ViewChannel guildId channelId EmptyPlaceholder
+
+                            ViewThreadWithFriends threadId _ _ ->
+                                ViewChannelThread guildId channelId threadId EmptyPlaceholder
+
+                    NewChannelRoute ->
+                        StopViewingChannel
+
+                    EditChannelRoute _ ->
+                        StopViewingChannel
+
+                    GuildSettingsRoute ->
+                        StopViewingChannel
+
+                    JoinRoute _ ->
+                        StopViewingChannel
+
+            else
+                StopViewingChannel
+
+        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
+            if SeqDict.member guildId local.discordGuilds then
+                case channelRoute of
+                    DiscordChannel_ChannelRoute channelId threadRoute ->
+                        case threadRoute of
+                            NoThreadWithFriends _ _ ->
+                                ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder
+
+                            ViewThreadWithFriends threadId _ _ ->
+                                ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
+
+                    DiscordChannel_NewChannelRoute ->
+                        StopViewingChannel
+
+                    DiscordChannel_EditChannelRoute _ ->
+                        StopViewingChannel
+
+                    DiscordChannel_GuildSettingsRoute ->
+                        StopViewingChannel
+
+            else
+                StopViewingChannel
+
+        DmRoute otherUserId threadRoute ->
+            if SeqDict.member otherUserId local.dmChannels then
+                case threadRoute of
+                    NoThreadWithFriends _ _ ->
+                        ViewDm otherUserId EmptyPlaceholder
+
+                    ViewThreadWithFriends threadId _ _ ->
+                        ViewDmThread otherUserId threadId EmptyPlaceholder
+
+            else
+                StopViewingChannel
+
+        DiscordDmRoute data ->
+            if SeqDict.member data.channelId local.discordDmChannels then
+                ViewDiscordDm data.currentDiscordUserId data.channelId EmptyPlaceholder
+
+            else
+                StopViewingChannel
+
+        AiChatRoute ->
+            StopViewingChannel
+
+        SlackOAuthRedirect _ ->
+            StopViewingChannel
+
+        TextEditorRoute ->
+            StopViewingChannel
+
+        LinkDiscord _ ->
+            StopViewingChannel

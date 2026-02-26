@@ -1460,6 +1460,10 @@ handleChannelCreated channel model =
                             NonemptySet.fromNonemptyList
                                 (Nonempty head.id (List.map .id rest))
 
+                        existingUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+                        existingUsers =
+                            model.discordUsers
+
                         model2 : BackendModel
                         model2 =
                             { model
@@ -1499,7 +1503,7 @@ handleChannelCreated channel model =
                             channelId
                             (Server_DiscordDmChannelCreated channelId members |> ServerChange)
                             model2
-                        , getUserAvatars (head :: rest)
+                        , getUserAvatars existingUsers (head :: rest)
                         ]
                     )
 
@@ -1639,7 +1643,7 @@ handleReadyData userAuth readyData model =
       }
     , Command.batch
         [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
-        , getUserAvatars readyData.users
+        , getUserAvatars model.discordUsers readyData.users
         , Task.map2
             Tuple.pair
             (List.filterMap
@@ -1673,7 +1677,7 @@ handleReadyData userAuth readyData model =
                 (SeqDict.toList discordDmChannels)
                 |> Task.sequence
             )
-            (List.map (getDiscordGuildData model auth) readyData.guilds |> Task.sequence)
+            (List.filterMap (getDiscordGuildData model auth) readyData.guilds |> Task.sequence)
             |> Task.andThen (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Time.now)
             |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Time.now)
             |> Task.perform identity
@@ -1712,130 +1716,137 @@ getDiscordGuildData :
     -> Discord.Authentication
     -> Discord.GatewayGuild
     ->
-        Task
-            BackendOnly
-            Discord.HttpError
-            ( Discord.Id.Id Discord.Id.GuildId
-            , { guild : Discord.GatewayGuild
-              , channels :
-                    List
-                        ( Discord.Channel
-                        , List Discord.Message
-                        , List (Result Http.Error ( String, FileStatus.UploadResponse ))
-                        )
-              , icon : Maybe FileStatus.UploadResponse
-              , threads : List DiscordThreadReadyData
-              }
+        Maybe
+            (Task
+                BackendOnly
+                Discord.HttpError
+                ( Discord.Id.Id Discord.Id.GuildId
+                , { guild : Discord.GatewayGuild
+                  , channels :
+                        List
+                            ( Discord.Channel
+                            , List Discord.Message
+                            , List (Result Http.Error ( String, FileStatus.UploadResponse ))
+                            )
+                  , icon : Maybe FileStatus.UploadResponse
+                  , threads : List DiscordThreadReadyData
+                  }
+                )
             )
 getDiscordGuildData model auth gatewayGuild =
-    Task.map3
-        (\channels maybeIcon threads ->
-            ( gatewayGuild.properties.id
-            , { guild = gatewayGuild
-              , channels = channels
-              , icon = maybeIcon
-              , threads = threads
-              }
+    if SeqDict.member gatewayGuild.properties.id model.discordGuilds then
+        Nothing
+
+    else
+        Task.map3
+            (\channels maybeIcon threads ->
+                ( gatewayGuild.properties.id
+                , { guild = gatewayGuild
+                  , channels = channels
+                  , icon = maybeIcon
+                  , threads = threads
+                  }
+                )
             )
-        )
-        (List.map
-            (\channel ->
-                getManyMessages auth { channelId = channel.id, limit = 1000 }
-                    |> Task.onError (\_ -> Task.succeed [])
-                    |> Task.andThen
-                        (\messages ->
-                            Task.map
-                                (\uploadResponses ->
-                                    ( channel, List.reverse messages, uploadResponses )
-                                )
-                                (uploadAttachmentsForMessages model messages)
+            (List.map
+                (\channel ->
+                    getManyMessages auth { channelId = channel.id, limit = 1000 }
+                        |> Task.onError (\_ -> Task.succeed [])
+                        |> Task.andThen
+                            (\messages ->
+                                Task.map
+                                    (\uploadResponses ->
+                                        ( channel, List.reverse messages, uploadResponses )
+                                    )
+                                    (uploadAttachmentsForMessages model messages)
+                            )
+                )
+                gatewayGuild.channels
+                |> Task.sequence
+            )
+            (case gatewayGuild.properties.icon of
+                Just icon ->
+                    loadImage
+                        (Discord.guildIconUrl
+                            { size = Discord.DefaultImageSize
+                            , imageType = Discord.Choice1 Discord.Png
+                            }
+                            gatewayGuild.properties.id
+                            icon
                         )
+
+                Nothing ->
+                    Task.succeed Nothing
             )
-            gatewayGuild.channels
-            |> Task.sequence
-        )
-        (case gatewayGuild.properties.icon of
-            Just icon ->
-                loadImage
-                    (Discord.guildIconUrl
-                        { size = Discord.DefaultImageSize
-                        , imageType = Discord.Choice1 Discord.Png
-                        }
-                        gatewayGuild.properties.id
-                        icon
+            (Task.map2
+                Tuple.pair
+                (List.map
+                    (\channel ->
+                        Discord.getPublicArchivedThreadsPayload
+                            auth
+                            { channelId = channel.id
+                            , before = Nothing
+                            , limit = Just 100
+                            }
+                            |> http
+                            |> Task.map .threads
+                            |> Task.onError (\_ -> Task.succeed [])
                     )
+                    gatewayGuild.channels
+                    |> Task.sequence
+                    |> Task.map List.concat
+                )
+                (List.map
+                    (\channel ->
+                        Discord.getPrivateArchivedThreadsPayload
+                            auth
+                            { channelId = channel.id
+                            , before = Nothing
+                            , limit = Just 100
+                            }
+                            |> http
+                            |> Task.map .threads
+                            |> Task.onError (\_ -> Task.succeed [])
+                    )
+                    gatewayGuild.channels
+                    |> Task.sequence
+                    |> Task.map List.concat
+                )
+                |> Task.andThen
+                    (\( publicArchivedThreads, privateArchivedThreads ) ->
+                        let
+                            allThreads : List Discord.Channel
+                            allThreads =
+                                gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
+                        in
+                        List.filterMap
+                            (\thread ->
+                                case thread.parentId of
+                                    Included (Just parentId) ->
+                                        getManyMessages auth { channelId = thread.id, limit = 1000 }
+                                            |> Task.onError (\_ -> Task.succeed [])
+                                            |> Task.andThen
+                                                (\messages ->
+                                                    Task.map
+                                                        (\uploadResponses ->
+                                                            { channelId = parentId
+                                                            , channel = thread
+                                                            , messages = List.reverse messages
+                                                            , uploadResponses = uploadResponses
+                                                            }
+                                                        )
+                                                        (uploadAttachmentsForMessages model messages)
+                                                )
+                                            |> Just
 
-            Nothing ->
-                Task.succeed Nothing
-        )
-        (Task.map2
-            Tuple.pair
-            (List.map
-                (\channel ->
-                    Discord.getPublicArchivedThreadsPayload
-                        auth
-                        { channelId = channel.id
-                        , before = Nothing
-                        , limit = Just 100
-                        }
-                        |> http
-                        |> Task.map .threads
-                        |> Task.onError (\_ -> Task.succeed [])
-                )
-                gatewayGuild.channels
-                |> Task.sequence
-                |> Task.map List.concat
+                                    _ ->
+                                        Nothing
+                            )
+                            allThreads
+                            |> Task.sequence
+                    )
             )
-            (List.map
-                (\channel ->
-                    Discord.getPrivateArchivedThreadsPayload
-                        auth
-                        { channelId = channel.id
-                        , before = Nothing
-                        , limit = Just 100
-                        }
-                        |> http
-                        |> Task.map .threads
-                        |> Task.onError (\_ -> Task.succeed [])
-                )
-                gatewayGuild.channels
-                |> Task.sequence
-                |> Task.map List.concat
-            )
-            |> Task.andThen
-                (\( publicArchivedThreads, privateArchivedThreads ) ->
-                    let
-                        allThreads : List Discord.Channel
-                        allThreads =
-                            gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
-                    in
-                    List.filterMap
-                        (\thread ->
-                            case thread.parentId of
-                                Included (Just parentId) ->
-                                    getManyMessages auth { channelId = thread.id, limit = 1000 }
-                                        |> Task.onError (\_ -> Task.succeed [])
-                                        |> Task.andThen
-                                            (\messages ->
-                                                Task.map
-                                                    (\uploadResponses ->
-                                                        { channelId = parentId
-                                                        , channel = thread
-                                                        , messages = List.reverse messages
-                                                        , uploadResponses = uploadResponses
-                                                        }
-                                                    )
-                                                    (uploadAttachmentsForMessages model messages)
-                                            )
-                                        |> Just
-
-                                _ ->
-                                    Nothing
-                        )
-                        allThreads
-                        |> Task.sequence
-                )
-        )
+            |> Just
 
 
 getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id.Id Discord.Id.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)
@@ -2000,32 +2011,38 @@ handleListGuildMembersResponse chunkData model =
                 )
                 model.discordGuilds
       }
-    , List.map .user chunkData.members |> getUserAvatars
+    , List.map .user chunkData.members |> getUserAvatars model.discordUsers
     )
 
 
 getUserAvatars :
-    List { a | id : Discord.Id.Id Discord.Id.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
+    SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
+    -> List { a | id : Discord.Id.Id Discord.Id.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
     -> Command restriction toMsg BackendMsg
-getUserAvatars users =
-    List.map
+getUserAvatars existingUsers users =
+    List.filterMap
         (\user ->
-            Task.map
-                (\maybeAvatar -> ( user.id, maybeAvatar ))
-                (case user.avatar of
-                    Just avatar ->
-                        loadImage
-                            (Discord.userAvatarUrl
-                                { size = Discord.DefaultImageSize
-                                , imageType = Discord.Choice1 Discord.Png
-                                }
-                                user.id
-                                avatar
-                            )
+            if SeqDict.member user.id existingUsers then
+                Nothing
 
-                    Nothing ->
-                        Task.succeed Nothing
-                )
+            else
+                Task.map
+                    (\maybeAvatar -> ( user.id, maybeAvatar ))
+                    (case user.avatar of
+                        Just avatar ->
+                            loadImage
+                                (Discord.userAvatarUrl
+                                    { size = Discord.DefaultImageSize
+                                    , imageType = Discord.Choice1 Discord.Png
+                                    }
+                                    user.id
+                                    avatar
+                                )
+
+                        Nothing ->
+                            Task.succeed Nothing
+                    )
+                    |> Just
         )
         users
         |> Task.sequence

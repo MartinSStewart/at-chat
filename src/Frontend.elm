@@ -535,7 +535,7 @@ routeViewingLocalChange local route =
     let
         localChange : SetViewing
         localChange =
-            UserSession.routeToViewing route
+            LocalState.routeToViewing route local
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -3832,7 +3832,7 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (if hasFocus then
-                            Local_CurrentlyViewing (UserSession.routeToViewing model.route) |> Just
+                            Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
 
                          else
                             Local_CurrentlyViewing StopViewingChannel |> Just

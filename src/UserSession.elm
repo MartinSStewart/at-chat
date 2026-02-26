@@ -7,7 +7,6 @@ module UserSession exposing
     , ToBeFilledInByBackend(..)
     , UserSession
     , init
-    , routeToViewing
     , setCurrentlyViewing
     , setViewingToCurrentlyViewing
     , toFrontend
@@ -18,7 +17,6 @@ import Effect.Http as Http
 import Effect.Lamdera exposing (SessionId)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ThreadRouteWithFriends(..))
 import SeqDict exposing (SeqDict)
 import SessionIdHash exposing (SessionIdHash)
 import Url exposing (Url)
@@ -132,77 +130,3 @@ toFrontend currentUserId userSession =
 
     else
         Nothing
-
-
-routeToViewing : Route -> SetViewing
-routeToViewing route =
-    case route of
-        HomePageRoute ->
-            StopViewingChannel
-
-        AdminRoute _ ->
-            StopViewingChannel
-
-        GuildRoute guildId channelRoute ->
-            case channelRoute of
-                ChannelRoute channelId threadRoute ->
-                    case threadRoute of
-                        NoThreadWithFriends _ _ ->
-                            ViewChannel guildId channelId EmptyPlaceholder
-
-                        ViewThreadWithFriends threadId _ _ ->
-                            ViewChannelThread guildId channelId threadId EmptyPlaceholder
-
-                NewChannelRoute ->
-                    StopViewingChannel
-
-                EditChannelRoute _ ->
-                    StopViewingChannel
-
-                GuildSettingsRoute ->
-                    StopViewingChannel
-
-                JoinRoute _ ->
-                    StopViewingChannel
-
-        DiscordGuildRoute { currentDiscordUserId, guildId, channelRoute } ->
-            case channelRoute of
-                DiscordChannel_ChannelRoute channelId threadRoute ->
-                    case threadRoute of
-                        NoThreadWithFriends _ _ ->
-                            ViewDiscordChannel guildId channelId currentDiscordUserId EmptyPlaceholder
-
-                        ViewThreadWithFriends threadId _ _ ->
-                            ViewDiscordChannelThread guildId channelId currentDiscordUserId threadId EmptyPlaceholder
-
-                DiscordChannel_NewChannelRoute ->
-                    StopViewingChannel
-
-                DiscordChannel_EditChannelRoute _ ->
-                    StopViewingChannel
-
-                DiscordChannel_GuildSettingsRoute ->
-                    StopViewingChannel
-
-        DmRoute otherUserId threadRoute ->
-            case threadRoute of
-                NoThreadWithFriends _ _ ->
-                    ViewDm otherUserId EmptyPlaceholder
-
-                ViewThreadWithFriends threadId _ _ ->
-                    ViewDmThread otherUserId threadId EmptyPlaceholder
-
-        DiscordDmRoute data ->
-            ViewDiscordDm data.currentDiscordUserId data.channelId EmptyPlaceholder
-
-        AiChatRoute ->
-            StopViewingChannel
-
-        SlackOAuthRedirect _ ->
-            StopViewingChannel
-
-        TextEditorRoute ->
-            StopViewingChannel
-
-        LinkDiscord _ ->
-            StopViewingChannel
