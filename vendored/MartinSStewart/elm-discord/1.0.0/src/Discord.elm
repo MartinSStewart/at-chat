@@ -7,7 +7,7 @@ module Discord exposing
     , Invite, InviteWithMetadata, InviteCode(..)
     , getCurrentUser, getCurrentUserGuilds, User, PartialUser, Permissions
     , ImageCdnConfig, Png(..), Jpg(..), WebP(..), Gif(..), Choices(..)
-    , ActiveThreads, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, PrivateChannel, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerType(..), SupplementalGuild, ThreadMember, ThreadSortType(..), UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
+    , ActiveThreads, ArchivedThreads, AutoArchiveDuration(..), AvatarHash, Bits, CaptchaChallengeData, Channel2, ChannelInviteConfig, ChannelType(..), CreateGuildCategoryChannel, CreateGuildTextChannel, CreateGuildVoiceChannel, DataUri(..), EmojiData, EmojiType(..), GatewayCloseEventCode(..), GatewayCommand(..), GatewayEvent(..), GatewayGuild, GatewayGuildProperties, GatewayUserCommand, GuildMemberNoUser, GuildMembersChunkData, GuildModifications, GuildPreview, HttpRequest, ImageHash(..), ImageSize(..), Intents, LoginResponse, LoginSettings, MessageType(..), MessageUpdate, Model, Modify(..), Msg(..), Nickname, Nonce(..), OpDispatchBotEvent(..), OpDispatchUserEvent, OptionalData(..), OutMsg(..), Overwrite, PrivateChannel, ReactionAdd, ReactionRemove, ReactionRemoveAll, ReactionRemoveEmoji, ReadyData, ReadySupplementalData, ReferencedMessage(..), Relationship, RoleOrUserId(..), Roles(..), SearchTagSetting(..), SearchThreadsResult, SequenceCounter(..), SessionId(..), SortOrder(..), Sticker, StickerFormatType(..), StickerType(..), SupplementalGuild, ThreadMember, ThreadSortType(..), UploadAttachment, UploadAttachmentResponse, UserAuth, UserDiscriminator(..), UserMessageUpdate, UserOutMsg(..), achievementIconUrl, addPinnedChannelMessage, addPinnedChannelMessagePayload, applicationAssetUrl, applicationIconUrl, bulkDeleteMessagePayload, createChannelInvite, createChannelInvitePayload, createDmChannel, createDmChannelPayload, createGuildCategoryChannel, createGuildCategoryChannelPayload, createGuildEmoji, createGuildEmojiPayload, createGuildTextChannel, createGuildTextChannelPayload, createGuildVoiceChannel, createGuildVoiceChannelPayload, createMarkdownMessagePayload, createMessagePayload, createPrivateChannel, createPrivateChannelPayload, createReactionPayload, createdHandle, customEmojiUrl, decodeGatewayEvent, defaultChannelInviteConfig, defaultUserAvatarUrl, deleteAllReactionsForEmojiPayload, deleteAllReactionsPayload, deleteChannelPayload, deleteChannelPermission, deleteChannelPermissionPayload, deleteGuild, deleteGuildEmoji, deleteGuildEmojiPayload, deleteGuildPayload, deleteInvite, deleteInvitePayload, deleteMessagePayload, deleteOwnReactionPayload, deletePinnedChannelMessage, deletePinnedChannelMessagePayload, deleteUserReactionPayload, editMessage, editMessagePayload, encodeGatewayCommand, gatewayCloseEventCodeFromInt, getChannelInvites, getChannelInvitesPayload, getChannelPayload, getCurrentUserGuildsPayload, getCurrentUserPayload, getDirectMessages, getDirectMessagesPayload, getGuild, getGuildChannels, getGuildChannelsPayload, getGuildEmojis, getGuildEmojisPayload, getGuildMember, getGuildMemberPayload, getGuildPayload, getGuildPreview, getGuildPreviewPayload, getInvite, getInvitePayload, getMessagePayload, getMessagesPayload, getPinnedMessages, getPinnedMessagesPayload, getPrivateArchivedThreads, getPrivateArchivedThreadsPayload, getPublicArchivedThreadsPayload, getReactionsPayload, getRelationships, getRelationshipsPayload, getUser, getUserPayload, guildBannerUrl, guildDiscoverySplashUrl, guildIconUrl, guildSplashUrl, handleBadStatus, handleGoodStatus, handleUserGateway, imageIsAnimated, init, leaveGuild, leaveGuildPayload, listActiveThreads, listActiveThreadsPayload, listGuildEmojis, listGuildEmojisPayload, listGuildMembers, listGuildMembersPayload, modifyCurrentUser, modifyCurrentUserPayload, modifyGuild, modifyGuildEmoji, modifyGuildEmojiPayload, modifyGuildPayload, noCapabilities, noGuildModifications, noIntents, nonce, requestGuildMembers, searchThreads, searchThreadsPayload, startThreadFromMessage, startThreadFromMessagePayload, stringToBinary, subscription, teamIconUrl, triggerTypingIndicator, triggerTypingIndicatorPayload, update, uploadAttachments, uploadAttachmentsPayload, userAvatarUrl, userToken, userUpdate, websocketGatewayUrl
     )
 
 {-| Useful Discord links:
@@ -80,6 +80,7 @@ import Array.Extra
 import Base64
 import Binary
 import Bitwise
+import Bytes exposing (Bytes)
 import Dict exposing (Dict)
 import Discord.Id exposing (AchievementId, ApplicationId, AttachmentId, ChannelId, CustomEmojiId, GuildId, Id, MessageId, OverwriteId, PrivateChannelId, RoleId, StickerId, StickerPackId, TagId, TeamId, UserId, WebhookId)
 import Discord.Markdown exposing (Markdown)
@@ -258,13 +259,29 @@ See message formatting for more information on how to properly format messages.
 The maximum request size when sending a message is 8MB.
 
 -}
-createMessage : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> Task HttpError Message
+createMessage :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , content : String
+        , replyTo : Maybe (Id MessageId)
+        , attachments : List CreateMessageAttachment
+        }
+    -> Task HttpError Message
 createMessage authentication data =
     createMessagePayload authentication data |> toTask
 
 
-createMessagePayload : Authentication -> { channelId : Id ChannelId, content : String, replyTo : Maybe (Id MessageId) } -> HttpRequest Message
-createMessagePayload authentication { channelId, content, replyTo } =
+createMessagePayload :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , content : String
+        , replyTo : Maybe (Id MessageId)
+        , attachments : List CreateMessageAttachment
+        }
+    -> HttpRequest Message
+createMessagePayload authentication { channelId, content, replyTo, attachments } =
     httpPost
         (Just "eyJsb2NhdGlvbiI6ImNoYXRfaW5wdXQifQ==")
         authentication
@@ -283,22 +300,66 @@ createMessagePayload authentication { channelId, content, replyTo } =
                     Nothing ->
                         []
                )
+            ++ (case attachments of
+                    [] ->
+                        []
+
+                    _ ->
+                        [ ( "attachments", JE.list identity (List.indexedMap encodeCreateMessageAttachment attachments) ) ]
+               )
             |> JE.object
         )
 
 
 {-| Same as `createMessage` but instead of taking a String, it takes a list of Markdown values.
 -}
-createMarkdownMessage : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> Task HttpError Message
+createMarkdownMessage :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , content : List (Markdown ())
+        , replyTo : Maybe (Id MessageId)
+        , attachments : List CreateMessageAttachment
+        }
+    -> Task HttpError Message
 createMarkdownMessage authentication data =
     createMarkdownMessagePayload authentication data |> toTask
 
 
-createMarkdownMessagePayload : Authentication -> { channelId : Id ChannelId, content : List (Markdown ()), replyTo : Maybe (Id MessageId) } -> HttpRequest Message
-createMarkdownMessagePayload authentication { channelId, content, replyTo } =
+type alias CreateMessageAttachment =
+    { filename : String
+    , uploadedFilename : String
+    , contentType : String
+    }
+
+
+encodeCreateMessageAttachment : Int -> CreateMessageAttachment -> JE.Value
+encodeCreateMessageAttachment index attachment =
+    JE.object
+        [ ( "id", String.fromInt index |> JE.string )
+        , ( "filename", JE.string attachment.filename )
+        , ( "uploaded_filename", JE.string attachment.uploadedFilename )
+        , ( "original_content_type", JE.string attachment.contentType )
+        ]
+
+
+createMarkdownMessagePayload :
+    Authentication
+    ->
+        { channelId : Id ChannelId
+        , content : List (Markdown ())
+        , replyTo : Maybe (Id MessageId)
+        , attachments : List CreateMessageAttachment
+        }
+    -> HttpRequest Message
+createMarkdownMessagePayload authentication { channelId, content, replyTo, attachments } =
     createMessagePayload
         authentication
-        { channelId = channelId, content = Discord.Markdown.toString content, replyTo = replyTo }
+        { channelId = channelId
+        , content = Discord.Markdown.toString content
+        , replyTo = replyTo
+        , attachments = attachments
+        }
 
 
 {-| Create a reaction for the message.
@@ -5650,6 +5711,57 @@ relationshipTypeDecoder =
                     JD.fail ("Invalid relationship type: " ++ String.fromInt int)
         )
         JD.int
+
+
+type alias UploadAttachment =
+    { fileSize : Int
+    , filename : String
+
+    --, id : Int
+    --, isClip : Bool
+    --, contentType : String
+    }
+
+
+encodeUploadAttachment : UploadAttachment -> JE.Value
+encodeUploadAttachment a =
+    JE.object
+        [ ( "file_size", JE.int a.fileSize )
+        , ( "filename", JE.string a.filename )
+        ]
+
+
+type alias UploadAttachmentResponse =
+    { uploadUrl : String
+    , uploadFilename : String
+    }
+
+
+decodeUploadAttachmentResponse : JD.Decoder (List UploadAttachmentResponse)
+decodeUploadAttachmentResponse =
+    JD.map2
+        UploadAttachmentResponse
+        (JD.field "upload_url" JD.string)
+        (JD.field "upload_filename" JD.string)
+        |> JD.list
+
+
+{-| <https://docs.discord.food/reference#uploading-to-google-cloud>
+-}
+uploadAttachments : UserAuth -> Id ChannelId -> List UploadAttachment -> Task HttpError (List UploadAttachmentResponse)
+uploadAttachments auth channelId attachments =
+    uploadAttachmentsPayload auth channelId attachments |> toTask
+
+
+uploadAttachmentsPayload : UserAuth -> Id ChannelId -> List UploadAttachment -> HttpRequest (List UploadAttachmentResponse)
+uploadAttachmentsPayload auth channelId attachments =
+    httpPost
+        Nothing
+        (userToken auth)
+        decodeUploadAttachmentResponse
+        [ "channels", Discord.Id.toString channelId, "attachments" ]
+        []
+        (JE.object [ ( "files", JE.list encodeUploadAttachment attachments ) ])
 
 
 {-| <https://docs.discord.food/resources/relationships#get-relationships>

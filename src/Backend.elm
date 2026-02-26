@@ -10,6 +10,7 @@ module Backend exposing
 import AiChat
 import Array exposing (Array)
 import Broadcast
+import Bytes
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -28,6 +29,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
+import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -1545,26 +1547,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 ( clientId, changeId )
                                                                 model.pendingDiscordCreateMessages
                                                       }
-                                                    , List.map
-                                                        (\attachment -> Http.task { url = FileStatus.fileUrl, resolver = Http.bytesResolver })
-                                                        (SeqDict.values attachedFiles2)
-                                                        |> Task.sequence
-                                                        |> Task.andThen
-                                                            (\attachments ->
-                                                                Discord.createMarkdownMessagePayload
-                                                                    (Discord.userToken discordUser.auth)
-                                                                    { channelId = channelId
-                                                                    , content = RichText.toDiscord text
-                                                                    , replyTo =
-                                                                        case maybeReplyTo of
-                                                                            Just replyTo ->
-                                                                                OneToOne.first replyTo channel.linkedMessageIds
-
-                                                                            Nothing ->
-                                                                                Nothing
-                                                                    }
-                                                                    |> DiscordSync.http
-                                                            )
+                                                    , DiscordSync.sendMessage
+                                                        discordUser
+                                                        channelId
+                                                        channel
+                                                        maybeReplyTo
+                                                        attachedFiles2
+                                                        text
                                                         |> Task.attempt
                                                             (SentDiscordGuildMessage
                                                                 time
@@ -1619,7 +1608,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         Discord.createMarkdownMessagePayload
                                                                             (Discord.userToken discordUser.auth)
                                                                             { channelId = discordThreadId
-                                                                            , content = RichText.toDiscord attachedFiles2 text
+                                                                            , content = RichText.toDiscord text
                                                                             , replyTo =
                                                                                 case maybeReplyTo of
                                                                                     Just replyTo ->
@@ -1627,6 +1616,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                                                     Nothing ->
                                                                                         Nothing
+                                                                            , attachments = []
                                                                             }
                                                                             |> DiscordSync.http
                                                                     )
@@ -1675,7 +1665,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             , Discord.createMarkdownMessagePayload
                                                 (Discord.userToken discordUser.auth)
                                                 { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
-                                                , content = RichText.toDiscord attachedFiles2 text
+                                                , content = RichText.toDiscord text
                                                 , replyTo =
                                                     case maybeReplyTo of
                                                         Just replyTo ->
@@ -1683,6 +1673,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                                                         Nothing ->
                                                             Nothing
+                                                , attachments = []
                                                 }
                                                 |> DiscordSync.http
                                                 |> Task.attempt
@@ -2494,7 +2485,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             , content =
-                                                                RichText.toDiscord SeqDict.empty newContent
+                                                                RichText.toDiscord newContent
                                                                     |> Discord.Markdown.toString
                                                             }
                                                             |> DiscordSync.http
@@ -2565,7 +2556,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { channelId = Discord.Id.toUInt64 dmData.channelId |> Discord.Id.fromUInt64
                                                     , messageId = discordMessageId
                                                     , content =
-                                                        RichText.toDiscord SeqDict.empty newContent
+                                                        RichText.toDiscord newContent
                                                             |> Discord.Markdown.toString
                                                     }
                                                     |> DiscordSync.http

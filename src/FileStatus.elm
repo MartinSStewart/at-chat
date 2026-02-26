@@ -14,6 +14,7 @@ module FileStatus exposing
     , addFileHash
     , contentType
     , contentTypeCodec
+    , contentTypes
     , domain
     , fileHash
     , fileHashCodec

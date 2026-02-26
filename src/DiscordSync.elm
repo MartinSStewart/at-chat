@@ -8,11 +8,13 @@ module DiscordSync exposing
     , handleDiscordCreateMessage
     , handleDiscordEditMessage
     , http
+    , sendMessage
     )
 
 import Array exposing (Array)
 import Array.Extra
 import Broadcast
+import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
@@ -27,7 +29,7 @@ import Effect.Time as Time
 import Effect.Websocket as Websocket
 import Emoji exposing (Emoji)
 import Env
-import FileName
+import FileName exposing (FileName)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..))
@@ -43,7 +45,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordDmChannelReadyData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordDmChannelReadyData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -2120,3 +2122,146 @@ http request =
                 )
         , timeout = Nothing
         }
+
+
+
+--type SendMessageError
+--    = SendMessage_DiscordError Discord.HttpError
+--    | SendMessage_HttpError Http.Error
+
+
+sendMessage :
+    DiscordFullUserData
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> DiscordBackendChannel
+    -> Maybe (Id ChannelMessageId)
+    -> SeqDict (Id FileId) FileData
+    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    -> Task BackendOnly Discord.HttpError Discord.Message
+sendMessage discordUser channelId channel maybeReplyTo attachedFiles text =
+    let
+        attachedFiles2 : List FileData
+        attachedFiles2 =
+            SeqDict.values attachedFiles
+    in
+    List.map
+        (\attachment ->
+            Http.task
+                { method = "GET"
+                , headers = []
+                , url = FileStatus.fileUrl attachment.contentType attachment.fileHash
+                , body = Http.emptyBody
+                , resolver =
+                    Http.bytesResolver
+                        (\response ->
+                            case response of
+                                Http.BadUrl_ url ->
+                                    Err ()
+
+                                Http.Timeout_ ->
+                                    Err ()
+
+                                Http.NetworkError_ ->
+                                    Err ()
+
+                                Http.BadStatus_ metadata body ->
+                                    Err ()
+
+                                Http.GoodStatus_ metadata body ->
+                                    Ok body
+                        )
+                , timeout = Duration.seconds 30 |> Just
+                }
+                |> Task.map (\bytes -> Ok ( attachment, bytes ))
+                |> Task.onError (\() -> Task.succeed (Err ()))
+        )
+        attachedFiles2
+        |> Task.sequence
+        |> Task.andThen
+            (\attachments ->
+                let
+                    attachments2 : List ( FileData, Bytes )
+                    attachments2 =
+                        List.filterMap Result.toMaybe attachments
+                in
+                Discord.uploadAttachmentsPayload
+                    discordUser.auth
+                    channelId
+                    (List.map
+                        (\( fileData, bytes ) ->
+                            { fileSize = Bytes.width bytes
+                            , filename = FileName.toString fileData.fileName
+                            }
+                        )
+                        attachments2
+                    )
+                    |> http
+                    |> Task.andThen
+                        (\uploadAttachmentsResponse ->
+                            uploadAttachments uploadAttachmentsResponse
+                                |> Task.andThen
+                                    (\_ ->
+                                        Discord.createMarkdownMessagePayload
+                                            (Discord.userToken discordUser.auth)
+                                            { channelId = channelId
+                                            , content = RichText.toDiscord text
+                                            , replyTo =
+                                                case maybeReplyTo of
+                                                    Just replyTo ->
+                                                        OneToOne.first replyTo channel.linkedMessageIds
+
+                                                    Nothing ->
+                                                        Nothing
+                                            , attachments =
+                                                List.map2
+                                                    (\a ( fileData, _ ) ->
+                                                        { filename = FileName.toString fileData.fileName
+                                                        , uploadedFilename = a.uploadFilename
+                                                        , contentType =
+                                                            OneToOne.second fileData.contentType FileStatus.contentTypes |> Maybe.withDefault ""
+                                                        }
+                                                    )
+                                                    uploadAttachmentsResponse
+                                                    attachments2
+                                            }
+                                            |> http
+                                    )
+                        )
+            )
+
+
+uploadAttachments : List Discord.UploadAttachmentResponse -> Task BackendOnly x (List (Result () ()))
+uploadAttachments uploadAttachmentsResponses =
+    List.map
+        (\uploadAttachmentsResponse ->
+            Http.task
+                { method = "GET"
+                , headers = []
+                , url = uploadAttachmentsResponse.uploadUrl
+                , body = Http.emptyBody
+                , resolver =
+                    Http.bytesResolver
+                        (\response ->
+                            case response of
+                                Http.BadUrl_ url ->
+                                    Err ()
+
+                                Http.Timeout_ ->
+                                    Err ()
+
+                                Http.NetworkError_ ->
+                                    Err ()
+
+                                Http.BadStatus_ metadata body ->
+                                    Err ()
+
+                                Http.GoodStatus_ metadata body ->
+                                    Ok ()
+                        )
+                , timeout = Duration.seconds 30 |> Just
+                }
+                |> Task.map (\() -> Ok ())
+                |> Task.onError (\() -> Task.succeed (Err ()))
+        )
+        uploadAttachmentsResponses
+        |> Task.sequence
