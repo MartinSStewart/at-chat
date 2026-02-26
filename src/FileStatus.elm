@@ -14,6 +14,7 @@ module FileStatus exposing
     , addFileHash
     , contentType
     , contentTypeCodec
+    , contentTypes
     , domain
     , fileHash
     , fileHashCodec
@@ -24,11 +25,15 @@ module FileStatus exposing
     , onlyUploadedFiles
     , pngContent
     , sizeToString
+    , textContent
     , thumbnailUrl
-    , upload
+    , unknownContentType
     , uploadAvatar
     , uploadBytes
+    , uploadFile
     , uploadTrackerId
+    , uploadUrl
+    , webpContent
     )
 
 import Bytes exposing (Bytes)
@@ -37,6 +42,7 @@ import CodecExtra
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
+import Duration
 import Effect.Browser.Dom as Dom
 import Effect.Command exposing (Command)
 import Effect.File exposing (File)
@@ -49,6 +55,7 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..))
 import Json.Decode
+import Json.Encode
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneToOne exposing (OneToOne)
@@ -172,6 +179,16 @@ pngContent =
     contentType "image/png"
 
 
+webpContent : ContentType
+webpContent =
+    contentType "image/webp"
+
+
+textContent : ContentType
+textContent =
+    contentType "text/plain"
+
+
 type ContentTypeType
     = Text
     | Image
@@ -205,7 +222,12 @@ contentTypeCodec =
 
 contentType : String -> ContentType
 contentType a =
-    OneToOne.first a contentTypes |> Maybe.withDefault (ContentType 9999)
+    OneToOne.first a contentTypes |> Maybe.withDefault unknownContentType
+
+
+unknownContentType : ContentType
+unknownContentType =
+    ContentType 9999
 
 
 type alias UploadResponse =
@@ -357,14 +379,32 @@ type alias ExposureTime =
     { numerator : Int, denominator : Int }
 
 
-upload :
+uploadUrl : SessionIdHash -> String -> Task restriction Http.Error UploadResponse
+uploadUrl sessionId url =
+    Http.task
+        { method = "POST"
+        , headers = []
+        , url = domain ++ "/file/upload-url"
+        , body =
+            Http.jsonBody
+                (Json.Encode.object
+                    [ ( "url", Json.Encode.string url )
+                    , ( "sid", Json.Encode.string (SessionIdHash.toString sessionId) )
+                    ]
+                )
+        , resolver = resolver uploadResponseCodec
+        , timeout = Just (Duration.seconds 30)
+        }
+
+
+uploadFile :
     (Result Http.Error UploadResponse -> msg)
     -> SessionIdHash
     -> ( AnyGuildOrDmId, ThreadRoute )
     -> Id FileId
     -> File
     -> Command restriction toFrontend msg
-upload onResult sessionId guildOrDmId fileId file2 =
+uploadFile onResult sessionId guildOrDmId fileId file2 =
     Http.request
         { method = "POST"
         , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
@@ -427,39 +467,43 @@ uploadTrackerId ( guildOrDmId, threadRoute ) fileId =
         ++ Id.toString fileId
 
 
-uploadBytes : String -> Bytes -> Task restriction Http.Error UploadResponse
+uploadBytes : SessionIdHash -> Bytes -> Task restriction Http.Error UploadResponse
 uploadBytes sessionId bytes =
     Http.task
         { method = "POST"
-        , headers = [ Http.header "sid" sessionId ]
+        , headers = [ Http.header "sid" (SessionIdHash.toString sessionId) ]
         , url = domain ++ "/file/upload"
         , body = Http.bytesBody "application/octet-stream" bytes
-        , resolver =
-            Http.stringResolver
-                (\result ->
-                    case result of
-                        Http.GoodStatus_ _ text ->
-                            case Codec.decodeString uploadResponseCodec text of
-                                Ok ok ->
-                                    Ok ok
-
-                                Err error ->
-                                    Json.Decode.errorToString error |> Http.BadBody |> Err
-
-                        Http.BadUrl_ string ->
-                            Err (Http.BadUrl string)
-
-                        Http.Timeout_ ->
-                            Err Http.Timeout
-
-                        Http.NetworkError_ ->
-                            Err Http.NetworkError
-
-                        Http.BadStatus_ metadata _ ->
-                            Err (Http.BadStatus metadata.statusCode)
-                )
+        , resolver = resolver uploadResponseCodec
         , timeout = Nothing
         }
+
+
+resolver : Codec value -> Http.Resolver restriction Http.Error value
+resolver codec =
+    Http.stringResolver
+        (\result ->
+            case result of
+                Http.GoodStatus_ _ text ->
+                    case Codec.decodeString codec text of
+                        Ok ok ->
+                            Ok ok
+
+                        Err error ->
+                            Json.Decode.errorToString error |> Http.BadBody |> Err
+
+                Http.BadUrl_ string ->
+                    Err (Http.BadUrl string)
+
+                Http.Timeout_ ->
+                    Err Http.Timeout
+
+                Http.NetworkError_ ->
+                    Err Http.NetworkError
+
+                Http.BadStatus_ metadata _ ->
+                    Err (Http.BadStatus metadata.statusCode)
+        )
 
 
 domain : String

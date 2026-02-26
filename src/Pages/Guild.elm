@@ -6223,7 +6223,7 @@ friendsColumn isMobile openedOtherUserId local =
                 (\( otherUserId, _ ) ->
                     case LocalState.getUser otherUserId local.localUser of
                         Just otherUser ->
-                            Ui.Lazy.lazy4
+                            Ui.Lazy.lazy5
                                 friendLabel
                                 isMobile
                                 (case openedOtherUserId of
@@ -6234,7 +6234,8 @@ friendsColumn isMobile openedOtherUserId local =
                                         False
                                 )
                                 otherUserId
-                                otherUser
+                                otherUser.name
+                                otherUser.icon
                                 |> Just
 
                         Nothing ->
@@ -6262,8 +6263,8 @@ friendsColumn isMobile openedOtherUserId local =
         )
 
 
-friendLabel : Bool -> Bool -> Id UserId -> FrontendUser -> Element FrontendMsg
-friendLabel isMobile isSelected otherUserId otherUser =
+friendLabel : Bool -> Bool -> Id UserId -> PersonName -> Maybe FileHash -> Element FrontendMsg
+friendLabel isMobile isSelected otherUserId name icon =
     let
         _ =
             Debug.log "rerender friendLabel" ()
@@ -6284,8 +6285,8 @@ friendLabel isMobile isSelected otherUserId otherUser =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        [ User.profileImage otherUser.icon
-        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+        [ User.profileImage icon
+        , Ui.el [] (Ui.text (PersonName.toString name))
         ]
 
 
@@ -6299,7 +6300,7 @@ discordFriendLabel :
 discordFriendLabel isMobile isSelected dmChannelId members localUser =
     let
         _ =
-            Debug.log "rerender friendLabel" ()
+            Debug.log "rerender discord friendLabel" ()
 
         members2 : List (Discord.Id.Id Discord.Id.UserId)
         members2 =

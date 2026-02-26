@@ -38,6 +38,8 @@ import Id exposing (Id, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import MyUi
+import NonemptyDict
+import NonemptyExtra
 import OneToOne exposing (OneToOne)
 import Parser exposing ((|.), (|=), Parser, Step(..))
 import PersonName exposing (PersonName)
@@ -1331,24 +1333,32 @@ fromSlack blocks =
         |> Maybe.withDefault (Nonempty (Italic (Nonempty (NormalText 'M' "essage is empty") [])) [])
 
 
-fromDiscord : String -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
-fromDiscord text =
-    let
-        textOrEmpty =
-            String.Nonempty.fromString text
-                |> Maybe.withDefault (NonemptyString '<' "empty>")
-    in
-    case Parser.run (discordParser []) text of
-        Ok ok ->
-            case List.Nonempty.fromList (Array.toList ok) of
-                Just nonempty ->
-                    normalize nonempty
+fromDiscord : String -> SeqDict (Id FileId) FileData -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+fromDiscord text attachments =
+    case String.Nonempty.fromString text of
+        Just nonempty ->
+            NonemptyExtra.appendList
+                (case Parser.run (discordParser []) text of
+                    Ok ok ->
+                        case List.Nonempty.fromList (Array.toList ok) of
+                            Just nonempty2 ->
+                                normalize nonempty2
+
+                            Nothing ->
+                                Nonempty (normalTextFromNonempty nonempty) []
+
+                    Err _ ->
+                        Nonempty (normalTextFromNonempty nonempty) []
+                )
+                (List.map AttachedFile (SeqDict.keys attachments))
+
+        Nothing ->
+            case NonemptyDict.fromSeqDict attachments of
+                Just attachments2 ->
+                    List.Nonempty.map AttachedFile (NonemptyDict.keys attachments2)
 
                 Nothing ->
-                    Nonempty (normalTextFromNonempty textOrEmpty) []
-
-        Err _ ->
-            Nonempty (normalTextFromNonempty textOrEmpty) []
+                    Nonempty (NormalText '<' "empty>") []
 
 
 type DiscordModifiers
@@ -1528,10 +1538,9 @@ discordStopOnChar =
 
 
 toDiscord :
-    SeqDict (Id FileId) FileData
-    -> Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
+    Nonempty (RichText (Discord.Id.Id Discord.Id.UserId))
     -> List (Discord.Markdown.Markdown a)
-toDiscord attachedFiles content =
+toDiscord content =
     List.map
         (\item ->
             case item of
@@ -1542,19 +1551,19 @@ toDiscord attachedFiles content =
                     Discord.Markdown.text (String.cons char string)
 
                 Bold nonempty ->
-                    Discord.Markdown.boldMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.boldMarkdown (toDiscord nonempty)
 
                 Italic nonempty ->
-                    Discord.Markdown.italicMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.italicMarkdown (toDiscord nonempty)
 
                 Underline nonempty ->
-                    Discord.Markdown.underlineMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.underlineMarkdown (toDiscord nonempty)
 
                 Strikethrough nonempty ->
-                    Discord.Markdown.strikethroughMarkdown (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.strikethroughMarkdown (toDiscord nonempty)
 
                 Spoiler nonempty ->
-                    Discord.Markdown.spoiler (toDiscord attachedFiles nonempty)
+                    Discord.Markdown.spoiler (toDiscord nonempty)
 
                 Hyperlink protocol string ->
                     Discord.Markdown.text (hyperlinkToString protocol string)
@@ -1574,19 +1583,7 @@ toDiscord attachedFiles content =
                         string
 
                 AttachedFile fileId ->
-                    (case SeqDict.get fileId attachedFiles of
-                        Just fileData ->
-                            case fileData.imageMetadata of
-                                Just { imageSize } ->
-                                    FileStatus.thumbnailUrl imageSize fileData.contentType fileData.fileHash
-
-                                Nothing ->
-                                    FileStatus.fileUrl fileData.contentType fileData.fileHash
-
-                        Nothing ->
-                            ""
-                    )
-                        |> Discord.Markdown.text
+                    Discord.Markdown.text ""
         )
         (List.Nonempty.toList content)
 

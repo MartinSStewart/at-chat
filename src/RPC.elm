@@ -2,6 +2,7 @@ module RPC exposing (checkFileUpload, lamdera_handleEndpoints)
 
 import Broadcast
 import Coord
+import DiscordSync
 import Env
 import FileStatus
 import Http
@@ -18,9 +19,13 @@ checkFileUpload : SessionId -> BackendModel -> Headers -> String -> ( Result Htt
 checkFileUpload _ model _ text =
     case String.split "," text of
         [ fileHash, fileSize, sessionId, width, height ] ->
+            let
+                sessionId2 =
+                    SessionIdHash.fromString sessionId
+            in
             case
                 T4
-                    (sessionId == Env.secretKey || Broadcast.getSessionFromSessionIdHash (SessionIdHash.fromString sessionId) model /= Nothing)
+                    (sessionId2 == DiscordSync.backendSessionIdHash || Broadcast.getSessionFromSessionIdHash sessionId2 model /= Nothing)
                     (String.toInt fileSize)
                     (String.toInt width)
                     (String.toInt height)

@@ -535,7 +535,7 @@ routeViewingLocalChange local route =
     let
         localChange : SetViewing
         localChange =
-            UserSession.routeToViewing route
+            LocalState.routeToViewing route local
     in
     if UserSession.setViewingToCurrentlyViewing localChange == local.localUser.session.currentlyViewing then
         Nothing
@@ -3832,7 +3832,7 @@ updateLoaded msg model =
                     handleLocalChange
                         model.time
                         (if hasFocus then
-                            Local_CurrentlyViewing (UserSession.routeToViewing model.route) |> Just
+                            Local_CurrentlyViewing (LocalState.routeToViewing model.route (Local.model loggedIn.localState)) |> Just
 
                          else
                             Local_CurrentlyViewing StopViewingChannel |> Just
@@ -4363,7 +4363,7 @@ gotFiles guildOrDmId files model =
                                                 ++ Id.toString id
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.upload
+                                    , FileStatus.uploadFile
                                         (GotFileHashName guildOrDmId id)
                                         local.localUser.session.sessionIdHash
                                         guildOrDmId
@@ -4398,7 +4398,7 @@ gotFiles guildOrDmId files model =
                                         id =
                                             Id.fromInt (index + 1)
                                     in
-                                    FileStatus.upload
+                                    FileStatus.uploadFile
                                         (GotFileHashName guildOrDmId id)
                                         local.localUser.session.sessionIdHash
                                         guildOrDmId
@@ -4472,7 +4472,7 @@ editMessage_gotFiles guildOrDmId files model =
                                                 ++ Id.toString fileId
                                                 ++ RichText.attachedFileSuffix
                                            ]
-                                    , FileStatus.upload
+                                    , FileStatus.uploadFile
                                         (EditMessage_GotFileHashName guildOrDmId edit.messageIndex fileId)
                                         (Local.model loggedIn.localState).localUser.session.sessionIdHash
                                         guildOrDmId

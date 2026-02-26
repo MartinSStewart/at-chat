@@ -28,6 +28,10 @@ async fn main() {
             post(upload_endpoint).options(options_endpoint),
         )
         .route(
+            "/file/upload-url",
+            post(upload_url_endpoint).options(options_endpoint),
+        )
+        .route(
             "/file/push-notification",
             post(push_notification_endpoint).options(options_endpoint),
         )
@@ -252,6 +256,22 @@ async fn upload_endpoint(request: Request) -> Response<String> {
     match (session_id, request.extract::<Bytes, _>().await) {
         (Some(session_id2), Ok(bytes)) => file_upload_helper(session_id2, bytes).await,
         _ => response_with_headers(
+            StatusCode::UNAUTHORIZED,
+            String::from("Invalid permissions 1"),
+        ),
+    }
+}
+
+async fn upload_url_endpoint(Json(UploadUrl { url, sid }): Json<UploadUrl>) -> Response<String> {
+    match reqwest::Client::new().get(url).send().await {
+        Ok(response) => match response.bytes().await {
+            Ok(bytes) => file_upload_helper(sid, bytes).await,
+            Err(_) => response_with_headers(
+                StatusCode::UNAUTHORIZED,
+                String::from("Invalid permissions 2"),
+            ),
+        },
+        Err(_) => response_with_headers(
             StatusCode::UNAUTHORIZED,
             String::from("Invalid permissions 1"),
         ),
@@ -787,4 +807,10 @@ pub struct CustomRequest {
 pub struct Header {
     key: String,
     value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UploadUrl {
+    pub url: String,
+    pub sid: String,
 }

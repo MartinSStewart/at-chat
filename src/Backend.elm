@@ -10,6 +10,7 @@ module Backend exposing
 import AiChat
 import Array exposing (Array)
 import Broadcast
+import Bytes
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -28,6 +29,7 @@ import Email.Html.Attributes
 import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
+import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
@@ -59,7 +61,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -178,6 +180,7 @@ init =
       , discordUsers = SeqDict.empty
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
+      , discordAttachments = SeqDict.empty
       }
     , Command.none
     )
@@ -652,9 +655,9 @@ update msg model =
                                     SeqDict
                                         (Discord.Id.Id Discord.Id.GuildId)
                                         { guild : Discord.GatewayGuild
-                                        , channels : List ( Discord.Channel, List Discord.Message )
+                                        , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
                                         , icon : Maybe FileStatus.UploadResponse
-                                        , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+                                        , threads : List DiscordThreadReadyData
                                         }
                                 guildDataDict =
                                     SeqDict.fromList guildData
@@ -695,12 +698,12 @@ update msg model =
                                                 guildDataDict
                                         , discordDms =
                                             List.filterMap
-                                                (\( channelId, _, _ ) ->
-                                                    case SeqDict.get channelId model2.discordDmChannels of
+                                                (\data ->
+                                                    case SeqDict.get data.dmChannelId model2.discordDmChannels of
                                                         Just dmChannel ->
                                                             case discordDmChannelToFrontend False dmChannel linkedDiscordUsers of
                                                                 Just dmChannel2 ->
-                                                                    Just ( channelId, dmChannel2 )
+                                                                    Just ( data.dmChannelId, dmChannel2 )
 
                                                                 Nothing ->
                                                                     Nothing
@@ -785,6 +788,118 @@ update msg model =
                             Debug.log "WebsocketSentDataForUser" ( discordUserId, "ConnectionClosed" )
                     in
                     ( model, Command.none )
+
+        DiscordMessageCreate_AttachmentsUploaded message results ->
+            let
+                ( attachments, discordAttachments ) =
+                    attachmentsUploadedHelper model message results
+            in
+            DiscordSync.handleDiscordCreateMessage message attachments { model | discordAttachments = discordAttachments }
+
+        DiscordMessageUpdate_AttachmentsUploaded message results ->
+            let
+                ( attachments, discordAttachments ) =
+                    attachmentsUploadedHelper model message results
+            in
+            DiscordSync.handleDiscordEditMessage message attachments { model | discordAttachments = discordAttachments }
+
+
+attachmentsUploadedHelper :
+    BackendModel
+    -> { a | attachments : List Discord.Attachment }
+    -> List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
+    -> ( SeqDict (Id FileId) FileData, SeqDict String DiscordAttachmentData )
+attachmentsUploadedHelper model message results =
+    let
+        uploadResponses : SeqDict (Discord.Id.Id Discord.Id.AttachmentId) FileStatus.UploadResponse
+        uploadResponses =
+            List.filterMap Result.toMaybe results |> SeqDict.fromList
+    in
+    List.foldl
+        (\attachment ( fileDataDict, discordAttachments ) ->
+            let
+                fileId : Id FileId
+                fileId =
+                    SeqDict.size fileDataDict + 1 |> Id.fromInt
+            in
+            case SeqDict.get attachment.url model.discordAttachments of
+                Just { fileHash, imageMetadata } ->
+                    ( SeqDict.insert
+                        fileId
+                        (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
+                        fileDataDict
+                    , discordAttachments
+                    )
+
+                Nothing ->
+                    case SeqDict.get attachment.id uploadResponses of
+                        Just uploadResponse ->
+                            ( SeqDict.insert
+                                fileId
+                                (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
+                                fileDataDict
+                            , SeqDict.insert
+                                attachment.url
+                                { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                                discordAttachments
+                            )
+
+                        Nothing ->
+                            ( fileDataDict, discordAttachments )
+        )
+        ( SeqDict.empty, model.discordAttachments )
+        message.attachments
+
+
+
+--(
+--
+--List.filterMap
+--    (\result ->
+--        case result of
+--            Ok ( attachmentId, { imageSize, fileHash } ) ->
+--                case SeqDict.get attachmentId attachmentsDict of
+--                    Just attachment ->
+--                        { fileName = FileName.fromString attachment.filename
+--                        , fileSize = attachment.size
+--                        , imageMetadata = imageSize
+--                        , contentType =
+--                            case attachment.contentType of
+--                                Included contentType ->
+--                                    FileStatus.contentType contentType
+--
+--                                Missing ->
+--                                    case imageSize of
+--                                        Just _ ->
+--                                            FileStatus.webpContent
+--
+--                                        Nothing ->
+--                                            FileStatus.unknownContentType
+--                        , fileHash = fileHash
+--                        }
+--                            |> Just
+--
+--                    Nothing ->
+--                        Nothing
+--
+--            Err _ ->
+--                Nothing
+--    )
+--    results
+--    |> List.indexedMap (\index fileData -> ( Id.fromInt (index + 1), fileData ))
+--    |> SeqDict.fromList
+--, List.foldl
+--    (\result dict ->
+--        case result of
+--            Ok ( attachment, uploadResponse ) ->
+--                SeqDict.insert attachment.url uploadResponse.fileHash dict
+--
+--            Err _ ->
+--                dict
+--    )
+--    existingDiscordAttachments
+--    results
+--)
 
 
 updateFromFrontend :
@@ -1432,19 +1547,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 ( clientId, changeId )
                                                                 model.pendingDiscordCreateMessages
                                                       }
-                                                    , Discord.createMarkdownMessagePayload
-                                                        (Discord.userToken discordUser.auth)
-                                                        { channelId = channelId
-                                                        , content = RichText.toDiscord attachedFiles2 text
-                                                        , replyTo =
-                                                            case maybeReplyTo of
-                                                                Just replyTo ->
-                                                                    OneToOne.first replyTo channel.linkedMessageIds
+                                                    , DiscordSync.sendMessage
+                                                        discordUser
+                                                        channelId
+                                                        (case maybeReplyTo of
+                                                            Just replyTo ->
+                                                                OneToOne.first replyTo channel.linkedMessageIds
 
-                                                                Nothing ->
-                                                                    Nothing
-                                                        }
-                                                        |> DiscordSync.http
+                                                            Nothing ->
+                                                                Nothing
+                                                        )
+                                                        attachedFiles2
+                                                        text
                                                         |> Task.attempt
                                                             (SentDiscordGuildMessage
                                                                 time
@@ -1496,19 +1610,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                               )
                                                                 |> Task.andThen
                                                                     (\() ->
-                                                                        Discord.createMarkdownMessagePayload
-                                                                            (Discord.userToken discordUser.auth)
-                                                                            { channelId = discordThreadId
-                                                                            , content = RichText.toDiscord attachedFiles2 text
-                                                                            , replyTo =
-                                                                                case maybeReplyTo of
-                                                                                    Just replyTo ->
-                                                                                        OneToOne.first replyTo thread.linkedMessageIds
+                                                                        DiscordSync.sendMessage
+                                                                            discordUser
+                                                                            channelId
+                                                                            (case maybeReplyTo of
+                                                                                Just replyTo ->
+                                                                                    OneToOne.first replyTo thread.linkedMessageIds
 
-                                                                                    Nothing ->
-                                                                                        Nothing
-                                                                            }
-                                                                            |> DiscordSync.http
+                                                                                Nothing ->
+                                                                                    Nothing
+                                                                            )
+                                                                            attachedFiles
+                                                                            text
                                                                     )
                                                                 |> Task.attempt
                                                                     (SentDiscordGuildMessage
@@ -1552,19 +1665,18 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         ( clientId, changeId )
                                                         model.pendingDiscordCreateDmMessages
                                               }
-                                            , Discord.createMarkdownMessagePayload
-                                                (Discord.userToken discordUser.auth)
-                                                { channelId = Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64
-                                                , content = RichText.toDiscord attachedFiles2 text
-                                                , replyTo =
-                                                    case maybeReplyTo of
-                                                        Just replyTo ->
-                                                            OneToOne.first replyTo dmChannel.linkedMessageIds
+                                            , DiscordSync.sendMessage
+                                                discordUser
+                                                (Discord.Id.toUInt64 data.channelId |> Discord.Id.fromUInt64)
+                                                (case maybeReplyTo of
+                                                    Just replyTo ->
+                                                        OneToOne.first replyTo dmChannel.linkedMessageIds
 
-                                                        Nothing ->
-                                                            Nothing
-                                                }
-                                                |> DiscordSync.http
+                                                    Nothing ->
+                                                        Nothing
+                                                )
+                                                attachedFiles
+                                                text
                                                 |> Task.attempt
                                                     (SentDiscordDmMessage
                                                         time
@@ -2374,7 +2486,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                             { channelId = discordChannelId
                                                             , messageId = discordMessageId
                                                             , content =
-                                                                RichText.toDiscord SeqDict.empty newContent
+                                                                RichText.toDiscord newContent
                                                                     |> Discord.Markdown.toString
                                                             }
                                                             |> DiscordSync.http
@@ -2445,7 +2557,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                     { channelId = Discord.Id.toUInt64 dmData.channelId |> Discord.Id.fromUInt64
                                                     , messageId = discordMessageId
                                                     , content =
-                                                        RichText.toDiscord SeqDict.empty newContent
+                                                        RichText.toDiscord newContent
                                                             |> Discord.Markdown.toString
                                                     }
                                                     |> DiscordSync.http

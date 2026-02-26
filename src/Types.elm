@@ -4,11 +4,14 @@ module Types exposing
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
+    , DiscordAttachmentData
     , DiscordBasicUserData
+    , DiscordDmChannelReadyData
     , DiscordExport
     , DiscordFullUserData
     , DiscordFullUserDataExport
     , DiscordNeedsAuthAgainExport
+    , DiscordThreadReadyData
     , DiscordUserData(..)
     , DiscordUserDataExport(..)
     , Drag(..)
@@ -302,7 +305,12 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
+    , discordAttachments : SeqDict String DiscordAttachmentData
     }
+
+
+type alias DiscordAttachmentData =
+    { fileHash : FileHash, imageMetadata : Maybe FileStatus.ImageMetadata }
 
 
 type DiscordUserData
@@ -613,13 +621,13 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List ( Discord.Id.Id Discord.Id.PrivateChannelId, DiscordDmChannel, List Discord.Message )
+            ( List DiscordDmChannelReadyData
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
-                  , channels : List ( Discord.Channel, List Discord.Message )
+                  , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
                   , icon : Maybe FileStatus.UploadResponse
-                  , threads : List ( Discord.Id.Id Discord.Id.ChannelId, Discord.Channel, List Discord.Message )
+                  , threads : List DiscordThreadReadyData
                   }
                 )
             )
@@ -627,6 +635,24 @@ type BackendMsg
     | WebsocketCreatedHandleForUser (Discord.Id.Id Discord.Id.UserId) Websocket.Connection
     | WebsocketClosedByBackendForUser (Discord.Id.Id Discord.Id.UserId) Bool
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
+    | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
+    | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
+
+
+type alias DiscordDmChannelReadyData =
+    { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+    , dmChannel : DiscordDmChannel
+    , messages : List Discord.Message
+    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
+
+
+type alias DiscordThreadReadyData =
+    { channelId : Discord.Id.Id Discord.Id.ChannelId
+    , channel : Discord.Channel
+    , messages : List Discord.Message
+    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
 
 
 type LoginResult
