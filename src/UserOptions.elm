@@ -546,13 +546,15 @@ discordUserCard loaded discordUserId data =
                     [ Ui.background MyUi.buttonBackground
                     , Ui.Font.color MyUi.font1
                     , Ui.width Ui.shrink
-                    , Ui.paddingXY 12 6
+                    , Ui.paddingXY 12 0
                     , Ui.rounded 4
                     , Ui.Font.size 14
+                    , Ui.contentCenterY
+                    , Ui.height (Ui.px 30)
                     ]
                     (case data.isLoadingData of
                         DiscordUserLoadingData _ ->
-                            Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading user data", Icons.spinner ]
+                            Ui.row [ Ui.spacing 8, Ui.contentCenterY ] [ Ui.text "Loading user data", Icons.spinner ]
 
                         _ ->
                             Ui.text "Reload user data"
@@ -563,9 +565,11 @@ discordUserCard loaded discordUserId data =
                 [ Ui.background MyUi.deleteButtonBackground
                 , Ui.Font.color MyUi.deleteButtonFont
                 , Ui.width Ui.shrink
-                , Ui.paddingXY 12 6
+                , Ui.paddingXY 12 0
                 , Ui.rounded 4
                 , Ui.Font.size 14
+                , Ui.contentCenterY
+                , Ui.height (Ui.px 30)
                 ]
                 (Ui.text "Unlink user")
             ]

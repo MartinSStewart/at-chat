@@ -705,9 +705,10 @@ spinner =
     Ui.el
         [ Ui.width (Ui.px 16)
         , Ui.height (Ui.px 16)
-        , Ui.Anim.spinning (Ui.Anim.ms 100)
-        , Ui.htmlAttribute (Html.Attributes.style "border" "2px solid #fff")
+        , Ui.Anim.spinning (Ui.Anim.ms 1000)
         , Ui.htmlAttribute (Html.Attributes.style "border-top-color" "transparent")
+        , -- This line has to come after border-top-color for some reason
+          Ui.htmlAttribute (Html.Attributes.style "border" "2px solid #fff")
         , Ui.htmlAttribute (Html.Attributes.style "border-radius" "50px")
         ]
         Ui.none
