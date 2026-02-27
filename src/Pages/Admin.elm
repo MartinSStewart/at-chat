@@ -818,14 +818,7 @@ deleteDiscordDmChannelButtonId channelId =
 view : Time.Zone -> AdminData -> BackendUser -> Model -> Element Msg
 view timezone adminData user model =
     Ui.el
-        (Ui.scrollable
-            :: (if Env.isProduction then
-                    [ Ui.borderWith { left = 6, right = 0, top = 0, bottom = 0 }, Ui.borderColor MyUi.errorColor ]
-
-                else
-                    []
-               )
-        )
+        [ Ui.scrollable ]
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
@@ -1585,7 +1578,16 @@ section expandedSections section2 content =
         title =
             User.sectionToString section2
                 |> Ui.text
-                |> Ui.el [ Ui.Font.size 20, Ui.Font.bold ]
+                |> Ui.el
+                    [ Ui.Font.size 20
+                    , Ui.Font.bold
+                    , Ui.width Ui.shrink
+                    , if Env.isProduction then
+                        Ui.background MyUi.errorColor
+
+                      else
+                        Ui.noAttr
+                    ]
     in
     MyUi.column
         [ Ui.background MyUi.secondaryGray
@@ -1598,7 +1600,6 @@ section expandedSections section2 content =
                 (Ui.row
                     [ Ui.Input.button (PressedCollapseSection section2)
                     , Ui.spacing 4
-                    , Ui.width Ui.shrink
                     , Dom.idToString (collapseSectionButtonId section2) |> Ui.id
                     ]
                     [ Ui.el [ Ui.move (Ui.up 2), Ui.width Ui.shrink ] Icons.collapseContainer
