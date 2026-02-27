@@ -33,6 +33,7 @@ module Icons exposing
     , smile
     , sortAscending
     , sortDescending
+    , spinner
     , tablet
     , threadBottomSegment
     , threadMiddleSegment
@@ -45,40 +46,125 @@ module Icons exposing
     )
 
 import Html exposing (Html)
-import Phosphor
+import Html.Attributes
 import Svg exposing (Svg)
 import Svg.Attributes
 import Ui
+import Ui.Anim
 
 
 reset : Ui.Element msg
 reset =
-    Phosphor.arrowCounterClockwise Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 link : Ui.Element msg
 link =
-    Phosphor.linkSimple Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 sortAscending : Ui.Element msg
 sortAscending =
-    Phosphor.arrowFatDown Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "m19.5 8.25-7.5 7.5-7.5-7.5"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 sortDescending : Ui.Element msg
 sortDescending =
-    Phosphor.arrowFatUp Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "m4.5 15.75 7.5-7.5 7.5 7.5"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 collapseContainer : Ui.Element msg
 collapseContainer =
-    Phosphor.minusSquare Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 expandContainer : Ui.Element msg
 expandContainer =
-    Phosphor.plusSquare Phosphor.Regular |> icon
+    Svg.svg
+        [ Svg.Attributes.fill "none"
+        , Svg.Attributes.viewBox "0 0 24 24"
+        , Svg.Attributes.strokeWidth "1.5"
+        , Svg.Attributes.stroke "currentColor"
+        , Svg.Attributes.width "24"
+        ]
+        [ Svg.path
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.strokeLinejoin "round"
+            , Svg.Attributes.d "M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            ]
+            []
+        ]
+        |> Ui.html
 
 
 delete : Html msg
@@ -109,11 +195,6 @@ download =
         , Svg.Attributes.width "18"
         ]
         [ Svg.path [ Svg.Attributes.strokeLinecap "round", Svg.Attributes.strokeLinejoin "round", Svg.Attributes.d "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" ] [] ]
-
-
-icon : Phosphor.IconVariant -> Ui.Element msg
-icon i =
-    i |> Phosphor.toHtml [] |> Ui.html
 
 
 copy : Html msg
@@ -617,3 +698,16 @@ warning =
             ]
             []
         ]
+
+
+spinner : Ui.Element msg
+spinner =
+    Ui.el
+        [ Ui.width (Ui.px 16)
+        , Ui.height (Ui.px 16)
+        , Ui.Anim.spinning (Ui.Anim.ms 100)
+        , Ui.htmlAttribute (Html.Attributes.style "border" "2px solid #fff")
+        , Ui.htmlAttribute (Html.Attributes.style "border-top-color" "transparent")
+        , Ui.htmlAttribute (Html.Attributes.style "border-radius" "50px")
+        ]
+        Ui.none

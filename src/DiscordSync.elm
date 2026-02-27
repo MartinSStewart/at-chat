@@ -914,7 +914,7 @@ handleDiscordCreateMessage message attachments model =
                                                         guildOrDmId
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
-                                                        SeqDict.empty
+                                                        attachments
                                                     )
                                                     |> Lamdera.sendToFrontend clientId
                                                 , Broadcast.toDiscordDmChannelExcludingOne

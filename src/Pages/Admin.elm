@@ -1488,7 +1488,7 @@ logSection timezone user model =
                 ]
 
         Nothing ->
-            section user.expandedSections LogSection [ Ui.text "Loading..." ]
+            section user.expandedSections LogSection [ Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading", Icons.spinner ] ]
 
 
 logPageRange : number

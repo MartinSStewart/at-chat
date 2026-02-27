@@ -552,7 +552,7 @@ discordUserCard loaded discordUserId data =
                     ]
                     (case data.isLoadingData of
                         DiscordUserLoadingData _ ->
-                            Ui.text "Loading user data..."
+                            Ui.row [ Ui.spacing 8 ] [ Ui.text "Loading user data", Icons.spinner ]
 
                         _ ->
                             Ui.text "Reload user data"
