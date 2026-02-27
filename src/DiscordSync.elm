@@ -925,7 +925,7 @@ handleDiscordCreateMessage message attachments model =
                                                         guildOrDmId
                                                         richText
                                                         (NoThreadWithMaybeMessage replyTo)
-                                                        SeqDict.empty
+                                                        attachments
                                                         |> ServerChange
                                                     )
                                                     model
@@ -939,7 +939,7 @@ handleDiscordCreateMessage message attachments model =
                                                     guildOrDmId
                                                     richText
                                                     (NoThreadWithMaybeMessage replyTo)
-                                                    SeqDict.empty
+                                                    attachments
                                                     |> ServerChange
                                                 )
                                                 model
@@ -1137,12 +1137,12 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                         Command.batch
                                             [ LocalChangeResponse
                                                 changeId
-                                                (Local_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute SeqDict.empty)
+                                                (Local_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute attachments)
                                                 |> Lamdera.sendToFrontend clientId
                                             , Broadcast.toDiscordGuildExcludingOne
                                                 clientId
                                                 discordGuildId
-                                                (Server_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute SeqDict.empty
+                                                (Server_Discord_SendMessage message.timestamp guildOrDmId richText threadRoute attachments
                                                     |> ServerChange
                                                 )
                                                 model
@@ -1156,7 +1156,7 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
                                                 guildOrDmId
                                                 richText
                                                 threadRoute
-                                                SeqDict.empty
+                                                attachments
                                                 |> ServerChange
                                             )
                                             model
