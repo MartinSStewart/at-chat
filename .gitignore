@@ -1,11 +1,9 @@
 .idea
 elm-stuff
 node_modules
-tests/RdSapTests
 public/cache
 pack.zip
 elm-pkg-js/test-gen.js
 endpoint.json
 rust-server/target/
-rust-server/var/
-tests/var/
+tests/var/lib/atchat/
