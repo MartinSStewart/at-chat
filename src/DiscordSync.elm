@@ -1341,6 +1341,9 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
                         Discord.UserOutMsg_ListGuildMembersResponse chunkData ->
                             let
+                                _ =
+                                    Debug.log "chunk" chunkData
+
                                 ( model3, cmd2 ) =
                                     handleListGuildMembersResponse chunkData model2
                             in
@@ -1349,7 +1352,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleReadyData userData.auth readyData model2
+                                    handleReadyData userData readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -1591,13 +1594,9 @@ handleReadySupplementalData data model =
             model
 
 
-handleReadyData : Discord.UserAuth -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleReadyData userAuth readyData model =
+handleReadyData : DiscordFullUserData -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleReadyData discordUser readyData model =
     let
-        auth : Discord.Authentication
-        auth =
-            Discord.userToken userAuth
-
         discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
         discordDmChannels =
             case readyData.privateChannels of
@@ -1653,7 +1652,7 @@ handleReadyData userAuth readyData model =
 
                     else
                         Discord.getDirectMessagesPayload
-                            userAuth
+                            discordUser.auth
                             { channelId = dmChannelId
                             , limit = 100
                             , relativeTo = Discord.MostRecent
@@ -1677,7 +1676,7 @@ handleReadyData userAuth readyData model =
                 (SeqDict.toList discordDmChannels)
                 |> Task.sequence
             )
-            (List.filterMap (getDiscordGuildData model auth) readyData.guilds |> Task.sequence)
+            (List.filterMap (getDiscordGuildData model discordUser) readyData.guilds |> Task.sequence)
             |> Task.andThen (\data -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Ok data)) Time.now)
             |> Task.onError (\error -> Task.map (\time -> HandleReadyDataStep2 time readyData.user.id (Err error)) Time.now)
             |> Task.perform identity
@@ -1713,7 +1712,7 @@ uploadAttachmentsForMessages model messages =
 
 getDiscordGuildData :
     BackendModel
-    -> Discord.Authentication
+    -> DiscordFullUserData
     -> Discord.GatewayGuild
     ->
         Maybe
@@ -1733,13 +1732,18 @@ getDiscordGuildData :
                   }
                 )
             )
-getDiscordGuildData model auth gatewayGuild =
+getDiscordGuildData model discordUser gatewayGuild =
     if SeqDict.member gatewayGuild.properties.id model.discordGuilds then
         Nothing
 
     else
-        Task.map3
-            (\channels maybeIcon threads ->
+        let
+            auth : Discord.Authentication
+            auth =
+                Discord.userToken discordUser.auth
+        in
+        Task.map4
+            (\() channels maybeIcon threads ->
                 ( gatewayGuild.properties.id
                 , { guild = gatewayGuild
                   , channels = channels
@@ -1748,9 +1752,20 @@ getDiscordGuildData model auth gatewayGuild =
                   }
                 )
             )
+            (case Discord.requestGuildMembers Websocket.sendString [ gatewayGuild.properties.id ] discordUser.connection of
+                Ok usersRequest2 ->
+                    let
+                        _ =
+                            Debug.log "abc" usersRequest2
+                    in
+                    Task.onError (\_ -> Task.succeed ()) usersRequest2
+
+                Err _ ->
+                    Task.succeed ()
+            )
             (List.map
                 (\channel ->
-                    getManyMessages auth { channelId = channel.id, limit = 1000 }
+                    getManyMessages auth { channelId = channel.id, limit = 5 }
                         |> Task.onError (\_ -> Task.succeed [])
                         |> Task.andThen
                             (\messages ->

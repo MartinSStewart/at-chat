@@ -5198,23 +5198,28 @@ encodeGatewayCommand gatewayCommand =
             JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
 
         OpRequestGuildMembers guildIds nonce2 ->
-            JE.object
-                [ ( "op", JE.int 8 )
-                , ( "d"
-                  , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
-                    , ( "query", JE.string "" )
-                    , ( "limit", JE.int 100 )
-                    ]
-                        ++ encodeOptionalData "nonce" encodeNonce nonce2
-                        |> JE.object
-                  )
-                ]
+            encodeRequestGuildMembers guildIds nonce2
 
         OpUpdateVoiceState ->
             JE.object []
 
         OpUpdatePresence ->
             JE.object []
+
+
+encodeRequestGuildMembers : List (Id idType) -> OptionalData Nonce -> JE.Value
+encodeRequestGuildMembers guildIds nonce2 =
+    JE.object
+        [ ( "op", JE.int 8 )
+        , ( "d"
+          , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
+            , ( "query", JE.string "" )
+            , ( "limit", JE.int 1000 )
+            ]
+                ++ encodeOptionalData "nonce" encodeNonce nonce2
+                |> JE.object
+          )
+        ]
 
 
 encodeUserGatewayCommand : GatewayUserCommand -> JE.Value
@@ -5258,17 +5263,7 @@ encodeUserGatewayCommand gatewayCommand =
             JE.object [ ( "op", JE.int 1 ), ( "d", JE.null ) ]
 
         GatewayUser_OpRequestGuildMembers guildIds nonce2 ->
-            JE.object
-                [ ( "op", JE.int 8 )
-                , ( "d"
-                  , [ ( "guild_id", JE.list Discord.Id.encodeId guildIds )
-                    , ( "query", JE.string "" )
-                    , ( "limit", JE.int 100 )
-                    ]
-                        ++ encodeOptionalData "nonce" encodeNonce nonce2
-                        |> JE.object
-                  )
-                ]
+            encodeRequestGuildMembers guildIds nonce2
 
         GatewayUser_OpUpdateVoiceState ->
             JE.object []
