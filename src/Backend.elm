@@ -231,6 +231,16 @@ adminData model lastLogPageViewed =
                 }
             )
             model.discordGuilds
+    , guilds =
+        SeqDict.map
+            (\_ guild ->
+                { name = guild.name
+                , channelCount = SeqDict.size guild.channels
+                , memberCount = SeqDict.size guild.members
+                , owner = guild.owner
+                }
+            )
+            model.guilds
     }
 
 
@@ -4251,8 +4261,35 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
         Pages.Admin.DeleteDiscordDmChannel channelId ->
             let
+                model2 : BackendModel
                 model2 =
                     { model | discordDmChannels = SeqDict.remove channelId model.discordDmChannels }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.DeleteDiscordGuild guildId ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | discordGuilds = SeqDict.remove guildId model.discordGuilds }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.DeleteGuild guildId ->
+            let
+                model2 : BackendModel
+                model2 =
+                    { model | guilds = SeqDict.remove guildId model.guilds }
             in
             ( model2
             , Command.batch

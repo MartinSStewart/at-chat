@@ -30,10 +30,10 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
-import GuildName
+import GuildName exposing (GuildName)
 import Html.Events
 import Icons
-import Id exposing (Id, UserId)
+import Id exposing (GuildId, Id, UserId)
 import Json.Decode
 import LocalState exposing (AdminData, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey)
 import Log
@@ -83,6 +83,8 @@ type Msg
     | ToggledEmailNotifications Bool
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedDeleteGuild (Id GuildId)
 
 
 type ToBackend
@@ -136,7 +138,8 @@ type alias InitAdminData =
     , discordGuilds :
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName.GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
+            { name : GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
+    , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
     }
 
 
@@ -156,6 +159,8 @@ type AdminChange
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
     | SetOpenRouterKey (Maybe String)
     | DeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
+    | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | DeleteGuild (Id GuildId)
 
 
 type alias EditedBackendUser =
@@ -267,6 +272,12 @@ updateAdmin changedBy change adminData local =
 
         DeleteDiscordDmChannel channelId ->
             { local | adminData = IsAdmin { adminData | discordDmChannels = SeqDict.remove channelId adminData.discordDmChannels } }
+
+        DeleteDiscordGuild guildId ->
+            { local | adminData = IsAdmin { adminData | discordGuilds = SeqDict.remove guildId adminData.discordGuilds } }
+
+        DeleteGuild guildId ->
+            { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
 
 
 update :
@@ -626,6 +637,12 @@ update navigationKey time adminData localState msg model =
         PressedDeleteDiscordDmChannel channelId ->
             ( model, Command.none, Just (DeleteDiscordDmChannel channelId) )
 
+        PressedDeleteDiscordGuild guildId ->
+            ( model, Command.none, Just (DeleteDiscordGuild guildId) )
+
+        PressedDeleteGuild guildId ->
+            ( model, Command.none, Just (DeleteGuild guildId) )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -783,6 +800,16 @@ deleteUserButtonId userTableId =
     "Admin_deleteUserButton_" ++ userTableIdToDomId userTableId |> Dom.id
 
 
+deleteGuildButtonId : Id GuildId -> HtmlId
+deleteGuildButtonId guildId =
+    "Admin_deleteGuildButton_" ++ Id.toString guildId |> Dom.id
+
+
+deleteDiscordGuildButtonId : Discord.Id.Id Discord.Id.GuildId -> HtmlId
+deleteDiscordGuildButtonId guildId =
+    "Admin_deleteDiscordGuildButton_" ++ Discord.Id.toString guildId |> Dom.id
+
+
 deleteDiscordDmChannelButtonId : Discord.Id.Id Discord.Id.PrivateChannelId -> HtmlId
 deleteDiscordDmChannelButtonId channelId =
     "Admin_deleteDiscordDmChannelButton_" ++ Discord.Id.toString channelId |> Dom.id
@@ -802,6 +829,7 @@ view timezone adminData user model =
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
             [ userSection user adminData model
+            , guildsSection user adminData
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
@@ -886,6 +914,43 @@ userSection user adminData model =
         ]
 
 
+guildsSection : BackendUser -> AdminData -> Element Msg
+guildsSection user adminData =
+    section
+        user.expandedSections
+        GuildsSection
+        [ if SeqDict.isEmpty adminData.guilds then
+            Ui.text "No guilds"
+
+          else
+            Ui.column
+                [ Ui.spacing 4 ]
+                (List.map
+                    (\( guildId, guild ) ->
+                        Ui.row
+                            [ Ui.spacing 8, Ui.Font.size 14 ]
+                            [ MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
+                            , Ui.text (Id.toString guildId)
+                            , Ui.text (GuildName.toString guild.name)
+                            , Ui.row
+                                [ Ui.spacing 8 ]
+                                [ Ui.text "Owner:"
+                                , case NonemptyDict.get guild.owner adminData.users of
+                                    Just user2 ->
+                                        userLabel user2
+
+                                    Nothing ->
+                                        Ui.text (Id.toString guild.owner)
+                                ]
+                            , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
+                            , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                            ]
+                    )
+                    (SeqDict.toList adminData.guilds)
+                )
+        ]
+
+
 discordGuildsSection : BackendUser -> AdminData -> Element Msg
 discordGuildsSection user adminData =
     section
@@ -901,7 +966,8 @@ discordGuildsSection user adminData =
                     (\( guildId, guild ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.text (Discord.Id.toString guildId)
+                            [ MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
+                            , Ui.text (Discord.Id.toString guildId)
                             , Ui.text (GuildName.toString guild.name)
                             , Ui.row
                                 [ Ui.spacing 8 ]
@@ -995,6 +1061,17 @@ discordUsersSection user adminData =
                     )
                     (SeqDict.toList adminData.discordUsers)
                 )
+        ]
+
+
+userLabel : BackendUser -> Element msg
+userLabel user =
+    Ui.row
+        [ Ui.spacing 8, Ui.width Ui.shrink ]
+        [ User.profileImage user.icon
+        , Ui.el
+            [ Ui.width Ui.shrink ]
+            (Ui.text (PersonName.toString user.name))
         ]
 
 

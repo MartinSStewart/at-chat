@@ -446,6 +446,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , discordDmChannels = adminData.discordDmChannels
                     , discordUsers = adminData.discordUsers
                     , discordGuilds = adminData.discordGuilds
+                    , guilds = adminData.guilds
                     }
 
             IsNotAdminLoginData ->
@@ -7486,6 +7487,12 @@ pendingChangesText localChange =
 
                 Pages.Admin.DeleteDiscordDmChannel _ ->
                     "Deleted Discord DM channel"
+
+                Pages.Admin.DeleteDiscordGuild id ->
+                    "Deleted Discord guild"
+
+                Pages.Admin.DeleteGuild id ->
+                    "Deleted guild"
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"

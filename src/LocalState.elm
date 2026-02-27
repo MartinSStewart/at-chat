@@ -405,6 +405,7 @@ type alias AdminData =
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
             { name : GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
+    , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
     }
 
 
