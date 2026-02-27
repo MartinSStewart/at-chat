@@ -7,7 +7,7 @@ import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
 import Icons
-import Id exposing (ChannelMessageId, Id, ThreadRouteWithMessage, UserId)
+import Id exposing (ChannelMessageId, Id, ThreadRouteWithMaybeMessage, ThreadRouteWithMessage, UserId)
 import MyUi
 import Postmark
 import Time exposing (Month(..))
@@ -32,6 +32,8 @@ type Log
     | FailedToRemoveReactionToDiscordGuildMessage (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToRemoveReactionToDiscordDmMessage (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji Discord.HttpError
     | FailedToLoadDiscordUserData (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
+    | FailedToSendDiscordGuildMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
+    | FailedToSendDiscordDmMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -77,6 +79,12 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToLoadDiscordUserData _ _ ->
+            Nothing
+
+        FailedToSendDiscordGuildMessage _ _ _ _ _ ->
+            Nothing
+
+        FailedToSendDiscordDmMessage _ _ _ ->
             Nothing
 
 
@@ -320,6 +328,25 @@ logContent log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Loading Discord user data failed"
                 , fieldRow "Discord user id" (Ui.text (Discord.Id.toString discordUserId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToSendDiscordGuildMessage discordUserId guildId channelId _ httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Sending Discord guild message failed"
+                , fieldRow "User" (Ui.text (Discord.Id.toString discordUserId))
+                , fieldRow "Guild" (Ui.text (Discord.Id.toString guildId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToSendDiscordDmMessage discordUserId channelId httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Sending Discord DM message failed"
+                , fieldRow "User" (Ui.text (Discord.Id.toString discordUserId))
+                , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

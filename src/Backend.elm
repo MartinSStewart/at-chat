@@ -358,23 +358,31 @@ update msg model =
                 Err _ ->
                     ( model, Command.none )
 
-        SentDiscordGuildMessage _ changeId _ clientId _ _ _ _ _ _ result ->
+        SentDiscordGuildMessage time changeId _ clientId guildId channelId threadRoute discordUserId result ->
             case result of
                 Ok _ ->
                     -- Wait until the Discord.UserOutMsg_UserCreatedMessage websocket event instead. This simplifies the code since we don't have two places that handle messages being created
                     ( model, Command.none )
 
-                Err _ ->
-                    ( model, invalidChangeResponse changeId clientId )
+                Err error ->
+                    addLogWithCmd
+                        time
+                        (Log.FailedToSendDiscordGuildMessage discordUserId guildId channelId threadRoute error)
+                        model
+                        (invalidChangeResponse changeId clientId)
 
-        SentDiscordDmMessage _ changeId _ clientId _ _ _ _ result ->
+        SentDiscordDmMessage time changeId _ clientId channelId discordUserId result ->
             case result of
                 Ok _ ->
                     -- Wait until the websocket event instead. This simplifies the code since we don't have two places that handle messages being created
                     ( model, Command.none )
 
-                Err _ ->
-                    ( model, invalidChangeResponse changeId clientId )
+                Err error ->
+                    addLogWithCmd
+                        time
+                        (Log.FailedToSendDiscordDmMessage discordUserId channelId error)
+                        model
+                        (invalidChangeResponse changeId clientId)
 
         DeletedDiscordGuildMessage time guildId channelId threadRoute messageId result ->
             case result of
@@ -1566,8 +1574,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                 guildId
                                                                 channelId
                                                                 threadRouteWithMaybeReplyTo
-                                                                text
-                                                                attachedFiles2
                                                                 currentDiscordUserId
                                                             )
                                                     )
@@ -1630,8 +1636,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                                         guildId
                                                                         channelId
                                                                         threadRouteWithMaybeReplyTo
-                                                                        text
-                                                                        attachedFiles2
                                                                         currentDiscordUserId
                                                                     )
                                                             )
@@ -1682,8 +1686,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                         sessionId
                                                         clientId
                                                         data.channelId
-                                                        text
-                                                        attachedFiles2
                                                         data.currentUserId
                                                     )
                                             )

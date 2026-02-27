@@ -2189,18 +2189,23 @@ sendMessage discordUser channelId maybeReplyTo attachedFiles text =
                     attachments2 =
                         List.filterMap Result.toMaybe attachments
                 in
-                Discord.uploadAttachmentsPayload
-                    discordUser.auth
-                    channelId
-                    (List.map
-                        (\( fileData, bytes ) ->
-                            { fileSize = Bytes.width bytes
-                            , filename = FileName.toString fileData.fileName
-                            }
+                (if List.isEmpty attachments2 then
+                    Task.succeed []
+
+                 else
+                    Discord.uploadAttachmentsPayload
+                        discordUser.auth
+                        channelId
+                        (List.map
+                            (\( fileData, bytes ) ->
+                                { fileSize = Bytes.width bytes
+                                , filename = FileName.toString fileData.fileName
+                                }
+                            )
+                            attachments2
                         )
-                        attachments2
-                    )
-                    |> http
+                        |> http
+                )
                     |> Task.andThen
                         (\uploadAttachmentsResponse ->
                             uploadAttachments attachments2 uploadAttachmentsResponse
