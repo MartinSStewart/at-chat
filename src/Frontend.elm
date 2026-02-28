@@ -7444,10 +7444,10 @@ pendingChangesText localChange =
                 Pages.Admin.DeleteDiscordDmChannel _ ->
                     "Deleted Discord DM channel"
 
-                Pages.Admin.DeleteDiscordGuild id ->
+                Pages.Admin.DeleteDiscordGuild _ ->
                     "Deleted Discord guild"
 
-                Pages.Admin.DeleteGuild id ->
+                Pages.Admin.DeleteGuild _ ->
                     "Deleted guild"
 
         Local_SendMessage _ _ _ _ _ ->

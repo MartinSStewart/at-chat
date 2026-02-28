@@ -9,7 +9,7 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
-import LocalState exposing (AdminStatus(..), LocalState, PrivateVapidKey(..))
+import LocalState exposing (LocalState)
 import Log
 import MyUi
 import PersonName
