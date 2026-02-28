@@ -51,6 +51,8 @@ module LocalState exposing
     , deleteMessageFrontendNoThread
     , discordAnnouncementChannel
     , discordChannelToFrontend
+    , discordGuildOrDmIdToMessage
+    , discordGuildOrDmIdToMessages
     , editChannel
     , editMessageFrontendHelper
     , editMessageFrontendHelperNoThread
@@ -60,6 +62,9 @@ module LocalState exposing
     , getDiscordUser
     , getGuildAndChannel
     , getUser
+    , guildOrDmIdToMessage
+    , guildOrDmIdToMessages
+    , guildOrDmIdToMessagesCount
     , guildToFrontend
     , guildToFrontendForUser
     , isGuildMemberOrOwner
@@ -97,7 +102,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuil
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
-import Message exposing (Message(..), MessageState(..), UserTextMessageData)
+import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageData, UserTextMessageDataNoReply)
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -2085,3 +2090,348 @@ routeToViewing route local =
 
         LinkDiscord _ ->
             StopViewingChannel
+
+
+guildOrDmIdToMessage :
+    GuildOrDmId
+    -> ThreadRouteWithMessage
+    -> LocalState
+    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+guildOrDmIdToMessage guildOrDmId threadRoute local =
+    let
+        helper :
+            { a | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
+            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
+        helper channel =
+            case threadRoute of
+                ViewThreadWithMessage threadId messageId ->
+                    case
+                        SeqDict.get threadId channel.threads
+                            |> Maybe.withDefault Thread.frontendInit
+                            |> .messages
+                            |> DmChannel.getArray messageId
+                    of
+                        Just (MessageLoaded (UserTextMessage data)) ->
+                            ( { createdAt = data.createdAt
+                              , createdBy = data.createdBy
+                              , content = data.content
+                              , reactions = data.reactions
+                              , editedAt = data.editedAt
+                              , attachedFiles = data.attachedFiles
+                              }
+                            , ViewThreadWithMaybeMessage threadId data.repliedTo
+                            )
+                                |> Just
+
+                        _ ->
+                            Nothing
+
+                NoThreadWithMessage messageId ->
+                    case DmChannel.getArray messageId channel.messages of
+                        Just (MessageLoaded (UserTextMessage data)) ->
+                            ( { createdAt = data.createdAt
+                              , createdBy = data.createdBy
+                              , content = data.content
+                              , reactions = data.reactions
+                              , editedAt = data.editedAt
+                              , attachedFiles = data.attachedFiles
+                              }
+                            , NoThreadWithMaybeMessage data.repliedTo
+                            )
+                                |> Just
+
+                        _ ->
+                            Nothing
+    in
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId ->
+            case getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    helper channel
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    helper dmChannel
+
+                Nothing ->
+                    Nothing
+
+
+discordGuildOrDmIdToMessage :
+    DiscordGuildOrDmId
+    -> ThreadRouteWithMessage
+    -> LocalState
+    -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
+discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
+    let
+        helper messageId channel =
+            case DmChannel.getArray messageId channel.messages of
+                Just (MessageLoaded (UserTextMessage data)) ->
+                    ( { createdAt = data.createdAt
+                      , createdBy = data.createdBy
+                      , content = data.content
+                      , reactions = data.reactions
+                      , editedAt = data.editedAt
+                      , attachedFiles = data.attachedFiles
+                      }
+                    , NoThreadWithMaybeMessage data.repliedTo
+                    )
+                        |> Just
+
+                _ ->
+                    Nothing
+    in
+    case guildOrDmId of
+        DiscordGuildOrDmId_Guild _ guildId channelId ->
+            case getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThreadWithMessage threadId messageId ->
+                            case
+                                SeqDict.get threadId channel.threads
+                                    |> Maybe.withDefault Thread.discordFrontendInit
+                                    |> .messages
+                                    |> DmChannel.getArray messageId
+                            of
+                                Just (MessageLoaded (UserTextMessage data)) ->
+                                    ( { createdAt = data.createdAt
+                                      , createdBy = data.createdBy
+                                      , content = data.content
+                                      , reactions = data.reactions
+                                      , editedAt = data.editedAt
+                                      , attachedFiles = data.attachedFiles
+                                      }
+                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
+                                    )
+                                        |> Just
+
+                                _ ->
+                                    Nothing
+
+                        NoThreadWithMessage messageId ->
+                            helper messageId channel
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId_Dm data ->
+            case ( SeqDict.get data.channelId local.discordDmChannels, threadRoute ) of
+                ( Just channel, NoThreadWithMessage messageId ) ->
+                    helper messageId channel
+
+                _ ->
+                    Nothing
+
+
+guildOrDmIdToMessages : ( GuildOrDmId, ThreadRoute ) -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
+guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
+    let
+        helper channel =
+            case threadRoute of
+                ViewThread threadMessageIndex ->
+                    SeqDict.get threadMessageIndex channel.threads
+                        |> Maybe.withDefault Thread.frontendInit
+                        |> .messages
+                        |> Array.map
+                            (\messageState ->
+                                case messageState of
+                                    MessageLoaded message ->
+                                        (case message of
+                                            UserTextMessage data ->
+                                                { createdAt = data.createdAt
+                                                , createdBy = data.createdBy
+                                                , content = data.content
+                                                , reactions = data.reactions
+                                                , editedAt = data.editedAt
+                                                , attachedFiles = data.attachedFiles
+                                                }
+                                                    |> UserTextMessage_NoReply
+
+                                            UserJoinedMessage time userId reactions ->
+                                                UserJoinedMessage_NoReply time userId reactions
+
+                                            DeletedMessage time ->
+                                                DeletedMessage_NoReply time
+                                        )
+                                            |> MessageLoaded_NoReply
+
+                                    MessageUnloaded ->
+                                        MessageUnloaded_NoReply
+                            )
+                        |> Just
+
+                NoThread ->
+                    Array.map
+                        (\messageState ->
+                            case messageState of
+                                MessageLoaded message ->
+                                    (case message of
+                                        UserTextMessage data ->
+                                            { createdAt = data.createdAt
+                                            , createdBy = data.createdBy
+                                            , content = data.content
+                                            , reactions = data.reactions
+                                            , editedAt = data.editedAt
+                                            , attachedFiles = data.attachedFiles
+                                            }
+                                                |> UserTextMessage_NoReply
+
+                                        UserJoinedMessage time userId reactions ->
+                                            UserJoinedMessage_NoReply time userId reactions
+
+                                        DeletedMessage time ->
+                                            DeletedMessage_NoReply time
+                                    )
+                                        |> MessageLoaded_NoReply
+
+                                MessageUnloaded ->
+                                    MessageUnloaded_NoReply
+                        )
+                        channel.messages
+                        |> Just
+    in
+    case guildOrDmId of
+        GuildOrDmId_Guild guildId channelId ->
+            case getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    helper channel
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId_Dm otherUserId ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    helper dmChannel
+
+                Nothing ->
+                    Nothing
+
+
+discordGuildOrDmIdToMessages : DiscordGuildOrDmId -> ThreadRoute -> LocalState -> Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
+discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
+    let
+        helper2 : { a | messages : Array (MessageState messageId userId) } -> Maybe (Array (MessageStateNoReply userId))
+        helper2 channel =
+            Array.map
+                (\messageState ->
+                    case messageState of
+                        MessageLoaded message ->
+                            (case message of
+                                UserTextMessage data ->
+                                    { createdAt = data.createdAt
+                                    , createdBy = data.createdBy
+                                    , content = data.content
+                                    , reactions = data.reactions
+                                    , editedAt = data.editedAt
+                                    , attachedFiles = data.attachedFiles
+                                    }
+                                        |> UserTextMessage_NoReply
+
+                                UserJoinedMessage time userId reactions ->
+                                    UserJoinedMessage_NoReply time userId reactions
+
+                                DeletedMessage time ->
+                                    DeletedMessage_NoReply time
+                            )
+                                |> MessageLoaded_NoReply
+
+                        MessageUnloaded ->
+                            MessageUnloaded_NoReply
+                )
+                channel.messages
+                |> Just
+    in
+    case guildOrDmId of
+        DiscordGuildOrDmId_Guild _ guildId channelId ->
+            case getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            case SeqDict.get threadMessageIndex channel.threads of
+                                Just thread ->
+                                    helper2 thread
+
+                                Nothing ->
+                                    Nothing
+
+                        NoThread ->
+                            helper2 channel
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId_Dm data ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just dmChannel ->
+                    helper2 dmChannel
+
+                Nothing ->
+                    Nothing
+
+
+guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
+guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
+    case guildOrDmId of
+        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+            case getGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            SeqDict.get threadMessageIndex channel.threads
+                                |> Maybe.withDefault Thread.frontendInit
+                                |> .messages
+                                |> Array.length
+                                |> Just
+
+                        NoThread ->
+                            Just (Array.length channel.messages)
+
+                Nothing ->
+                    Nothing
+
+        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+            case SeqDict.get otherUserId local.dmChannels of
+                Just dmChannel ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            SeqDict.get threadMessageIndex dmChannel.threads
+                                |> Maybe.withDefault Thread.frontendInit
+                                |> .messages
+                                |> Array.length
+                                |> Just
+
+                        NoThread ->
+                            Just (Array.length dmChannel.messages)
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
+            case getDiscordGuildAndChannel guildId channelId local of
+                Just ( _, channel ) ->
+                    case threadRoute of
+                        ViewThread threadMessageIndex ->
+                            SeqDict.get threadMessageIndex channel.threads
+                                |> Maybe.withDefault Thread.discordFrontendInit
+                                |> .messages
+                                |> Array.length
+                                |> Just
+
+                        NoThread ->
+                            Just (Array.length channel.messages)
+
+                Nothing ->
+                    Nothing
+
+        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
+            case SeqDict.get data.channelId local.discordDmChannels of
+                Just dmChannel ->
+                    Just (Array.length dmChannel.messages)
+
+                Nothing ->
+                    Nothing

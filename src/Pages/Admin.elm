@@ -15,6 +15,7 @@ module Pages.Admin exposing
     , applyChangesToBackendUsers
     , init
     , logSectionId
+    , pendingChangesText
     , update
     , updateAdmin
     , updateFromBackend
@@ -871,6 +872,50 @@ deleteDiscordDmChannelButtonId channelId =
     "Admin_deleteDiscordDmChannelButton_" ++ Discord.Id.toString channelId |> Dom.id
 
 
+pendingChangesText : AdminChange -> String
+pendingChangesText change =
+    case change of
+        ChangeUsers _ ->
+            "Changed users via admin page"
+
+        ExpandSection _ ->
+            "Expanded section in admin page"
+
+        CollapseSection _ ->
+            "Collapsed section in admin page"
+
+        LogPageChanged int ->
+            "Switched to log page " ++ String.fromInt int
+
+        SetEmailNotificationsEnabled isEnabled ->
+            if isEnabled then
+                "Enabled email notifications"
+
+            else
+                "Disabled email notifications"
+
+        SetPrivateVapidKey _ ->
+            "Set private vapid key"
+
+        SetPublicVapidKey _ ->
+            "Set public vapid key"
+
+        SetSlackClientSecret _ ->
+            "Set slack client secret"
+
+        SetOpenRouterKey _ ->
+            "Set OpenRouter key"
+
+        DeleteDiscordDmChannel _ ->
+            "Deleted Discord DM channel"
+
+        DeleteDiscordGuild _ ->
+            "Deleted Discord guild"
+
+        DeleteGuild _ ->
+            "Deleted guild"
+
+
 view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view local adminData user model =
     Ui.el
@@ -889,6 +934,7 @@ view local adminData user model =
         )
 
 
+apiKeysSection : LocalState -> BackendUser -> AdminData -> Model -> Element Msg
 apiKeysSection local user adminData2 model =
     section
         user.expandedSections

@@ -11,7 +11,6 @@ import CssPixels exposing (CssPixels)
 import Discord.Id
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
-import Ease
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Events
@@ -24,7 +23,7 @@ import Effect.Http as Http
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Subscription as Subscription exposing (Subscription)
-import Effect.Task as Task exposing (Task)
+import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileName
@@ -43,7 +42,7 @@ import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
 import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..), MessageNoReply(..), MessageState(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
 import MessageMenu
 import MessageView
@@ -58,11 +57,12 @@ import Ports exposing (PwaStatus(..))
 import Quantity exposing (Quantity, Rate, Unitless)
 import RichText exposing (RichText)
 import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Scroll
 import SeqDict exposing (SeqDict)
 import SeqSet
 import String.Nonempty
 import TextEditor
-import Thread exposing (FrontendGenericThread, FrontendThread)
+import Thread exposing (FrontendGenericThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -76,7 +76,7 @@ import UserAgent exposing (UserAgent)
 import UserOptions
 import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import Vector2d
-import VisibleMessages exposing (VisibleMessages)
+import VisibleMessages
 
 
 app :
@@ -921,7 +921,7 @@ openChannelCmds threadRoute model3 =
             ViewThreadWithFriends _ maybeMessageIndex _ ->
                 case maybeMessageIndex of
                     Just messageIndex ->
-                        smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
+                        Scroll.smoothScroll (Pages.Guild.threadMessageHtmlId messageIndex)
                             |> Task.attempt (\_ -> ScrolledToMessage)
 
                     Nothing ->
@@ -930,46 +930,12 @@ openChannelCmds threadRoute model3 =
             NoThreadWithFriends maybeMessageIndex _ ->
                 case maybeMessageIndex of
                     Just messageIndex ->
-                        smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
+                        Scroll.smoothScroll (Pages.Guild.channelMessageHtmlId messageIndex)
                             |> Task.attempt (\_ -> ScrolledToMessage)
 
                     Nothing ->
                         scrollToBottom
         ]
-
-
-routeRequiresLogin : Route -> Bool
-routeRequiresLogin route =
-    case route of
-        HomePageRoute ->
-            False
-
-        AdminRoute _ ->
-            True
-
-        AiChatRoute ->
-            False
-
-        GuildRoute _ _ ->
-            True
-
-        DiscordGuildRoute _ ->
-            True
-
-        DmRoute _ _ ->
-            True
-
-        SlackOAuthRedirect _ ->
-            False
-
-        TextEditorRoute ->
-            False
-
-        DiscordDmRoute _ ->
-            True
-
-        LinkDiscord _ ->
-            False
 
 
 isPressMsg : FrontendMsg -> Bool
@@ -1476,7 +1442,7 @@ updateLoaded msg model =
                                 model2 =
                                     { model | loginStatus = NotLoggedIn { notLoggedIn | loginForm = Nothing } }
                             in
-                            if routeRequiresLogin model2.route then
+                            if Route.requiresLogin model2.route then
                                 routePush model2 HomePageRoute
 
                             else
@@ -1643,10 +1609,10 @@ updateLoaded msg model =
                                         , filesToUpload = SeqDict.remove guildOrDmIdWithThread loggedIn.filesToUpload
                                     }
                                     (if MyUi.isMobile model then
-                                        smoothScrollToBottomOfChannel
+                                        Scroll.toBottomOfChannelSmooth
 
                                      else
-                                        scrollToBottomOfChannel
+                                        Scroll.toBottomOfChannel
                                     )
 
                             else
@@ -2063,7 +2029,7 @@ updateLoaded msg model =
                                                     handleLocalChange
                                                         model.time
                                                         (case
-                                                            guildOrDmIdToMessagesCount
+                                                            LocalState.guildOrDmIdToMessagesCount
                                                                 guildOrDmId
                                                                 threadRoute
                                                                 (Local.model loggedIn2.localState)
@@ -2251,7 +2217,10 @@ updateLoaded msg model =
                                     GuildOrDmId guildOrDmId2 ->
                                         case
                                             ( String.Nonempty.fromString edit.text
-                                            , guildOrDmIdToMessage guildOrDmId2 (Id.threadRouteWithMessage edit.messageIndex threadRoute) local
+                                            , LocalState.guildOrDmIdToMessage
+                                                guildOrDmId2
+                                                (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                local
                                             )
                                         of
                                             ( Just nonempty, Just ( message, _ ) ) ->
@@ -2286,7 +2255,10 @@ updateLoaded msg model =
                                     DiscordGuildOrDmId guildOrDmId2 ->
                                         case
                                             ( String.Nonempty.fromString edit.text
-                                            , discordGuildOrDmIdToMessage guildOrDmId2 (Id.threadRouteWithMessage edit.messageIndex threadRoute) local
+                                            , LocalState.discordGuildOrDmIdToMessage
+                                                guildOrDmId2
+                                                (Id.threadRouteWithMessage edit.messageIndex threadRoute)
+                                                local
                                             )
                                         of
                                             ( Just nonempty, Just ( message, _ ) ) ->
@@ -2409,7 +2381,7 @@ updateLoaded msg model =
 
                                 maybeMessages : Maybe (Array (MessageStateNoReply (Id UserId)))
                                 maybeMessages =
-                                    guildOrDmIdToMessages ( guildOrDmId2, threadRoute ) local
+                                    LocalState.guildOrDmIdToMessages ( guildOrDmId2, threadRoute ) local
                             in
                             case maybeMessages of
                                 Just messages ->
@@ -2486,7 +2458,7 @@ updateLoaded msg model =
 
                                 maybeMessages : Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
                                 maybeMessages =
-                                    discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
+                                    LocalState.discordGuildOrDmIdToMessages guildOrDmId2 threadRoute local
 
                                 currentUserId : Discord.Id.Id Discord.Id.UserId
                                 currentUserId =
@@ -3531,7 +3503,7 @@ updateLoaded msg model =
                         LoggedIn loggedIn ->
                             case guildOrDmId of
                                 GuildOrDmId guildOrDmId2 ->
-                                    case guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
+                                    case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
                                                 ( GuildOrDmId_Guild guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
@@ -3559,7 +3531,7 @@ updateLoaded msg model =
                                             ( model, Command.none )
 
                                 DiscordGuildOrDmId guildOrDmId2 ->
-                                    case discordGuildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
+                                    case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute (Local.model loggedIn.localState) of
                                         Just ( _, maybeRepliedTo ) ->
                                             case ( guildOrDmId2, maybeRepliedTo ) of
                                                 ( DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId, ViewThreadWithMaybeMessage threadId (Just repliedTo) ) ->
@@ -4072,7 +4044,7 @@ setLastViewedToLatestMessage model loggedIn =
         model.time
         (case routeToGuildOrDmId model.route of
             Just ( guildOrDmId, threadRoute ) ->
-                case guildOrDmIdToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
+                case LocalState.guildOrDmIdToMessagesCount guildOrDmId threadRoute (Local.model loggedIn.localState) of
                     Just messages ->
                         Local_SetLastViewed
                             guildOrDmId
@@ -4153,7 +4125,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                 maybeContentAndFiles =
                     case guildOrDmId of
                         GuildOrDmId guildOrDmId2 ->
-                            case guildOrDmIdToMessage guildOrDmId2 threadRoute local of
+                            case LocalState.guildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
                                     ( RichText.toString (LocalState.allUsers local) message.content
                                     , message.attachedFiles
@@ -4164,7 +4136,7 @@ pressedEditMessage guildOrDmId threadRoute model =
                                     Nothing
 
                         DiscordGuildOrDmId guildOrDmId2 ->
-                            case discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
+                            case LocalState.discordGuildOrDmIdToMessage guildOrDmId2 threadRoute local of
                                 Just ( message, _ ) ->
                                     ( RichText.toString (LocalState.allDiscordUsers2 local.localUser) message.content
                                     , message.attachedFiles
@@ -4609,52 +4581,6 @@ dragChannelSidebar time delta sidebar =
         ChannelSidebarDragging record ->
             ChannelSidebarDragging
                 { record | offset = clamp 0 1 (record.offset + delta), time = time }
-
-
-smoothScroll : HtmlId -> Task FrontendOnly Dom.Error ()
-smoothScroll targetId =
-    Task.map2
-        Tuple.pair
-        (Dom.getElement targetId)
-        (Dom.getViewportOf Pages.Guild.conversationContainerId)
-        |> Task.andThen
-            (\( { element }, { viewport } ) ->
-                if element.y > 0 then
-                    Dom.setViewportOf
-                        Pages.Guild.conversationContainerId
-                        0
-                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
-
-                else
-                    smoothScrollY
-                        0
-                        viewport.x
-                        viewport.y
-                        (viewport.y + element.y - Pages.Guild.channelHeaderHeight)
-            )
-
-
-smoothScrollSteps : number
-smoothScrollSteps =
-    20
-
-
-smoothScrollY : Int -> Float -> Float -> Float -> Task FrontendOnly Dom.Error ()
-smoothScrollY stepsLeft x startY endY =
-    let
-        t =
-            toFloat stepsLeft / smoothScrollSteps |> Ease.inOutQuart
-
-        y : Float
-        y =
-            startY + (endY - startY) * t
-    in
-    if stepsLeft > smoothScrollSteps then
-        Task.succeed ()
-
-    else
-        Dom.setViewportOf Pages.Guild.conversationContainerId x y
-            |> Task.andThen (\() -> smoothScrollY (stepsLeft + 1) x startY endY)
 
 
 isTouchingTextInput : NonemptyDict Int Touch -> Bool
@@ -5167,7 +5093,7 @@ changeUpdate localMsg local =
                                 , dmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
-                                        (loadMessages messagesLoaded)
+                                        (DmChannel.loadMessages messagesLoaded)
                                         local.dmChannels
                             }
 
@@ -5187,7 +5113,7 @@ changeUpdate localMsg local =
                                                 | threads =
                                                     SeqDict.updateIfExists
                                                         threadId
-                                                        (loadMessages messagesLoaded)
+                                                        (DmChannel.loadMessages messagesLoaded)
                                                         dmChannel.threads
                                             }
                                         )
@@ -5204,7 +5130,7 @@ changeUpdate localMsg local =
                                 , discordDmChannels =
                                     SeqDict.updateIfExists
                                         channelId
-                                        (loadMessages messagesLoaded)
+                                        (DmChannel.loadMessages messagesLoaded)
                                         local.discordDmChannels
                             }
 
@@ -5218,7 +5144,7 @@ changeUpdate localMsg local =
                                 , guilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
+                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) channelId)
                                         local.guilds
                             }
 
@@ -5239,7 +5165,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (loadMessages messagesLoaded)
+                                                            (DmChannel.loadMessages messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
@@ -5266,7 +5192,7 @@ changeUpdate localMsg local =
                                 , discordGuilds =
                                     SeqDict.updateIfExists
                                         guildId
-                                        (LocalState.updateChannel (loadMessages messagesLoaded) channelId)
+                                        (LocalState.updateChannel (DmChannel.loadMessages messagesLoaded) channelId)
                                         local.discordGuilds
                             }
 
@@ -5291,7 +5217,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (loadMessages messagesLoaded)
+                                                            (DmChannel.loadMessages messagesLoaded)
                                                             channel.threads
                                                 }
                                             )
@@ -5315,7 +5241,7 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
                                             channelId
                                         )
                                         local.guilds
@@ -5326,7 +5252,7 @@ changeUpdate localMsg local =
                                 | dmChannels =
                                     SeqDict.updateIfExists
                                         otherUserId
-                                        (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
                                         local.dmChannels
                             }
 
@@ -5343,7 +5269,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (loadOlderMessages
+                                                            (DmChannel.loadOlderMessages
                                                                 previousOldestVisibleMessage
                                                                 messagesLoaded
                                                             )
@@ -5365,7 +5291,7 @@ changeUpdate localMsg local =
                                                 | threads =
                                                     SeqDict.updateIfExists
                                                         threadId
-                                                        (loadOlderMessages
+                                                        (DmChannel.loadOlderMessages
                                                             previousOldestVisibleMessage
                                                             messagesLoaded
                                                         )
@@ -5383,7 +5309,7 @@ changeUpdate localMsg local =
                                     SeqDict.updateIfExists
                                         guildId
                                         (LocalState.updateChannel
-                                            (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                            (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
                                             channelId
                                         )
                                         local.discordGuilds
@@ -5394,7 +5320,7 @@ changeUpdate localMsg local =
                                 | discordDmChannels =
                                     SeqDict.updateIfExists
                                         data.channelId
-                                        (loadOlderMessages previousOldestVisibleMessage messagesLoaded)
+                                        (DmChannel.loadOlderMessages previousOldestVisibleMessage messagesLoaded)
                                         local.discordDmChannels
                             }
 
@@ -5411,7 +5337,7 @@ changeUpdate localMsg local =
                                                     | threads =
                                                         SeqDict.updateIfExists
                                                             threadId
-                                                            (loadOlderMessages
+                                                            (DmChannel.loadOlderMessages
                                                                 previousOldestVisibleMessage
                                                                 messagesLoaded
                                                             )
@@ -6575,54 +6501,6 @@ deleteMessage guildOrDmId threadRoute local =
                     local
 
 
-loadOlderMessages :
-    Id messageId
-    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
-    case messagesLoaded of
-        FilledInByBackend messagesLoaded2 ->
-            { channel
-                | messages =
-                    SeqDict.foldl
-                        (\messageId message messages ->
-                            DmChannel.setArray messageId (MessageLoaded message) messages
-                        )
-                        channel.messages
-                        messagesLoaded2
-                , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
-            }
-
-        EmptyPlaceholder ->
-            channel
-
-
-loadMessages :
-    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
-loadMessages messagesLoaded channel =
-    case messagesLoaded of
-        FilledInByBackend messagesLoaded2 ->
-            { channel
-                | messages =
-                    SeqDict.foldl
-                        (\messageId message messages ->
-                            DmChannel.setArray
-                                messageId
-                                (MessageLoaded message)
-                                messages
-                        )
-                        channel.messages
-                        messagesLoaded2
-                , visibleMessages = VisibleMessages.firstLoad channel
-            }
-
-        EmptyPlaceholder ->
-            channel
-
-
 handleLocalChange :
     Time.Posix
     -> Maybe LocalChange
@@ -6861,7 +6739,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6873,7 +6751,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
                                             if otherUserId == otherUserIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6885,7 +6763,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6897,7 +6775,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
                                             if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6912,7 +6790,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
                                             if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6924,7 +6802,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
                                             if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -6936,7 +6814,7 @@ updateLoadedFromBackend msg model =
                                     case routeToGuildOrDmId model.route of
                                         Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
                                             if channelId == data.channelId then
-                                                scrollToBottomOfChannel
+                                                Scroll.toBottomOfChannel
 
                                             else
                                                 Command.none
@@ -7009,10 +6887,10 @@ updateLoadedFromBackend msg model =
                                                 , case loggedIn.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         if MyUi.isMobile model then
-                                                            smoothScrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannelSmooth
 
                                                         else
-                                                            scrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannel
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -7044,10 +6922,10 @@ updateLoadedFromBackend msg model =
                                                 , case loggedIn.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         if MyUi.isMobile model then
-                                                            smoothScrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannelSmooth
 
                                                         else
-                                                            scrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannel
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -7074,10 +6952,10 @@ updateLoadedFromBackend msg model =
                                                 , case loggedIn.channelScrollPosition of
                                                     ScrolledToBottom ->
                                                         if MyUi.isMobile model then
-                                                            smoothScrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannelSmooth
 
                                                         else
-                                                            scrollToBottomOfChannel
+                                                            Scroll.toBottomOfChannel
 
                                                     ScrolledToMiddle ->
                                                         Command.none
@@ -7232,7 +7110,7 @@ logout model =
                             NotLoggedIn { loginForm = Nothing, useInviteAfterLoggedIn = Nothing }
                     }
             in
-            if routeRequiresLogin model2.route then
+            if Route.requiresLogin model2.route then
                 routePush model2 HomePageRoute
 
             else
@@ -7240,43 +7118,6 @@ logout model =
 
         NotLoggedIn _ ->
             ( model, Command.none )
-
-
-scrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
-scrollToBottomOfChannel =
-    Dom.setViewportOf Pages.Guild.conversationContainerId 0 9999999 |> Task.attempt (\_ -> SetScrollToBottom)
-
-
-smoothScrollToBottomOfChannel : Command FrontendOnly toMsg FrontendMsg
-smoothScrollToBottomOfChannel =
-    Dom.getViewportOf Pages.Guild.conversationContainerId
-        |> Task.andThen
-            (\{ scene, viewport } ->
-                smoothScrollToBottomOfChannelHelper viewport.y (scene.height - viewport.height) 0
-            )
-        |> Task.attempt (\_ -> SetScrollToBottom)
-
-
-smoothScrollDuration : number
-smoothScrollDuration =
-    20
-
-
-smoothScrollToBottomOfChannelHelper : Float -> Float -> Int -> Task FrontendOnly Dom.Error ()
-smoothScrollToBottomOfChannelHelper startY endY count =
-    if count <= smoothScrollDuration then
-        let
-            t =
-                toFloat count / smoothScrollDuration
-
-            y =
-                t * (endY - startY) + startY |> Debug.log "t"
-        in
-        Dom.setViewportOf Pages.Guild.conversationContainerId 0 y
-            |> Task.andThen (\() -> smoothScrollToBottomOfChannelHelper startY endY (count + 1))
-
-    else
-        Task.succeed ()
 
 
 isViewing : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Bool
@@ -7409,46 +7250,7 @@ pendingChangesText localChange =
             "InvalidChange"
 
         Local_Admin adminChange ->
-            case adminChange of
-                Pages.Admin.ChangeUsers _ ->
-                    "Changed users via admin page"
-
-                Pages.Admin.ExpandSection _ ->
-                    "Expanded section in admin page"
-
-                Pages.Admin.CollapseSection _ ->
-                    "Collapsed section in admin page"
-
-                Pages.Admin.LogPageChanged int ->
-                    "Switched to log page " ++ String.fromInt int
-
-                Pages.Admin.SetEmailNotificationsEnabled isEnabled ->
-                    if isEnabled then
-                        "Enabled email notifications"
-
-                    else
-                        "Disabled email notifications"
-
-                Pages.Admin.SetPrivateVapidKey _ ->
-                    "Set private vapid key"
-
-                Pages.Admin.SetPublicVapidKey _ ->
-                    "Set public vapid key"
-
-                Pages.Admin.SetSlackClientSecret _ ->
-                    "Set slack client secret"
-
-                Pages.Admin.SetOpenRouterKey _ ->
-                    "Set OpenRouter key"
-
-                Pages.Admin.DeleteDiscordDmChannel _ ->
-                    "Deleted Discord DM channel"
-
-                Pages.Admin.DeleteDiscordGuild _ ->
-                    "Deleted Discord guild"
-
-                Pages.Admin.DeleteGuild _ ->
-                    "Deleted guild"
+            Pages.Admin.pendingChangesText adminChange
 
         Local_SendMessage _ _ _ _ _ ->
             "Sent a message"
@@ -7959,351 +7761,6 @@ errorPage model text =
                 )
             ]
         )
-
-
-guildOrDmIdToMessage :
-    GuildOrDmId
-    -> ThreadRouteWithMessage
-    -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
-guildOrDmIdToMessage guildOrDmId threadRoute local =
-    let
-        helper :
-            { a | messages : Array (MessageState ChannelMessageId (Id UserId)), threads : SeqDict (Id ChannelMessageId) FrontendThread }
-            -> Maybe ( UserTextMessageDataNoReply (Id UserId), ThreadRouteWithMaybeMessage )
-        helper channel =
-            case threadRoute of
-                ViewThreadWithMessage threadId messageId ->
-                    case
-                        SeqDict.get threadId channel.threads
-                            |> Maybe.withDefault Thread.frontendInit
-                            |> .messages
-                            |> DmChannel.getArray messageId
-                    of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , ViewThreadWithMaybeMessage threadId data.repliedTo
-                            )
-                                |> Just
-
-                        _ ->
-                            Nothing
-
-                NoThreadWithMessage messageId ->
-                    case DmChannel.getArray messageId channel.messages of
-                        Just (MessageLoaded (UserTextMessage data)) ->
-                            ( { createdAt = data.createdAt
-                              , createdBy = data.createdBy
-                              , content = data.content
-                              , reactions = data.reactions
-                              , editedAt = data.editedAt
-                              , attachedFiles = data.attachedFiles
-                              }
-                            , NoThreadWithMaybeMessage data.repliedTo
-                            )
-                                |> Just
-
-                        _ ->
-                            Nothing
-    in
-    case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            case LocalState.getGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    helper channel
-
-                Nothing ->
-                    Nothing
-
-        GuildOrDmId_Dm otherUserId ->
-            case SeqDict.get otherUserId local.dmChannels of
-                Just dmChannel ->
-                    helper dmChannel
-
-                Nothing ->
-                    Nothing
-
-
-discordGuildOrDmIdToMessage :
-    DiscordGuildOrDmId
-    -> ThreadRouteWithMessage
-    -> LocalState
-    -> Maybe ( UserTextMessageDataNoReply (Discord.Id.Id Discord.Id.UserId), ThreadRouteWithMaybeMessage )
-discordGuildOrDmIdToMessage guildOrDmId threadRoute local =
-    let
-        helper messageId channel =
-            case DmChannel.getArray messageId channel.messages of
-                Just (MessageLoaded (UserTextMessage data)) ->
-                    ( { createdAt = data.createdAt
-                      , createdBy = data.createdBy
-                      , content = data.content
-                      , reactions = data.reactions
-                      , editedAt = data.editedAt
-                      , attachedFiles = data.attachedFiles
-                      }
-                    , NoThreadWithMaybeMessage data.repliedTo
-                    )
-                        |> Just
-
-                _ ->
-                    Nothing
-    in
-    case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ guildId channelId ->
-            case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        ViewThreadWithMessage threadId messageId ->
-                            case
-                                SeqDict.get threadId channel.threads
-                                    |> Maybe.withDefault Thread.discordFrontendInit
-                                    |> .messages
-                                    |> DmChannel.getArray messageId
-                            of
-                                Just (MessageLoaded (UserTextMessage data)) ->
-                                    ( { createdAt = data.createdAt
-                                      , createdBy = data.createdBy
-                                      , content = data.content
-                                      , reactions = data.reactions
-                                      , editedAt = data.editedAt
-                                      , attachedFiles = data.attachedFiles
-                                      }
-                                    , ViewThreadWithMaybeMessage threadId data.repliedTo
-                                    )
-                                        |> Just
-
-                                _ ->
-                                    Nothing
-
-                        NoThreadWithMessage messageId ->
-                            helper messageId channel
-
-                Nothing ->
-                    Nothing
-
-        DiscordGuildOrDmId_Dm data ->
-            case ( SeqDict.get data.channelId local.discordDmChannels, threadRoute ) of
-                ( Just channel, NoThreadWithMessage messageId ) ->
-                    helper messageId channel
-
-                _ ->
-                    Nothing
-
-
-guildOrDmIdToMessages : ( GuildOrDmId, ThreadRoute ) -> LocalState -> Maybe (Array (MessageStateNoReply (Id UserId)))
-guildOrDmIdToMessages ( guildOrDmId, threadRoute ) local =
-    let
-        helper channel =
-            case threadRoute of
-                ViewThread threadMessageIndex ->
-                    SeqDict.get threadMessageIndex channel.threads
-                        |> Maybe.withDefault Thread.frontendInit
-                        |> .messages
-                        |> Array.map
-                            (\messageState ->
-                                case messageState of
-                                    MessageLoaded message ->
-                                        (case message of
-                                            UserTextMessage data ->
-                                                { createdAt = data.createdAt
-                                                , createdBy = data.createdBy
-                                                , content = data.content
-                                                , reactions = data.reactions
-                                                , editedAt = data.editedAt
-                                                , attachedFiles = data.attachedFiles
-                                                }
-                                                    |> UserTextMessage_NoReply
-
-                                            UserJoinedMessage time userId reactions ->
-                                                UserJoinedMessage_NoReply time userId reactions
-
-                                            DeletedMessage time ->
-                                                DeletedMessage_NoReply time
-                                        )
-                                            |> MessageLoaded_NoReply
-
-                                    MessageUnloaded ->
-                                        MessageUnloaded_NoReply
-                            )
-                        |> Just
-
-                NoThread ->
-                    Array.map
-                        (\messageState ->
-                            case messageState of
-                                MessageLoaded message ->
-                                    (case message of
-                                        UserTextMessage data ->
-                                            { createdAt = data.createdAt
-                                            , createdBy = data.createdBy
-                                            , content = data.content
-                                            , reactions = data.reactions
-                                            , editedAt = data.editedAt
-                                            , attachedFiles = data.attachedFiles
-                                            }
-                                                |> UserTextMessage_NoReply
-
-                                        UserJoinedMessage time userId reactions ->
-                                            UserJoinedMessage_NoReply time userId reactions
-
-                                        DeletedMessage time ->
-                                            DeletedMessage_NoReply time
-                                    )
-                                        |> MessageLoaded_NoReply
-
-                                MessageUnloaded ->
-                                    MessageUnloaded_NoReply
-                        )
-                        channel.messages
-                        |> Just
-    in
-    case guildOrDmId of
-        GuildOrDmId_Guild guildId channelId ->
-            case LocalState.getGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    helper channel
-
-                Nothing ->
-                    Nothing
-
-        GuildOrDmId_Dm otherUserId ->
-            case SeqDict.get otherUserId local.dmChannels of
-                Just dmChannel ->
-                    helper dmChannel
-
-                Nothing ->
-                    Nothing
-
-
-discordGuildOrDmIdToMessages : DiscordGuildOrDmId -> ThreadRoute -> LocalState -> Maybe (Array (MessageStateNoReply (Discord.Id.Id Discord.Id.UserId)))
-discordGuildOrDmIdToMessages guildOrDmId threadRoute local =
-    let
-        helper2 : { a | messages : Array (MessageState messageId userId) } -> Maybe (Array (MessageStateNoReply userId))
-        helper2 channel =
-            Array.map
-                (\messageState ->
-                    case messageState of
-                        MessageLoaded message ->
-                            (case message of
-                                UserTextMessage data ->
-                                    { createdAt = data.createdAt
-                                    , createdBy = data.createdBy
-                                    , content = data.content
-                                    , reactions = data.reactions
-                                    , editedAt = data.editedAt
-                                    , attachedFiles = data.attachedFiles
-                                    }
-                                        |> UserTextMessage_NoReply
-
-                                UserJoinedMessage time userId reactions ->
-                                    UserJoinedMessage_NoReply time userId reactions
-
-                                DeletedMessage time ->
-                                    DeletedMessage_NoReply time
-                            )
-                                |> MessageLoaded_NoReply
-
-                        MessageUnloaded ->
-                            MessageUnloaded_NoReply
-                )
-                channel.messages
-                |> Just
-    in
-    case guildOrDmId of
-        DiscordGuildOrDmId_Guild _ guildId channelId ->
-            case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        ViewThread threadMessageIndex ->
-                            case SeqDict.get threadMessageIndex channel.threads of
-                                Just thread ->
-                                    helper2 thread
-
-                                Nothing ->
-                                    Nothing
-
-                        NoThread ->
-                            helper2 channel
-
-                Nothing ->
-                    Nothing
-
-        DiscordGuildOrDmId_Dm data ->
-            case SeqDict.get data.channelId local.discordDmChannels of
-                Just dmChannel ->
-                    helper2 dmChannel
-
-                Nothing ->
-                    Nothing
-
-
-guildOrDmIdToMessagesCount : AnyGuildOrDmId -> ThreadRoute -> LocalState -> Maybe Int
-guildOrDmIdToMessagesCount guildOrDmId threadRoute local =
-    case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
-            case LocalState.getGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        ViewThread threadMessageIndex ->
-                            SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault Thread.frontendInit
-                                |> .messages
-                                |> Array.length
-                                |> Just
-
-                        NoThread ->
-                            Just (Array.length channel.messages)
-
-                Nothing ->
-                    Nothing
-
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
-            case SeqDict.get otherUserId local.dmChannels of
-                Just dmChannel ->
-                    case threadRoute of
-                        ViewThread threadMessageIndex ->
-                            SeqDict.get threadMessageIndex dmChannel.threads
-                                |> Maybe.withDefault Thread.frontendInit
-                                |> .messages
-                                |> Array.length
-                                |> Just
-
-                        NoThread ->
-                            Just (Array.length dmChannel.messages)
-
-                Nothing ->
-                    Nothing
-
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ guildId channelId) ->
-            case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                Just ( _, channel ) ->
-                    case threadRoute of
-                        ViewThread threadMessageIndex ->
-                            SeqDict.get threadMessageIndex channel.threads
-                                |> Maybe.withDefault Thread.discordFrontendInit
-                                |> .messages
-                                |> Array.length
-                                |> Just
-
-                        NoThread ->
-                            Just (Array.length channel.messages)
-
-                Nothing ->
-                    Nothing
-
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data) ->
-            case SeqDict.get data.channelId local.discordDmChannels of
-                Just dmChannel ->
-                    Just (Array.length dmChannel.messages)
-
-                Nothing ->
-                    Nothing
 
 
 routeToGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )

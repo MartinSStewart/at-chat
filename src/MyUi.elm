@@ -54,7 +54,6 @@ module MyUi exposing
     , replyToColor
     , rowButton
     , secondaryButton
-    , secondaryGray
     , secondaryGrayBorder
     , simpleButton
     , textLinkColor

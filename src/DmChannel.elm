@@ -11,6 +11,8 @@ module DmChannel exposing
     , getArray
     , latestMessageId
     , latestThreadMessageId
+    , loadMessages
+    , loadOlderMessages
     , otherUserId
     , setArray
     , toDiscordFrontendHelper
@@ -28,6 +30,7 @@ import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
 import SeqDict exposing (SeqDict)
 import Thread exposing (BackendThread, DiscordBackendThread, FrontendThread, LastTypedAt)
+import UserSession exposing (ToBeFilledInByBackend(..))
 import VisibleMessages exposing (VisibleMessages)
 
 
@@ -189,3 +192,46 @@ otherUserId userId (DmChannelId userIdA userIdB) =
 
     else
         Nothing
+
+
+loadOlderMessages :
+    Id messageId
+    -> ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+loadOlderMessages previousOldestVisibleMessage messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            { channel
+                | messages =
+                    SeqDict.foldl
+                        (\messageId message messages ->
+                            setArray messageId (MessageLoaded message) messages
+                        )
+                        channel.messages
+                        messagesLoaded2
+                , visibleMessages = VisibleMessages.loadOlder previousOldestVisibleMessage channel.visibleMessages
+            }
+
+        EmptyPlaceholder ->
+            channel
+
+
+loadMessages :
+    ToBeFilledInByBackend (SeqDict (Id messageId) (Message messageId userId))
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+    -> { a | messages : Array (MessageState messageId userId), visibleMessages : VisibleMessages messageId }
+loadMessages messagesLoaded channel =
+    case messagesLoaded of
+        FilledInByBackend messagesLoaded2 ->
+            { channel
+                | messages =
+                    SeqDict.foldl
+                        (\messageId message messages -> setArray messageId (MessageLoaded message) messages)
+                        channel.messages
+                        messagesLoaded2
+                , visibleMessages = VisibleMessages.firstLoad channel
+            }
+
+        EmptyPlaceholder ->
+            channel

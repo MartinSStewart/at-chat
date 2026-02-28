@@ -11,6 +11,7 @@ module Route exposing
     , encode
     , linkDiscordPath
     , linkDiscordQueryParam
+    , requiresLogin
     )
 
 import AppUrl
@@ -484,3 +485,37 @@ maybeMessageIdToString maybeMessageIndex =
 
         Nothing ->
             []
+
+
+requiresLogin : Route -> Bool
+requiresLogin route =
+    case route of
+        HomePageRoute ->
+            False
+
+        AdminRoute _ ->
+            True
+
+        AiChatRoute ->
+            False
+
+        GuildRoute _ _ ->
+            True
+
+        DiscordGuildRoute _ ->
+            True
+
+        DmRoute _ _ ->
+            True
+
+        SlackOAuthRedirect _ ->
+            False
+
+        TextEditorRoute ->
+            False
+
+        DiscordDmRoute _ ->
+            True
+
+        LinkDiscord _ ->
+            False
