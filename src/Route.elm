@@ -12,6 +12,7 @@ module Route exposing
     , linkDiscordPath
     , linkDiscordQueryParam
     , requiresLogin
+    , toGuildOrDmId
     )
 
 import AppUrl
@@ -19,7 +20,7 @@ import Codec
 import Dict
 import Discord
 import Discord.Id
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, InviteLinkId, ThreadMessageId, UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), UserId)
 import SecretId exposing (SecretId)
 import SessionIdHash exposing (SessionIdHash)
 import Slack
@@ -519,3 +520,55 @@ requiresLogin route =
 
         LinkDiscord _ ->
             False
+
+
+toGuildOrDmId : Route -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+toGuildOrDmId route =
+    case route of
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            ( GuildOrDmId_Guild guildId channelId |> GuildOrDmId
+            , case threadRoute of
+                ViewThreadWithFriends threadMessageId _ _ ->
+                    ViewThread threadMessageId
+
+                NoThreadWithFriends _ _ ->
+                    NoThread
+            )
+                |> Just
+
+        DmRoute otherUserId threadRoute ->
+            ( GuildOrDmId_Dm otherUserId |> GuildOrDmId
+            , case threadRoute of
+                ViewThreadWithFriends threadMessageId _ _ ->
+                    ViewThread threadMessageId
+
+                NoThreadWithFriends _ _ ->
+                    NoThread
+            )
+                |> Just
+
+        DiscordGuildRoute data ->
+            case data.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    ( DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId
+                    , case threadRoute of
+                        ViewThreadWithFriends threadMessageId _ _ ->
+                            ViewThread threadMessageId
+
+                        NoThreadWithFriends _ _ ->
+                            NoThread
+                    )
+                        |> Just
+
+                _ ->
+                    Nothing
+
+        DiscordDmRoute data ->
+            ( DiscordGuildOrDmId_Dm { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
+                |> DiscordGuildOrDmId
+            , NoThread
+            )
+                |> Just
+
+        _ ->
+            Nothing
