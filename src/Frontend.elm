@@ -584,6 +584,7 @@ routeRequest previousRoute newRoute model =
 
                                 Nothing ->
                                     loggedIn.admin
+                        , userOptions = Nothing
                       }
                     , viewCmd
                     )
@@ -1199,9 +1200,6 @@ isPressMsg msg =
         UserNameEditableMsg editableMsg ->
             Editable.isPressMsg editableMsg
 
-        PublicVapidKeyEditableMsg editableMsg ->
-            Editable.isPressMsg editableMsg
-
         ProfilePictureEditorMsg imageEditorMsg ->
             ImageEditor.isPressMsg imageEditorMsg
 
@@ -1258,15 +1256,6 @@ isPressMsg msg =
 
         SelectedNotificationMode _ ->
             True
-
-        PrivateVapidKeyEditableMsg editableMsg ->
-            Editable.isPressMsg editableMsg
-
-        SlackClientSecretEditableMsg editableMsg ->
-            Editable.isPressMsg editableMsg
-
-        OpenRouterKeyEditableMsg editableMsg ->
-            Editable.isPressMsg editableMsg
 
         PressedGuildNotificationLevel _ _ ->
             True
@@ -1401,12 +1390,12 @@ updateLoaded msg model =
                     )
 
         AdminPageMsg adminPageMsg ->
-            updateLoggedIn
-                (\loggedIn ->
+            case model.loginStatus of
+                LoggedIn loggedIn ->
                     case ( loggedIn.admin, (Local.model loggedIn.localState).adminData ) of
                         ( Just admin, IsAdmin adminData ) ->
                             let
-                                ( newAdmin, cmd, maybeLocalChange ) =
+                                ( newAdmin, cmd, outMsg ) =
                                     Pages.Admin.update
                                         model.navigationKey
                                         model.time
@@ -1414,17 +1403,36 @@ updateLoaded msg model =
                                         (Local.model loggedIn.localState)
                                         adminPageMsg
                                         admin
+
+                                loggedIn2 : LoggedIn2
+                                loggedIn2 =
+                                    { loggedIn | admin = Just newAdmin }
                             in
-                            handleLocalChange
-                                model.time
-                                (Maybe.map Local_Admin maybeLocalChange)
-                                { loggedIn | admin = Just newAdmin }
-                                (Command.map AdminToBackend AdminPageMsg cmd)
+                            case outMsg of
+                                Pages.Admin.AdminChange adminChange ->
+                                    let
+                                        ( loggedIn3, cmd2 ) =
+                                            handleLocalChange
+                                                model.time
+                                                (Local_Admin adminChange |> Just)
+                                                loggedIn2
+                                                (Command.map AdminToBackend AdminPageMsg cmd)
+                                    in
+                                    ( { model | loginStatus = LoggedIn loggedIn3 }, cmd2 )
+
+                                Pages.Admin.NoOutMsg ->
+                                    ( { model | loginStatus = LoggedIn loggedIn2 }
+                                    , Command.map AdminToBackend AdminPageMsg cmd
+                                    )
+
+                                Pages.Admin.GoToHomepage ->
+                                    routePush { model | loginStatus = LoggedIn loggedIn2 } HomePageRoute
 
                         _ ->
-                            ( loggedIn, Command.none )
-                )
-                model
+                            ( model, Command.none )
+
+                NotLoggedIn _ ->
+                    ( model, Command.none )
 
         LoginFormMsg loginFormMsg ->
             case model.loginStatus of
@@ -3168,32 +3176,6 @@ updateLoaded msg model =
                 (\value loggedIn -> handleLocalChange model.time (Just (Local_SetName value)) loggedIn Command.none)
                 model
 
-        PublicVapidKeyEditableMsg editableMsg ->
-            handleEditable
-                editableMsg
-                (\userOptions value -> { userOptions | publicVapidKey = value })
-                (\value loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_Admin (Pages.Admin.SetPublicVapidKey value)))
-                        loggedIn
-                        Command.none
-                )
-                model
-
-        PrivateVapidKeyEditableMsg editableMsg ->
-            handleEditable
-                editableMsg
-                (\userOptions value -> { userOptions | privateVapidKey = value })
-                (\value loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_Admin (Pages.Admin.SetPrivateVapidKey value)))
-                        loggedIn
-                        Command.none
-                )
-                model
-
         OneFrameAfterDragEnd ->
             ( { model | dragPrevious = model.drag }, Command.none )
 
@@ -3746,32 +3728,6 @@ updateLoaded msg model =
                             PushNotifications ->
                                 Ports.registerPushSubscriptionToJs (Local.model loggedIn.localState).publicVapidKey
                         )
-                )
-                model
-
-        SlackClientSecretEditableMsg editableMsg ->
-            handleEditable
-                editableMsg
-                (\userOptions value -> { userOptions | slackClientSecret = value })
-                (\value loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_Admin (Pages.Admin.SetSlackClientSecret value)))
-                        loggedIn
-                        Command.none
-                )
-                model
-
-        OpenRouterKeyEditableMsg editableMsg ->
-            handleEditable
-                editableMsg
-                (\userOptions value -> { userOptions | openRouterKey = value })
-                (\value loggedIn ->
-                    handleLocalChange
-                        model.time
-                        (Just (Local_Admin (Pages.Admin.SetOpenRouterKey value)))
-                        loggedIn
-                        Command.none
                 )
                 model
 
@@ -7871,7 +7827,7 @@ view model =
                                         case NonemptyDict.get local.localUser.session.userId adminData.users of
                                             Just user ->
                                                 Pages.Admin.view
-                                                    loaded.timezone
+                                                    local
                                                     adminData
                                                     user
                                                     admin

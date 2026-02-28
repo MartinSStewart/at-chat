@@ -5,6 +5,7 @@ module Pages.Admin exposing
     , InitAdminData
     , Model
     , Msg(..)
+    , OutMsg(..)
     , ToBackend(..)
     , ToFrontend(..)
     , UserColumn(..)
@@ -23,6 +24,7 @@ module Pages.Admin exposing
 import Array exposing (Array)
 import Array.Extra
 import Discord.Id
+import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -35,7 +37,7 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey)
+import LocalState exposing (AdminData, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -85,6 +87,11 @@ type Msg
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | PressedDeleteGuild (Id GuildId)
+    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
+    | PublicVapidKeyEditableMsg (Editable.Msg String)
+    | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
+    | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
+    | PressedHomepageLink
 
 
 type ToBackend
@@ -101,6 +108,10 @@ type alias Model =
     , userTable : UserTable
     , submitError : Maybe UsersChangeError
     , logs : Pagination LogWithTime
+    , slackClientSecret : Editable.Model
+    , publicVapidKey : Editable.Model
+    , privateVapidKey : Editable.Model
+    , openRouterKey : Editable.Model
     }
 
 
@@ -193,6 +204,10 @@ init logs { highlightLog } =
             }
       , submitError = Nothing
       , logs = logs
+      , slackClientSecret = Editable.init
+      , publicVapidKey = Editable.init
+      , privateVapidKey = Editable.init
+      , openRouterKey = Editable.init
       }
     , case highlightLog of
         Just index ->
@@ -280,6 +295,12 @@ updateAdmin changedBy change adminData local =
             { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
 
 
+type OutMsg
+    = AdminChange AdminChange
+    | GoToHomepage
+    | NoOutMsg
+
+
 update :
     BrowserNavigation.Key
     -> Time.Posix
@@ -287,7 +308,7 @@ update :
     -> LocalState
     -> Msg
     -> Model
-    -> ( Model, Command FrontendOnly ToBackend Msg, Maybe AdminChange )
+    -> ( Model, Command FrontendOnly ToBackend Msg, OutMsg )
 update navigationKey time adminData localState msg model =
     case msg of
         PressedLogPage index ->
@@ -297,7 +318,7 @@ update navigationKey time adminData localState msg model =
             in
             ( { model | logs = logs }
             , Command.map LogPaginationToBackend identity cmd
-            , LogPageChanged index |> Just
+            , LogPageChanged index |> AdminChange
             )
 
         PressedCopyLogLink logIndex ->
@@ -311,19 +332,19 @@ update navigationKey time adminData localState msg model =
                 [ Ports.copyToClipboard route
                 , BrowserNavigation.replaceUrl navigationKey route
                 ]
-            , Nothing
+            , NoOutMsg
             )
 
         PressedCollapseSection section2 ->
             ( model
             , Command.none
-            , CollapseSection section2 |> Just
+            , CollapseSection section2 |> AdminChange
             )
 
         PressedExpandSection section2 ->
             ( model
             , Command.none
-            , ExpandSection section2 |> Just
+            , ExpandSection section2 |> AdminChange
             )
 
         PressedEditCell userTableId column ->
@@ -339,7 +360,7 @@ update navigationKey time adminData localState msg model =
                                 Nothing ->
                                     userTable
 
-                        helper : EditedBackendUser -> ( UserTable, Command FrontendOnly ToBackend Msg, Maybe AdminChange )
+                        helper : EditedBackendUser -> ( UserTable, Command FrontendOnly ToBackend Msg, OutMsg )
                         helper change =
                             ( { userTable2
                                 | editingCell =
@@ -350,7 +371,7 @@ update navigationKey time adminData localState msg model =
                                         |> Just
                               }
                             , Dom.focus editCellTextInputId |> Task.attempt (\_ -> FocusedOnEditCell)
-                            , Nothing
+                            , NoOutMsg
                             )
                     in
                     case userTableId of
@@ -365,7 +386,7 @@ update navigationKey time adminData localState msg model =
                                             userToEditUser user |> helper
 
                                         Nothing ->
-                                            ( userTable2, Command.none, Nothing )
+                                            ( userTable2, Command.none, NoOutMsg )
 
                         NewUserId index ->
                             case Array.get index userTable2.newUsers of
@@ -373,7 +394,7 @@ update navigationKey time adminData localState msg model =
                                     helper change
 
                                 Nothing ->
-                                    ( userTable2, Command.none, Nothing )
+                                    ( userTable2, Command.none, NoOutMsg )
                 )
                 model
 
@@ -387,7 +408,7 @@ update navigationKey time adminData localState msg model =
                         Nothing ->
                             userTableState
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
@@ -406,13 +427,13 @@ update navigationKey time adminData localState msg model =
                         Nothing ->
                             userTable
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
 
         FocusedOnEditCell ->
-            ( model, Ports.textInputSelectAll editCellTextInputId, Nothing )
+            ( model, Ports.textInputSelectAll editCellTextInputId, NoOutMsg )
 
         EnterKeyInEditCell userId column ->
             updateUserTable
@@ -428,7 +449,7 @@ update navigationKey time adminData localState msg model =
                         Nothing ->
                             userTable
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
@@ -474,11 +495,11 @@ update navigationKey time adminData localState msg model =
                         , newUsers = userTable2.newUsers
                         , deletedUsers = userTable2.deletedUsers
                         }
-                        |> Just
+                        |> AdminChange
                     )
 
                 Err error ->
-                    ( { model | submitError = Just error }, Command.none, Nothing )
+                    ( { model | submitError = Just error }, Command.none, NoOutMsg )
 
         TabKeyInEditCell shiftKeyHeld ->
             updateUserTable
@@ -527,11 +548,11 @@ update navigationKey time adminData localState msg model =
                                         |> Just
                               }
                             , Dom.focus editCellTextInputId |> Task.attempt (\_ -> FocusedOnEditCell)
-                            , Nothing
+                            , NoOutMsg
                             )
 
                         Nothing ->
-                            ( userTable, Command.none, Nothing )
+                            ( userTable, Command.none, NoOutMsg )
                 )
                 model
 
@@ -544,13 +565,13 @@ update navigationKey time adminData localState msg model =
                         , deletedUsers = SeqSet.empty
                       }
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
 
         EscapeKeyInEditCell ->
-            updateUserTable (\userTable -> ( { userTable | editingCell = Nothing }, Command.none, Nothing )) model
+            updateUserTable (\userTable -> ( { userTable | editingCell = Nothing }, Command.none, NoOutMsg )) model
 
         PressedAddUserRow ->
             updateUserTable
@@ -566,7 +587,7 @@ update navigationKey time adminData localState msg model =
                                 userTable.newUsers
                       }
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
@@ -581,13 +602,13 @@ update navigationKey time adminData localState msg model =
                                 , changedUsers = SeqDict.remove userId userTable.changedUsers
                               }
                             , Command.none
-                            , Nothing
+                            , NoOutMsg
                             )
 
                         NewUserId index ->
                             ( { userTable | newUsers = Array.Extra.removeAt index userTable.newUsers }
                             , Command.none
-                            , Nothing
+                            , NoOutMsg
                             )
                 )
                 model
@@ -600,7 +621,7 @@ update navigationKey time adminData localState msg model =
                         , deletedUsers = SeqSet.remove userId userTable.deletedUsers
                       }
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
@@ -610,38 +631,73 @@ update navigationKey time adminData localState msg model =
             , Dom.getElement (collapseSectionButtonId section2)
                 |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y - 8))
                 |> Task.attempt (\_ -> ScrolledToSection)
-            , Nothing
+            , NoOutMsg
             )
 
         ScrolledToSection ->
-            ( model, Command.none, Nothing )
+            ( model, Command.none, NoOutMsg )
 
         UserTableMsg tableMsg ->
             updateUserTable
-                (\userTable -> ( { userTable | table = Table.update tableMsg userTable.table }, Command.none, Nothing ))
+                (\userTable -> ( { userTable | table = Table.update tableMsg userTable.table }, Command.none, NoOutMsg ))
                 model
 
         ToggledEmailNotifications isChecked ->
-            ( model, Command.none, Just (SetEmailNotificationsEnabled isChecked) )
+            ( model, Command.none, AdminChange (SetEmailNotificationsEnabled isChecked) )
 
         ToggleIsAdmin userTableId isAdmin ->
             updateUserTable
                 (\userTableState ->
                     ( handleTogglingAdmin userTableId userTableState isAdmin adminData
                     , Command.none
-                    , Nothing
+                    , NoOutMsg
                     )
                 )
                 model
 
         PressedDeleteDiscordDmChannel channelId ->
-            ( model, Command.none, Just (DeleteDiscordDmChannel channelId) )
+            ( model, Command.none, AdminChange (DeleteDiscordDmChannel channelId) )
 
         PressedDeleteDiscordGuild guildId ->
-            ( model, Command.none, Just (DeleteDiscordGuild guildId) )
+            ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
         PressedDeleteGuild guildId ->
-            ( model, Command.none, Just (DeleteGuild guildId) )
+            ( model, Command.none, AdminChange (DeleteGuild guildId) )
+
+        SlackClientSecretEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | slackClientSecret = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetSlackClientSecret value |> AdminChange )
+
+        PublicVapidKeyEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | publicVapidKey = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetPublicVapidKey value |> AdminChange )
+
+        PrivateVapidKeyEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | privateVapidKey = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetPrivateVapidKey value |> AdminChange )
+
+        OpenRouterKeyEditableMsg editableMsg ->
+            case editableMsg of
+                Editable.Edit editable ->
+                    ( { model | openRouterKey = editable }, Command.none, NoOutMsg )
+
+                Editable.PressedAcceptEdit value ->
+                    ( model, Command.none, SetOpenRouterKey value |> AdminChange )
+
+        PressedHomepageLink ->
+            ( model, Command.none, GoToHomepage )
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
@@ -772,9 +828,9 @@ userToEditUser user =
 
 
 updateUserTable :
-    (UserTable -> ( UserTable, Command FrontendOnly ToBackend Msg, Maybe AdminChange ))
+    (UserTable -> ( UserTable, Command FrontendOnly ToBackend Msg, OutMsg ))
     -> Model
-    -> ( Model, Command FrontendOnly ToBackend Msg, Maybe AdminChange )
+    -> ( Model, Command FrontendOnly ToBackend Msg, OutMsg )
 updateUserTable updateFunc model =
     let
         ( userTable, cmd, localChange ) =
@@ -815,20 +871,93 @@ deleteDiscordDmChannelButtonId channelId =
     "Admin_deleteDiscordDmChannelButton_" ++ Discord.Id.toString channelId |> Dom.id
 
 
-view : Time.Zone -> AdminData -> BackendUser -> Model -> Element Msg
-view timezone adminData user model =
+view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
+view local adminData user model =
     Ui.el
-        [ Ui.scrollable ]
+        [ Ui.scrollable, Ui.background MyUi.background1 ]
         (MyUi.column
-            [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 }, Ui.Font.color (Ui.rgb 0 0 0) ]
-            [ userSection user adminData model
+            [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 } ]
+            [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
+            , userSection user adminData model
             , guildsSection user adminData
             , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
-            , logSection timezone user model
+            , logSection local.localUser.timezone user model
+            , apiKeysSection local user adminData model
             ]
         )
+
+
+apiKeysSection local user adminData2 model =
+    section
+        user.expandedSections
+        ApiKeysSection
+        [ Editable.view
+            (Dom.id "userOptions_slackClientSecret")
+            True
+            "Slack client secret"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just (Slack.ClientSecret text2) |> Ok
+            )
+            SlackClientSecretEditableMsg
+            (case adminData2.slackClientSecret of
+                Just (Slack.ClientSecret a) ->
+                    a
+
+                Nothing ->
+                    ""
+            )
+            model.slackClientSecret
+        , Editable.view
+            (Dom.id "userOptions_publicVapidKey")
+            True
+            "Public VAPID key"
+            (\text -> String.trim text |> Ok)
+            PublicVapidKeyEditableMsg
+            local.publicVapidKey
+            model.publicVapidKey
+        , Editable.view
+            (Dom.id "userOptions_privateVapidKey")
+            True
+            "Private VAPID key"
+            (\text -> String.trim text |> PrivateVapidKey |> Ok)
+            PrivateVapidKeyEditableMsg
+            (adminData2.privateVapidKey |> (\(PrivateVapidKey a) -> a))
+            model.privateVapidKey
+        , Editable.view
+            (Dom.id "userOptions_openRouterKey")
+            True
+            "OpenRouter API key"
+            (\text ->
+                let
+                    text2 =
+                        String.trim text
+                in
+                if text2 == "" then
+                    Ok Nothing
+
+                else
+                    Just text2 |> Ok
+            )
+            OpenRouterKeyEditableMsg
+            (case adminData2.openRouterKey of
+                Just key ->
+                    key
+
+                Nothing ->
+                    ""
+            )
+            model.openRouterKey
+        ]
 
 
 userSection : BackendUser -> AdminData -> Model -> Element Msg
@@ -874,7 +1003,7 @@ userSection user adminData model =
                             (Dom.id "Admin_resetUserChanges")
                             PressedResetUserChanges
                             (Ui.text "Reset")
-                        , MyUi.primaryButton saveUserChangesButtonId PressedSaveUserChanges "Save changes"
+                        , MyUi.simpleButton saveUserChangesButtonId PressedSaveUserChanges (Ui.text "Save changes")
                         , case model.submitError of
                             Just error ->
                                 (case error of
@@ -1167,13 +1296,12 @@ tableAttributes =
     [ Ui.width Ui.fill
     , Ui.borderWith { top = 1, bottom = 1, left = 0, right = 0 }
     , cellBorderColor
-    , Ui.background (Ui.rgb 255 255 255)
     ]
 
 
 cellBorderColor : Ui.Attribute msg
 cellBorderColor =
-    Ui.borderColor (Ui.rgb 237 242 247)
+    Ui.borderColor MyUi.buttonBorder
 
 
 type UserColumn
@@ -1336,7 +1464,7 @@ cellBackgroundColor userTableId state =
 
 newRowColor : Ui.Color
 newRowColor =
-    Ui.rgb 200 255 200
+    Ui.rgb 63 89 63
 
 
 localChangeToText : UserColumn -> EditedBackendUser -> String
@@ -1351,12 +1479,12 @@ localChangeToText column localChange =
 
 editColor : Ui.Color
 editColor =
-    Ui.rgb 250 240 210
+    Ui.rgb 122 115 87
 
 
 deleteColor : Ui.Color
 deleteColor =
-    Ui.rgb 250 220 220
+    Ui.rgb 126 90 90
 
 
 type RowButtonType
@@ -1590,7 +1718,7 @@ section expandedSections section2 content =
                     ]
     in
     MyUi.column
-        [ Ui.background MyUi.secondaryGray
+        [ Ui.background MyUi.background3
         , Ui.rounded 8
         , Ui.padding 8
         ]

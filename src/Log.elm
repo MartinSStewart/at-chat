@@ -169,7 +169,7 @@ view timezone onPressCopyLink isCopied isHighlighted { time, log } =
             , Ui.Font.size 14
             ]
             [ Ui.row
-                [ Ui.Font.color MyUi.gray
+                [ Ui.Font.color MyUi.font3
                 , Ui.width Ui.shrink
                 , Ui.spacing 4
                 , Ui.Input.button onPressCopyLink
@@ -411,7 +411,7 @@ fieldRow label value =
     Ui.row
         [ Ui.spacing 6 ]
         [ Ui.el
-            [ Ui.Font.color MyUi.gray
+            [ Ui.Font.color MyUi.font3
             , Ui.Font.size 13
             , Ui.width Ui.shrink
             , MyUi.noShrinking
@@ -432,7 +432,7 @@ errorDetails content =
     Ui.row
         [ Ui.spacing 6 ]
         [ Ui.el
-            [ Ui.Font.color MyUi.gray
+            [ Ui.Font.color MyUi.font3
             , Ui.Font.size 13
             , Ui.width Ui.shrink
             , MyUi.noShrinking

@@ -28,7 +28,6 @@ module MyUi exposing
     , font1
     , font2
     , font3
-    , gray
     , heightAttr
     , highlightedBorder
     , hover
@@ -50,7 +49,6 @@ module MyUi exposing
     , noPointerEvents
     , noShrinking
     , prewrap
-    , primaryButton
     , radioColumn
     , radioRowWithSeparators
     , replyToColor
@@ -374,21 +372,6 @@ white =
     Ui.rgb 255 255 255
 
 
-gray : Ui.Color
-gray =
-    Ui.rgb 100 100 100
-
-
-green500 : Ui.Color
-green500 =
-    Ui.rgb 72 187 120
-
-
-green500Border : Ui.Color
-green500Border =
-    Ui.rgb 55 141 91
-
-
 secondaryGray : Ui.Color
 secondaryGray =
     Ui.rgb 240 240 240
@@ -568,8 +551,8 @@ button attrs text =
          , Ui.rounded 8
          , Ui.border 1
          , Ui.width Ui.shrink
-         , Ui.background green500
-         , Ui.borderColor green500Border
+         , Ui.background buttonBackground
+         , Ui.borderColor buttonBorder
          , Ui.Font.weight 600
          , Ui.Font.color white
          , Ui.Shadow.shadows buttonShadows
@@ -655,16 +638,6 @@ container backgroundColor isMobile2 label2 contents =
             ]
             contents
         )
-
-
-primaryButton : HtmlId -> msg -> String -> Element msg
-primaryButton htmlId onPress text =
-    button
-        [ Ui.Input.button onPress
-        , id htmlId
-        , focusEffect
-        ]
-        text
 
 
 simpleButton : HtmlId -> msg -> Element msg -> Element msg

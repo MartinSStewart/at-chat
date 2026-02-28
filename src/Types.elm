@@ -199,10 +199,6 @@ type alias LoggedIn2 =
 
 type alias UserOptionsModel =
     { name : Editable.Model
-    , slackClientSecret : Editable.Model
-    , publicVapidKey : Editable.Model
-    , privateVapidKey : Editable.Model
-    , openRouterKey : Editable.Model
     , showLinkDiscordSetup : Bool
     }
 
@@ -492,10 +488,6 @@ type FrontendMsg
     | TwoFactorMsg TwoFactorAuthentication.Msg
     | AiChatMsg AiChat.Msg
     | UserNameEditableMsg (Editable.Msg PersonName)
-    | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
-    | PublicVapidKeyEditableMsg (Editable.Msg String)
-    | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
-    | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | ProfilePictureEditorMsg ImageEditor.Msg
     | OneFrameAfterDragEnd
     | GotFileHashName ( AnyGuildOrDmId, ThreadRoute ) (Id FileId) (Result Http.Error FileStatus.UploadResponse)

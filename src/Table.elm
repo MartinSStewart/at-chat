@@ -60,12 +60,12 @@ update msg model =
 
 headerBackgroundColor : Ui.Attribute msg
 headerBackgroundColor =
-    Ui.background (Ui.rgb 247 250 252)
+    Ui.background MyUi.background2
 
 
 cellBorderColor : Ui.Attribute msg
 cellBorderColor =
-    Ui.borderColor (Ui.rgb 237 242 247)
+    Ui.borderColor MyUi.buttonBorder
 
 
 header : Maybe (Int -> msg) -> Int -> String -> Model -> Ui.Table.Cell msg
@@ -188,7 +188,6 @@ tableConfig id showAll onMsg getModel userColumns =
                                             (Ui.el
                                                 [ Ui.Input.button (onMsg PressedShowAll)
                                                 , Dom.idToString id ++ "_showAll" |> Ui.id
-                                                , Ui.background MyUi.secondaryGray
                                                 , MyUi.focusEffect
                                                 , Ui.Font.color (Ui.rgb 0 0 0)
                                                 , Ui.rounded 4

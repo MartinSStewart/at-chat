@@ -15,7 +15,6 @@ import MyUi
 import PersonName
 import Route
 import SeqDict
-import Slack
 import Time
 import TwoFactorAuthentication
 import Types exposing (FrontendMsg(..), LoadedFrontend, LoggedIn2, UserOptionsModel)
@@ -32,10 +31,6 @@ import UserSession exposing (NotificationMode(..), PushSubscription(..))
 init : UserOptionsModel
 init =
     { name = Editable.init
-    , slackClientSecret = Editable.init
-    , publicVapidKey = Editable.init
-    , privateVapidKey = Editable.init
-    , openRouterKey = Editable.init
     , showLinkDiscordSetup = False
     }
 
@@ -184,79 +179,17 @@ view isMobile time local loggedIn loaded model =
             , Ui.spacing 16
             , Ui.scrollable
             ]
-            [ case local.adminData of
-                IsAdmin adminData2 ->
-                    MyUi.container
-                        MyUi.background1
-                        isMobile
-                        "Admin"
-                        [ Editable.view
-                            (Dom.id "userOptions_slackClientSecret")
-                            True
-                            "Slack client secret"
-                            (\text ->
-                                let
-                                    text2 =
-                                        String.trim text
-                                in
-                                if text2 == "" then
-                                    Ok Nothing
+            [ case loggedIn.admin of
+                Just _ ->
+                    Ui.el
+                        [ Ui.paddingXY 32 0 ]
+                        (MyUi.simpleButton
+                            (Dom.id "userOptions_gotoAdmin")
+                            (PressedLink (Route.AdminRoute { highlightLog = Nothing }))
+                            (Ui.text "Go to Admin")
+                        )
 
-                                else
-                                    Just (Slack.ClientSecret text2) |> Ok
-                            )
-                            SlackClientSecretEditableMsg
-                            (case adminData2.slackClientSecret of
-                                Just (Slack.ClientSecret a) ->
-                                    a
-
-                                Nothing ->
-                                    ""
-                            )
-                            model.slackClientSecret
-                        , Editable.view
-                            (Dom.id "userOptions_publicVapidKey")
-                            True
-                            "Public VAPID key"
-                            (\text -> String.trim text |> Ok)
-                            PublicVapidKeyEditableMsg
-                            local.publicVapidKey
-                            model.publicVapidKey
-                        , Editable.view
-                            (Dom.id "userOptions_privateVapidKey")
-                            True
-                            "Private VAPID key"
-                            (\text -> String.trim text |> PrivateVapidKey |> Ok)
-                            PrivateVapidKeyEditableMsg
-                            (adminData2.privateVapidKey |> (\(PrivateVapidKey a) -> a))
-                            model.privateVapidKey
-                        , Editable.view
-                            (Dom.id "userOptions_openRouterKey")
-                            True
-                            "OpenRouter API key"
-                            (\text ->
-                                let
-                                    text2 =
-                                        String.trim text
-                                in
-                                if text2 == "" then
-                                    Ok Nothing
-
-                                else
-                                    Just text2 |> Ok
-                            )
-                            OpenRouterKeyEditableMsg
-                            (case adminData2.openRouterKey of
-                                Just key ->
-                                    key
-
-                                Nothing ->
-                                    ""
-                            )
-                            model.openRouterKey
-                        ]
-
-                IsNotAdmin ->
+                Nothing ->
                     Ui.none
             , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg
