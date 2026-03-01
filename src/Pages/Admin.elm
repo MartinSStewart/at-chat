@@ -88,7 +88,7 @@ type Msg
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
-    | PressedToggleDiscordGuildChannels (Discord.Id.Id Discord.Id.GuildId)
+    | PressedExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | PressedDeleteGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
@@ -115,7 +115,7 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
-    , expandedDiscordGuildChannels : Set String
+    , expandedDiscordGuildChannels : SeqSet (Discord.Id.Id Discord.Id.GuildId)
     }
 
 
@@ -222,7 +222,7 @@ init logs { highlightLog } =
       , publicVapidKey = Editable.init
       , privateVapidKey = Editable.init
       , openRouterKey = Editable.init
-      , expandedDiscordGuildChannels = Set.empty
+      , expandedDiscordGuildChannels = SeqSet.empty
       }
     , case highlightLog of
         Just index ->
@@ -676,18 +676,14 @@ update navigationKey time adminData localState msg model =
         PressedDeleteDiscordGuild guildId ->
             ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
-        PressedToggleDiscordGuildChannels guildId ->
-            let
-                key =
-                    Discord.Id.toString guildId
-            in
+        PressedExpandDiscordGuild guildId ->
             ( { model
                 | expandedDiscordGuildChannels =
-                    if Set.member key model.expandedDiscordGuildChannels then
-                        Set.remove key model.expandedDiscordGuildChannels
+                    if SeqSet.member guildId model.expandedDiscordGuildChannels then
+                        SeqSet.remove guildId model.expandedDiscordGuildChannels
 
                     else
-                        Set.insert key model.expandedDiscordGuildChannels
+                        SeqSet.insert guildId model.expandedDiscordGuildChannels
               }
             , Command.none
             , NoOutMsg
@@ -1128,8 +1124,7 @@ guildsSection user adminData =
                     (\( guildId, guild ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
-                            , Ui.text (Id.toString guildId)
+                            [ Ui.text (Id.toString guildId)
                             , Ui.text (GuildName.toString guild.name)
                             , Ui.row
                                 [ Ui.spacing 8 ]
@@ -1143,6 +1138,7 @@ guildsSection user adminData =
                                 ]
                             , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
                             , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                            , MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
                             ]
                     )
                     (SeqDict.toList adminData.guilds)
@@ -1165,7 +1161,7 @@ discordGuildsSection user adminData model =
                     (\( guildId, guild ) ->
                         let
                             isExpanded =
-                                Set.member (Discord.Id.toString guildId) model.expandedDiscordGuildChannels
+                                SeqSet.member guildId model.expandedDiscordGuildChannels
 
                             channelCount =
                                 List.length guild.channels
@@ -1174,7 +1170,14 @@ discordGuildsSection user adminData model =
                             [ Ui.spacing 4 ]
                             [ Ui.row
                                 [ Ui.spacing 8, Ui.Font.size 14 ]
-                                [ MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
+                                [ Ui.el
+                                    [ Ui.width Ui.shrink, Ui.Input.button (PressedExpandDiscordGuild guildId) ]
+                                    (if isExpanded then
+                                        Icons.collapseContainer
+
+                                     else
+                                        Icons.expandContainer
+                                    )
                                 , Ui.text (Discord.Id.toString guildId)
                                 , Ui.text (GuildName.toString guild.name)
                                 , Ui.row
@@ -1187,20 +1190,9 @@ discordGuildsSection user adminData model =
                                         Nothing ->
                                             Ui.text (Discord.Id.toString guild.owner)
                                     ]
-                                , Ui.row
-                                    [ Ui.spacing 4
-                                    , Ui.Input.button (PressedToggleDiscordGuildChannels guildId)
-                                    ]
-                                    [ Ui.el [ Ui.move (Ui.up 1), Ui.width Ui.shrink ]
-                                        (if isExpanded then
-                                            Icons.collapseContainer
-
-                                         else
-                                            Icons.expandContainer
-                                        )
-                                    , Ui.text ("Channels: " ++ String.fromInt channelCount)
-                                    ]
+                                , Ui.text ("Channels: " ++ String.fromInt channelCount)
                                 , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                                , MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
                                 ]
                             , if isExpanded then
                                 Ui.column
@@ -1241,8 +1233,7 @@ discordDmChannelsSection user adminData =
                     (\( channelId, channel ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
-                            , Ui.text (Discord.Id.toString channelId)
+                            [ Ui.text (Discord.Id.toString channelId)
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
@@ -1259,6 +1250,7 @@ discordDmChannelsSection user adminData =
                                     |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
                             ]
                     )
                     (SeqDict.toList adminData.discordDmChannels)
