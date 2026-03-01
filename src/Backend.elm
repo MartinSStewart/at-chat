@@ -225,7 +225,16 @@ adminData model lastLogPageViewed =
         SeqDict.map
             (\_ guild ->
                 { name = guild.name
-                , channelCount = SeqDict.size guild.channels
+                , channels =
+                    SeqDict.toList guild.channels
+                        |> List.map
+                            (\( channelId, channel ) ->
+                                { channelId = channelId
+                                , name = channel.name
+                                , messageCount = Array.length channel.messages
+                                , threadCount = SeqDict.size channel.threads
+                                }
+                            )
                 , memberCount = SeqDict.size guild.members
                 , owner = guild.owner
                 }

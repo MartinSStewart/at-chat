@@ -409,7 +409,17 @@ type alias AdminData =
     , discordGuilds :
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
+            { name : GuildName
+            , channels :
+                List
+                    { channelId : Discord.Id.Id Discord.Id.ChannelId
+                    , name : ChannelName
+                    , messageCount : Int
+                    , threadCount : Int
+                    }
+            , memberCount : Int
+            , owner : Discord.Id.Id Discord.Id.UserId
+            }
     , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
     }
 

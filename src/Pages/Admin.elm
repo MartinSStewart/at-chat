@@ -24,6 +24,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
+import ChannelName exposing (ChannelName)
 import Discord.Id
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -87,6 +88,7 @@ type Msg
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedToggleDiscordGuildChannels (Discord.Id.Id Discord.Id.GuildId)
     | PressedDeleteGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
@@ -113,6 +115,7 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , expandedDiscordGuildChannels : Set String
     }
 
 
@@ -150,7 +153,17 @@ type alias InitAdminData =
     , discordGuilds :
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName, channelCount : Int, memberCount : Int, owner : Discord.Id.Id Discord.Id.UserId }
+            { name : GuildName
+            , channels :
+                List
+                    { channelId : Discord.Id.Id Discord.Id.ChannelId
+                    , name : ChannelName
+                    , messageCount : Int
+                    , threadCount : Int
+                    }
+            , memberCount : Int
+            , owner : Discord.Id.Id Discord.Id.UserId
+            }
     , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
     }
 
@@ -209,6 +222,7 @@ init logs { highlightLog } =
       , publicVapidKey = Editable.init
       , privateVapidKey = Editable.init
       , openRouterKey = Editable.init
+      , expandedDiscordGuildChannels = Set.empty
       }
     , case highlightLog of
         Just index ->
@@ -662,6 +676,23 @@ update navigationKey time adminData localState msg model =
         PressedDeleteDiscordGuild guildId ->
             ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
+        PressedToggleDiscordGuildChannels guildId ->
+            let
+                key =
+                    Discord.Id.toString guildId
+            in
+            ( { model
+                | expandedDiscordGuildChannels =
+                    if Set.member key model.expandedDiscordGuildChannels then
+                        Set.remove key model.expandedDiscordGuildChannels
+
+                    else
+                        Set.insert key model.expandedDiscordGuildChannels
+              }
+            , Command.none
+            , NoOutMsg
+            )
+
         PressedDeleteGuild guildId ->
             ( model, Command.none, AdminChange (DeleteGuild guildId) )
 
@@ -925,7 +956,7 @@ view local adminData user model =
             [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
             , userSection user adminData model
             , guildsSection user adminData
-            , discordGuildsSection user adminData
+            , discordGuildsSection user adminData model
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
             , logSection local.localUser.timezone user model
@@ -1119,8 +1150,8 @@ guildsSection user adminData =
         ]
 
 
-discordGuildsSection : BackendUser -> AdminData -> Element Msg
-discordGuildsSection user adminData =
+discordGuildsSection : BackendUser -> AdminData -> Model -> Element Msg
+discordGuildsSection user adminData model =
     section
         user.expandedSections
         DiscordGuildsSection
@@ -1132,23 +1163,62 @@ discordGuildsSection user adminData =
                 [ Ui.spacing 4 ]
                 (List.map
                     (\( guildId, guild ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
-                            , Ui.text (Discord.Id.toString guildId)
-                            , Ui.text (GuildName.toString guild.name)
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.text "Owner:"
-                                , case SeqDict.get guild.owner adminData.discordUsers of
-                                    Just discordUser ->
-                                        discordUserLabel discordUser
+                        let
+                            isExpanded =
+                                Set.member (Discord.Id.toString guildId) model.expandedDiscordGuildChannels
 
-                                    Nothing ->
-                                        Ui.text (Discord.Id.toString guild.owner)
+                            channelCount =
+                                List.length guild.channels
+                        in
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.row
+                                [ Ui.spacing 8, Ui.Font.size 14 ]
+                                [ MyUi.deleteButton (deleteDiscordGuildButtonId guildId) (PressedDeleteDiscordGuild guildId)
+                                , Ui.text (Discord.Id.toString guildId)
+                                , Ui.text (GuildName.toString guild.name)
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.text "Owner:"
+                                    , case SeqDict.get guild.owner adminData.discordUsers of
+                                        Just discordUser ->
+                                            discordUserLabel discordUser
+
+                                        Nothing ->
+                                            Ui.text (Discord.Id.toString guild.owner)
+                                    ]
+                                , Ui.row
+                                    [ Ui.spacing 4
+                                    , Ui.Input.button (PressedToggleDiscordGuildChannels guildId)
+                                    ]
+                                    [ Ui.el [ Ui.move (Ui.up 1), Ui.width Ui.shrink ]
+                                        (if isExpanded then
+                                            Icons.collapseContainer
+
+                                         else
+                                            Icons.expandContainer
+                                        )
+                                    , Ui.text ("Channels: " ++ String.fromInt channelCount)
+                                    ]
+                                , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
                                 ]
-                            , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
-                            , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                            , if isExpanded then
+                                Ui.column
+                                    [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
+                                    (List.map
+                                        (\channel ->
+                                            Ui.row
+                                                [ Ui.spacing 8, Ui.Font.size 13 ]
+                                                [ Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+                                                ]
+                                        )
+                                        guild.channels
+                                    )
+
+                              else
+                                Ui.none
                             ]
                     )
                     (SeqDict.toList adminData.discordGuilds)
