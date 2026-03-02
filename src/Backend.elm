@@ -852,7 +852,7 @@ update msg model =
                                 Ok messages ->
                                     let
                                         ( messages2, linkedMessageIds ) =
-                                            DiscordSync.messagesAndLinks messages SeqDict.empty
+                                            DiscordSync.messagesAndLinks (List.reverse messages) SeqDict.empty
                                     in
                                     { channel
                                         | isReloading = DiscordChannel_NotReloading
@@ -861,10 +861,7 @@ update msg model =
                                     }
 
                                 Err error ->
-                                    { channel
-                                        | isReloading =
-                                            DiscordChannel_LastReloadFailed time error
-                                    }
+                                    { channel | isReloading = DiscordChannel_LastReloadFailed time error }
 
                         model2 : BackendModel
                         model2 =
@@ -4380,7 +4377,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
                             (Discord.userToken discordUser.auth)
-                            { channelId = channelId, limit = 1000 }
+                            { channelId = channelId, limit = 10000 }
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]
                     )

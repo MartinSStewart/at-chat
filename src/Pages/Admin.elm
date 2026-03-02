@@ -1284,7 +1284,7 @@ discordGuildsSection user adminData model =
                                                 )
                                                 adminData.discordUsers
                                             )
-                                            guild.members
+                                            (SeqDict.insert guild.owner { joinedAt = Time.millisToPosix 0 } guild.members)
                                             |> SeqDict.keys
                                             |> List.head
                                 in

@@ -2992,6 +2992,48 @@ type MessageType
     | ApplicationCommand
     | ThreadStarterMessage
     | GuildInviteReminder
+    | ContextMenuCommand
+    | AutoModerationAction
+    | RoleSubscriptionPurchase
+    | InteractionPremiumUpsell
+    | StageStart
+    | StageEnd
+    | StageSpeaker
+    | StageRaiseHand
+    | StageTopic
+    | GuildApplicationPremiumSubscription
+    | PrivateChannelIntegrationAdded
+    | PrivateChannelIntegrationRemoved
+    | PremiumReferral
+    | GuildIncidentAlertModeEnabled
+    | GuildIncidentAlertModeDisabled
+    | GuildIncidentReportRaid
+    | GuildIncidentReportFalseAlarm
+    | GuildDeadChatRevivePrompt
+    | CustomGift
+    | GuildGamingStatsPrompt
+    | Poll
+    | PurchaseNotification
+    | VoiceHangoutInvite
+    | PollResult
+    | Changelog
+    | NitroNotification
+    | ChannelLinkedToLobby
+    | GiftingPrompt
+    | InGameMessageNux
+    | GuildJoinRequestAcceptNotification
+    | GuildJoinRequestRejectNotification
+    | GuildJoinRequestWithdrawnNotification
+    | HdStreamingUpgraded
+    | ChatWallpaperSet
+    | ChatWallpaperRemove
+    | ReportToModDeletedMessage
+    | ReportToModTimeoutUser
+    | ReportToModKickUser
+    | ReportToModBanUser
+    | ReportToModClosedReport
+    | EmojiAdded
+    | UnknownMessageType
 
 
 {-| -}
@@ -3349,79 +3391,202 @@ decodeMessage =
 
 decodeMessageType : JD.Decoder MessageType
 decodeMessageType =
-    JD.int
-        |> JD.andThen
-            (\messageType ->
-                case messageType of
-                    0 ->
-                        JD.succeed DefaultMessageType
+    JD.map
+        (\messageType ->
+            case messageType of
+                0 ->
+                    DefaultMessageType
 
-                    1 ->
-                        JD.succeed RecipientAdd
+                1 ->
+                    RecipientAdd
 
-                    2 ->
-                        JD.succeed RecipientRemove
+                2 ->
+                    RecipientRemove
 
-                    3 ->
-                        JD.succeed Call
+                3 ->
+                    Call
 
-                    4 ->
-                        JD.succeed ChannelNameChange
+                4 ->
+                    ChannelNameChange
 
-                    5 ->
-                        JD.succeed ChannelIconChange
+                5 ->
+                    ChannelIconChange
 
-                    6 ->
-                        JD.succeed ChannelPinnedMessage
+                6 ->
+                    ChannelPinnedMessage
 
-                    7 ->
-                        JD.succeed GuildMemberJoin
+                7 ->
+                    GuildMemberJoin
 
-                    8 ->
-                        JD.succeed UserPremiumGuildSubscription
+                8 ->
+                    UserPremiumGuildSubscription
 
-                    9 ->
-                        JD.succeed UserPremiumGuildSubscriptionTier1
+                9 ->
+                    UserPremiumGuildSubscriptionTier1
 
-                    10 ->
-                        JD.succeed UserPremiumGuildSubscriptionTier2
+                10 ->
+                    UserPremiumGuildSubscriptionTier2
 
-                    11 ->
-                        JD.succeed UserPremiumGuildSubscriptionTier3
+                11 ->
+                    UserPremiumGuildSubscriptionTier3
 
-                    12 ->
-                        JD.succeed ChannelFollowAdd
+                12 ->
+                    ChannelFollowAdd
 
-                    14 ->
-                        JD.succeed GuildDiscoveryDisqualified
+                14 ->
+                    GuildDiscoveryDisqualified
 
-                    15 ->
-                        JD.succeed GuildDiscoveryRequalified
+                15 ->
+                    GuildDiscoveryRequalified
 
-                    16 ->
-                        JD.succeed GuildDiscoveryGracePeriodInitialWarning
+                16 ->
+                    GuildDiscoveryGracePeriodInitialWarning
 
-                    17 ->
-                        JD.succeed GuildDiscoveryGracePeriodFinalWarning
+                17 ->
+                    GuildDiscoveryGracePeriodFinalWarning
 
-                    18 ->
-                        JD.succeed ThreadCreated
+                18 ->
+                    ThreadCreated
 
-                    19 ->
-                        JD.succeed Reply
+                19 ->
+                    Reply
 
-                    20 ->
-                        JD.succeed ApplicationCommand
+                20 ->
+                    ApplicationCommand
 
-                    21 ->
-                        JD.succeed ThreadStarterMessage
+                21 ->
+                    ThreadStarterMessage
 
-                    22 ->
-                        JD.succeed GuildInviteReminder
+                22 ->
+                    GuildInviteReminder
 
-                    _ ->
-                        JD.fail "Invalid message type"
-            )
+                23 ->
+                    ContextMenuCommand
+
+                24 ->
+                    AutoModerationAction
+
+                25 ->
+                    RoleSubscriptionPurchase
+
+                26 ->
+                    InteractionPremiumUpsell
+
+                27 ->
+                    StageStart
+
+                28 ->
+                    StageEnd
+
+                29 ->
+                    StageSpeaker
+
+                30 ->
+                    StageRaiseHand
+
+                31 ->
+                    StageTopic
+
+                32 ->
+                    GuildApplicationPremiumSubscription
+
+                33 ->
+                    PrivateChannelIntegrationAdded
+
+                34 ->
+                    PrivateChannelIntegrationRemoved
+
+                35 ->
+                    PremiumReferral
+
+                36 ->
+                    GuildIncidentAlertModeEnabled
+
+                37 ->
+                    GuildIncidentAlertModeDisabled
+
+                38 ->
+                    GuildIncidentReportRaid
+
+                39 ->
+                    GuildIncidentReportFalseAlarm
+
+                40 ->
+                    GuildDeadChatRevivePrompt
+
+                41 ->
+                    CustomGift
+
+                42 ->
+                    GuildGamingStatsPrompt
+
+                43 ->
+                    Poll
+
+                44 ->
+                    PurchaseNotification
+
+                45 ->
+                    VoiceHangoutInvite
+
+                46 ->
+                    PollResult
+
+                47 ->
+                    Changelog
+
+                48 ->
+                    NitroNotification
+
+                49 ->
+                    ChannelLinkedToLobby
+
+                50 ->
+                    GiftingPrompt
+
+                51 ->
+                    InGameMessageNux
+
+                52 ->
+                    GuildJoinRequestAcceptNotification
+
+                53 ->
+                    GuildJoinRequestRejectNotification
+
+                54 ->
+                    GuildJoinRequestWithdrawnNotification
+
+                55 ->
+                    HdStreamingUpgraded
+
+                56 ->
+                    ChatWallpaperSet
+
+                57 ->
+                    ChatWallpaperRemove
+
+                58 ->
+                    ReportToModDeletedMessage
+
+                59 ->
+                    ReportToModTimeoutUser
+
+                60 ->
+                    ReportToModKickUser
+
+                61 ->
+                    ReportToModBanUser
+
+                62 ->
+                    ReportToModClosedReport
+
+                63 ->
+                    EmojiAdded
+
+                _ ->
+                    UnknownMessageType
+        )
+        JD.int
 
 
 decodeUser : JD.Decoder User
