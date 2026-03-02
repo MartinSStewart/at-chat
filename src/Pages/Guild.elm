@@ -965,11 +965,12 @@ discordGuildView model routeData loggedIn local =
                             , Ui.clip
                             , (case showMembers of
                                 ShowMembersTab ->
-                                    Ui.Lazy.lazy4
+                                    Ui.Lazy.lazy5
                                         discordMemberColumnMobile
                                         canScroll2
                                         local.localUser
                                         routeData.currentDiscordUserId
+                                        guild.owner
                                         guild.members
                                         |> Ui.el
                                             [ Ui.height Ui.fill
@@ -1047,10 +1048,11 @@ discordGuildView model routeData loggedIn local =
                                     [ Ui.height Ui.fill
                                     , MyUi.htmlStyle "padding-top" MyUi.insetTop
                                     ]
-                            , Ui.Lazy.lazy3
+                            , Ui.Lazy.lazy4
                                 discordMemberColumnNotMobile
                                 local.localUser
                                 routeData.currentDiscordUserId
+                                guild.owner
                                 guild.members
                                 |> Ui.el
                                     [ Ui.width Ui.shrink
@@ -1141,9 +1143,10 @@ memberColumnNotMobile localUser guildOwner guildMembers =
 discordMemberColumnNotMobile :
     LocalUser
     -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.UserId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
     -> Element FrontendMsg
-discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers =
+discordMemberColumnNotMobile localUser currentDiscordUserId guildOwner guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1159,7 +1162,9 @@ discordMemberColumnNotMobile localUser currentDiscordUserId guildMembers =
         ]
         [ Ui.column
             [ Ui.paddingXY 8 4 ]
-            [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+            [ Ui.text "Owner"
+            , discordMemberLabel False localUser currentDiscordUserId guildOwner
+            , Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
             , Ui.column
                 [ Ui.height Ui.fill ]
                 (SeqDict.foldr
@@ -1223,9 +1228,10 @@ discordMemberColumnMobile :
     Bool
     -> LocalUser
     -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.UserId
     -> SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
     -> Element FrontendMsg
-discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers =
+discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildOwner guildMembers =
     let
         _ =
             Debug.log "rerendered memberColumn" ()
@@ -1254,7 +1260,12 @@ discordMemberColumnMobile canScroll2 localUser currentDiscordUserId guildMembers
             ]
             [ Ui.column
                 [ Ui.paddingXY 8 4 ]
-                [ Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
+                [ Ui.column
+                    [ Ui.paddingXY 8 4 ]
+                    [ Ui.text "Owner"
+                    , discordMemberLabel False localUser currentDiscordUserId guildOwner
+                    ]
+                , Ui.text ("Members (" ++ String.fromInt (SeqDict.size guildMembers) ++ ")")
                 , Ui.column
                     [ Ui.height Ui.fill ]
                     (SeqDict.foldr

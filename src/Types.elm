@@ -619,7 +619,6 @@ type BackendMsg
                 , { guild : Discord.GatewayGuild
                   , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
                   , icon : Maybe FileStatus.UploadResponse
-                  , threads : List DiscordThreadReadyData
                   }
                 )
             )

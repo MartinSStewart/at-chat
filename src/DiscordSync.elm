@@ -9,6 +9,8 @@ module DiscordSync exposing
     , handleDiscordEditMessage
     , http
     , sendMessage
+    , websocketClose
+    , websocketCreateHandle
     )
 
 import Array exposing (Array)
@@ -46,6 +48,7 @@ import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
 import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordDmChannelReadyData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Unsafe
 import User
 
 
@@ -728,36 +731,28 @@ addDiscordDms dmChannels model =
 
 
 addDiscordGuilds :
-    SeqDict
-        (Discord.Id.Id Discord.Id.GuildId)
-        { guild : Discord.GatewayGuild
-        , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
-        , icon : Maybe FileStatus.UploadResponse
-        , threads : List DiscordThreadReadyData
-        }
+    Time.Posix
+    -> Discord.Id.Id Discord.Id.UserId
+    ->
+        SeqDict
+            (Discord.Id.Id Discord.Id.GuildId)
+            { guild : Discord.GatewayGuild
+            , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
+            , icon : Maybe FileStatus.UploadResponse
+            }
     -> BackendModel
     -> BackendModel
-addDiscordGuilds guilds model =
+addDiscordGuilds time userId guilds model =
     let
         attachments : SeqDict String DiscordAttachmentData
         attachments =
             SeqDict.foldl
                 (\_ guild dict ->
-                    let
-                        dict3 : SeqDict String DiscordAttachmentData
-                        dict3 =
-                            List.foldl
-                                (\data dict2 ->
-                                    addUploadResponsesToDiscordAttachments data.uploadResponses dict2
-                                )
-                                dict
-                                guild.threads
-                    in
                     List.foldl
-                        (\( _, _, uploadResponses ) dict4 ->
-                            addUploadResponsesToDiscordAttachments uploadResponses dict4
+                        (\( _, _, uploadResponses ) dict2 ->
+                            addUploadResponsesToDiscordAttachments uploadResponses dict2
                         )
-                        dict3
+                        dict
                         guild.channels
                 )
                 model.discordAttachments
@@ -770,26 +765,6 @@ addDiscordGuilds guilds model =
                     SeqDict.updateIfExists
                         guildId
                         (\guild ->
-                            let
-                                threads : SeqDict (Discord.Id.Id Discord.Id.ChannelId) (List ( Discord.Channel, List Discord.Message ))
-                                threads =
-                                    List.foldl
-                                        (\data2 dict ->
-                                            SeqDict.update
-                                                data2.channelId
-                                                (\maybe2 ->
-                                                    case maybe2 of
-                                                        Just list ->
-                                                            Just (( data2.channel, data2.messages ) :: list)
-
-                                                        Nothing ->
-                                                            Just [ ( data2.channel, data2.messages ) ]
-                                                )
-                                                dict
-                                        )
-                                        SeqDict.empty
-                                        data.threads
-                            in
                             { name = GuildName.fromStringLossy data.guild.properties.name
                             , icon = Maybe.map .fileHash data.icon
                             , channels =
@@ -803,13 +778,28 @@ addDiscordGuilds guilds model =
                                                         maybe
 
                                                     Nothing ->
-                                                        addDiscordChannel attachments threads channel messages
+                                                        addDiscordChannel attachments SeqDict.empty channel messages
                                             )
                                             channels
                                     )
                                     guild.channels
                                     data.channels
-                            , members = guild.members
+                            , members =
+                                if userId == data.guild.properties.ownerId then
+                                    guild.members
+
+                                else
+                                    -- Make sure the current user is included in the guild they loaded
+                                    SeqDict.update userId
+                                        (\maybe ->
+                                            case maybe of
+                                                Just _ ->
+                                                    maybe
+
+                                                Nothing ->
+                                                    Just { joinedAt = time }
+                                        )
+                                        guild.members
                             , owner = data.guild.properties.ownerId
                             }
                         )
@@ -1184,6 +1174,29 @@ handleDiscordCreateGuildMessage discordGuildId message attachments model =
             ( model, Command.none )
 
 
+websocketCreateHandle : String -> (Websocket.Connection -> msg) -> String -> Command restriction toMsg msg
+websocketCreateHandle debugName msg url =
+    let
+        _ =
+            Debug.log "websocket created" debugName
+    in
+    Websocket.createHandle msg url
+
+
+websocketClose : String -> Websocket.Connection -> Task restriction x ()
+websocketClose debugName connection =
+    Task.map
+        (\() ->
+            let
+                _ =
+                    Debug.log ("websocketClose " ++ debugName) connection
+            in
+            ()
+        )
+        (Task.succeed ())
+        |> Task.andThen (\() -> Websocket.close connection)
+
+
 discordUserWebsocketMsg : Discord.Id.Id Discord.Id.UserId -> Discord.Msg -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 discordUserWebsocketMsg discordUserId discordMsg model =
     case SeqDict.get discordUserId model.discordUsers of
@@ -1197,13 +1210,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                     case outMsg of
                         Discord.UserOutMsg_CloseAndReopenHandle connection ->
                             ( model2
-                            , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (Websocket.close connection)
+                            , Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId True) (websocketClose "UserOutMsg_CloseAndReopenHandle" connection)
                                 :: cmds
                             )
 
                         Discord.UserOutMsg_OpenHandle ->
                             ( model2
-                            , Websocket.createHandle (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+                            , websocketCreateHandle "OpenHandle" (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
                                 :: cmds
                             )
 
@@ -1594,6 +1607,11 @@ handleReadySupplementalData data model =
             model
 
 
+initialMessageCount : Int
+initialMessageCount =
+    2
+
+
 handleReadyData : DiscordFullUserData -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
 handleReadyData discordUser readyData model =
     let
@@ -1641,8 +1659,7 @@ handleReadyData discordUser readyData model =
         , discordUsers = List.foldl addDiscordUserData model.discordUsers readyData.users
       }
     , Command.batch
-        [ Websocket.createHandle (WebsocketCreatedHandleForUser readyData.user.id) Discord.websocketGatewayUrl
-        , getUserAvatars model.discordUsers readyData.users
+        [ getUserAvatars model.discordUsers readyData.users
         , Task.map2
             Tuple.pair
             (List.filterMap
@@ -1654,7 +1671,7 @@ handleReadyData discordUser readyData model =
                         Discord.getDirectMessagesPayload
                             discordUser.auth
                             { channelId = dmChannelId
-                            , limit = 100
+                            , limit = initialMessageCount
                             , relativeTo = Discord.MostRecent
                             }
                             |> http
@@ -1728,7 +1745,6 @@ getDiscordGuildData :
                             , List (Result Http.Error ( String, FileStatus.UploadResponse ))
                             )
                   , icon : Maybe FileStatus.UploadResponse
-                  , threads : List DiscordThreadReadyData
                   }
                 )
             )
@@ -1742,30 +1758,18 @@ getDiscordGuildData model discordUser gatewayGuild =
             auth =
                 Discord.userToken discordUser.auth
         in
-        Task.map4
-            (\() channels maybeIcon threads ->
+        Task.map2
+            (\channels maybeIcon ->
                 ( gatewayGuild.properties.id
                 , { guild = gatewayGuild
                   , channels = channels
                   , icon = maybeIcon
-                  , threads = threads
                   }
                 )
             )
-            (case Discord.requestGuildMembers Websocket.sendString [ gatewayGuild.properties.id ] discordUser.connection of
-                Ok usersRequest2 ->
-                    let
-                        _ =
-                            Debug.log "abc" usersRequest2
-                    in
-                    Task.onError (\_ -> Task.succeed ()) usersRequest2
-
-                Err _ ->
-                    Task.succeed ()
-            )
             (List.map
                 (\channel ->
-                    getManyMessages auth { channelId = channel.id, limit = 5 }
+                    getManyMessages auth { channelId = channel.id, limit = initialMessageCount }
                         |> Task.onError (\_ -> Task.succeed [])
                         |> Task.andThen
                             (\messages ->
@@ -1793,75 +1797,78 @@ getDiscordGuildData model discordUser gatewayGuild =
                 Nothing ->
                     Task.succeed Nothing
             )
-            (Task.map2
-                Tuple.pair
-                (List.map
-                    (\channel ->
-                        Discord.getPublicArchivedThreadsPayload
-                            auth
-                            { channelId = channel.id
-                            , before = Nothing
-                            , limit = Just 100
-                            }
-                            |> http
-                            |> Task.map .threads
-                            |> Task.onError (\_ -> Task.succeed [])
-                    )
-                    gatewayGuild.channels
-                    |> Task.sequence
-                    |> Task.map List.concat
-                )
-                (List.map
-                    (\channel ->
-                        Discord.getPrivateArchivedThreadsPayload
-                            auth
-                            { channelId = channel.id
-                            , before = Nothing
-                            , limit = Just 100
-                            }
-                            |> http
-                            |> Task.map .threads
-                            |> Task.onError (\_ -> Task.succeed [])
-                    )
-                    gatewayGuild.channels
-                    |> Task.sequence
-                    |> Task.map List.concat
-                )
-                |> Task.andThen
-                    (\( publicArchivedThreads, privateArchivedThreads ) ->
-                        let
-                            allThreads : List Discord.Channel
-                            allThreads =
-                                gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
-                        in
-                        List.filterMap
-                            (\thread ->
-                                case thread.parentId of
-                                    Included (Just parentId) ->
-                                        getManyMessages auth { channelId = thread.id, limit = 1000 }
-                                            |> Task.onError (\_ -> Task.succeed [])
-                                            |> Task.andThen
-                                                (\messages ->
-                                                    Task.map
-                                                        (\uploadResponses ->
-                                                            { channelId = parentId
-                                                            , channel = thread
-                                                            , messages = List.reverse messages
-                                                            , uploadResponses = uploadResponses
-                                                            }
-                                                        )
-                                                        (uploadAttachmentsForMessages model messages)
-                                                )
-                                            |> Just
-
-                                    _ ->
-                                        Nothing
-                            )
-                            allThreads
-                            |> Task.sequence
-                    )
-            )
             |> Just
+
+
+getChannelThreads : Discord.Authentication -> Discord.GatewayGuild -> BackendModel -> Task BackendOnly x (List DiscordThreadReadyData)
+getChannelThreads auth gatewayGuild model =
+    Task.map2
+        Tuple.pair
+        (List.map
+            (\channel ->
+                Discord.getPublicArchivedThreadsPayload
+                    auth
+                    { channelId = channel.id
+                    , before = Nothing
+                    , limit = Just 100
+                    }
+                    |> http
+                    |> Task.map .threads
+                    |> Task.onError (\_ -> Task.succeed [])
+            )
+            gatewayGuild.channels
+            |> Task.sequence
+            |> Task.map List.concat
+        )
+        (List.map
+            (\channel ->
+                Discord.getPrivateArchivedThreadsPayload
+                    auth
+                    { channelId = channel.id
+                    , before = Nothing
+                    , limit = Just 100
+                    }
+                    |> http
+                    |> Task.map .threads
+                    |> Task.onError (\_ -> Task.succeed [])
+            )
+            gatewayGuild.channels
+            |> Task.sequence
+            |> Task.map List.concat
+        )
+        |> Task.andThen
+            (\( publicArchivedThreads, privateArchivedThreads ) ->
+                let
+                    allThreads : List Discord.Channel
+                    allThreads =
+                        gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
+                in
+                List.filterMap
+                    (\thread ->
+                        case thread.parentId of
+                            Included (Just parentId) ->
+                                getManyMessages auth { channelId = thread.id, limit = 1000 }
+                                    |> Task.onError (\_ -> Task.succeed [])
+                                    |> Task.andThen
+                                        (\messages ->
+                                            Task.map
+                                                (\uploadResponses ->
+                                                    { channelId = parentId
+                                                    , channel = thread
+                                                    , messages = List.reverse messages
+                                                    , uploadResponses = uploadResponses
+                                                    }
+                                                )
+                                                (uploadAttachmentsForMessages model messages)
+                                        )
+                                    |> Just
+
+                            _ ->
+                                Nothing
+                    )
+                    allThreads
+                    |> Task.sequence
+            )
 
 
 getManyMessages : Discord.Authentication -> { a | channelId : Discord.Id.Id Discord.Id.ChannelId, limit : Int } -> Task BackendOnly Discord.HttpError (List Discord.Message)

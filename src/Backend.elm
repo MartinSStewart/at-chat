@@ -264,7 +264,15 @@ subscriptions model =
                     FullData data2 ->
                         Discord.subscription
                             (\connection onData onClose ->
-                                Websocket.listen connection onData (\data3 -> onClose data3.reason)
+                                Websocket.listen connection
+                                    onData
+                                    (\data3 ->
+                                        let
+                                            _ =
+                                                Debug.log "Websocket unexpected close" ()
+                                        in
+                                        onClose data3.reason
+                                    )
                             )
                             data2.connection
                             |> Maybe.map (Subscription.map (DiscordUserWebsocketMsg discordUserId))
@@ -613,7 +621,8 @@ update msg model =
                                 |> ServerChange
                             )
                             model
-                        , Websocket.createHandle
+                        , DiscordSync.websocketCreateHandle
+                            "LinkDiscordUserStep1"
                             (WebsocketCreatedHandleForUser discordUser.id)
                             Discord.websocketGatewayUrl
                         ]
@@ -645,7 +654,8 @@ update msg model =
                                 |> ServerChange
                             )
                             model
-                        , Websocket.createHandle
+                        , DiscordSync.websocketCreateHandle
+                            "ReloadDiscordUserStep1"
                             (WebsocketCreatedHandleForUser discordUserId)
                             Discord.websocketGatewayUrl
                         ]
@@ -682,13 +692,14 @@ update msg model =
                                         { guild : Discord.GatewayGuild
                                         , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
                                         , icon : Maybe FileStatus.UploadResponse
-                                        , threads : List DiscordThreadReadyData
                                         }
                                 guildDataDict =
                                     SeqDict.fromList guildData
 
                                 model2 =
                                     DiscordSync.addDiscordGuilds
+                                        time
+                                        discordUserId
                                         guildDataDict
                                         { model
                                             | discordUsers =
@@ -783,7 +794,7 @@ update msg model =
                       }
                     , case data.connection.websocketHandle of
                         Just connection2 ->
-                            Websocket.close connection2
+                            DiscordSync.websocketClose "WebsocketClosedByBackendForUser" connection2
                                 |> Task.perform (\() -> WebsocketClosedByBackendForUser discordUserId False)
 
                         Nothing ->
@@ -796,7 +807,10 @@ update msg model =
         WebsocketClosedByBackendForUser discordUserId reopen ->
             ( model
             , if reopen then
-                Websocket.createHandle (WebsocketCreatedHandleForUser discordUserId) Discord.websocketGatewayUrl
+                DiscordSync.websocketCreateHandle
+                    "WebsocketClosedByBackendForUser"
+                    (WebsocketCreatedHandleForUser discordUserId)
+                    Discord.websocketGatewayUrl
 
               else
                 Command.none
@@ -3540,7 +3554,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                                 Just connection ->
                                                     Task.perform
                                                         (\() -> WebsocketClosedByBackendForUser discordUserId False)
-                                                        (Websocket.close connection)
+                                                        (DiscordSync.websocketClose "Local_UnlinkDiscordUser" connection)
 
                                                 Nothing ->
                                                     Command.none
