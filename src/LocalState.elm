@@ -1,5 +1,6 @@
 module LocalState exposing
     ( AdminData
+    , AdminData_DiscordChannel
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -285,6 +286,7 @@ type alias DiscordBackendChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
+    , isReloading : Maybe Time.Posix
     }
 
 
@@ -410,17 +412,19 @@ type alias AdminData =
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
             { name : GuildName
-            , channels :
-                List
-                    { channelId : Discord.Id.Id Discord.Id.ChannelId
-                    , name : ChannelName
-                    , messageCount : Int
-                    , threadCount : Int
-                    }
+            , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
             , memberCount : Int
             , owner : Discord.Id.Id Discord.Id.UserId
             }
     , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
+    }
+
+
+type alias AdminData_DiscordChannel =
+    { name : ChannelName
+    , messageCount : Int
+    , threadCount : Int
+    , isReloading : Maybe Time.Posix
     }
 
 

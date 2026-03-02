@@ -226,15 +226,15 @@ adminData model lastLogPageViewed =
             (\_ guild ->
                 { name = guild.name
                 , channels =
-                    SeqDict.toList guild.channels
-                        |> List.map
-                            (\( channelId, channel ) ->
-                                { channelId = channelId
-                                , name = channel.name
-                                , messageCount = Array.length channel.messages
-                                , threadCount = SeqDict.size channel.threads
-                                }
-                            )
+                    SeqDict.map
+                        (\_ channel ->
+                            { name = channel.name
+                            , messageCount = Array.length channel.messages
+                            , threadCount = SeqDict.size channel.threads
+                            , isReloading = channel.isReloading
+                            }
+                        )
+                        guild.channels
                 , memberCount = SeqDict.size guild.members
                 , owner = guild.owner
                 }
@@ -4320,6 +4320,22 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
                 ]
             )
+
+        Pages.Admin.StartReloadingDiscordChannel _ guildId channelId ->
+            case Pages.Admin.startReloadingDiscordChannel time guildId channelId model of
+                Ok model2 ->
+                    ( model2
+                    , Command.batch
+                        [ Pages.Admin.StartReloadingDiscordChannel time guildId channelId
+                            |> Local_Admin
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        ]
+                    )
+
+                Err () ->
+                    ( model, invalidChangeResponse changeId clientId )
 
 
 sendDirectMessage :

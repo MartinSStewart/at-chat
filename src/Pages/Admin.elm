@@ -16,6 +16,7 @@ module Pages.Admin exposing
     , init
     , logSectionId
     , pendingChangesText
+    , startReloadingDiscordChannel
     , update
     , updateAdmin
     , updateFromBackend
@@ -39,7 +40,7 @@ import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -95,6 +96,7 @@ type Msg
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | PressedHomepageLink
+    | PressedResetDiscordChannel (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
 
 
 type ToBackend
@@ -154,13 +156,7 @@ type alias InitAdminData =
         SeqDict
             (Discord.Id.Id Discord.Id.GuildId)
             { name : GuildName
-            , channels :
-                List
-                    { channelId : Discord.Id.Id Discord.Id.ChannelId
-                    , name : ChannelName
-                    , messageCount : Int
-                    , threadCount : Int
-                    }
+            , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
             , memberCount : Int
             , owner : Discord.Id.Id Discord.Id.UserId
             }
@@ -186,6 +182,7 @@ type AdminChange
     | DeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | DeleteGuild (Id GuildId)
+    | StartReloadingDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
 
 
 type alias EditedBackendUser =
@@ -308,6 +305,76 @@ updateAdmin changedBy change adminData local =
 
         DeleteGuild guildId ->
             { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
+
+        StartReloadingDiscordChannel time guildId channelId ->
+            case startReloadingDiscordChannel time guildId channelId adminData of
+                Ok adminData2 ->
+                    { local | adminData = IsAdmin adminData2 }
+
+                Err () ->
+                    local
+
+
+startReloadingDiscordChannel :
+    Time.Posix
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    ->
+        { a
+            | discordGuilds :
+                SeqDict
+                    (Discord.Id.Id Discord.Id.GuildId)
+                    { b
+                        | channels :
+                            SeqDict
+                                (Discord.Id.Id Discord.Id.ChannelId)
+                                { c | isReloading : Maybe Time.Posix }
+                    }
+        }
+    ->
+        Result
+            ()
+            { a
+                | discordGuilds :
+                    SeqDict
+                        (Discord.Id.Id Discord.Id.GuildId)
+                        { b
+                            | channels :
+                                SeqDict
+                                    (Discord.Id.Id Discord.Id.ChannelId)
+                                    { c | isReloading : Maybe Time.Posix }
+                        }
+            }
+startReloadingDiscordChannel time guildId channelId adminData =
+    case SeqDict.get guildId adminData.discordGuilds of
+        Just guild ->
+            case SeqDict.get channelId guild.channels of
+                Just channel ->
+                    case channel.isReloading of
+                        Just _ ->
+                            Err ()
+
+                        Nothing ->
+                            { adminData
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert
+                                                    channelId
+                                                    { channel | isReloading = Just time }
+                                                    guild.channels
+                                        }
+                                        adminData.discordGuilds
+                            }
+                                |> Ok
+
+                Nothing ->
+                    Err ()
+
+        Nothing ->
+            Err ()
 
 
 type OutMsg
@@ -727,6 +794,9 @@ update navigationKey time adminData localState msg model =
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
 
+        PressedResetDiscordChannel guildId channelId ->
+            ( model, Command.none, StartReloadingDiscordChannel time guildId channelId |> AdminChange )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -941,6 +1011,9 @@ pendingChangesText change =
 
         DeleteGuild _ ->
             "Deleted guild"
+
+        StartReloadingDiscordChannel _ _ _ ->
+            "Reset Discord channel"
 
 
 view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
@@ -1160,11 +1233,13 @@ discordGuildsSection user adminData model =
                 (List.map
                     (\( guildId, guild ) ->
                         let
+                            isExpanded : Bool
                             isExpanded =
                                 SeqSet.member guildId model.expandedDiscordGuildChannels
 
+                            channelCount : Int
                             channelCount =
-                                List.length guild.channels
+                                SeqDict.size guild.channels
                         in
                         Ui.column
                             [ Ui.spacing 4 ]
@@ -1198,15 +1273,29 @@ discordGuildsSection user adminData model =
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
                                     (List.map
-                                        (\channel ->
+                                        (\( channelId, channel ) ->
                                             Ui.row
                                                 [ Ui.spacing 8, Ui.Font.size 13 ]
-                                                [ Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                [ case channel.isReloading of
+                                                    Just _ ->
+                                                        Ui.el
+                                                            [ Ui.width (Ui.px 30)
+                                                            , Ui.height (Ui.px 30)
+                                                            , Ui.contentCenterX
+                                                            , Ui.contentCenterY
+                                                            ]
+                                                            Icons.spinner
+
+                                                    Nothing ->
+                                                        resetButton
+                                                            (Dom.id ("admin_resetDiscordChannel_" ++ Discord.Id.toString channelId))
+                                                            (PressedResetDiscordChannel guildId channelId)
+                                                , Ui.text ("#" ++ ChannelName.toString channel.name)
                                                 , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                                                 , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
                                                 ]
                                         )
-                                        guild.channels
+                                        (SeqDict.toList guild.channels)
                                     )
 
                               else
@@ -1651,19 +1740,7 @@ userTableColumns tableState twoFactorAuthentication =
                                 MyUi.deleteButton (deleteUserButtonId userTableId) (PressedDeleteUser userTableId)
 
                             ResetButton userId ->
-                                Ui.el
-                                    [ Ui.Input.button (PressedResetUser userId)
-                                    , Ui.id "Admin_resetUser"
-                                    , MyUi.hoverText "Reset"
-                                    , Ui.padding 3
-                                    , Ui.background (Ui.rgb 50 100 255)
-                                    , Ui.Font.color MyUi.white
-                                    , Ui.rounded 4
-                                    , Ui.width Ui.shrink
-                                    , Ui.Shadow.shadows
-                                        [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
-                                    ]
-                                    Icons.reset
+                                resetButton (Dom.id "Admin_resetUser") (PressedResetUser userId)
                         )
           , sortBy = Nothing
           }
@@ -1730,6 +1807,23 @@ userTableColumns tableState twoFactorAuthentication =
           , sortBy = Nothing
           }
         ]
+
+
+resetButton : HtmlId -> msg -> Element msg
+resetButton htmlId onPress =
+    Ui.el
+        [ Ui.Input.button onPress
+        , Ui.id (Dom.idToString htmlId)
+        , MyUi.hoverText "Reset"
+        , Ui.padding 3
+        , Ui.background (Ui.rgb 50 100 255)
+        , Ui.Font.color MyUi.white
+        , Ui.rounded 4
+        , Ui.width Ui.shrink
+        , Ui.Shadow.shadows
+            [ { x = 0, y = 1, size = 0, blur = 2, color = Ui.rgba 0 0 0 0.1 } ]
+        ]
+        Icons.reset
 
 
 logSection : Time.Zone -> BackendUser -> Model -> Element Msg

@@ -385,6 +385,7 @@ discordBackendChannelCodec =
         |> Codec.field "lastTypedAt" .lastTypedAt (CodecExtra.seqDict CodecExtra.discordId lastTypedAtCodec)
         |> Codec.field "linkedMessageIds" .linkedMessageIds (CodecExtra.oneToOne CodecExtra.discordId Id.codec)
         |> Codec.field "threads" .threads (CodecExtra.seqDict Id.codec discordBackendThreadCodec)
+        |> Codec.field "isReloading" .isReloading (Codec.nullable CodecExtra.timePosix)
         |> Codec.buildObject
 
 

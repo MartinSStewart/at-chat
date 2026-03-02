@@ -626,6 +626,7 @@ addDiscordChannel discordAttachments threads discordChannel messages =
                 -- threads2
                 Nothing ->
                     SeqDict.empty
+        , isReloading = Nothing
         }
             |> Just
 
@@ -1558,6 +1559,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
+                                                    , isReloading = Nothing
                                                     }
                                                         |> Just
                                         )
