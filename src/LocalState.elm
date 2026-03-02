@@ -1,6 +1,7 @@
 module LocalState exposing
     ( AdminData
     , AdminData_DiscordChannel
+    , AdminData_DiscordGuild
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -9,6 +10,7 @@ module LocalState exposing
     , ChannelStatus(..)
     , DiscordBackendChannel
     , DiscordBackendGuild
+    , DiscordChannelReloadingStatus(..)
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
@@ -84,6 +86,7 @@ module LocalState exposing
     , removeReactionEmojiFrontendHelper
     , removeReactionEmojiHelper
     , routeToViewing
+    , setDiscordChannelIsReloading
     , updateChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
@@ -286,7 +289,7 @@ type alias DiscordBackendChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
-    , isReloading : Maybe Time.Posix
+    , isReloading : DiscordChannelReloadingStatus
     }
 
 
@@ -408,15 +411,16 @@ type alias AdminData =
             (Discord.Id.Id Discord.Id.PrivateChannelId)
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
-    , discordGuilds :
-        SeqDict
-            (Discord.Id.Id Discord.Id.GuildId)
-            { name : GuildName
-            , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
-            , memberCount : Int
-            , owner : Discord.Id.Id Discord.Id.UserId
-            }
+    , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
+    }
+
+
+type alias AdminData_DiscordGuild =
+    { name : GuildName
+    , channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) AdminData_DiscordChannel
+    , members : SeqDict (Discord.Id.Id Discord.Id.UserId) { joinedAt : Time.Posix }
+    , owner : Discord.Id.Id Discord.Id.UserId
     }
 
 
@@ -424,8 +428,24 @@ type alias AdminData_DiscordChannel =
     { name : ChannelName
     , messageCount : Int
     , threadCount : Int
-    , isReloading : Maybe Time.Posix
+    , isReloading : DiscordChannelReloadingStatus
     }
+
+
+setDiscordChannelIsReloading :
+    DiscordChannelReloadingStatus
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> AdminData_DiscordChannel
+    -> AdminData_DiscordGuild
+    -> AdminData_DiscordGuild
+setDiscordChannelIsReloading status channelId channel guild =
+    { guild | channels = SeqDict.insert channelId { channel | isReloading = status } guild.channels }
+
+
+type DiscordChannelReloadingStatus
+    = DiscordChannel_NotReloading
+    | DiscordChannel_Reloading Time.Posix
+    | DiscordChannel_LastReloadFailed Time.Posix Discord.HttpError
 
 
 type DiscordUserData_ForAdmin
@@ -1811,8 +1831,14 @@ getGuildAndChannel guildId channelId local =
 getDiscordGuildAndChannel :
     Discord.Id.Id Discord.Id.GuildId
     -> Discord.Id.Id Discord.Id.ChannelId
-    -> LocalState
-    -> Maybe ( DiscordFrontendGuild, DiscordFrontendChannel )
+    ->
+        { a
+            | discordGuilds :
+                SeqDict
+                    (Discord.Id.Id Discord.Id.GuildId)
+                    { b | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) channel }
+        }
+    -> Maybe ( { b | channels : SeqDict (Discord.Id.Id Discord.Id.ChannelId) channel }, channel )
 getDiscordGuildAndChannel guildId channelId local =
     case SeqDict.get guildId local.discordGuilds of
         Just guild ->

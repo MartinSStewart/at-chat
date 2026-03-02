@@ -10,6 +10,7 @@ module Broadcast exposing
     , notification
     , pushNotification
     , pushNotificationCodec
+    , toAdmins
     , toDiscordDmChannel
     , toDiscordDmChannelExcludingOne
     , toDiscordGuild
@@ -266,6 +267,31 @@ toUser clientToSkip sessionToSkip userId msg model =
         )
         model.sessions
         |> SeqDict.values
+        |> Command.batch
+
+
+toAdmins : BackendModel -> LocalMsg -> Command BackendOnly ToFrontend msg
+toAdmins model broadcastMsg =
+    List.concatMap
+        (\( sessionId, clientIds ) ->
+            case getUserFromSessionId sessionId model of
+                Just ( _, user ) ->
+                    if user.isAdmin then
+                        NonemptyDict.toList clientIds
+                            |> List.filterMap
+                                (\( clientId2, _ ) ->
+                                    ChangeBroadcast broadcastMsg
+                                        |> Lamdera.sendToFrontend clientId2
+                                        |> Just
+                                )
+
+                    else
+                        []
+
+                Nothing ->
+                    []
+        )
+        (SeqDict.toList model.connections)
         |> Command.batch
 
 

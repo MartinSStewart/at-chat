@@ -5,9 +5,11 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserToPartialUser
     , discordUserWebsocketMsg
+    , getManyMessages
     , handleDiscordCreateMessage
     , handleDiscordEditMessage
     , http
+    , messagesAndLinks
     , sendMessage
     , websocketClose
     , websocketCreateHandle
@@ -38,7 +40,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..)
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReloadingStatus(..), DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
@@ -626,7 +628,7 @@ addDiscordChannel discordAttachments threads discordChannel messages =
                 -- threads2
                 Nothing ->
                     SeqDict.empty
-        , isReloading = Nothing
+        , isReloading = DiscordChannel_NotReloading
         }
             |> Just
 
@@ -1559,7 +1561,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
-                                                    , isReloading = Nothing
+                                                    , isReloading = DiscordChannel_NotReloading
                                                     }
                                                         |> Just
                                         )

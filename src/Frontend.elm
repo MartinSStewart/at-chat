@@ -40,7 +40,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), ChangeAttachments(..), DiscordChannelReloadingStatus(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -1393,6 +1393,11 @@ updateLoaded msg model =
 
                                 Pages.Admin.GoToHomepage ->
                                     routePush { model | loginStatus = LoggedIn loggedIn2 } HomePageRoute
+
+                                Pages.Admin.CopyToClipboard text ->
+                                    ( { model | lastCopied = Just { copiedAt = model.time, copiedText = text } }
+                                    , Ports.copyToClipboard text
+                                    )
 
                         _ ->
                             ( model, Command.none )
@@ -6164,6 +6169,45 @@ changeUpdate localMsg local =
 
                 Server_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
+
+                Server_ReloadedDiscordChannel time guildId channelId result ->
+                    case local.adminData of
+                        IsAdmin adminData ->
+                            case SeqDict.get guildId adminData.discordGuilds of
+                                Just guild ->
+                                    case SeqDict.get channelId guild.channels of
+                                        Just channel ->
+                                            { local
+                                                | adminData =
+                                                    { adminData
+                                                        | discordGuilds =
+                                                            SeqDict.insert
+                                                                guildId
+                                                                (LocalState.setDiscordChannelIsReloading
+                                                                    (case result of
+                                                                        Ok () ->
+                                                                            DiscordChannel_NotReloading
+
+                                                                        Err error ->
+                                                                            DiscordChannel_LastReloadFailed time error
+                                                                    )
+                                                                    channelId
+                                                                    channel
+                                                                    guild
+                                                                )
+                                                                adminData.discordGuilds
+                                                    }
+                                                        |> IsAdmin
+                                            }
+
+                                        Nothing ->
+                                            local
+
+                                Nothing ->
+                                    local
+
+                        IsNotAdmin ->
+                            local
 
 
 startReloadingDiscordUser : Time.Posix -> Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState

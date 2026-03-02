@@ -12,7 +12,7 @@ import FileName
 import FileStatus exposing (FileData, ImageMetadata)
 import GuildName
 import Id
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild)
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReloadingStatus(..))
 import Message exposing (Message, UserTextMessageData)
 import RichText
 import SecretId
@@ -385,8 +385,33 @@ discordBackendChannelCodec =
         |> Codec.field "lastTypedAt" .lastTypedAt (CodecExtra.seqDict CodecExtra.discordId lastTypedAtCodec)
         |> Codec.field "linkedMessageIds" .linkedMessageIds (CodecExtra.oneToOne CodecExtra.discordId Id.codec)
         |> Codec.field "threads" .threads (CodecExtra.seqDict Id.codec discordBackendThreadCodec)
-        |> Codec.field "isReloading" .isReloading (Codec.nullable CodecExtra.timePosix)
+        |> Codec.field "isReloading" .isReloading discordChannelReloadStatus
         |> Codec.buildObject
+
+
+discordChannelReloadStatus : Codec DiscordChannelReloadingStatus
+discordChannelReloadStatus =
+    Codec.custom
+        (\a b c value ->
+            case value of
+                DiscordChannel_NotReloading ->
+                    a
+
+                DiscordChannel_Reloading argA ->
+                    b argA
+
+                DiscordChannel_LastReloadFailed argA argB ->
+                    c argA argB
+        )
+        |> Codec.variant0 "DiscordChannel_NotReloading" DiscordChannel_NotReloading
+        |> Codec.variant1 "DiscordChannel_Reloading" DiscordChannel_Reloading CodecExtra.timePosix
+        |> Codec.variant2 "DiscordChannel_LastReloadFailed" DiscordChannel_LastReloadFailed CodecExtra.timePosix discordHttpErrorCodec
+        |> Codec.buildCustom
+
+
+discordHttpErrorCodec : Codec Discord.HttpError
+discordHttpErrorCodec =
+    Debug.todo ""
 
 
 discordBackendThreadCodec : Codec DiscordBackendThread

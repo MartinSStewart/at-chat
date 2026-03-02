@@ -628,6 +628,7 @@ type BackendMsg
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
+    | ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError (List Discord.Message))
 
 
 type alias DiscordDmChannelReadyData =
@@ -756,6 +757,7 @@ type ServerChange
             }
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
+    | Server_ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ())
 
 
 type LocalChange
