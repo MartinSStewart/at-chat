@@ -278,11 +278,10 @@ toAdmins model broadcastMsg =
                 Just ( _, user ) ->
                     if user.isAdmin then
                         NonemptyDict.toList clientIds
-                            |> List.filterMap
+                            |> List.map
                                 (\( clientId2, _ ) ->
                                     ChangeBroadcast broadcastMsg
                                         |> Lamdera.sendToFrontend clientId2
-                                        |> Just
                                 )
 
                     else
