@@ -39,9 +39,9 @@ import Env
 import GuildName exposing (GuildName)
 import Html.Events
 import Icons
-import Id exposing (GuildId, Id, UserId)
+import Id exposing (ChannelId, GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordGuild, AdminStatus(..), DiscordChannelReloadingStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordChannelReloadingStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
@@ -91,6 +91,7 @@ type Msg
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | PressedExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | PressedExpandGuild (Id GuildId)
     | PressedDeleteGuild (Id GuildId)
     | SlackClientSecretEditableMsg (Editable.Msg (Maybe Slack.ClientSecret))
     | PublicVapidKeyEditableMsg (Editable.Msg String)
@@ -119,7 +120,6 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
-    , expandedDiscordGuildChannels : SeqSet (Discord.Id.Id Discord.Id.GuildId)
     }
 
 
@@ -155,7 +155,7 @@ type alias InitAdminData =
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
-    , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
+    , guilds : SeqDict (Id GuildId) AdminData_Guild
     }
 
 
@@ -178,6 +178,10 @@ type AdminChange
     | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | DeleteGuild (Id GuildId)
     | StartReloadingDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | ExpandGuild (Id GuildId)
+    | CollapseGuild (Id GuildId)
+    | ExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
+    | CollapseDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
 
 
 type alias EditedBackendUser =
@@ -214,7 +218,6 @@ init logs { highlightLog } =
       , publicVapidKey = Editable.init
       , privateVapidKey = Editable.init
       , openRouterKey = Editable.init
-      , expandedDiscordGuildChannels = SeqSet.empty
       }
     , case highlightLog of
         Just index ->
@@ -308,6 +311,58 @@ updateAdmin changedBy change adminData local =
 
                 Err () ->
                     local
+
+        ExpandGuild guildId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds })
+                                    adminData.users
+                        }
+            }
+
+        CollapseGuild guildId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds })
+                                    adminData.users
+                        }
+            }
+
+        ExpandDiscordGuild guildId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds })
+                                    adminData.users
+                        }
+            }
+
+        CollapseDiscordGuild guildId ->
+            { local
+                | adminData =
+                    IsAdmin
+                        { adminData
+                            | users =
+                                NonemptyDict.updateIfExists
+                                    changedBy
+                                    (\user -> { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds })
+                                    adminData.users
+                        }
+            }
 
 
 startReloadingDiscordChannel :
@@ -740,16 +795,35 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, AdminChange (DeleteDiscordGuild guildId) )
 
         PressedExpandDiscordGuild guildId ->
-            ( { model
-                | expandedDiscordGuildChannels =
-                    if SeqSet.member guildId model.expandedDiscordGuildChannels then
-                        SeqSet.remove guildId model.expandedDiscordGuildChannels
-
-                    else
-                        SeqSet.insert guildId model.expandedDiscordGuildChannels
-              }
+            let
+                user =
+                    localState.localUser.user
+            in
+            ( model
             , Command.none
-            , NoOutMsg
+            , AdminChange
+                (if SeqSet.member guildId user.expandedDiscordGuilds then
+                    CollapseDiscordGuild guildId
+
+                 else
+                    ExpandDiscordGuild guildId
+                )
+            )
+
+        PressedExpandGuild guildId ->
+            let
+                user =
+                    localState.localUser.user
+            in
+            ( model
+            , Command.none
+            , AdminChange
+                (if SeqSet.member guildId user.expandedGuilds then
+                    CollapseGuild guildId
+
+                 else
+                    ExpandGuild guildId
+                )
             )
 
         PressedDeleteGuild guildId ->
@@ -1014,6 +1088,18 @@ pendingChangesText change =
         StartReloadingDiscordChannel _ _ _ _ ->
             "Reset Discord channel"
 
+        ExpandGuild _ ->
+            "Expanded guild in admin page"
+
+        CollapseGuild _ ->
+            "Collapsed guild in admin page"
+
+        ExpandDiscordGuild _ ->
+            "Expanded Discord guild in admin page"
+
+        CollapseDiscordGuild _ ->
+            "Collapsed Discord guild in admin page"
+
 
 view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view local adminData user model =
@@ -1024,7 +1110,7 @@ view local adminData user model =
             [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
             , userSection user adminData model
             , guildsSection user adminData
-            , discordGuildsSection user adminData model
+            , discordGuildsSection user adminData
             , discordDmChannelsSection user adminData
             , discordUsersSection user adminData
             , logSection local.localUser.timezone user model
@@ -1194,23 +1280,59 @@ guildsSection user adminData =
                 [ Ui.spacing 4 ]
                 (List.map
                     (\( guildId, guild ) ->
-                        Ui.row
-                            [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.text (Id.toString guildId)
-                            , Ui.text (GuildName.toString guild.name)
-                            , Ui.row
-                                [ Ui.spacing 8 ]
-                                [ Ui.text "Owner:"
-                                , case NonemptyDict.get guild.owner adminData.users of
-                                    Just user2 ->
-                                        userLabel user2
+                        let
+                            isExpanded : Bool
+                            isExpanded =
+                                SeqSet.member guildId user.expandedGuilds
 
-                                    Nothing ->
-                                        Ui.text (Id.toString guild.owner)
+                            channelCount : Int
+                            channelCount =
+                                SeqDict.size guild.channels
+                        in
+                        Ui.column
+                            [ Ui.spacing 4 ]
+                            [ Ui.row
+                                [ Ui.spacing 8, Ui.Font.size 14 ]
+                                [ Ui.el
+                                    [ Ui.width Ui.shrink, Ui.Input.button (PressedExpandGuild guildId) ]
+                                    (if isExpanded then
+                                        Icons.collapseContainer
+
+                                     else
+                                        Icons.expandContainer
+                                    )
+                                , Ui.text (Id.toString guildId)
+                                , Ui.text (GuildName.toString guild.name)
+                                , Ui.row
+                                    [ Ui.spacing 8 ]
+                                    [ Ui.text "Owner:"
+                                    , case NonemptyDict.get guild.owner adminData.users of
+                                        Just user2 ->
+                                            userLabel user2
+
+                                        Nothing ->
+                                            Ui.text (Id.toString guild.owner)
+                                    ]
+                                , Ui.text ("Channels: " ++ String.fromInt channelCount)
+                                , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
+                                , MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
                                 ]
-                            , Ui.text ("Channels: " ++ String.fromInt guild.channelCount)
-                            , Ui.text ("Members: " ++ String.fromInt guild.memberCount)
-                            , MyUi.deleteButton (deleteGuildButtonId guildId) (PressedDeleteGuild guildId)
+                            , if isExpanded then
+                                Ui.column
+                                    [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
+                                    (List.map
+                                        (\( _, channel ) ->
+                                            Ui.row
+                                                [ Ui.spacing 8, Ui.Font.size 13 ]
+                                                [ Ui.text ("#" ++ ChannelName.toString channel.name)
+                                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                                                ]
+                                        )
+                                        (SeqDict.toList guild.channels)
+                                    )
+
+                              else
+                                Ui.none
                             ]
                     )
                     (SeqDict.toList adminData.guilds)
@@ -1218,8 +1340,8 @@ guildsSection user adminData =
         ]
 
 
-discordGuildsSection : BackendUser -> AdminData -> Model -> Element Msg
-discordGuildsSection user adminData model =
+discordGuildsSection : BackendUser -> AdminData -> Element Msg
+discordGuildsSection user adminData =
     section
         user.expandedSections
         DiscordGuildsSection
@@ -1234,7 +1356,7 @@ discordGuildsSection user adminData model =
                         let
                             isExpanded : Bool
                             isExpanded =
-                                SeqSet.member guildId model.expandedDiscordGuildChannels
+                                SeqSet.member guildId user.expandedDiscordGuilds
 
                             channelCount : Int
                             channelCount =

@@ -2,6 +2,8 @@ module LocalState exposing
     ( AdminData
     , AdminData_DiscordChannel
     , AdminData_DiscordGuild
+    , AdminData_Guild
+    , AdminData_GuildChannel
     , AdminStatus(..)
     , Archived
     , BackendChannel
@@ -412,7 +414,21 @@ type alias AdminData =
             { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
-    , guilds : SeqDict (Id GuildId) { name : GuildName, channelCount : Int, memberCount : Int, owner : Id UserId }
+    , guilds : SeqDict (Id GuildId) AdminData_Guild
+    }
+
+
+type alias AdminData_Guild =
+    { name : GuildName
+    , channels : SeqDict (Id ChannelId) AdminData_GuildChannel
+    , memberCount : Int
+    , owner : Id UserId
+    }
+
+
+type alias AdminData_GuildChannel =
+    { name : ChannelName
+    , messageCount : Int
     }
 
 

@@ -244,7 +244,14 @@ adminData model lastLogPageViewed =
         SeqDict.map
             (\_ guild ->
                 { name = guild.name
-                , channelCount = SeqDict.size guild.channels
+                , channels =
+                    SeqDict.map
+                        (\_ channel ->
+                            { name = channel.name
+                            , messageCount = Array.length channel.messages
+                            }
+                        )
+                        guild.channels
                 , memberCount = SeqDict.size guild.members
                 , owner = guild.owner
                 }
@@ -4384,6 +4391,50 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 _ ->
                     ( model, invalidChangeResponse changeId clientId )
+
+        Pages.Admin.ExpandGuild guildId ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.CollapseGuild guildId ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.ExpandDiscordGuild guildId ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.CollapseDiscordGuild guildId ->
+            ( { model
+                | users =
+                    NonemptyDict.insert
+                        userId
+                        { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
+                        model.users
+              }
+            , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+            )
 
 
 sendDirectMessage :

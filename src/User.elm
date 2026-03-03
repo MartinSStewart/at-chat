@@ -70,6 +70,8 @@ type alias BackendUser =
     , directMentions : SeqDict (Id GuildId) (NonemptyDict ( Id ChannelId, ThreadRoute ) OneOrGreater)
     , discordDirectMentions : SeqDict (Discord.Id.Id Discord.Id.GuildId) (NonemptyDict ( Discord.Id.Id Discord.Id.ChannelId, ThreadRoute ) OneOrGreater)
     , lastPushNotification : Maybe Time.Posix
+    , expandedGuilds : SeqSet (Id GuildId)
+    , expandedDiscordGuilds : SeqSet (Discord.Id.Id Discord.Id.GuildId)
     }
 
 
@@ -139,6 +141,8 @@ init createdAt name email userIsAdmin =
     , directMentions = SeqDict.empty
     , discordDirectMentions = SeqDict.empty
     , lastPushNotification = Nothing
+    , expandedGuilds = SeqSet.empty
+    , expandedDiscordGuilds = SeqSet.empty
     }
 
 
@@ -392,6 +396,8 @@ backendToFrontendCurrent user =
     , directMentions = user.directMentions
     , discordDirectMentions = user.discordDirectMentions
     , lastPushNotification = user.lastPushNotification
+    , expandedGuilds = user.expandedGuilds
+    , expandedDiscordGuilds = user.expandedDiscordGuilds
     }
 
 
