@@ -101,7 +101,7 @@ type Msg
     | PrivateVapidKeyEditableMsg (Editable.Msg PrivateVapidKey)
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | PressedHomepageLink
-    | PressedResetDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | PressedReloadDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | PressedCopyText String
     | TypedDiscordGuildChannelFirstMessage
     | TypedDiscordDmChannelFirstMessage
@@ -866,7 +866,7 @@ update navigationKey time adminData localState msg model =
         PressedHomepageLink ->
             ( model, Command.none, GoToHomepage )
 
-        PressedResetDiscordChannel currentUserId guildId channelId ->
+        PressedReloadDiscordChannel currentUserId guildId channelId ->
             ( model, Command.none, StartReloadingDiscordChannel time currentUserId guildId channelId |> AdminChange )
 
         PressedCopyText string ->
@@ -1453,8 +1453,8 @@ discordGuildChannel maybeUserId guildId ( channelId, channel ) =
                 case maybeUserId of
                     Just userId ->
                         resetButton
-                            (Dom.id ("admin_resetDiscordChannel_" ++ Discord.Id.toString channelId))
-                            (PressedResetDiscordChannel userId guildId channelId)
+                            (Dom.id ("admin_reloadDiscordChannel_" ++ Discord.Id.toString channelId))
+                            (PressedReloadDiscordChannel userId guildId channelId)
 
                     Nothing ->
                         Ui.none
