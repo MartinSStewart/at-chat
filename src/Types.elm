@@ -616,11 +616,14 @@ type BackendMsg
         (Discord.Id.Id Discord.Id.UserId)
         (Result
             Discord.HttpError
-            ( List DiscordDmChannelReadyData
+            ( List
+                { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                , dmChannel : DiscordDmChannel
+                }
             , List
                 ( Discord.Id.Id Discord.Id.GuildId
                 , { guild : Discord.GatewayGuild
-                  , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
+                  , channels : List Discord.Channel
                   , icon : Maybe FileStatus.UploadResponse
                   }
                 )
@@ -637,13 +640,13 @@ type BackendMsg
 
 type alias ReloadedDiscordDmChannelData =
     { messages : List Discord.Message
-    , attachments : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     }
 
 
 type alias ReloadedDiscordChannelData =
     { messages : List Discord.Message
-    , attachments : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     , threads : List DiscordThreadReadyData
     }
 
@@ -652,7 +655,7 @@ type alias DiscordDmChannelReadyData =
     { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
     , dmChannel : DiscordDmChannel
     , messages : List Discord.Message
-    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    , uploadResponses : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     }
 
 
@@ -660,7 +663,7 @@ type alias DiscordThreadReadyData =
     { channelId : Discord.Id.Id Discord.Id.ChannelId
     , channel : Discord.Channel
     , messages : List Discord.Message
-    , uploadResponses : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    , uploadResponses : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     }
 
 

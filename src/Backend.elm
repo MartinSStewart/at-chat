@@ -701,7 +701,7 @@ update msg model =
                                     SeqDict
                                         (Discord.Id.Id Discord.Id.GuildId)
                                         { guild : Discord.GatewayGuild
-                                        , channels : List ( Discord.Channel, List Discord.Message, List (Result Http.Error ( String, FileStatus.UploadResponse )) )
+                                        , channels : List Discord.Channel
                                         , icon : Maybe FileStatus.UploadResponse
                                         }
                                 guildDataDict =
@@ -719,7 +719,6 @@ update msg model =
                                                     (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
                                                     model.discordUsers
                                         }
-                                        |> DiscordSync.addDiscordDms dmData
 
                                 ( otherDiscordUsers, linkedDiscordUsers ) =
                                     getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
@@ -991,40 +990,38 @@ attachmentsUploadedHelper model message results =
     in
     List.foldl
         (\attachment ( fileDataDict, discordAttachments ) ->
-            case DiscordAttachmentId.fromUrlText attachment.url of
-                Just attachmentUrl ->
-                    let
-                        fileId : Id FileId
-                        fileId =
-                            SeqDict.size fileDataDict + 1 |> Id.fromInt
-                    in
-                    case SeqDict.get attachmentUrl model.discordAttachments of
-                        Just { fileHash, imageMetadata } ->
+            let
+                attachmentId =
+                    DiscordAttachmentId.fromUrl attachment.url
+
+                fileId : Id FileId
+                fileId =
+                    SeqDict.size fileDataDict + 1 |> Id.fromInt
+            in
+            case SeqDict.get attachmentId model.discordAttachments of
+                Just { fileHash, imageMetadata } ->
+                    ( SeqDict.insert
+                        fileId
+                        (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
+                        fileDataDict
+                    , discordAttachments
+                    )
+
+                Nothing ->
+                    case SeqDict.get attachment.id uploadResponses of
+                        Just uploadResponse ->
                             ( SeqDict.insert
                                 fileId
-                                (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
+                                (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
                                 fileDataDict
-                            , discordAttachments
+                            , SeqDict.insert
+                                attachmentId
+                                { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                                discordAttachments
                             )
 
                         Nothing ->
-                            case SeqDict.get attachment.id uploadResponses of
-                                Just uploadResponse ->
-                                    ( SeqDict.insert
-                                        fileId
-                                        (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
-                                        fileDataDict
-                                    , SeqDict.insert
-                                        attachmentUrl
-                                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
-                                        discordAttachments
-                                    )
-
-                                Nothing ->
-                                    ( fileDataDict, discordAttachments )
-
-                Nothing ->
-                    ( fileDataDict, discordAttachments )
+                            ( fileDataDict, discordAttachments )
         )
         ( SeqDict.empty, model.discordAttachments )
         message.attachments

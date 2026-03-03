@@ -1,24 +1,16 @@
-module DiscordAttachmentId exposing (DiscordAttachmentId, fromUrlText)
-
-import Url
+module DiscordAttachmentId exposing (DiscordAttachmentId, fromUrl)
 
 
 type DiscordAttachmentId
     = DiscordAttachmentId String
 
 
-fromUrlText : String -> Maybe DiscordAttachmentId
-fromUrlText text =
-    case Url.fromString text of
-        Just url ->
-            case String.split "/" url.path of
-                [ "attachments", channelId, messageId, attachmentId, attachmentFileName ] ->
-                    (channelId ++ "/" ++ messageId ++ "/" ++ attachmentId ++ "/" ++ attachmentFileName)
-                        |> DiscordAttachmentId
-                        |> Just
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
+fromUrl : String -> DiscordAttachmentId
+fromUrl text =
+    String.split "?" text
+        |> List.head
+        |> Maybe.withDefault text
+        |> String.split "attachments"
+        |> List.drop 1
+        |> String.join "attachments"
+        |> DiscordAttachmentId
