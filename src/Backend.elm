@@ -198,6 +198,7 @@ adminData model lastLogPageViewed =
             (\_ channel ->
                 { members = channel.members
                 , messageCount = Array.length channel.messages
+                , firstMessage = Array.get 0 channel.messages
                 }
             )
             model.discordDmChannels
@@ -232,6 +233,7 @@ adminData model lastLogPageViewed =
                             , messageCount = Array.length channel.messages
                             , threadCount = SeqDict.size channel.threads
                             , isReloading = channel.isReloading
+                            , firstMessage = Array.get 0 channel.messages
                             }
                         )
                         guild.channels
@@ -4384,7 +4386,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
                             (Discord.userToken discordUser.auth)
-                            { channelId = channelId, limit = 10000 }
+                            { channelId = channelId, limit = 10 }
+                            |> Task.andThen
+                                (\messages ->
+                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                )
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]
                     )

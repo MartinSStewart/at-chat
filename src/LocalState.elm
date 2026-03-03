@@ -1,6 +1,7 @@
 module LocalState exposing
     ( AdminData
     , AdminData_DiscordChannel
+    , AdminData_DiscordDmChannel
     , AdminData_DiscordGuild
     , AdminData_Guild
     , AdminData_GuildChannel
@@ -411,10 +412,17 @@ type alias AdminData =
     , discordDmChannels :
         SeqDict
             (Discord.Id.Id Discord.Id.PrivateChannelId)
-            { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
+            AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    }
+
+
+type alias AdminData_DiscordDmChannel =
+    { members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    , messageCount : Int
+    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     }
 
 
@@ -445,6 +453,7 @@ type alias AdminData_DiscordChannel =
     , messageCount : Int
     , threadCount : Int
     , isReloading : DiscordChannelReloadingStatus
+    , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     }
 
 

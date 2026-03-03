@@ -37,18 +37,21 @@ import Effect.Time as Time
 import EmailAddress
 import Env
 import GuildName exposing (GuildName)
+import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, GuildId, Id, UserId)
+import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordChannelReloadingStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordChannelReloadingStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
+import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet exposing (NonemptySet)
 import Pagination exposing (Pagination)
 import PersonName
 import Ports
+import RichText
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -100,6 +103,8 @@ type Msg
     | PressedHomepageLink
     | PressedResetDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | PressedCopyText String
+    | TypedDiscordGuildChannelFirstMessage
+    | TypedDiscordDmChannelFirstMessage
 
 
 type ToBackend
@@ -149,10 +154,7 @@ type alias InitAdminData =
     , privateVapidKey : PrivateVapidKey
     , slackClientSecret : Maybe Slack.ClientSecret
     , openRouterKey : Maybe String
-    , discordDmChannels :
-        SeqDict
-            (Discord.Id.Id Discord.Id.PrivateChannelId)
-            { members : NonemptySet (Discord.Id.Id Discord.Id.UserId), messageCount : Int }
+    , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) AdminData_DiscordDmChannel
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
@@ -870,6 +872,12 @@ update navigationKey time adminData localState msg model =
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
+        TypedDiscordGuildChannelFirstMessage ->
+            ( model, Command.none, NoOutMsg )
+
+        TypedDiscordDmChannelFirstMessage ->
+            ( model, Command.none, NoOutMsg )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -1412,45 +1420,7 @@ discordGuildsSection user adminData =
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map
-                                        (\( channelId, channel ) ->
-                                            Ui.row
-                                                [ Ui.spacing 8, Ui.Font.size 13 ]
-                                                [ case channel.isReloading of
-                                                    DiscordChannel_Reloading _ ->
-                                                        Ui.el
-                                                            [ Ui.width (Ui.px 30)
-                                                            , Ui.height (Ui.px 30)
-                                                            , Ui.contentCenterX
-                                                            , Ui.contentCenterY
-                                                            ]
-                                                            Icons.spinner
-
-                                                    _ ->
-                                                        case maybeUserId of
-                                                            Just userId ->
-                                                                resetButton
-                                                                    (Dom.id ("admin_resetDiscordChannel_" ++ Discord.Id.toString channelId))
-                                                                    (PressedResetDiscordChannel userId guildId channelId)
-
-                                                            Nothing ->
-                                                                Ui.none
-                                                , Ui.text ("#" ++ ChannelName.toString channel.name)
-                                                , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
-                                                , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-                                                , case channel.isReloading of
-                                                    DiscordChannel_LastReloadFailed _ error ->
-                                                        MyUi.errorBox
-                                                            (Dom.id "Admin_errorBox")
-                                                            PressedCopyText
-                                                            (Discord.httpErrorToString error)
-
-                                                    _ ->
-                                                        Ui.none
-                                                ]
-                                        )
-                                        (SeqDict.toList guild.channels)
-                                    )
+                                    (List.map (discordGuildChannel maybeUserId guildId) (SeqDict.toList guild.channels))
 
                               else
                                 Ui.none
@@ -1459,6 +1429,83 @@ discordGuildsSection user adminData =
                     (SeqDict.toList adminData.discordGuilds)
                 )
         ]
+
+
+discordGuildChannel :
+    Maybe (Discord.Id.Id Discord.Id.UserId)
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> ( Discord.Id.Id Discord.Id.ChannelId, AdminData_DiscordChannel )
+    -> Element Msg
+discordGuildChannel maybeUserId guildId ( channelId, channel ) =
+    Ui.row
+        [ Ui.spacing 8, Ui.Font.size 13 ]
+        [ case channel.isReloading of
+            DiscordChannel_Reloading _ ->
+                Ui.el
+                    [ Ui.width (Ui.px channelRowHeight)
+                    , Ui.height (Ui.px channelRowHeight)
+                    , Ui.contentCenterX
+                    , Ui.contentCenterY
+                    ]
+                    Icons.spinner
+
+            _ ->
+                case maybeUserId of
+                    Just userId ->
+                        resetButton
+                            (Dom.id ("admin_resetDiscordChannel_" ++ Discord.Id.toString channelId))
+                            (PressedResetDiscordChannel userId guildId channelId)
+
+                    Nothing ->
+                        Ui.none
+        , Ui.text ("#" ++ ChannelName.toString channel.name)
+        , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+        , firstMessageView channel
+        , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
+        , case channel.isReloading of
+            DiscordChannel_LastReloadFailed _ error ->
+                MyUi.errorBox
+                    (Dom.id "Admin_errorBox")
+                    PressedCopyText
+                    (Discord.httpErrorToString error)
+
+            _ ->
+                Ui.none
+        ]
+
+
+firstMessageView : { a | firstMessage : Maybe (Message messageId userId) } -> Element Msg
+firstMessageView channel =
+    case channel.firstMessage of
+        Just firstMessage ->
+            let
+                firstMessageLabel : { element : Element msg, id : Ui.Input.Label }
+                firstMessageLabel =
+                    Ui.Input.label "admin_discordGuildChannelFirstMessage" [ Ui.width Ui.shrink ] (Ui.text "First message:")
+            in
+            Ui.row
+                [ Ui.spacing 8 ]
+                [ firstMessageLabel.element
+                , Ui.Input.text
+                    [ Html.Attributes.readonly True |> Ui.htmlAttribute
+                    , Ui.paddingXY 4 0
+                    , Ui.background MyUi.background2
+                    , Ui.height (Ui.px channelRowHeight)
+                    ]
+                    { text = LocalState.messageToString SeqDict.empty firstMessage
+                    , onChange = \_ -> TypedDiscordGuildChannelFirstMessage
+                    , label = firstMessageLabel.id
+                    , placeholder = Nothing
+                    }
+                ]
+
+        Nothing ->
+            Ui.none
+
+
+channelRowHeight : number
+channelRowHeight =
+    30
 
 
 discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
@@ -1493,6 +1540,7 @@ discordDmChannelsSection user adminData =
                                     |> Ui.row [ Ui.spacing 8, Ui.width Ui.shrink ]
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
+                            , firstMessageView channel
                             , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
                             ]
                     )

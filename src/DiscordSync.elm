@@ -11,6 +11,7 @@ module DiscordSync exposing
     , http
     , messagesAndLinks
     , sendMessage
+    , uploadAttachmentsForMessages
     , websocketClose
     , websocketCreateHandle
     )
