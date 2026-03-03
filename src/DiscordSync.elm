@@ -25,7 +25,7 @@ import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
-import DmChannel exposing (DiscordDmChannel)
+import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -43,7 +43,7 @@ import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..)
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
-import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReloadingStatus(..), DiscordMessageAlreadyExists(..))
+import LocalState exposing (ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordMessageAlreadyExists(..))
 import Message exposing (Message(..))
 import NonemptyDict
 import NonemptySet exposing (NonemptySet)
@@ -725,6 +725,7 @@ addDiscordDms dmChannels model =
                                     , lastTypedAt = SeqDict.empty
                                     , linkedMessageIds = links
                                     , members = data.dmChannel.members
+                                    , isReloading = DiscordChannel_NotReloading
                                     }
                                         |> Just
                         )
@@ -1502,6 +1503,7 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , members = members
+                                                    , isReloading = DiscordChannel_NotReloading
                                                     }
                                                         |> Just
                                         )

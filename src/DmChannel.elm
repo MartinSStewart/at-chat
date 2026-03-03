@@ -1,5 +1,6 @@
 module DmChannel exposing
-    ( DiscordDmChannel
+    ( DiscordChannelReloadingStatus(..)
+    , DiscordDmChannel
     , DiscordFrontendDmChannel
     , DmChannel
     , DmChannelId(..)
@@ -23,6 +24,7 @@ module DmChannel exposing
 import Array exposing (Array)
 import Discord
 import Discord.Id
+import Effect.Time as Time
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import List.Nonempty exposing (Nonempty(..))
 import Message exposing (Message, MessageState(..))
@@ -46,7 +48,14 @@ type alias DiscordDmChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
+    , isReloading : DiscordChannelReloadingStatus
     }
+
+
+type DiscordChannelReloadingStatus
+    = DiscordChannel_NotReloading
+    | DiscordChannel_Reloading Time.Posix
+    | DiscordChannel_LastReloadFailed Time.Posix Discord.HttpError
 
 
 type alias DiscordFrontendDmChannel =
@@ -85,6 +94,7 @@ discordBackendInit currentUserId channel =
     , lastTypedAt = SeqDict.empty
     , linkedMessageIds = OneToOne.empty
     , members = NonemptySet.fromNonemptyList (Nonempty currentUserId channel.recipientIds)
+    , isReloading = DiscordChannel_NotReloading
     }
 
 

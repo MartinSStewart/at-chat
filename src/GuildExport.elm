@@ -7,12 +7,13 @@ import ChannelName
 import Codec exposing (Codec)
 import CodecExtra
 import Discord
+import DmChannel exposing (DiscordChannelReloadingStatus(..))
 import Emoji
 import FileName
 import FileStatus exposing (FileData, ImageMetadata)
 import GuildName
 import Id
-import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReloadingStatus(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChannelStatus, DiscordBackendChannel, DiscordBackendGuild)
 import Message exposing (Message, UserTextMessageData)
 import RichText
 import SecretId

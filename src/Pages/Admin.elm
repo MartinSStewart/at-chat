@@ -29,6 +29,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord
 import Discord.Id
+import DmChannel exposing (DiscordChannelReloadingStatus(..))
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -43,7 +44,7 @@ import Html.Events
 import Icons
 import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordChannelReloadingStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
 import MyUi
@@ -326,56 +327,81 @@ updateAdmin changedBy change adminData local =
                     local
 
         ExpandGuild guildId ->
+            let
+                localUser =
+                    local.localUser
+            in
             { local
                 | adminData =
                     IsAdmin
                         { adminData
-                            | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds })
-                                    adminData.users
+                            | users = NonemptyDict.updateIfExists changedBy (expandGuild guildId) adminData.users
                         }
+                , localUser = { localUser | user = expandGuild guildId localUser.user }
             }
 
         CollapseGuild guildId ->
+            let
+                localUser =
+                    local.localUser
+            in
             { local
                 | adminData =
                     IsAdmin
                         { adminData
-                            | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds })
-                                    adminData.users
+                            | users = NonemptyDict.updateIfExists changedBy (collapseGuild guildId) adminData.users
                         }
+                , localUser = { localUser | user = collapseGuild guildId localUser.user }
             }
 
         ExpandDiscordGuild guildId ->
+            let
+                localUser =
+                    local.localUser
+            in
             { local
                 | adminData =
                     IsAdmin
                         { adminData
-                            | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds })
-                                    adminData.users
+                            | users = NonemptyDict.updateIfExists changedBy (expandDiscordGuild guildId) adminData.users
                         }
+                , localUser = { localUser | user = expandDiscordGuild guildId localUser.user }
             }
 
         CollapseDiscordGuild guildId ->
+            let
+                localUser =
+                    local.localUser
+            in
             { local
                 | adminData =
                     IsAdmin
                         { adminData
                             | users =
-                                NonemptyDict.updateIfExists
-                                    changedBy
-                                    (\user -> { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds })
-                                    adminData.users
+                                NonemptyDict.updateIfExists changedBy (collapseDiscordGuild guildId) adminData.users
                         }
+                , localUser = { localUser | user = collapseDiscordGuild guildId localUser.user }
             }
+
+
+expandGuild : Id GuildId -> BackendUser -> BackendUser
+expandGuild guildId user =
+    { user | expandedGuilds = SeqSet.insert guildId user.expandedGuilds }
+
+
+collapseGuild : Id GuildId -> BackendUser -> BackendUser
+collapseGuild guildId user =
+    { user | expandedGuilds = SeqSet.remove guildId user.expandedGuilds }
+
+
+expandDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> BackendUser -> BackendUser
+expandDiscordGuild guildId user =
+    { user | expandedDiscordGuilds = SeqSet.insert guildId user.expandedDiscordGuilds }
+
+
+collapseDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> BackendUser -> BackendUser
+collapseDiscordGuild guildId user =
+    { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
 
 
 startReloadingDiscordChannel :
@@ -849,6 +875,7 @@ update navigationKey time adminData localState msg model =
 
         PressedExpandDiscordGuild guildId ->
             let
+                user : User.FrontendCurrentUser
                 user =
                     localState.localUser.user
             in

@@ -14,7 +14,7 @@ import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
 import DiscordSync
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordChannelReloadingStatus(..), DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -154,7 +154,6 @@ init =
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDmChannels = SeqDict.empty
-      , discordDmChannelReloading = SeqDict.empty
       , slackWorkspaces = OneToOne.empty
       , slackUsers = OneToOne.empty
       , slackServers = OneToOne.empty
@@ -196,13 +195,11 @@ adminData model lastLogPageViewed =
     , openRouterKey = model.openRouterKey
     , discordDmChannels =
         SeqDict.map
-            (\channelId channel ->
+            (\_ channel ->
                 { members = channel.members
                 , messageCount = Array.length channel.messages
                 , firstMessage = Array.get 0 channel.messages
-                , isReloading =
-                    SeqDict.get channelId model.discordDmChannelReloading
-                        |> Maybe.withDefault LocalState.DiscordChannel_NotReloading
+                , isReloading = channel.isReloading
                 }
             )
             model.discordDmChannels
@@ -951,14 +948,15 @@ update msg model =
                                     in
                                     ( attachments2
                                     , { channel
-                                        | messages = messages2
+                                        | isReloading = DiscordChannel_NotReloading
+                                        , messages = messages2
                                         , linkedMessageIds = linkedMessageIds
                                       }
                                     )
 
-                                Err _ ->
+                                Err error ->
                                     ( model.discordAttachments
-                                    , channel
+                                    , { channel | isReloading = DiscordChannel_LastReloadFailed time error }
                                     )
 
                         model2 : BackendModel
@@ -967,13 +965,6 @@ update msg model =
                                 | discordDmChannels =
                                     SeqDict.insert channelId channel2 model.discordDmChannels
                                 , discordAttachments = attachments3
-                                , discordDmChannelReloading =
-                                    case result of
-                                        Ok _ ->
-                                            SeqDict.remove channelId model.discordDmChannelReloading
-
-                                        Err error ->
-                                            SeqDict.insert channelId (DiscordChannel_LastReloadFailed time error) model.discordDmChannelReloading
                             }
                     in
                     ( model2
@@ -4484,7 +4475,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                         , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
                         , Task.map2
                             Tuple.pair
-                            (DiscordSync.getManyMessages auth { channelId = channelId, limit = 10 })
+                            (DiscordSync.getManyMessages auth { channelId = channelId, limit = reloadChannelMaxMessages })
                             (DiscordSync.getChannelThreads auth guildId channelId model2)
                             |> Task.andThen
                                 (\( messages, threads ) ->
@@ -4502,52 +4493,35 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                     ( model, invalidChangeResponse changeId clientId )
 
         Pages.Admin.StartReloadingDiscordDmChannel _ currentUserId channelId ->
-            let
-                currentReloadStatus =
-                    SeqDict.get channelId model.discordDmChannelReloading
-            in
             case
                 ( SeqDict.get currentUserId model.discordUsers
-                , SeqDict.member channelId model.discordDmChannels
-                , currentReloadStatus
+                , Pages.Admin.startReloadingDiscordDmChannel time channelId model
                 )
             of
-                ( Just (FullData discordUser), True, justReloading ) ->
-                    case justReloading of
-                        Just (DiscordChannel_Reloading _) ->
-                            ( model, invalidChangeResponse changeId clientId )
-
-                        _ ->
-                            let
-                                model2 =
-                                    { model
-                                        | discordDmChannelReloading =
-                                            SeqDict.insert channelId (DiscordChannel_Reloading time) model.discordDmChannelReloading
-                                    }
-                            in
-                            ( model2
-                            , Command.batch
-                                [ Pages.Admin.StartReloadingDiscordDmChannel time currentUserId channelId
-                                    |> Local_Admin
-                                    |> LocalChangeResponse changeId
-                                    |> Lamdera.sendToFrontend clientId
-                                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
-                                , DiscordSync.getManyMessages
-                                    (Discord.userToken discordUser.auth)
-                                    { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = 10 }
-                                    |> Task.andThen
-                                        (\messages ->
-                                            DiscordSync.uploadAttachmentsForMessages model messages
-                                                |> Task.map
-                                                    (\attachments ->
-                                                        { messages = messages
-                                                        , attachments = attachments
-                                                        }
-                                                    )
-                                        )
-                                    |> Task.attempt (ReloadedDiscordDmChannel time channelId)
-                                ]
-                            )
+                ( Just (FullData discordUser), Ok model2 ) ->
+                    ( model2
+                    , Command.batch
+                        [ Pages.Admin.StartReloadingDiscordDmChannel time currentUserId channelId
+                            |> Local_Admin
+                            |> LocalChangeResponse changeId
+                            |> Lamdera.sendToFrontend clientId
+                        , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        , DiscordSync.getManyMessages
+                            (Discord.userToken discordUser.auth)
+                            { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
+                            |> Task.andThen
+                                (\messages ->
+                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                        |> Task.map
+                                            (\attachments ->
+                                                { messages = messages
+                                                , attachments = attachments
+                                                }
+                                            )
+                                )
+                            |> Task.attempt (ReloadedDiscordDmChannel time channelId)
+                        ]
+                    )
 
                 _ ->
                     ( model, invalidChangeResponse changeId clientId )
@@ -4595,6 +4569,11 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
               }
             , LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
             )
+
+
+reloadChannelMaxMessages : Int
+reloadChannelMaxMessages =
+    10000
 
 
 sendDirectMessage :

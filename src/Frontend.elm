@@ -9,7 +9,7 @@ import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -40,7 +40,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), ChangeAttachments(..), DiscordChannelReloadingStatus(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput

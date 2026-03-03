@@ -76,7 +76,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordChannelReloadingStatus, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -289,7 +289,6 @@ type alias BackendModel =
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
-    , discordDmChannelReloading : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordChannelReloadingStatus
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)

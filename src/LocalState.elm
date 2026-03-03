@@ -13,7 +13,6 @@ module LocalState exposing
     , ChannelStatus(..)
     , DiscordBackendChannel
     , DiscordBackendGuild
-    , DiscordChannelReloadingStatus(..)
     , DiscordFrontendChannel
     , DiscordFrontendGuild
     , DiscordMessageAlreadyExists(..)
@@ -100,7 +99,7 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord
 import Discord.Id
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordChannelReloadingStatus, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
@@ -466,12 +465,6 @@ setDiscordChannelIsReloading :
     -> AdminData_DiscordGuild
 setDiscordChannelIsReloading status channelId channel guild =
     { guild | channels = SeqDict.insert channelId { channel | isReloading = status } guild.channels }
-
-
-type DiscordChannelReloadingStatus
-    = DiscordChannel_NotReloading
-    | DiscordChannel_Reloading Time.Posix
-    | DiscordChannel_LastReloadFailed Time.Posix Discord.HttpError
 
 
 type DiscordUserData_ForAdmin
