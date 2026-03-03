@@ -1,6 +1,5 @@
 module Types exposing
-    ( AdminStatusLoginData(..)
-    , BackendFileData
+    ( BackendFileData
     , BackendModel
     , BackendMsg(..)
     , ChannelSidebarMode(..)
@@ -570,6 +569,7 @@ type ToBackend
     | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
     | ImportGuildRequest BackendGuild
     | ImportDiscordGuildRequest DiscordExport
+    | AdminDataRequest
 
 
 type BackendMsg
@@ -672,11 +672,12 @@ type ToFrontend
     | ExportDiscordGuildResponse DiscordExport
     | ImportGuildResponse (Result String (Id GuildId))
     | ImportDiscordGuildResponse (Result String ())
+    | AdminDataResponse InitAdminData
 
 
 type alias LoginData =
     { session : UserSession
-    , adminData : AdminStatusLoginData
+    , isAdmin : Bool
     , twoFactorAuthenticationEnabled : Maybe Time.Posix
     , guilds : SeqDict (Id GuildId) FrontendGuild
     , dmChannels : SeqDict (Id UserId) FrontendDmChannel
@@ -690,11 +691,6 @@ type alias LoginData =
     , publicVapidKey : String
     , textEditor : TextEditor.LocalState
     }
-
-
-type AdminStatusLoginData
-    = IsAdminLoginData InitAdminData
-    | IsNotAdminLoginData
 
 
 type LocalMsg

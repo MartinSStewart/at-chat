@@ -59,7 +59,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), DiscordUserDataExport(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
@@ -1087,12 +1087,7 @@ getLoginData sessionId session user requestMessagesFor model =
             getLinkedDiscordUsersAndOtherUsers session.userId model
     in
     { session = session
-    , adminData =
-        if user.isAdmin then
-            IsAdminLoginData (adminData model user.lastLogPageViewed)
-
-        else
-            IsNotAdminLoginData
+    , isAdmin = user.isAdmin
     , twoFactorAuthenticationEnabled =
         SeqDict.get session.userId model.twoFactorAuthentication |> Maybe.map .finishedAt
     , guilds =
@@ -3892,6 +3887,16 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
+        AdminDataRequest ->
+            asAdmin
+                model
+                sessionId
+                (\_ user ->
+                    ( model
+                    , Lamdera.sendToFrontend clientId (AdminDataResponse (adminData model user.lastLogPageViewed))
+                    )
+                )
+
 
 threadRouteToDiscordMessageId :
     Discord.Id.Id Discord.Id.ChannelId
@@ -4384,6 +4389,9 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
 
                 _ ->
                     ( model, invalidChangeResponse changeId clientId )
+
+        Pages.Admin.LoadAdminData _ ->
+            ( model, invalidChangeResponse changeId clientId )
 
 
 sendDirectMessage :

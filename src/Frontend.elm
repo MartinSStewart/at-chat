@@ -65,7 +65,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -330,41 +330,10 @@ loadedInitHelper time timezone userAgent loginData loading =
         localState =
             loginDataToLocalState userAgent timezone loginData
 
-        maybeAdmin : Maybe ( Pages.Admin.Model, Maybe Pages.Admin.AdminChange, Command FrontendOnly ToBackend msg )
-        maybeAdmin =
-            case loginData.adminData of
-                IsAdminLoginData _ ->
-                    let
-                        ( logPagination, paginationCmd ) =
-                            Pagination.init localState.localUser.user.lastLogPageViewed
-                    in
-                    Pages.Admin.init
-                        logPagination
-                        (case loading.route of
-                            AdminRoute params ->
-                                params
-
-                            _ ->
-                                { highlightLog = Nothing }
-                        )
-                        |> (\( a, b ) ->
-                                ( a
-                                , b
-                                , Command.map
-                                    (\toMsg -> Pages.Admin.LogPaginationToBackend toMsg |> AdminToBackend)
-                                    identity
-                                    paginationCmd
-                                )
-                           )
-                        |> Just
-
-                IsNotAdminLoginData ->
-                    Nothing
-
         loggedIn : LoggedIn2
         loggedIn =
             { localState = Local.init localState
-            , admin = Maybe.map (\( a, _, _ ) -> a) maybeAdmin
+            , admin = Nothing
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
@@ -396,61 +365,23 @@ loadedInitHelper time timezone userAgent loginData loading =
 
         cmds : Command FrontendOnly ToBackend FrontendMsg
         cmds =
-            Command.batch
-                [ case loading.route of
-                    AdminRoute params ->
-                        case params.highlightLog of
-                            Just _ ->
-                                Dom.getElement Pages.Admin.logSectionId
-                                    |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
-                                    |> Task.attempt (\_ -> ScrolledToLogSection)
+            case loading.route of
+                AdminRoute _ ->
+                    if loginData.isAdmin then
+                        Lamdera.sendToBackend AdminDataRequest
 
-                            Nothing ->
-                                Command.none
-
-                    _ ->
+                    else
                         Command.none
-                , case maybeAdmin of
-                    Just ( _, _, cmd ) ->
-                        cmd
 
-                    Nothing ->
-                        Command.none
-                ]
+                _ ->
+                    Command.none
     in
-    handleLocalChange
-        time
-        (case maybeAdmin of
-            Just ( _, Just adminChange, _ ) ->
-                Local_Admin adminChange |> Just
-
-            _ ->
-                Nothing
-        )
-        loggedIn
-        cmds
+    ( loggedIn, cmds )
 
 
 loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
 loginDataToLocalState userAgent timezone loginData =
-    { adminData =
-        case loginData.adminData of
-            IsAdminLoginData adminData ->
-                IsAdmin
-                    { users = adminData.users
-                    , emailNotificationsEnabled = adminData.emailNotificationsEnabled
-                    , twoFactorAuthentication = adminData.twoFactorAuthentication
-                    , privateVapidKey = adminData.privateVapidKey
-                    , slackClientSecret = adminData.slackClientSecret
-                    , openRouterKey = adminData.openRouterKey
-                    , discordDmChannels = adminData.discordDmChannels
-                    , discordUsers = adminData.discordUsers
-                    , discordGuilds = adminData.discordGuilds
-                    , guilds = adminData.guilds
-                    }
-
-            IsNotAdminLoginData ->
-                IsNotAdmin
+    { adminData = IsNotAdmin
     , guilds = loginData.guilds
     , discordGuilds = loginData.discordGuilds
     , dmChannels = loginData.dmChannels
@@ -576,6 +507,13 @@ routeRequest previousRoute newRoute model =
         AdminRoute { highlightLog } ->
             updateLoggedIn
                 (\loggedIn ->
+                    let
+                        local =
+                            Local.model loggedIn.localState
+
+                        needsAdminData =
+                            local.localUser.user.isAdmin && local.adminData == IsNotAdmin
+                    in
                     ( { loggedIn
                         | admin =
                             case loggedIn.admin of
@@ -586,7 +524,14 @@ routeRequest previousRoute newRoute model =
                                     loggedIn.admin
                         , userOptions = Nothing
                       }
-                    , viewCmd
+                    , Command.batch
+                        [ viewCmd
+                        , if needsAdminData then
+                            Lamdera.sendToBackend AdminDataRequest
+
+                          else
+                            Command.none
+                        ]
                     )
                 )
                 model2
@@ -4671,11 +4616,14 @@ changeUpdate localMsg local =
                     local
 
                 Local_Admin adminChange ->
-                    case local.adminData of
-                        IsAdmin adminData ->
+                    case ( adminChange, local.adminData ) of
+                        ( Pages.Admin.LoadAdminData initAdminData, _ ) ->
+                            { local | adminData = IsAdmin (Pages.Admin.initAdminDataToAdminData initAdminData) }
+
+                        ( _, IsAdmin adminData ) ->
                             Pages.Admin.updateAdmin changedBy adminChange adminData local
 
-                        IsNotAdmin ->
+                        ( _, IsNotAdmin ) ->
                             local
 
                 Local_SendMessage createdAt guildOrDmId text threadRouteWithRepliedTo attachedFiles ->
@@ -7141,6 +7089,65 @@ updateLoadedFromBackend msg model =
                     -- Could show error message to user
                     ( model, Command.none )
 
+        AdminDataResponse initAdminData ->
+            updateLoggedIn
+                (\loggedIn ->
+                    let
+                        localState : Local LocalMsg LocalState
+                        localState =
+                            Local.updateFromBackend
+                                changeUpdate
+                                Nothing
+                                (LocalChange
+                                    (Local.model loggedIn.localState).localUser.session.userId
+                                    (Local_Admin (Pages.Admin.LoadAdminData initAdminData))
+                                )
+                                loggedIn.localState
+
+                        ( logPagination, paginationCmd ) =
+                            Pagination.init initAdminData.lastLogPageViewed
+
+                        ( adminModel, maybeAdminChange ) =
+                            Pages.Admin.init
+                                logPagination
+                                (case model.route of
+                                    AdminRoute params ->
+                                        params
+
+                                    _ ->
+                                        { highlightLog = Nothing }
+                                )
+                    in
+                    handleLocalChange
+                        model.time
+                        (Maybe.map Local_Admin maybeAdminChange)
+                        { loggedIn
+                            | localState = localState
+                            , admin = Just adminModel
+                        }
+                        (Command.batch
+                            [ Command.map
+                                (\toMsg -> Pages.Admin.LogPaginationToBackend toMsg |> AdminToBackend)
+                                identity
+                                paginationCmd
+                            , case model.route of
+                                AdminRoute { highlightLog } ->
+                                    case highlightLog of
+                                        Just _ ->
+                                            Dom.getElement Pages.Admin.logSectionId
+                                                |> Task.andThen (\{ element } -> Dom.setViewport 0 (element.y + 40))
+                                                |> Task.attempt (\_ -> ScrolledToLogSection)
+
+                                        Nothing ->
+                                            Command.none
+
+                                _ ->
+                                    Command.none
+                            ]
+                        )
+                )
+                model
+
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )
 logout model =
@@ -7683,7 +7690,11 @@ view model =
                                                 Ui.text "User not found"
 
                                     _ ->
-                                        errorPage loaded "Admin access required to view this page"
+                                        if local.localUser.user.isAdmin then
+                                            Ui.text "Loading..."
+
+                                        else
+                                            errorPage loaded "Admin access required to view this page"
                             )
 
                     AiChatRoute ->

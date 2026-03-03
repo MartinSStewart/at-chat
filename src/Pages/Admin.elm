@@ -14,6 +14,7 @@ module Pages.Admin exposing
     , UsersChangeError(..)
     , applyChangesToBackendUsers
     , init
+    , initAdminDataToAdminData
     , logSectionId
     , pendingChangesText
     , startReloadingDiscordChannel
@@ -159,6 +160,21 @@ type alias InitAdminData =
     }
 
 
+initAdminDataToAdminData : InitAdminData -> AdminData
+initAdminDataToAdminData initData =
+    { users = initData.users
+    , emailNotificationsEnabled = initData.emailNotificationsEnabled
+    , twoFactorAuthentication = initData.twoFactorAuthentication
+    , privateVapidKey = initData.privateVapidKey
+    , slackClientSecret = initData.slackClientSecret
+    , openRouterKey = initData.openRouterKey
+    , discordDmChannels = initData.discordDmChannels
+    , discordUsers = initData.discordUsers
+    , discordGuilds = initData.discordGuilds
+    , guilds = initData.guilds
+    }
+
+
 type AdminChange
     = ChangeUsers
         { time : Time.Posix
@@ -178,6 +194,7 @@ type AdminChange
     | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | DeleteGuild (Id GuildId)
     | StartReloadingDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | LoadAdminData InitAdminData
 
 
 type alias EditedBackendUser =
@@ -308,6 +325,9 @@ updateAdmin changedBy change adminData local =
 
                 Err () ->
                     local
+
+        LoadAdminData _ ->
+            local
 
 
 startReloadingDiscordChannel :
@@ -1013,6 +1033,9 @@ pendingChangesText change =
 
         StartReloadingDiscordChannel _ _ _ _ ->
             "Reset Discord channel"
+
+        LoadAdminData _ ->
+            "Loaded admin data"
 
 
 view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
