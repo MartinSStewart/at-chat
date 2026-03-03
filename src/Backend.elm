@@ -855,22 +855,29 @@ update msg model =
             case LocalState.getDiscordGuildAndChannel guildId channelId model of
                 Just ( guild, channel ) ->
                     let
-                        channel2 : DiscordBackendChannel
-                        channel2 =
+                        ( attachments3, channel2 ) =
                             case result of
-                                Ok messages ->
+                                Ok { messages, attachments } ->
                                     let
+                                        attachments2 : SeqDict String DiscordAttachmentData
+                                        attachments2 =
+                                            DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+
                                         ( messages2, linkedMessageIds ) =
-                                            DiscordSync.messagesAndLinks (List.reverse messages) SeqDict.empty
+                                            DiscordSync.messagesAndLinks (List.reverse messages) attachments2
                                     in
-                                    { channel
+                                    ( attachments2
+                                    , { channel
                                         | isReloading = DiscordChannel_NotReloading
                                         , messages = messages2
                                         , linkedMessageIds = linkedMessageIds
-                                    }
+                                      }
+                                    )
 
                                 Err error ->
-                                    { channel | isReloading = DiscordChannel_LastReloadFailed time error }
+                                    ( model.discordAttachments
+                                    , { channel | isReloading = DiscordChannel_LastReloadFailed time error }
+                                    )
 
                         model2 : BackendModel
                         model2 =
@@ -880,6 +887,7 @@ update msg model =
                                         guildId
                                         { guild | channels = SeqDict.insert channelId channel2 guild.channels }
                                         model.discordGuilds
+                                , discordAttachments = attachments3
                             }
                     in
                     ( model2
@@ -4390,6 +4398,12 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> Task.andThen
                                 (\messages ->
                                     DiscordSync.uploadAttachmentsForMessages model messages
+                                        |> Task.map
+                                            (\attachments ->
+                                                { messages = messages
+                                                , attachments = attachments
+                                                }
+                                            )
                                 )
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]

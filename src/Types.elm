@@ -37,6 +37,7 @@ module Types exposing
     , NeedsAuthAgainData
     , NewChannelForm
     , NewGuildForm
+    , ReloadedDiscordChannelData
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -628,7 +629,13 @@ type BackendMsg
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
-    | ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError (List Discord.Message))
+    | ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ReloadedDiscordChannelData)
+
+
+type alias ReloadedDiscordChannelData =
+    { messages : List Discord.Message
+    , attachments : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
 
 
 type alias DiscordDmChannelReadyData =

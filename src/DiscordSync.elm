@@ -1,6 +1,7 @@
 module DiscordSync exposing
     ( addDiscordDms
     , addDiscordGuilds
+    , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
     , backendSessionIdHash
     , discordUserToPartialUser
