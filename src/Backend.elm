@@ -857,11 +857,16 @@ update msg model =
                     let
                         ( attachments3, channel2 ) =
                             case result of
-                                Ok { messages, attachments } ->
+                                Ok { messages, attachments, threads } ->
                                     let
                                         attachments2 : SeqDict String DiscordAttachmentData
                                         attachments2 =
-                                            DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+                                            List.foldl
+                                                (\thread dict ->
+                                                    DiscordSync.addUploadResponsesToDiscordAttachments thread.uploadResponses dict
+                                                )
+                                                (DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments)
+                                                threads
 
                                         ( messages2, linkedMessageIds ) =
                                             DiscordSync.messagesAndLinks (List.reverse messages) attachments2
@@ -871,6 +876,32 @@ update msg model =
                                         | isReloading = DiscordChannel_NotReloading
                                         , messages = messages2
                                         , linkedMessageIds = linkedMessageIds
+                                        , threads =
+                                            List.filterMap
+                                                (\thread ->
+                                                    case
+                                                        OneToOne.second
+                                                            (Discord.Id.toUInt64 thread.channel.id |> Discord.Id.fromUInt64)
+                                                            linkedMessageIds
+                                                    of
+                                                        Just channelMessageIndex ->
+                                                            let
+                                                                ( messages3, links ) =
+                                                                    DiscordSync.messagesAndLinks thread.messages attachments2
+                                                            in
+                                                            ( channelMessageIndex
+                                                            , { messages = messages3
+                                                              , lastTypedAt = SeqDict.empty
+                                                              , linkedMessageIds = links
+                                                              }
+                                                            )
+                                                                |> Just
+
+                                                        Nothing ->
+                                                            Nothing
+                                                )
+                                                threads
+                                                |> SeqDict.fromList
                                       }
                                     )
 
@@ -4385,6 +4416,10 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 )
             of
                 ( Just (FullData discordUser), Ok model2 ) ->
+                    let
+                        auth =
+                            Discord.userToken discordUser.auth
+                    in
                     ( model2
                     , Command.batch
                         [ Pages.Admin.StartReloadingDiscordChannel time currentUserId guildId channelId
@@ -4392,18 +4427,17 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
                         , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
-                        , DiscordSync.getManyMessages
-                            (Discord.userToken discordUser.auth)
-                            { channelId = channelId, limit = 10 }
+                        , Task.map2
+                            Tuple.pair
+                            (DiscordSync.getManyMessages auth { channelId = channelId, limit = 10 })
+                            (DiscordSync.getChannelThreads auth guildId channelId model2)
                             |> Task.andThen
-                                (\messages ->
-                                    DiscordSync.uploadAttachmentsForMessages model messages
-                                        |> Task.map
-                                            (\attachments ->
-                                                { messages = messages
-                                                , attachments = attachments
-                                                }
-                                            )
+                                (\( messages, threads ) ->
+                                    Task.map
+                                        (\attachments ->
+                                            { messages = messages, attachments = attachments, threads = threads }
+                                        )
+                                        (DiscordSync.uploadAttachmentsForMessages model messages)
                                 )
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]

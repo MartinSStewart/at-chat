@@ -635,6 +635,7 @@ type BackendMsg
 type alias ReloadedDiscordChannelData =
     { messages : List Discord.Message
     , attachments : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    , threads : List DiscordThreadReadyData
     }
 
 

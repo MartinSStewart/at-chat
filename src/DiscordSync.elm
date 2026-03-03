@@ -6,6 +6,7 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserToPartialUser
     , discordUserWebsocketMsg
+    , getChannelThreads
     , getManyMessages
     , handleDiscordCreateMessage
     , handleDiscordEditMessage
@@ -1806,68 +1807,70 @@ getDiscordGuildData model discordUser gatewayGuild =
             |> Just
 
 
-getChannelThreads : Discord.Authentication -> Discord.GatewayGuild -> BackendModel -> Task BackendOnly x (List DiscordThreadReadyData)
-getChannelThreads auth gatewayGuild model =
-    Task.map2
-        Tuple.pair
-        (List.map
-            (\channel ->
-                Discord.getPublicArchivedThreadsPayload
-                    auth
-                    { channelId = channel.id
-                    , before = Nothing
-                    , limit = Just 100
-                    }
-                    |> http
-                    |> Task.map .threads
-                    |> Task.onError (\_ -> Task.succeed [])
-            )
-            gatewayGuild.channels
-            |> Task.sequence
-            |> Task.map List.concat
+getChannelThreads :
+    Discord.Authentication
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> BackendModel
+    -> Task BackendOnly x (List DiscordThreadReadyData)
+getChannelThreads auth guildId channelId model =
+    Task.map3
+        (\active public private -> ( active, public, private ))
+        (Discord.listActiveThreadsPayload auth guildId
+            |> http
+            |> Task.map .threads
+            |> Task.onError (\_ -> Task.succeed [])
         )
-        (List.map
-            (\channel ->
-                Discord.getPrivateArchivedThreadsPayload
-                    auth
-                    { channelId = channel.id
-                    , before = Nothing
-                    , limit = Just 100
-                    }
-                    |> http
-                    |> Task.map .threads
-                    |> Task.onError (\_ -> Task.succeed [])
-            )
-            gatewayGuild.channels
-            |> Task.sequence
-            |> Task.map List.concat
+        (Discord.getPublicArchivedThreadsPayload
+            auth
+            { channelId = channelId
+            , before = Nothing
+            , limit = Just 100
+            }
+            |> http
+            |> Task.map .threads
+            |> Task.onError (\_ -> Task.succeed [])
+        )
+        (Discord.getPrivateArchivedThreadsPayload
+            auth
+            { channelId = channelId
+            , before = Nothing
+            , limit = Just 100
+            }
+            |> http
+            |> Task.map .threads
+            |> Task.onError (\_ -> Task.succeed [])
         )
         |> Task.andThen
-            (\( publicArchivedThreads, privateArchivedThreads ) ->
+            (\( activeThreads, publicArchivedThreads, privateArchivedThreads ) ->
                 let
                     allThreads : List Discord.Channel
                     allThreads =
-                        gatewayGuild.threads ++ publicArchivedThreads ++ privateArchivedThreads
+                        activeThreads ++ publicArchivedThreads ++ privateArchivedThreads
                 in
                 List.filterMap
                     (\thread ->
                         case thread.parentId of
                             Included (Just parentId) ->
-                                getManyMessages auth { channelId = thread.id, limit = 1000 }
-                                    |> Task.onError (\_ -> Task.succeed [])
-                                    |> Task.andThen
-                                        (\messages ->
-                                            Task.map
-                                                (\uploadResponses ->
-                                                    { channelId = parentId
-                                                    , channel = thread
-                                                    , messages = List.reverse messages
-                                                    , uploadResponses = uploadResponses
-                                                    }
-                                                )
-                                                (uploadAttachmentsForMessages model messages)
-                                        )
-                                    |> Just
+                                if parentId == channelId then
+                                    getManyMessages auth { channelId = thread.id, limit = 1000 }
+                                        |> Task.onError (\_ -> Task.succeed [])
+                                        |> Task.andThen
+                                            (\messages ->
+                                                Task.map
+                                                    (\uploadResponses ->
+                                                        { channelId = parentId
+                                                        , channel = thread
+                                                        , messages = List.reverse messages
+                                                        , uploadResponses = uploadResponses
+                                                        }
+                                                    )
+                                                    (uploadAttachmentsForMessages model messages)
+                                            )
+                                        |> Just
+
+                                else
+                                    Nothing
 
                             _ ->
                                 Nothing
