@@ -25,6 +25,7 @@ import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
+import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
@@ -675,9 +676,9 @@ messagesAndLinks messages discordAttachments =
 
 
 addUploadResponsesToDiscordAttachments :
-    List (Result Http.Error ( String, FileStatus.UploadResponse ))
-    -> SeqDict String DiscordAttachmentData
-    -> SeqDict String DiscordAttachmentData
+    List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
+    -> SeqDict DiscordAttachmentId DiscordAttachmentData
+    -> SeqDict DiscordAttachmentId DiscordAttachmentData
 addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachments =
     List.foldl
         (\result dict2 ->
@@ -698,7 +699,7 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
 addDiscordDms : List DiscordDmChannelReadyData -> BackendModel -> BackendModel
 addDiscordDms dmChannels model =
     let
-        discordAttachments : SeqDict String DiscordAttachmentData
+        discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
         discordAttachments =
             List.foldl
                 (\dmChannel dict -> addUploadResponsesToDiscordAttachments dmChannel.uploadResponses dict)

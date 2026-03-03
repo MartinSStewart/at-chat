@@ -57,6 +57,7 @@ import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord
 import Discord.Id
+import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId, FrontendDmChannel)
 import Duration exposing (Duration)
 import Editable
@@ -303,7 +304,7 @@ type alias BackendModel =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
-    , discordAttachments : SeqDict String DiscordAttachmentData
+    , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     }
 
 

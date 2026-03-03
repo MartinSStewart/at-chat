@@ -13,6 +13,7 @@ import Broadcast
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
+import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
 import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
 import Duration
@@ -860,7 +861,7 @@ update msg model =
                             case result of
                                 Ok { messages, attachments, threads } ->
                                     let
-                                        attachments2 : SeqDict String DiscordAttachmentData
+                                        attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
                                         attachments2 =
                                             List.foldl
                                                 (\thread dict ->
@@ -939,7 +940,7 @@ update msg model =
                             case result of
                                 Ok { messages, attachments } ->
                                     let
-                                        attachments2 : SeqDict String DiscordAttachmentData
+                                        attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
                                         attachments2 =
                                             DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
@@ -981,7 +982,7 @@ attachmentsUploadedHelper :
     BackendModel
     -> { a | attachments : List Discord.Attachment }
     -> List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse ))
-    -> ( SeqDict (Id FileId) FileData, SeqDict String DiscordAttachmentData )
+    -> ( SeqDict (Id FileId) FileData, SeqDict DiscordAttachmentId DiscordAttachmentData )
 attachmentsUploadedHelper model message results =
     let
         uploadResponses : SeqDict (Discord.Id.Id Discord.Id.AttachmentId) FileStatus.UploadResponse
@@ -990,35 +991,40 @@ attachmentsUploadedHelper model message results =
     in
     List.foldl
         (\attachment ( fileDataDict, discordAttachments ) ->
-            let
-                fileId : Id FileId
-                fileId =
-                    SeqDict.size fileDataDict + 1 |> Id.fromInt
-            in
-            case SeqDict.get attachment.url model.discordAttachments of
-                Just { fileHash, imageMetadata } ->
-                    ( SeqDict.insert
-                        fileId
-                        (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
-                        fileDataDict
-                    , discordAttachments
-                    )
-
-                Nothing ->
-                    case SeqDict.get attachment.id uploadResponses of
-                        Just uploadResponse ->
+            case DiscordAttachmentId.fromUrlText attachment.url of
+                Just attachmentUrl ->
+                    let
+                        fileId : Id FileId
+                        fileId =
+                            SeqDict.size fileDataDict + 1 |> Id.fromInt
+                    in
+                    case SeqDict.get attachmentUrl model.discordAttachments of
+                        Just { fileHash, imageMetadata } ->
                             ( SeqDict.insert
                                 fileId
-                                (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
+                                (DiscordSync.attachmentsToFileData attachment fileHash imageMetadata)
                                 fileDataDict
-                            , SeqDict.insert
-                                attachment.url
-                                { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
-                                discordAttachments
+                            , discordAttachments
                             )
 
                         Nothing ->
-                            ( fileDataDict, discordAttachments )
+                            case SeqDict.get attachment.id uploadResponses of
+                                Just uploadResponse ->
+                                    ( SeqDict.insert
+                                        fileId
+                                        (DiscordSync.attachmentsToFileData attachment uploadResponse.fileHash uploadResponse.imageSize)
+                                        fileDataDict
+                                    , SeqDict.insert
+                                        attachmentUrl
+                                        { fileHash = uploadResponse.fileHash, imageMetadata = uploadResponse.imageSize }
+                                        discordAttachments
+                                    )
+
+                                Nothing ->
+                                    ( fileDataDict, discordAttachments )
+
+                Nothing ->
+                    ( fileDataDict, discordAttachments )
         )
         ( SeqDict.empty, model.discordAttachments )
         message.attachments
