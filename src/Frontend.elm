@@ -6209,6 +6209,37 @@ changeUpdate localMsg local =
                         IsNotAdmin ->
                             local
 
+                Server_ReloadedDiscordDmChannel time channelId result ->
+                    case local.adminData of
+                        IsAdmin adminData ->
+                            case SeqDict.get channelId adminData.discordDmChannels of
+                                Just channel ->
+                                    { local
+                                        | adminData =
+                                            { adminData
+                                                | discordDmChannels =
+                                                    SeqDict.insert
+                                                        channelId
+                                                        { channel
+                                                            | isReloading =
+                                                                case result of
+                                                                    Ok () ->
+                                                                        DiscordChannel_NotReloading
+
+                                                                    Err error ->
+                                                                        DiscordChannel_LastReloadFailed time error
+                                                        }
+                                                        adminData.discordDmChannels
+                                            }
+                                                |> IsAdmin
+                                    }
+
+                                Nothing ->
+                                    local
+
+                        IsNotAdmin ->
+                            local
+
 
 startReloadingDiscordUser : Time.Posix -> Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
 startReloadingDiscordUser time discordUserId local =

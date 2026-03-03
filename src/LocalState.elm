@@ -423,6 +423,7 @@ type alias AdminData_DiscordDmChannel =
     { members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
     , messageCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
+    , isReloading : DiscordChannelReloadingStatus
     }
 
 

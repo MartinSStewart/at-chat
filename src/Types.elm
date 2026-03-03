@@ -38,6 +38,7 @@ module Types exposing
     , NewChannelForm
     , NewGuildForm
     , ReloadedDiscordChannelData
+    , ReloadedDiscordDmChannelData
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -75,7 +76,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordChannelReloadingStatus, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -288,6 +289,7 @@ type alias BackendModel =
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) DiscordBackendGuild
     , dmChannels : SeqDict DmChannelId DmChannel
     , discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
+    , discordDmChannelReloading : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordChannelReloadingStatus
     , slackDms : OneToOne (Slack.Id Slack.ChannelId) DmChannelId
     , slackWorkspaces : OneToOne String (Id GuildId)
     , slackUsers : OneToOne (Slack.Id Slack.UserId) (Id UserId)
@@ -630,6 +632,13 @@ type BackendMsg
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ReloadedDiscordChannelData)
+    | ReloadedDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError ReloadedDiscordDmChannelData)
+
+
+type alias ReloadedDiscordDmChannelData =
+    { messages : List Discord.Message
+    , attachments : List (Result Http.Error ( String, FileStatus.UploadResponse ))
+    }
 
 
 type alias ReloadedDiscordChannelData =
@@ -766,6 +775,7 @@ type ServerChange
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
     | Server_ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ())
+    | Server_ReloadedDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError ())
 
 
 type LocalChange

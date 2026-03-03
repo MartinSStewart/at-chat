@@ -17,6 +17,7 @@ module Pages.Admin exposing
     , logSectionId
     , pendingChangesText
     , startReloadingDiscordChannel
+    , startReloadingDiscordDmChannel
     , update
     , updateAdmin
     , updateFromBackend
@@ -102,6 +103,7 @@ type Msg
     | OpenRouterKeyEditableMsg (Editable.Msg (Maybe String))
     | PressedHomepageLink
     | PressedReloadDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | PressedReloadDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedCopyText String
     | TypedDiscordGuildChannelFirstMessage
     | TypedDiscordDmChannelFirstMessage
@@ -180,6 +182,7 @@ type AdminChange
     | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | DeleteGuild (Id GuildId)
     | StartReloadingDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | StartReloadingDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
     | ExpandDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
@@ -314,6 +317,14 @@ updateAdmin changedBy change adminData local =
                 Err () ->
                     local
 
+        StartReloadingDiscordDmChannel time _ channelId ->
+            case startReloadingDiscordDmChannel time channelId adminData of
+                Ok adminData2 ->
+                    { local | adminData = IsAdmin adminData2 }
+
+                Err () ->
+                    local
+
         ExpandGuild guildId ->
             { local
                 | adminData =
@@ -424,6 +435,46 @@ startReloadingDiscordChannel time guildId channelId adminData =
 
                 Nothing ->
                     Err ()
+
+        Nothing ->
+            Err ()
+
+
+startReloadingDiscordDmChannel :
+    Time.Posix
+    -> Discord.Id.Id Discord.Id.PrivateChannelId
+    ->
+        { a
+            | discordDmChannels :
+                SeqDict
+                    (Discord.Id.Id Discord.Id.PrivateChannelId)
+                    { b | isReloading : DiscordChannelReloadingStatus }
+        }
+    ->
+        Result
+            ()
+            { a
+                | discordDmChannels :
+                    SeqDict
+                        (Discord.Id.Id Discord.Id.PrivateChannelId)
+                        { b | isReloading : DiscordChannelReloadingStatus }
+            }
+startReloadingDiscordDmChannel time channelId adminData =
+    case SeqDict.get channelId adminData.discordDmChannels of
+        Just channel ->
+            case channel.isReloading of
+                DiscordChannel_Reloading _ ->
+                    Err ()
+
+                _ ->
+                    { adminData
+                        | discordDmChannels =
+                            SeqDict.insert
+                                channelId
+                                { channel | isReloading = DiscordChannel_Reloading time }
+                                adminData.discordDmChannels
+                    }
+                        |> Ok
 
         Nothing ->
             Err ()
@@ -869,6 +920,9 @@ update navigationKey time adminData localState msg model =
         PressedReloadDiscordChannel currentUserId guildId channelId ->
             ( model, Command.none, StartReloadingDiscordChannel time currentUserId guildId channelId |> AdminChange )
 
+        PressedReloadDiscordDmChannel currentUserId channelId ->
+            ( model, Command.none, StartReloadingDiscordDmChannel time currentUserId channelId |> AdminChange )
+
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
@@ -1095,6 +1149,9 @@ pendingChangesText change =
 
         StartReloadingDiscordChannel _ _ _ _ ->
             "Reset Discord channel"
+
+        StartReloadingDiscordDmChannel _ _ _ ->
+            "Reset Discord DM channel"
 
         ExpandGuild _ ->
             "Expanded guild in admin page"
@@ -1510,6 +1567,22 @@ channelRowHeight =
 
 discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
 discordDmChannelsSection user adminData =
+    let
+        maybeUserId : Maybe (Discord.Id.Id Discord.Id.UserId)
+        maybeUserId =
+            SeqDict.filter
+                (\_ discordUser ->
+                    case discordUser of
+                        FullData_ForAdmin _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                adminData.discordUsers
+                |> SeqDict.keys
+                |> List.head
+    in
     section
         user.expandedSections
         DiscordDmChannelsSection
@@ -1523,7 +1596,26 @@ discordDmChannelsSection user adminData =
                     (\( channelId, channel ) ->
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ Ui.text (Discord.Id.toString channelId)
+                            [ case channel.isReloading of
+                                DiscordChannel_Reloading _ ->
+                                    Ui.el
+                                        [ Ui.width (Ui.px channelRowHeight)
+                                        , Ui.height (Ui.px channelRowHeight)
+                                        , Ui.contentCenterX
+                                        , Ui.contentCenterY
+                                        ]
+                                        Icons.spinner
+
+                                _ ->
+                                    case maybeUserId of
+                                        Just userId ->
+                                            resetButton
+                                                (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.Id.toString channelId))
+                                                (PressedReloadDiscordDmChannel userId channelId)
+
+                                        Nothing ->
+                                            Ui.none
+                            , Ui.text (Discord.Id.toString channelId)
                             , Ui.row
                                 [ Ui.spacing 8 ]
                                 [ Ui.text "Members:"
@@ -1541,6 +1633,15 @@ discordDmChannelsSection user adminData =
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                             , firstMessageView channel
+                            , case channel.isReloading of
+                                DiscordChannel_LastReloadFailed _ error ->
+                                    MyUi.errorBox
+                                        (Dom.id "Admin_dmChannel_errorBox")
+                                        PressedCopyText
+                                        (Discord.httpErrorToString error)
+
+                                _ ->
+                                    Ui.none
                             , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
                             ]
                     )

@@ -154,6 +154,7 @@ init =
       , discordGuilds = SeqDict.empty
       , dmChannels = SeqDict.empty
       , discordDmChannels = SeqDict.empty
+      , discordDmChannelReloading = SeqDict.empty
       , slackWorkspaces = OneToOne.empty
       , slackUsers = OneToOne.empty
       , slackServers = OneToOne.empty
@@ -195,10 +196,13 @@ adminData model lastLogPageViewed =
     , openRouterKey = model.openRouterKey
     , discordDmChannels =
         SeqDict.map
-            (\_ channel ->
+            (\channelId channel ->
                 { members = channel.members
                 , messageCount = Array.length channel.messages
                 , firstMessage = Array.get 0 channel.messages
+                , isReloading =
+                    SeqDict.get channelId model.discordDmChannelReloading
+                        |> Maybe.withDefault LocalState.DiscordChannel_NotReloading
                 }
             )
             model.discordDmChannels
@@ -923,6 +927,57 @@ update msg model =
                     in
                     ( model2
                     , Server_ReloadedDiscordChannel time guildId channelId (Result.map (\_ -> ()) result)
+                        |> ServerChange
+                        |> Broadcast.toAdmins model2
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        ReloadedDiscordDmChannel time channelId result ->
+            case SeqDict.get channelId model.discordDmChannels of
+                Just channel ->
+                    let
+                        ( attachments3, channel2 ) =
+                            case result of
+                                Ok { messages, attachments } ->
+                                    let
+                                        attachments2 : SeqDict String DiscordAttachmentData
+                                        attachments2 =
+                                            DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+
+                                        ( messages2, linkedMessageIds ) =
+                                            DiscordSync.messagesAndLinks (List.reverse messages) attachments2
+                                    in
+                                    ( attachments2
+                                    , { channel
+                                        | messages = messages2
+                                        , linkedMessageIds = linkedMessageIds
+                                      }
+                                    )
+
+                                Err _ ->
+                                    ( model.discordAttachments
+                                    , channel
+                                    )
+
+                        model2 : BackendModel
+                        model2 =
+                            { model
+                                | discordDmChannels =
+                                    SeqDict.insert channelId channel2 model.discordDmChannels
+                                , discordAttachments = attachments3
+                                , discordDmChannelReloading =
+                                    case result of
+                                        Ok _ ->
+                                            SeqDict.remove channelId model.discordDmChannelReloading
+
+                                        Err error ->
+                                            SeqDict.insert channelId (DiscordChannel_LastReloadFailed time error) model.discordDmChannelReloading
+                            }
+                    in
+                    ( model2
+                    , Server_ReloadedDiscordDmChannel time channelId (Result.map (\_ -> ()) result)
                         |> ServerChange
                         |> Broadcast.toAdmins model2
                     )
@@ -4442,6 +4497,57 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]
                     )
+
+                _ ->
+                    ( model, invalidChangeResponse changeId clientId )
+
+        Pages.Admin.StartReloadingDiscordDmChannel _ currentUserId channelId ->
+            let
+                currentReloadStatus =
+                    SeqDict.get channelId model.discordDmChannelReloading
+            in
+            case
+                ( SeqDict.get currentUserId model.discordUsers
+                , SeqDict.member channelId model.discordDmChannels
+                , currentReloadStatus
+                )
+            of
+                ( Just (FullData discordUser), True, justReloading ) ->
+                    case justReloading of
+                        Just (DiscordChannel_Reloading _) ->
+                            ( model, invalidChangeResponse changeId clientId )
+
+                        _ ->
+                            let
+                                model2 =
+                                    { model
+                                        | discordDmChannelReloading =
+                                            SeqDict.insert channelId (DiscordChannel_Reloading time) model.discordDmChannelReloading
+                                    }
+                            in
+                            ( model2
+                            , Command.batch
+                                [ Pages.Admin.StartReloadingDiscordDmChannel time currentUserId channelId
+                                    |> Local_Admin
+                                    |> LocalChangeResponse changeId
+                                    |> Lamdera.sendToFrontend clientId
+                                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                                , DiscordSync.getManyMessages
+                                    (Discord.userToken discordUser.auth)
+                                    { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = 10 }
+                                    |> Task.andThen
+                                        (\messages ->
+                                            DiscordSync.uploadAttachmentsForMessages model messages
+                                                |> Task.map
+                                                    (\attachments ->
+                                                        { messages = messages
+                                                        , attachments = attachments
+                                                        }
+                                                    )
+                                        )
+                                    |> Task.attempt (ReloadedDiscordDmChannel time channelId)
+                                ]
+                            )
 
                 _ ->
                     ( model, invalidChangeResponse changeId clientId )
