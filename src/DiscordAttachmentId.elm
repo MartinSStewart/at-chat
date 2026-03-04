@@ -1,6 +1,10 @@
-module DiscordAttachmentId exposing (DiscordAttachmentId, fromUrl)
+module DiscordAttachmentId exposing (DiscordAttachmentId(..), fromUrl)
+
+{-| -}
 
 
+{-| OpaqueVariants
+-}
 type DiscordAttachmentId
     = DiscordAttachmentId String
 
