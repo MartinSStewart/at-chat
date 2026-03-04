@@ -1479,8 +1479,8 @@ discordGuildsSection user adminData =
                                 ]
                             , if isExpanded then
                                 let
-                                    maybeUserId : Maybe (Discord.Id.Id Discord.Id.UserId)
-                                    maybeUserId =
+                                    userThatCanReload : Maybe (Discord.Id.Id Discord.Id.UserId)
+                                    userThatCanReload =
                                         SeqDict.intersect
                                             (SeqDict.filter
                                                 (\_ discordUser ->
@@ -1499,7 +1499,7 @@ discordGuildsSection user adminData =
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map (discordGuildChannel maybeUserId guildId) (SeqDict.toList guild.channels))
+                                    (List.map (discordGuildChannel userThatCanReload guildId) (SeqDict.toList guild.channels))
 
                               else
                                 Ui.none
@@ -1589,22 +1589,6 @@ channelRowHeight =
 
 discordDmChannelsSection : BackendUser -> AdminData -> Element Msg
 discordDmChannelsSection user adminData =
-    let
-        maybeUserId : Maybe (Discord.Id.Id Discord.Id.UserId)
-        maybeUserId =
-            SeqDict.filter
-                (\_ discordUser ->
-                    case discordUser of
-                        FullData_ForAdmin _ ->
-                            True
-
-                        _ ->
-                            False
-                )
-                adminData.discordUsers
-                |> SeqDict.keys
-                |> List.head
-    in
     section
         user.expandedSections
         DiscordDmChannelsSection
@@ -1616,6 +1600,27 @@ discordDmChannelsSection user adminData =
                 [ Ui.spacing 4 ]
                 (List.map
                     (\( channelId, channel ) ->
+                        let
+                            userThatCanReload : Maybe (Discord.Id.Id Discord.Id.UserId)
+                            userThatCanReload =
+                                SeqSet.intersect
+                                    (SeqDict.filter
+                                        (\_ discordUser ->
+                                            case discordUser of
+                                                FullData_ForAdmin _ ->
+                                                    True
+
+                                                _ ->
+                                                    False
+                                        )
+                                        adminData.discordUsers
+                                        |> SeqDict.keys
+                                        |> SeqSet.fromList
+                                    )
+                                    (NonemptySet.toSeqSet channel.members)
+                                    |> SeqSet.toList
+                                    |> List.head
+                        in
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
                             [ case channel.isReloading of
@@ -1629,7 +1634,7 @@ discordDmChannelsSection user adminData =
                                         Icons.spinner
 
                                 _ ->
-                                    case maybeUserId of
+                                    case userThatCanReload of
                                         Just userId ->
                                             resetButton
                                                 (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.Id.toString channelId))
