@@ -1,6 +1,5 @@
 module DmChannel exposing
-    ( DiscordChannelReloadingStatus(..)
-    , DiscordDmChannel
+    ( DiscordDmChannel
     , DiscordFrontendDmChannel
     , DmChannel
     , DmChannelId(..)
@@ -46,14 +45,7 @@ type alias DiscordDmChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
-    , isReloading : DiscordChannelReloadingStatus
     }
-
-
-type DiscordChannelReloadingStatus
-    = DiscordChannel_NotReloading
-    | DiscordChannel_Reloading Time.Posix
-    | DiscordChannel_LastReloadFailed Time.Posix Discord.HttpError
 
 
 type alias DiscordFrontendDmChannel =

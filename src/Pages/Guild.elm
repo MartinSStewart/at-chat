@@ -273,6 +273,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
             , Ui.height Ui.fill
             , Ui.background MyUi.background1
             , scrollable canScroll2
+            , MyUi.htmlStyle "overflow-x" "hidden"
             , Ui.htmlAttribute (Html.Attributes.class "disable-scrollbars")
             , MyUi.htmlStyle "padding" ("calc(max(6px, " ++ MyUi.insetTop ++ ")) 0 4px 0")
             , bounceScroll isMobile

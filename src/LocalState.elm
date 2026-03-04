@@ -20,6 +20,8 @@ module LocalState exposing
     , FrontendChannel
     , FrontendGuild
     , JoinGuildError(..)
+    , LoadingDiscordChannel(..)
+    , LoadingDiscordChannelStep(..)
     , LocalState
     , LocalUser
     , LogWithTime
@@ -72,7 +74,10 @@ module LocalState exposing
     , guildOrDmIdToMessagesCount
     , guildToFrontend
     , guildToFrontendForUser
+    , isDiscordDmChannelReloading
+    , isDiscordGuildChannelReloading
     , isGuildMemberOrOwner
+    , loadingDiscordChannelMap
     , markAllChannelsAsViewed
     , memberIsEditTypingBackend
     , memberIsEditTypingBackendHelper
@@ -88,8 +93,8 @@ module LocalState exposing
     , removeReactionEmojiFrontendHelper
     , removeReactionEmojiHelper
     , routeToViewing
-    , setDiscordChannelIsReloading
     , updateChannel
+    , userIsLoadingDiscordChannel
     , usersMentionedOrRepliedToBackend
     , usersMentionedOrRepliedToFrontend
     )
@@ -99,12 +104,13 @@ import Array.Extra
 import ChannelName exposing (ChannelName)
 import Discord
 import Discord.Id
-import DmChannel exposing (DiscordChannelReloadingStatus, DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, FrontendDmChannel)
 import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName exposing (GuildName)
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import List.Extra
 import List.Nonempty exposing (Nonempty)
 import Log exposing (Log)
 import Maybe.Extra
@@ -291,7 +297,6 @@ type alias DiscordBackendChannel =
     , lastTypedAt : SeqDict (Discord.Id.Id Discord.Id.UserId) (LastTypedAt ChannelMessageId)
     , linkedMessageIds : OneToOne (Discord.Id.Id Discord.Id.MessageId) (Id ChannelMessageId)
     , threads : SeqDict (Id ChannelMessageId) DiscordBackendThread
-    , isReloading : DiscordChannelReloadingStatus
     }
 
 
@@ -415,14 +420,126 @@ type alias AdminData =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
     }
+
+
+type LoadingDiscordChannel messages
+    = LoadingDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (LoadingDiscordChannelStep messages)
+    | LoadingDiscordGuildChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (LoadingDiscordChannelStep messages)
+
+
+type LoadingDiscordChannelStep messages
+    = LoadingDiscordChannelMessages
+    | LoadingDiscordChannelMessagesFailed Discord.HttpError
+    | LoadingDiscordChannelAttachments Time.Posix messages
+
+
+userIsLoadingDiscordChannel : Discord.Id.Id Discord.Id.UserId -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a) -> Bool
+userIsLoadingDiscordChannel userId loadingDiscordChannels =
+    case SeqDict.get userId loadingDiscordChannels of
+        Just (LoadingDiscordGuildChannel _ _ _ step) ->
+            case step of
+                LoadingDiscordChannelMessages ->
+                    True
+
+                LoadingDiscordChannelMessagesFailed _ ->
+                    False
+
+                LoadingDiscordChannelAttachments _ _ ->
+                    True
+
+        Just (LoadingDiscordDmChannel _ _ step) ->
+            case step of
+                LoadingDiscordChannelMessages ->
+                    True
+
+                LoadingDiscordChannelMessagesFailed _ ->
+                    False
+
+                LoadingDiscordChannelAttachments _ _ ->
+                    True
+
+        Nothing ->
+            False
+
+
+isDiscordGuildChannelReloading :
+    Discord.Id.Id Discord.Id.ChannelId
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a)
+    -> Maybe (LoadingDiscordChannelStep a)
+isDiscordGuildChannelReloading channelId loadingDiscordChannels =
+    List.Extra.findMap
+        (\( _, loading ) ->
+            case loading of
+                LoadingDiscordGuildChannel _ _ otherChannelId step ->
+                    if channelId == otherChannelId then
+                        Just step
+
+                    else
+                        Nothing
+
+                LoadingDiscordDmChannel posix id loadingDiscordChannelStep ->
+                    Nothing
+        )
+        (SeqDict.toList loadingDiscordChannels)
+
+
+isDiscordDmChannelReloading :
+    Discord.Id.Id Discord.Id.PrivateChannelId
+    -> SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel a)
+    -> Maybe (LoadingDiscordChannelStep a)
+isDiscordDmChannelReloading channelId loadingDiscordChannels =
+    List.Extra.findMap
+        (\( _, loading ) ->
+            case loading of
+                LoadingDiscordGuildChannel _ _ otherChannelId step ->
+                    Nothing
+
+                LoadingDiscordDmChannel posix otherChannelId step ->
+                    if channelId == otherChannelId then
+                        Just step
+
+                    else
+                        Nothing
+        )
+        (SeqDict.toList loadingDiscordChannels)
+
+
+loadingDiscordChannelMap : (a -> b) -> LoadingDiscordChannel a -> LoadingDiscordChannel b
+loadingDiscordChannelMap mapFunc channel =
+    case channel of
+        LoadingDiscordDmChannel startTime channelId step ->
+            (case step of
+                LoadingDiscordChannelMessages ->
+                    LoadingDiscordChannelMessages
+
+                LoadingDiscordChannelMessagesFailed error ->
+                    LoadingDiscordChannelMessagesFailed error
+
+                LoadingDiscordChannelAttachments time messages ->
+                    LoadingDiscordChannelAttachments time (mapFunc messages)
+            )
+                |> LoadingDiscordDmChannel startTime channelId
+
+        LoadingDiscordGuildChannel startTime guildId channelId step ->
+            (case step of
+                LoadingDiscordChannelMessages ->
+                    LoadingDiscordChannelMessages
+
+                LoadingDiscordChannelMessagesFailed error ->
+                    LoadingDiscordChannelMessagesFailed error
+
+                LoadingDiscordChannelAttachments time messages ->
+                    LoadingDiscordChannelAttachments time (mapFunc messages)
+            )
+                |> LoadingDiscordGuildChannel startTime guildId channelId
 
 
 type alias AdminData_DiscordDmChannel =
     { members : NonemptySet (Discord.Id.Id Discord.Id.UserId)
     , messageCount : Int
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
-    , isReloading : DiscordChannelReloadingStatus
     }
 
 
@@ -452,19 +569,8 @@ type alias AdminData_DiscordChannel =
     { name : ChannelName
     , messageCount : Int
     , threadCount : Int
-    , isReloading : DiscordChannelReloadingStatus
     , firstMessage : Maybe (Message ChannelMessageId (Discord.Id.Id Discord.Id.UserId))
     }
-
-
-setDiscordChannelIsReloading :
-    DiscordChannelReloadingStatus
-    -> Discord.Id.Id Discord.Id.ChannelId
-    -> AdminData_DiscordChannel
-    -> AdminData_DiscordGuild
-    -> AdminData_DiscordGuild
-setDiscordChannelIsReloading status channelId channel guild =
-    { guild | channels = SeqDict.insert channelId { channel | isReloading = status } guild.channels }
 
 
 type DiscordUserData_ForAdmin

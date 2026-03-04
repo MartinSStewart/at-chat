@@ -9,7 +9,7 @@ import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
-import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
@@ -447,6 +447,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , discordUsers = adminData.discordUsers
                     , discordGuilds = adminData.discordGuilds
                     , guilds = adminData.guilds
+                    , loadingDiscordChannels = adminData.loadingDiscordChannels
                     }
 
             IsNotAdminLoginData ->
@@ -6170,72 +6171,22 @@ changeUpdate localMsg local =
                 Server_StartReloadingDiscordUser time discordUserId ->
                     startReloadingDiscordUser time discordUserId local
 
-                Server_ReloadedDiscordChannel time guildId channelId result ->
+                Server_LoadingDiscordChannelChanged userIdToLoadWith maybeLoading ->
                     case local.adminData of
                         IsAdmin adminData ->
-                            case SeqDict.get guildId adminData.discordGuilds of
-                                Just guild ->
-                                    case SeqDict.get channelId guild.channels of
-                                        Just channel ->
-                                            { local
-                                                | adminData =
-                                                    { adminData
-                                                        | discordGuilds =
-                                                            SeqDict.insert
-                                                                guildId
-                                                                (LocalState.setDiscordChannelIsReloading
-                                                                    (case result of
-                                                                        Ok () ->
-                                                                            DiscordChannel_NotReloading
+                            { local
+                                | adminData =
+                                    { adminData
+                                        | loadingDiscordChannels =
+                                            case maybeLoading of
+                                                Just loading ->
+                                                    SeqDict.insert userIdToLoadWith loading adminData.loadingDiscordChannels
 
-                                                                        Err error ->
-                                                                            DiscordChannel_LastReloadFailed time error
-                                                                    )
-                                                                    channelId
-                                                                    channel
-                                                                    guild
-                                                                )
-                                                                adminData.discordGuilds
-                                                    }
-                                                        |> IsAdmin
-                                            }
-
-                                        Nothing ->
-                                            local
-
-                                Nothing ->
-                                    local
-
-                        IsNotAdmin ->
-                            local
-
-                Server_ReloadedDiscordDmChannel time channelId result ->
-                    case local.adminData of
-                        IsAdmin adminData ->
-                            case SeqDict.get channelId adminData.discordDmChannels of
-                                Just channel ->
-                                    { local
-                                        | adminData =
-                                            { adminData
-                                                | discordDmChannels =
-                                                    SeqDict.insert
-                                                        channelId
-                                                        { channel
-                                                            | isReloading =
-                                                                case result of
-                                                                    Ok () ->
-                                                                        DiscordChannel_NotReloading
-
-                                                                    Err error ->
-                                                                        DiscordChannel_LastReloadFailed time error
-                                                        }
-                                                        adminData.discordDmChannels
-                                            }
-                                                |> IsAdmin
+                                                Nothing ->
+                                                    SeqDict.remove userIdToLoadWith adminData.loadingDiscordChannels
                                     }
-
-                                Nothing ->
-                                    local
+                                        |> IsAdmin
+                            }
 
                         IsNotAdmin ->
                             local

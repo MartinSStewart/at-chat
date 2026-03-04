@@ -25,7 +25,7 @@ import ChannelName exposing (ChannelName)
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import DiscordAttachmentId exposing (DiscordAttachmentId)
-import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel)
+import DmChannel exposing (DiscordDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -594,7 +594,6 @@ addDiscordChannel discordChannel =
         , lastTypedAt = SeqDict.empty
         , linkedMessageIds = OneToOne.empty
         , threads = SeqDict.empty
-        , isReloading = DiscordChannel_NotReloading
         }
             |> Just
 
@@ -1346,7 +1345,6 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , members = members
-                                                    , isReloading = DiscordChannel_NotReloading
                                                     }
                                                         |> Just
                                         )
@@ -1409,7 +1407,6 @@ handleChannelCreated channel model =
                                                     , lastTypedAt = SeqDict.empty
                                                     , linkedMessageIds = OneToOne.empty
                                                     , threads = SeqDict.empty
-                                                    , isReloading = DiscordChannel_NotReloading
                                                     }
                                                         |> Just
                                         )

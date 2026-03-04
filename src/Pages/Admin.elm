@@ -16,8 +16,6 @@ module Pages.Admin exposing
     , init
     , logSectionId
     , pendingChangesText
-    , startReloadingDiscordChannel
-    , startReloadingDiscordDmChannel
     , update
     , updateAdmin
     , updateFromBackend
@@ -29,7 +27,6 @@ import Array.Extra
 import ChannelName
 import Discord
 import Discord.Id
-import DmChannel exposing (DiscordChannelReloadingStatus(..))
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
@@ -38,13 +35,14 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
+import Evergreen.V125.DmChannel exposing (DiscordChannelReloadingStatus(..))
 import GuildName
 import Html.Attributes
 import Html.Events
 import Icons
 import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
 import MyUi
@@ -159,6 +157,7 @@ type alias InitAdminData =
     , discordUsers : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserData_ForAdmin
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
+    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
     }
 
 
@@ -180,7 +179,7 @@ type AdminChange
     | DeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | DeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
     | DeleteGuild (Id GuildId)
-    | StartReloadingDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
+    | StartReloadingDiscordGuildChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | StartReloadingDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | ExpandGuild (Id GuildId)
     | CollapseGuild (Id GuildId)
@@ -308,21 +307,44 @@ updateAdmin changedBy change adminData local =
         DeleteGuild guildId ->
             { local | adminData = IsAdmin { adminData | guilds = SeqDict.remove guildId adminData.guilds } }
 
-        StartReloadingDiscordChannel time _ guildId channelId ->
-            case startReloadingDiscordChannel time guildId channelId adminData of
-                Ok adminData2 ->
-                    { local | adminData = IsAdmin adminData2 }
+        StartReloadingDiscordGuildChannel time userId guildId channelId ->
+            if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
+                local
 
-                Err () ->
-                    local
+            else
+                { local
+                    | adminData =
+                        IsAdmin
+                            { adminData
+                                | loadingDiscordChannels =
+                                    SeqDict.insert
+                                        userId
+                                        (LoadingDiscordGuildChannel
+                                            time
+                                            guildId
+                                            channelId
+                                            LoadingDiscordChannelMessages
+                                        )
+                                        adminData.loadingDiscordChannels
+                            }
+                }
 
-        StartReloadingDiscordDmChannel time _ channelId ->
-            case startReloadingDiscordDmChannel time channelId adminData of
-                Ok adminData2 ->
-                    { local | adminData = IsAdmin adminData2 }
+        StartReloadingDiscordDmChannel time userId channelId ->
+            if LocalState.userIsLoadingDiscordChannel userId adminData.loadingDiscordChannels then
+                local
 
-                Err () ->
-                    local
+            else
+                { local
+                    | adminData =
+                        IsAdmin
+                            { adminData
+                                | loadingDiscordChannels =
+                                    SeqDict.insert
+                                        userId
+                                        (LoadingDiscordDmChannel time channelId LoadingDiscordChannelMessages)
+                                        adminData.loadingDiscordChannels
+                            }
+                }
 
         ExpandGuild guildId ->
             let
@@ -400,108 +422,6 @@ expandDiscordGuild guildId user =
 collapseDiscordGuild : Discord.Id.Id Discord.Id.GuildId -> BackendUser -> BackendUser
 collapseDiscordGuild guildId user =
     { user | expandedDiscordGuilds = SeqSet.remove guildId user.expandedDiscordGuilds }
-
-
-startReloadingDiscordChannel :
-    Time.Posix
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
-    ->
-        { a
-            | discordGuilds :
-                SeqDict
-                    (Discord.Id.Id Discord.Id.GuildId)
-                    { b
-                        | channels :
-                            SeqDict
-                                (Discord.Id.Id Discord.Id.ChannelId)
-                                { c | isReloading : DiscordChannelReloadingStatus }
-                    }
-        }
-    ->
-        Result
-            ()
-            { a
-                | discordGuilds :
-                    SeqDict
-                        (Discord.Id.Id Discord.Id.GuildId)
-                        { b
-                            | channels :
-                                SeqDict
-                                    (Discord.Id.Id Discord.Id.ChannelId)
-                                    { c | isReloading : DiscordChannelReloadingStatus }
-                        }
-            }
-startReloadingDiscordChannel time guildId channelId adminData =
-    case SeqDict.get guildId adminData.discordGuilds of
-        Just guild ->
-            case SeqDict.get channelId guild.channels of
-                Just channel ->
-                    case channel.isReloading of
-                        DiscordChannel_Reloading _ ->
-                            Err ()
-
-                        _ ->
-                            { adminData
-                                | discordGuilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild
-                                            | channels =
-                                                SeqDict.insert
-                                                    channelId
-                                                    { channel | isReloading = DiscordChannel_Reloading time }
-                                                    guild.channels
-                                        }
-                                        adminData.discordGuilds
-                            }
-                                |> Ok
-
-                Nothing ->
-                    Err ()
-
-        Nothing ->
-            Err ()
-
-
-startReloadingDiscordDmChannel :
-    Time.Posix
-    -> Discord.Id.Id Discord.Id.PrivateChannelId
-    ->
-        { a
-            | discordDmChannels :
-                SeqDict
-                    (Discord.Id.Id Discord.Id.PrivateChannelId)
-                    { b | isReloading : DiscordChannelReloadingStatus }
-        }
-    ->
-        Result
-            ()
-            { a
-                | discordDmChannels :
-                    SeqDict
-                        (Discord.Id.Id Discord.Id.PrivateChannelId)
-                        { b | isReloading : DiscordChannelReloadingStatus }
-            }
-startReloadingDiscordDmChannel time channelId adminData =
-    case SeqDict.get channelId adminData.discordDmChannels of
-        Just channel ->
-            case channel.isReloading of
-                DiscordChannel_Reloading _ ->
-                    Err ()
-
-                _ ->
-                    { adminData
-                        | discordDmChannels =
-                            SeqDict.insert
-                                channelId
-                                { channel | isReloading = DiscordChannel_Reloading time }
-                                adminData.discordDmChannels
-                    }
-                        |> Ok
-
-        Nothing ->
-            Err ()
 
 
 type OutMsg
@@ -943,7 +863,7 @@ update navigationKey time adminData localState msg model =
             ( model, Command.none, GoToHomepage )
 
         PressedReloadDiscordChannel currentUserId guildId channelId ->
-            ( model, Command.none, StartReloadingDiscordChannel time currentUserId guildId channelId |> AdminChange )
+            ( model, Command.none, StartReloadingDiscordGuildChannel time currentUserId guildId channelId |> AdminChange )
 
         PressedReloadDiscordDmChannel currentUserId channelId ->
             ( model, Command.none, StartReloadingDiscordDmChannel time currentUserId channelId |> AdminChange )
@@ -1169,7 +1089,7 @@ pendingChangesText change =
         DeleteGuild _ ->
             "Deleted guild"
 
-        StartReloadingDiscordChannel _ _ _ _ ->
+        StartReloadingDiscordGuildChannel _ _ _ _ ->
             "Reset Discord channel"
 
         StartReloadingDiscordDmChannel _ _ _ ->
@@ -1499,7 +1419,7 @@ discordGuildsSection user adminData =
                                 in
                                 Ui.column
                                     [ Ui.spacing 2, Ui.paddingWith { left = 32, right = 0, top = 0, bottom = 0 } ]
-                                    (List.map (discordGuildChannel userThatCanReload guildId) (SeqDict.toList guild.channels))
+                                    (List.map (discordGuildChannel userThatCanReload guildId adminData) (SeqDict.toList guild.channels))
 
                               else
                                 Ui.none
@@ -1510,46 +1430,77 @@ discordGuildsSection user adminData =
         ]
 
 
+spinner : Element msg
+spinner =
+    Ui.el
+        [ Ui.width (Ui.px channelRowHeight)
+        , Ui.height (Ui.px channelRowHeight)
+        , Ui.contentCenterX
+        , Ui.contentCenterY
+        ]
+        Icons.spinner
+
+
+loadingChannelView : Maybe (LoadingDiscordChannelStep Int) -> Element msg -> Element msg
+loadingChannelView isReloading resetButton2 =
+    case isReloading of
+        Just LoadingDiscordChannelMessages ->
+            Ui.row
+                [ Ui.contentCenterY, Ui.spacing 8 ]
+                [ spinner, Ui.text "Loading messages" ]
+
+        Just (LoadingDiscordChannelAttachments _ attachmentCount) ->
+            Ui.row
+                [ Ui.contentCenterY, Ui.spacing 8 ]
+                [ spinner, Ui.text ("Loading " ++ String.fromInt attachmentCount ++ " attachments") ]
+
+        _ ->
+            resetButton2
+
+
+loadingChannelErrorView : String -> Maybe (LoadingDiscordChannelStep Int) -> Element Msg
+loadingChannelErrorView channelId isReloading =
+    case isReloading of
+        Just (LoadingDiscordChannelMessagesFailed error) ->
+            MyUi.errorBox
+                (Dom.id ("Admin_errorBox_" ++ channelId))
+                PressedCopyText
+                ("Loading messages failed: " ++ Discord.httpErrorToString error)
+
+        _ ->
+            Ui.none
+
+
 discordGuildChannel :
     Maybe (Discord.Id.Id Discord.Id.UserId)
     -> Discord.Id.Id Discord.Id.GuildId
+    -> AdminData
     -> ( Discord.Id.Id Discord.Id.ChannelId, AdminData_DiscordChannel )
     -> Element Msg
-discordGuildChannel maybeUserId guildId ( channelId, channel ) =
+discordGuildChannel maybeUserId guildId adminData ( channelId, channel ) =
+    let
+        isReloading : Maybe (LoadingDiscordChannelStep Int)
+        isReloading =
+            LocalState.isDiscordGuildChannelReloading channelId adminData.loadingDiscordChannels
+    in
     Ui.row
         [ Ui.spacing 8, Ui.Font.size 13 ]
-        [ case channel.isReloading of
-            DiscordChannel_Reloading _ ->
-                Ui.el
-                    [ Ui.width (Ui.px channelRowHeight)
-                    , Ui.height (Ui.px channelRowHeight)
-                    , Ui.contentCenterX
-                    , Ui.contentCenterY
-                    ]
-                    Icons.spinner
+        [ loadingChannelView
+            isReloading
+            (case maybeUserId of
+                Just userId ->
+                    resetButton
+                        (Dom.id ("admin_reloadDiscordChannel_" ++ Discord.Id.toString channelId))
+                        (PressedReloadDiscordChannel userId guildId channelId)
 
-            _ ->
-                case maybeUserId of
-                    Just userId ->
-                        resetButton
-                            (Dom.id ("admin_reloadDiscordChannel_" ++ Discord.Id.toString channelId))
-                            (PressedReloadDiscordChannel userId guildId channelId)
-
-                    Nothing ->
-                        Ui.none
+                Nothing ->
+                    Ui.none
+            )
         , Ui.text ("#" ++ ChannelName.toString channel.name)
         , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
         , firstMessageView channel
         , Ui.text ("Threads: " ++ String.fromInt channel.threadCount)
-        , case channel.isReloading of
-            DiscordChannel_LastReloadFailed _ error ->
-                MyUi.errorBox
-                    (Dom.id "Admin_errorBox")
-                    PressedCopyText
-                    (Discord.httpErrorToString error)
-
-            _ ->
-                Ui.none
+        , loadingChannelErrorView (Discord.Id.toString channelId) isReloading
         ]
 
 
@@ -1601,6 +1552,10 @@ discordDmChannelsSection user adminData =
                 (List.map
                     (\( channelId, channel ) ->
                         let
+                            isReloading : Maybe (LoadingDiscordChannelStep Int)
+                            isReloading =
+                                LocalState.isDiscordDmChannelReloading channelId adminData.loadingDiscordChannels
+
                             userThatCanReload : Maybe (Discord.Id.Id Discord.Id.UserId)
                             userThatCanReload =
                                 SeqSet.intersect
@@ -1623,25 +1578,17 @@ discordDmChannelsSection user adminData =
                         in
                         Ui.row
                             [ Ui.spacing 8, Ui.Font.size 14 ]
-                            [ case channel.isReloading of
-                                DiscordChannel_Reloading _ ->
-                                    Ui.el
-                                        [ Ui.width (Ui.px channelRowHeight)
-                                        , Ui.height (Ui.px channelRowHeight)
-                                        , Ui.contentCenterX
-                                        , Ui.contentCenterY
-                                        ]
-                                        Icons.spinner
+                            [ loadingChannelView
+                                isReloading
+                                (case userThatCanReload of
+                                    Just userId ->
+                                        resetButton
+                                            (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.Id.toString channelId))
+                                            (PressedReloadDiscordDmChannel userId channelId)
 
-                                _ ->
-                                    case userThatCanReload of
-                                        Just userId ->
-                                            resetButton
-                                                (Dom.id ("admin_reloadDiscordDmChannel_" ++ Discord.Id.toString channelId))
-                                                (PressedReloadDiscordDmChannel userId channelId)
-
-                                        Nothing ->
-                                            Ui.none
+                                    Nothing ->
+                                        Ui.none
+                                )
                             , Ui.text (Discord.Id.toString channelId)
                             , Ui.row
                                 [ Ui.spacing 8 ]
@@ -1660,15 +1607,7 @@ discordDmChannelsSection user adminData =
                                 ]
                             , Ui.text ("Messages: " ++ String.fromInt channel.messageCount)
                             , firstMessageView channel
-                            , case channel.isReloading of
-                                DiscordChannel_LastReloadFailed _ error ->
-                                    MyUi.errorBox
-                                        (Dom.id "Admin_dmChannel_errorBox")
-                                        PressedCopyText
-                                        (Discord.httpErrorToString error)
-
-                                _ ->
-                                    Ui.none
+                            , loadingChannelErrorView (Discord.Id.toString channelId) isReloading
                             , MyUi.deleteButton (deleteDiscordDmChannelButtonId channelId) (PressedDeleteDiscordDmChannel channelId)
                             ]
                     )

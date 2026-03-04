@@ -36,8 +36,6 @@ module Types exposing
     , NeedsAuthAgainData
     , NewChannelForm
     , NewGuildForm
-    , ReloadedDiscordChannelData
-    , ReloadedDiscordDmChannelData
     , RevealedSpoilers
     , ScrollPosition(..)
     , ServerChange(..)
@@ -76,7 +74,7 @@ import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, DiscordGuildOrD
 import ImageEditor
 import List.Nonempty exposing (Nonempty)
 import Local exposing (ChangeId, Local)
-import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LocalState, PrivateVapidKey)
+import LocalState exposing (BackendGuild, DiscordBackendGuild, DiscordFrontendGuild, FrontendGuild, JoinGuildError, LoadingDiscordChannel, LocalState, PrivateVapidKey)
 import Log exposing (Log)
 import LoginForm exposing (LoginForm)
 import Maybe exposing (Maybe)
@@ -304,6 +302,7 @@ type alias BackendModel =
     , pendingDiscordCreateMessages : SeqDict ( Discord.Id.Id Discord.Id.UserId, Discord.Id.Id Discord.Id.ChannelId ) ( ClientId, ChangeId )
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
+    , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel (List Discord.Message))
     }
 
 
@@ -633,21 +632,10 @@ type BackendMsg
     | WebsocketSentDataForUser (Discord.Id.Id Discord.Id.UserId) (Result Websocket.SendError ())
     | DiscordMessageCreate_AttachmentsUploaded Discord.Message (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
     | DiscordMessageUpdate_AttachmentsUploaded Discord.UserMessageUpdate (List (Result Http.Error ( Discord.Id.Id Discord.Id.AttachmentId, FileStatus.UploadResponse )))
-    | ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ReloadedDiscordChannelData)
-    | ReloadedDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError ReloadedDiscordDmChannelData)
-
-
-type alias ReloadedDiscordDmChannelData =
-    { messages : List Discord.Message
-    , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
-    }
-
-
-type alias ReloadedDiscordChannelData =
-    { messages : List Discord.Message
-    , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
-    , threads : List DiscordThreadReadyData
-    }
+    | ReloadedDiscordGuildChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
+    | ReloadedDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
+    | GotDiscordGuildChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError (List Discord.Message))
+    | GotDiscordDmChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
 
 
 type alias DiscordThreadReadyData =
@@ -768,8 +756,7 @@ type ServerChange
             }
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
-    | Server_ReloadedDiscordChannel Time.Posix (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError ())
-    | Server_ReloadedDiscordDmChannel Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError ())
+    | Server_LoadingDiscordChannelChanged (Discord.Id.Id Discord.Id.UserId) (Maybe (LoadingDiscordChannel Int))
 
 
 type LocalChange

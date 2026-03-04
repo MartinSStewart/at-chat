@@ -15,7 +15,7 @@ import Discord.Id
 import Discord.Markdown
 import DiscordAttachmentId exposing (DiscordAttachmentId)
 import DiscordSync
-import DmChannel exposing (DiscordChannelReloadingStatus(..), DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Http as Http
@@ -38,7 +38,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), PrivateVapidKey(..))
+import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
 import Log exposing (Log)
 import LoginForm
 import Message exposing (Message(..))
@@ -181,6 +181,7 @@ init =
       , pendingDiscordCreateMessages = SeqDict.empty
       , pendingDiscordCreateDmMessages = SeqDict.empty
       , discordAttachments = SeqDict.empty
+      , loadingDiscordChannels = SeqDict.empty
       }
     , Command.none
     )
@@ -201,7 +202,6 @@ adminData model lastLogPageViewed =
                 { members = channel.members
                 , messageCount = Array.length channel.messages
                 , firstMessage = Array.get 0 channel.messages
-                , isReloading = channel.isReloading
                 }
             )
             model.discordDmChannels
@@ -235,7 +235,6 @@ adminData model lastLogPageViewed =
                             { name = channel.name
                             , messageCount = Array.length channel.messages
                             , threadCount = SeqDict.size channel.threads
-                            , isReloading = channel.isReloading
                             , firstMessage = Array.get 0 channel.messages
                             }
                         )
@@ -262,6 +261,14 @@ adminData model lastLogPageViewed =
                 }
             )
             model.guilds
+    , loadingDiscordChannels =
+        SeqDict.map
+            (\_ channel ->
+                LocalState.loadingDiscordChannelMap
+                    (List.foldl (\message count -> count + List.length message.attachments) 0)
+                    channel
+            )
+            model.loadingDiscordChannels
     }
 
 
@@ -780,7 +787,6 @@ update msg model =
                                                                     , linkedMessageIds = OneToOne.empty
                                                                     , members =
                                                                         List.foldl NonemptySet.insert (NonemptySet.singleton discordUserId) data.members
-                                                                    , isReloading = DiscordChannel_NotReloading
                                                                     }
                                                                         |> Just
                                                         )
@@ -922,128 +928,223 @@ update msg model =
             in
             DiscordSync.handleDiscordEditMessage message attachments { model | discordAttachments = discordAttachments }
 
-        ReloadedDiscordChannel time guildId channelId result ->
-            case LocalState.getDiscordGuildAndChannel guildId channelId model of
-                Just ( guild, channel ) ->
-                    let
-                        ( attachments3, channel2 ) =
-                            case result of
-                                Ok { messages, attachments, threads } ->
-                                    let
-                                        attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
-                                        attachments2 =
-                                            List.foldl
-                                                (\thread dict ->
-                                                    DiscordSync.addUploadResponsesToDiscordAttachments thread.uploadResponses dict
-                                                )
-                                                (DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments)
-                                                threads
+        ReloadedDiscordGuildChannel userIdToLoadWith guildId channelId attachments ->
+            case ( LocalState.getDiscordGuildAndChannel guildId channelId model, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
+                ( Just ( guild, channel ), Just (LoadingDiscordGuildChannel _ guildIdB channelIdB (LoadingDiscordChannelAttachments _ messages)) ) ->
+                    if guildId == guildIdB && channelId == channelIdB then
+                        let
+                            attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
+                            attachments2 =
+                                DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
 
-                                        ( messages2, linkedMessageIds ) =
-                                            DiscordSync.messagesAndLinks (List.reverse messages) attachments2
-                                    in
-                                    ( attachments2
-                                    , { channel
-                                        | isReloading = DiscordChannel_NotReloading
-                                        , messages = messages2
-                                        , linkedMessageIds = linkedMessageIds
-                                        , threads =
-                                            List.filterMap
-                                                (\thread ->
-                                                    case
-                                                        OneToOne.second
-                                                            (Discord.Id.toUInt64 thread.channel.id |> Discord.Id.fromUInt64)
-                                                            linkedMessageIds
-                                                    of
-                                                        Just channelMessageIndex ->
-                                                            let
-                                                                ( messages3, links ) =
-                                                                    DiscordSync.messagesAndLinks thread.messages attachments2
-                                                            in
-                                                            ( channelMessageIndex
-                                                            , { messages = messages3
-                                                              , lastTypedAt = SeqDict.empty
-                                                              , linkedMessageIds = links
-                                                              }
-                                                            )
-                                                                |> Just
+                            ( messages2, linkedMessageIds ) =
+                                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
 
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                                threads
-                                                |> SeqDict.fromList
-                                      }
-                                    )
+                            --( attachments3, channel2 ) =
+                            --case result of
+                            --    Ok { messages, attachments, threads } ->
+                            --        let
+                            --            attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
+                            --            attachments2 =
+                            --                List.foldl
+                            --                    (\thread dict ->
+                            --                        DiscordSync.addUploadResponsesToDiscordAttachments thread.uploadResponses dict
+                            --                    )
+                            --                    (DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments)
+                            --                    threads
+                            --
+                            --            ( messages2, linkedMessageIds ) =
+                            --                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
+                            --        in
+                            --        ( attachments2
+                            --        , { channel
+                            --            | messages = messages2
+                            --            , linkedMessageIds = linkedMessageIds
+                            --            , threads =
+                            --                List.filterMap
+                            --                    (\thread ->
+                            --                        case
+                            --                            OneToOne.second
+                            --                                (Discord.Id.toUInt64 thread.channel.id |> Discord.Id.fromUInt64)
+                            --                                linkedMessageIds
+                            --                        of
+                            --                            Just channelMessageIndex ->
+                            --                                let
+                            --                                    ( messages3, links ) =
+                            --                                        DiscordSync.messagesAndLinks thread.messages attachments2
+                            --                                in
+                            --                                ( channelMessageIndex
+                            --                                , { messages = messages3
+                            --                                  , lastTypedAt = SeqDict.empty
+                            --                                  , linkedMessageIds = links
+                            --                                  }
+                            --                                )
+                            --                                    |> Just
+                            --
+                            --                            Nothing ->
+                            --                                Nothing
+                            --                    )
+                            --                    threads
+                            --                    |> SeqDict.fromList
+                            --          }
+                            --        )
+                            model2 : BackendModel
+                            model2 =
+                                { model
+                                    | discordGuilds =
+                                        SeqDict.insert
+                                            guildId
+                                            { guild
+                                                | channels =
+                                                    SeqDict.insert
+                                                        channelId
+                                                        { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                                                        guild.channels
+                                            }
+                                            model.discordGuilds
+                                    , discordAttachments = attachments2
+                                    , loadingDiscordChannels = SeqDict.remove userIdToLoadWith model.loadingDiscordChannels
+                                }
+                        in
+                        ( model2
+                        , Server_LoadingDiscordChannelChanged userIdToLoadWith Nothing
+                            |> ServerChange
+                            |> Broadcast.toAdmins model2
+                        )
 
-                                Err error ->
-                                    ( model.discordAttachments
-                                    , { channel | isReloading = DiscordChannel_LastReloadFailed time error }
-                                    )
+                    else
+                        ( model, Command.none )
 
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | discordGuilds =
-                                    SeqDict.insert
-                                        guildId
-                                        { guild | channels = SeqDict.insert channelId channel2 guild.channels }
-                                        model.discordGuilds
-                                , discordAttachments = attachments3
-                            }
-                    in
-                    ( model2
-                    , Server_ReloadedDiscordChannel time guildId channelId (Result.map (\_ -> ()) result)
-                        |> ServerChange
-                        |> Broadcast.toAdmins model2
-                    )
-
-                Nothing ->
+                _ ->
                     ( model, Command.none )
 
-        ReloadedDiscordDmChannel time channelId result ->
-            case SeqDict.get channelId model.discordDmChannels of
-                Just channel ->
-                    let
-                        ( attachments3, channel2 ) =
-                            case result of
-                                Ok { messages, attachments } ->
-                                    let
-                                        attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
-                                        attachments2 =
-                                            DiscordSync.addUploadResponsesToDiscordAttachments attachments model.discordAttachments
+        ReloadedDiscordDmChannel userIdToLoadWith channelId attachments ->
+            case ( SeqDict.get channelId model.discordDmChannels, SeqDict.get userIdToLoadWith model.loadingDiscordChannels ) of
+                ( Just channel, Just (LoadingDiscordDmChannel _ channelIdB (LoadingDiscordChannelAttachments _ messages)) ) ->
+                    if channelId == channelIdB then
+                        let
+                            attachments2 : SeqDict DiscordAttachmentId DiscordAttachmentData
+                            attachments2 =
+                                DiscordSync.addUploadResponsesToDiscordAttachments
+                                    attachments
+                                    model.discordAttachments
 
-                                        ( messages2, linkedMessageIds ) =
-                                            DiscordSync.messagesAndLinks (List.reverse messages) attachments2
-                                    in
-                                    ( attachments2
-                                    , { channel
-                                        | isReloading = DiscordChannel_NotReloading
-                                        , messages = messages2
-                                        , linkedMessageIds = linkedMessageIds
-                                      }
-                                    )
+                            ( messages2, linkedMessageIds ) =
+                                DiscordSync.messagesAndLinks (List.reverse messages) attachments2
 
-                                Err error ->
-                                    ( model.discordAttachments
-                                    , { channel | isReloading = DiscordChannel_LastReloadFailed time error }
-                                    )
+                            model2 : BackendModel
+                            model2 =
+                                { model
+                                    | discordDmChannels =
+                                        SeqDict.insert
+                                            channelId
+                                            { channel | messages = messages2, linkedMessageIds = linkedMessageIds }
+                                            model.discordDmChannels
+                                    , discordAttachments = attachments2
+                                    , loadingDiscordChannels =
+                                        SeqDict.remove
+                                            userIdToLoadWith
+                                            model.loadingDiscordChannels
+                                }
+                        in
+                        ( model2
+                        , Server_LoadingDiscordChannelChanged userIdToLoadWith Nothing
+                            |> ServerChange
+                            |> Broadcast.toAdmins model2
+                        )
 
-                        model2 : BackendModel
-                        model2 =
-                            { model
-                                | discordDmChannels =
-                                    SeqDict.insert channelId channel2 model.discordDmChannels
-                                , discordAttachments = attachments3
-                            }
-                    in
-                    ( model2
-                    , Server_ReloadedDiscordDmChannel time channelId (Result.map (\_ -> ()) result)
-                        |> ServerChange
-                        |> Broadcast.toAdmins model2
-                    )
+                    else
+                        ( model, Command.none )
 
-                Nothing ->
+                _ ->
+                    ( model, Command.none )
+
+        GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId result ->
+            case SeqDict.get userIdToLoadWith model.loadingDiscordChannels of
+                Just (LoadingDiscordGuildChannel startTime loadingGuildId loadingChannelId LoadingDiscordChannelMessages) ->
+                    if guildId == loadingGuildId && channelId == loadingChannelId then
+                        let
+                            loading : LoadingDiscordChannel (List Discord.Message)
+                            loading =
+                                (case result of
+                                    Ok messages ->
+                                        LoadingDiscordChannelAttachments time messages
+
+                                    Err error ->
+                                        LoadingDiscordChannelMessagesFailed error
+                                )
+                                    |> LoadingDiscordGuildChannel startTime loadingGuildId loadingChannelId
+                        in
+                        ( { model
+                            | loadingDiscordChannels =
+                                SeqDict.insert userIdToLoadWith loading model.loadingDiscordChannels
+                          }
+                        , Command.batch
+                            [ case result of
+                                Ok messages ->
+                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                        |> Task.perform (ReloadedDiscordGuildChannel userIdToLoadWith guildId channelId)
+
+                                Err _ ->
+                                    Command.none
+                            , LocalState.loadingDiscordChannelMap
+                                (List.foldl (\message count -> count + List.length message.attachments) 0)
+                                loading
+                                |> Just
+                                |> Server_LoadingDiscordChannelChanged userIdToLoadWith
+                                |> ServerChange
+                                |> Broadcast.toAdmins model
+                            ]
+                        )
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
+                    ( model, Command.none )
+
+        GotDiscordDmChannelMessages time userIdToLoadWith channelId result ->
+            case SeqDict.get userIdToLoadWith model.loadingDiscordChannels of
+                Just (LoadingDiscordDmChannel startTime loadingChannelId LoadingDiscordChannelMessages) ->
+                    if channelId == loadingChannelId then
+                        let
+                            loading : LoadingDiscordChannel (List Discord.Message)
+                            loading =
+                                (case result of
+                                    Ok messages ->
+                                        LoadingDiscordChannelAttachments time messages
+
+                                    Err error ->
+                                        LoadingDiscordChannelMessagesFailed error
+                                )
+                                    |> LoadingDiscordDmChannel startTime loadingChannelId
+                        in
+                        ( { model
+                            | loadingDiscordChannels =
+                                SeqDict.insert userIdToLoadWith loading model.loadingDiscordChannels
+                          }
+                        , Command.batch
+                            [ case result of
+                                Ok messages ->
+                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                        |> Task.perform (ReloadedDiscordDmChannel userIdToLoadWith channelId)
+
+                                Err _ ->
+                                    Command.none
+                            , LocalState.loadingDiscordChannelMap
+                                (List.foldl (\message count -> count + List.length message.attachments) 0)
+                                loading
+                                |> Just
+                                |> Server_LoadingDiscordChannelChanged userIdToLoadWith
+                                |> ServerChange
+                                |> Broadcast.toAdmins model
+                            ]
+                        )
+
+                    else
+                        ( model, Command.none )
+
+                _ ->
                     ( model, Command.none )
 
 
@@ -4528,71 +4629,90 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                 ]
             )
 
-        Pages.Admin.StartReloadingDiscordChannel _ currentUserId guildId channelId ->
+        Pages.Admin.StartReloadingDiscordGuildChannel _ userIdToLoadWith guildId channelId ->
             case
-                ( SeqDict.get currentUserId model.discordUsers
-                , Pages.Admin.startReloadingDiscordChannel time guildId channelId model
+                ( SeqDict.get userIdToLoadWith model.discordUsers
+                , LocalState.isDiscordGuildChannelReloading channelId model.loadingDiscordChannels
+                , LocalState.userIsLoadingDiscordChannel userIdToLoadWith model.loadingDiscordChannels
                 )
             of
-                ( Just (FullData discordUser), Ok model2 ) ->
+                ( Just (FullData discordUser), Nothing, False ) ->
                     let
                         auth =
                             Discord.userToken discordUser.auth
                     in
-                    ( model2
+                    ( { model
+                        | loadingDiscordChannels =
+                            SeqDict.insert
+                                userIdToLoadWith
+                                (LoadingDiscordGuildChannel time guildId channelId LoadingDiscordChannelMessages)
+                                model.loadingDiscordChannels
+                      }
                     , Command.batch
-                        [ Pages.Admin.StartReloadingDiscordChannel time currentUserId guildId channelId
+                        [ Pages.Admin.StartReloadingDiscordGuildChannel time userIdToLoadWith guildId channelId
                             |> Local_Admin
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
-                        , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
-                        , Task.map2
-                            Tuple.pair
-                            (DiscordSync.getManyMessages auth { channelId = channelId, limit = reloadChannelMaxMessages })
-                            (DiscordSync.getChannelThreads auth guildId channelId model2)
-                            |> Task.andThen
-                                (\( messages, threads ) ->
-                                    Task.map
-                                        (\attachments ->
-                                            { messages = messages, attachments = attachments, threads = threads }
-                                        )
-                                        (DiscordSync.uploadAttachmentsForMessages model2 messages)
-                                )
-                            |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
+                        , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
+                        , DiscordSync.getManyMessages auth { channelId = channelId, limit = reloadChannelMaxMessages }
+                            |> Task.attempt (GotDiscordGuildChannelMessages time userIdToLoadWith guildId channelId)
+
+                        --(DiscordSync.getChannelThreads auth guildId channelId model)
+                        --|> Task.andThen
+                        --    (\( messages, threads ) ->
+                        --        Task.map
+                        --            (\attachments ->
+                        --                { messages = messages, attachments = attachments, threads = threads }
+                        --            )
+                        --            (DiscordSync.uploadAttachmentsForMessages model messages)
+                        --    )
+                        --|> Task.attempt (ReloadedDiscordChannel time userIdToLoadWith guildId channelId)
                         ]
                     )
 
                 _ ->
                     ( model, invalidChangeResponse changeId clientId )
 
-        Pages.Admin.StartReloadingDiscordDmChannel _ currentUserId channelId ->
+        Pages.Admin.StartReloadingDiscordDmChannel _ userIdToLoadWith channelId ->
             case
-                ( SeqDict.get currentUserId model.discordUsers
-                , Pages.Admin.startReloadingDiscordDmChannel time channelId model
+                ( SeqDict.get userIdToLoadWith model.discordUsers
+                , LocalState.isDiscordDmChannelReloading channelId model.loadingDiscordChannels
+                , LocalState.userIsLoadingDiscordChannel userIdToLoadWith model.loadingDiscordChannels
                 )
             of
-                ( Just (FullData discordUser), Ok model2 ) ->
-                    ( model2
+                ( Just (FullData discordUser), Nothing, False ) ->
+                    ( { model
+                        | loadingDiscordChannels =
+                            SeqDict.insert
+                                userIdToLoadWith
+                                (LoadingDiscordDmChannel time channelId LoadingDiscordChannelMessages)
+                                model.loadingDiscordChannels
+                      }
                     , Command.batch
-                        [ Pages.Admin.StartReloadingDiscordDmChannel time currentUserId channelId
+                        [ Pages.Admin.StartReloadingDiscordDmChannel time userIdToLoadWith channelId
                             |> Local_Admin
                             |> LocalChangeResponse changeId
                             |> Lamdera.sendToFrontend clientId
-                        , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                        , Broadcast.toOtherAdmins clientId model (LocalChange userId localMsg)
                         , DiscordSync.getManyMessages
                             (Discord.userToken discordUser.auth)
                             { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
-                            |> Task.andThen
-                                (\messages ->
-                                    DiscordSync.uploadAttachmentsForMessages model2 messages
-                                        |> Task.map
-                                            (\attachments ->
-                                                { messages = messages
-                                                , attachments = attachments
-                                                }
-                                            )
-                                )
-                            |> Task.attempt (ReloadedDiscordDmChannel time channelId)
+                            |> Task.attempt (GotDiscordDmChannelMessages time userIdToLoadWith channelId)
+
+                        --, DiscordSync.getManyMessages
+                        --    (Discord.userToken discordUser.auth)
+                        --    { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
+                        --    |> Task.andThen
+                        --        (\messages ->
+                        --            DiscordSync.uploadAttachmentsForMessages model messages
+                        --                |> Task.map
+                        --                    (\attachments ->
+                        --                        { messages = messages
+                        --                        , attachments = attachments
+                        --                        }
+                        --                    )
+                        --        )
+                        --    |> Task.attempt (ReloadedDiscordDmChannel time userIdToLoadWith channelId)
                         ]
                     )
 
