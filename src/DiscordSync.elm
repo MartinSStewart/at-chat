@@ -1,6 +1,5 @@
 module DiscordSync exposing
-    ( addDiscordDms
-    , addDiscordGuilds
+    ( addDiscordChannel
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
     , backendSessionIdHash
@@ -658,105 +657,6 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
         )
         existingDiscordAttachments
         uploadResponses
-
-
-addDiscordDms :
-    Discord.Id.Id Discord.Id.UserId
-    -> List { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId, members : List (Discord.Id.Id Discord.Id.UserId) }
-    -> BackendModel
-    -> BackendModel
-addDiscordDms currentUserId dmChannels model =
-    { model
-        | discordDmChannels =
-            List.foldl
-                (\data dmChannels2 ->
-                    SeqDict.update
-                        data.dmChannelId
-                        (\maybe ->
-                            case maybe of
-                                Just _ ->
-                                    maybe
-
-                                Nothing ->
-                                    { messages = Array.empty
-                                    , lastTypedAt = SeqDict.empty
-                                    , linkedMessageIds = OneToOne.empty
-                                    , members =
-                                        List.foldl NonemptySet.insert (NonemptySet.singleton currentUserId) data.members
-                                    , isReloading = DiscordChannel_NotReloading
-                                    }
-                                        |> Just
-                        )
-                        dmChannels2
-                )
-                model.discordDmChannels
-                dmChannels
-    }
-
-
-addDiscordGuilds :
-    Time.Posix
-    -> Discord.Id.Id Discord.Id.UserId
-    ->
-        SeqDict
-            (Discord.Id.Id Discord.Id.GuildId)
-            { guild : Discord.GatewayGuild
-            , channels : List Discord.Channel
-            , icon : Maybe FileStatus.UploadResponse
-            }
-    -> BackendModel
-    -> BackendModel
-addDiscordGuilds time userId guilds model =
-    { model
-        | discordGuilds =
-            SeqDict.foldl
-                (\guildId data discordGuilds ->
-                    SeqDict.updateIfExists
-                        guildId
-                        (\guild ->
-                            { name = GuildName.fromStringLossy data.guild.properties.name
-                            , icon = Maybe.map .fileHash data.icon
-                            , channels =
-                                List.foldl
-                                    (\channel channels ->
-                                        SeqDict.update
-                                            channel.id
-                                            (\maybe ->
-                                                case maybe of
-                                                    Just _ ->
-                                                        maybe
-
-                                                    Nothing ->
-                                                        addDiscordChannel channel
-                                            )
-                                            channels
-                                    )
-                                    guild.channels
-                                    data.channels
-                            , members =
-                                if userId == data.guild.properties.ownerId then
-                                    guild.members
-
-                                else
-                                    -- Make sure the current user is included in the guild they loaded
-                                    SeqDict.update userId
-                                        (\maybe ->
-                                            case maybe of
-                                                Just _ ->
-                                                    maybe
-
-                                                Nothing ->
-                                                    Just { joinedAt = time }
-                                        )
-                                        guild.members
-                            , owner = data.guild.properties.ownerId
-                            }
-                        )
-                        discordGuilds
-                )
-                model.discordGuilds
-                guilds
-    }
 
 
 referencedMessageToMessageId :

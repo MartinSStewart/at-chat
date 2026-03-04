@@ -30,6 +30,7 @@ import EmailAddress exposing (EmailAddress)
 import Emoji
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
+import GuildName
 import Hex
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
@@ -708,18 +709,86 @@ update msg model =
                                     SeqDict.fromList guildData
 
                                 model2 =
-                                    DiscordSync.addDiscordGuilds
-                                        time
-                                        discordUserId
-                                        guildDataDict
-                                        { model
-                                            | discordUsers =
-                                                SeqDict.insert
-                                                    discordUserId
-                                                    (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
-                                                    model.discordUsers
-                                        }
-                                        |> DiscordSync.addDiscordDms discordUserId dmData
+                                    { model
+                                        | discordUsers =
+                                            SeqDict.insert
+                                                discordUserId
+                                                (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
+                                                model.discordUsers
+                                        , discordGuilds =
+                                            SeqDict.foldl
+                                                (\guildId data discordGuilds ->
+                                                    SeqDict.updateIfExists
+                                                        guildId
+                                                        (\guild ->
+                                                            { name = GuildName.fromStringLossy data.guild.properties.name
+                                                            , icon = Maybe.map .fileHash data.icon
+                                                            , channels =
+                                                                List.foldl
+                                                                    (\channel channels ->
+                                                                        SeqDict.update
+                                                                            channel.id
+                                                                            (\maybe ->
+                                                                                case maybe of
+                                                                                    Just _ ->
+                                                                                        maybe
+
+                                                                                    Nothing ->
+                                                                                        DiscordSync.addDiscordChannel channel
+                                                                            )
+                                                                            channels
+                                                                    )
+                                                                    guild.channels
+                                                                    data.channels
+                                                            , members =
+                                                                if discordUserId == data.guild.properties.ownerId then
+                                                                    guild.members
+
+                                                                else
+                                                                    -- Make sure the current user is included in the guild they loaded
+                                                                    SeqDict.update
+                                                                        discordUserId
+                                                                        (\maybe ->
+                                                                            case maybe of
+                                                                                Just _ ->
+                                                                                    maybe
+
+                                                                                Nothing ->
+                                                                                    Just { joinedAt = time }
+                                                                        )
+                                                                        guild.members
+                                                            , owner = data.guild.properties.ownerId
+                                                            }
+                                                        )
+                                                        discordGuilds
+                                                )
+                                                model.discordGuilds
+                                                guildDataDict
+                                        , discordDmChannels =
+                                            List.foldl
+                                                (\data dmChannels2 ->
+                                                    SeqDict.update
+                                                        data.dmChannelId
+                                                        (\maybe ->
+                                                            case maybe of
+                                                                Just _ ->
+                                                                    maybe
+
+                                                                Nothing ->
+                                                                    { messages = Array.empty
+                                                                    , lastTypedAt = SeqDict.empty
+                                                                    , linkedMessageIds = OneToOne.empty
+                                                                    , members =
+                                                                        List.foldl NonemptySet.insert (NonemptySet.singleton discordUserId) data.members
+                                                                    , isReloading = DiscordChannel_NotReloading
+                                                                    }
+                                                                        |> Just
+                                                        )
+                                                        dmChannels2
+                                                )
+                                                model.discordDmChannels
+                                                dmData
+                                    }
 
                                 ( otherDiscordUsers, linkedDiscordUsers ) =
                                     getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
