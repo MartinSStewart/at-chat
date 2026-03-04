@@ -4556,7 +4556,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                                         (\attachments ->
                                             { messages = messages, attachments = attachments, threads = threads }
                                         )
-                                        (DiscordSync.uploadAttachmentsForMessages model messages)
+                                        (DiscordSync.uploadAttachmentsForMessages model2 messages)
                                 )
                             |> Task.attempt (ReloadedDiscordChannel time guildId channelId)
                         ]
@@ -4584,7 +4584,7 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
                             { channelId = Discord.Id.toUInt64 channelId |> Discord.Id.fromUInt64, limit = reloadChannelMaxMessages }
                             |> Task.andThen
                                 (\messages ->
-                                    DiscordSync.uploadAttachmentsForMessages model messages
+                                    DiscordSync.uploadAttachmentsForMessages model2 messages
                                         |> Task.map
                                             (\attachments ->
                                                 { messages = messages

@@ -52,8 +52,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordDmChannelReadyData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
-import Unsafe
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -1602,7 +1601,7 @@ getChannelThreads :
     -> Discord.Id.Id Discord.Id.ChannelId
     -> BackendModel
     -> Task BackendOnly x (List DiscordThreadReadyData)
-getChannelThreads auth guildId channelId model =
+getChannelThreads _ _ _ _ =
     Task.succeed []
 
 

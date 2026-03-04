@@ -26,7 +26,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
-import ChannelName exposing (ChannelName)
+import ChannelName
 import Discord
 import Discord.Id
 import DmChannel exposing (DiscordChannelReloadingStatus(..))
@@ -38,22 +38,21 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
-import GuildName exposing (GuildName)
+import GuildName
 import Html.Attributes
 import Html.Events
 import Icons
-import Id exposing (ChannelId, ChannelMessageId, GuildId, Id, UserId)
+import Id exposing (GuildId, Id, UserId)
 import Json.Decode
-import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminData_GuildChannel, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
+import LocalState exposing (AdminData, AdminData_DiscordChannel, AdminData_DiscordDmChannel, AdminData_DiscordGuild, AdminData_Guild, AdminStatus(..), DiscordUserData_ForAdmin(..), LocalState, LogWithTime, PrivateVapidKey(..))
 import Log
 import Message exposing (Message)
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
-import NonemptySet exposing (NonemptySet)
+import NonemptySet
 import Pagination exposing (Pagination)
 import PersonName
 import Ports
-import RichText
 import Route
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
@@ -106,8 +105,7 @@ type Msg
     | PressedReloadDiscordChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId)
     | PressedReloadDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedCopyText String
-    | TypedDiscordGuildChannelFirstMessage
-    | TypedDiscordDmChannelFirstMessage
+    | TypedInReadOnlyTextInput
 
 
 type ToBackend
@@ -953,10 +951,7 @@ update navigationKey time adminData localState msg model =
         PressedCopyText string ->
             ( model, Command.none, CopyToClipboard string )
 
-        TypedDiscordGuildChannelFirstMessage ->
-            ( model, Command.none, NoOutMsg )
-
-        TypedDiscordDmChannelFirstMessage ->
+        TypedInReadOnlyTextInput ->
             ( model, Command.none, NoOutMsg )
 
 
@@ -1577,7 +1572,7 @@ firstMessageView channel =
                     , Ui.height (Ui.px channelRowHeight)
                     ]
                     { text = LocalState.messageToString SeqDict.empty firstMessage
-                    , onChange = \_ -> TypedDiscordGuildChannelFirstMessage
+                    , onChange = \_ -> TypedInReadOnlyTextInput
                     , label = firstMessageLabel.id
                     , placeholder = Nothing
                     }

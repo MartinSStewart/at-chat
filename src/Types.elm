@@ -6,7 +6,6 @@ module Types exposing
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , DiscordBasicUserData
-    , DiscordDmChannelReadyData
     , DiscordExport
     , DiscordFullUserData
     , DiscordFullUserDataExport
@@ -648,14 +647,6 @@ type alias ReloadedDiscordChannelData =
     { messages : List Discord.Message
     , attachments : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     , threads : List DiscordThreadReadyData
-    }
-
-
-type alias DiscordDmChannelReadyData =
-    { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
-    , dmChannel : DiscordDmChannel
-    , messages : List Discord.Message
-    , uploadResponses : List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse ))
     }
 
 

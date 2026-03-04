@@ -7,7 +7,6 @@ module DmChannel exposing
     , FrontendDmChannel
     , backendInit
     , channelIdFromUserIds
-    , discordBackendInit
     , frontendInit
     , getArray
     , latestMessageId
@@ -26,7 +25,6 @@ import Discord
 import Discord.Id
 import Effect.Time as Time
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
-import List.Nonempty exposing (Nonempty(..))
 import Message exposing (Message, MessageState(..))
 import NonemptySet exposing (NonemptySet)
 import OneToOne exposing (OneToOne)
@@ -85,16 +83,6 @@ backendInit =
     { messages = Array.empty
     , lastTypedAt = SeqDict.empty
     , threads = SeqDict.empty
-    }
-
-
-discordBackendInit : Discord.Id.Id Discord.Id.UserId -> Discord.PrivateChannel -> DiscordDmChannel
-discordBackendInit currentUserId channel =
-    { messages = Array.empty
-    , lastTypedAt = SeqDict.empty
-    , linkedMessageIds = OneToOne.empty
-    , members = NonemptySet.fromNonemptyList (Nonempty currentUserId channel.recipientIds)
-    , isReloading = DiscordChannel_NotReloading
     }
 
 
