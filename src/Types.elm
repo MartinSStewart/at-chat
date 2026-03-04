@@ -618,7 +618,7 @@ type BackendMsg
             Discord.HttpError
             ( List
                 { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId
-                , dmChannel : DiscordDmChannel
+                , members : List (Discord.Id.Id Discord.Id.UserId)
                 }
             , List
                 ( Discord.Id.Id Discord.Id.GuildId

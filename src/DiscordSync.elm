@@ -1,5 +1,6 @@
 module DiscordSync exposing
-    ( addDiscordGuilds
+    ( addDiscordDms
+    , addDiscordGuilds
     , addUploadResponsesToDiscordAttachments
     , attachmentsToFileData
     , backendSessionIdHash
@@ -659,6 +660,40 @@ addUploadResponsesToDiscordAttachments uploadResponses existingDiscordAttachment
         uploadResponses
 
 
+addDiscordDms :
+    Discord.Id.Id Discord.Id.UserId
+    -> List { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId, members : List (Discord.Id.Id Discord.Id.UserId) }
+    -> BackendModel
+    -> BackendModel
+addDiscordDms currentUserId dmChannels model =
+    { model
+        | discordDmChannels =
+            List.foldl
+                (\data dmChannels2 ->
+                    SeqDict.update
+                        data.dmChannelId
+                        (\maybe ->
+                            case maybe of
+                                Just _ ->
+                                    maybe
+
+                                Nothing ->
+                                    { messages = Array.empty
+                                    , lastTypedAt = SeqDict.empty
+                                    , linkedMessageIds = OneToOne.empty
+                                    , members =
+                                        List.foldl NonemptySet.insert (NonemptySet.singleton currentUserId) data.members
+                                    , isReloading = DiscordChannel_NotReloading
+                                    }
+                                        |> Just
+                        )
+                        dmChannels2
+                )
+                model.discordDmChannels
+                dmChannels
+    }
+
+
 addDiscordGuilds :
     Time.Posix
     -> Discord.Id.Id Discord.Id.UserId
@@ -1278,7 +1313,7 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                         Discord.UserOutMsg_ReadyData readyData ->
                             let
                                 ( model3, cmd2 ) =
-                                    handleReadyData userData readyData model2
+                                    handleReadyData readyData model2
                             in
                             ( model3, cmd2 :: cmds )
 
@@ -1525,25 +1560,21 @@ handleReadySupplementalData data model =
             model
 
 
-handleReadyData : DiscordFullUserData -> Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
-handleReadyData discordUser readyData model =
+handleReadyData : Discord.ReadyData -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
+handleReadyData readyData model =
     let
-        discordDmChannels : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordDmChannel
+        discordDmChannels : List { dmChannelId : Discord.Id.Id Discord.Id.PrivateChannelId, members : List (Discord.Id.Id Discord.Id.UserId) }
         discordDmChannels =
             case readyData.privateChannels of
                 Included privateChannels ->
-                    List.foldl
-                        (\dmChannel dmChannels ->
-                            SeqDict.insert
-                                dmChannel.id
-                                (DmChannel.discordBackendInit readyData.user.id dmChannel)
-                                dmChannels
+                    List.map
+                        (\dmChannel ->
+                            { dmChannelId = dmChannel.id, members = dmChannel.recipientIds }
                         )
-                        model.discordDmChannels
                         privateChannels
 
                 Missing ->
-                    model.discordDmChannels
+                    []
     in
     ( { model
         | discordGuilds =
@@ -1578,24 +1609,7 @@ handleReadyData discordUser readyData model =
                 (\data ->
                     Task.map
                         (\time ->
-                            HandleReadyDataStep2 time
-                                readyData.user.id
-                                (Ok
-                                    ( List.filterMap
-                                        (\( dmChannelId, dmChannel ) ->
-                                            if SeqDict.member dmChannelId model.discordDmChannels then
-                                                Nothing
-
-                                            else
-                                                { dmChannelId = dmChannelId
-                                                , dmChannel = dmChannel
-                                                }
-                                                    |> Just
-                                        )
-                                        (SeqDict.toList discordDmChannels)
-                                    , data
-                                    )
-                                )
+                            HandleReadyDataStep2 time readyData.user.id (Ok ( discordDmChannels, data ))
                         )
                         Time.now
                 )

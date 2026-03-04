@@ -719,6 +719,7 @@ update msg model =
                                                     (FullData { discordUser | isLoadingData = DiscordUserLoadedSuccessfully })
                                                     model.discordUsers
                                         }
+                                        |> DiscordSync.addDiscordDms discordUserId dmData
 
                                 ( otherDiscordUsers, linkedDiscordUsers ) =
                                     getLinkedDiscordUsersAndOtherUsers discordUser.linkedTo model2
