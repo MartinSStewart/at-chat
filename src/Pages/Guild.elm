@@ -362,7 +362,7 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                             maybeDiscordUserId : Maybe ( Discord.Id.Id Discord.Id.UserId, User.DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
                                 SeqDict.filter
-                                    (\linkedUserId _ -> SeqDict.member linkedUserId guild.members)
+                                    (\linkedUserId _ -> SeqDict.member linkedUserId guild.members || linkedUserId == guild.owner)
                                     localUser.linkedDiscordUsers
                                     |> SeqDict.toList
                                     |> List.head
@@ -939,7 +939,7 @@ discordGuildView model routeData loggedIn local =
         ( Nothing, Nothing ) ->
             case ( SeqDict.get routeData.guildId local.discordGuilds, SeqDict.get routeData.currentDiscordUserId local.localUser.linkedDiscordUsers ) of
                 ( Just guild, Just currentDiscordUser ) ->
-                    if not (SeqDict.member routeData.currentDiscordUserId guild.members) then
+                    if not (SeqDict.member routeData.currentDiscordUserId guild.members || routeData.currentDiscordUserId == guild.owner) then
                         guildErrorPage
                             ("Selected Discord user ("
                                 ++ PersonName.toString currentDiscordUser.name
