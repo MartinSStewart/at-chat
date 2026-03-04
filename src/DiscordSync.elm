@@ -277,6 +277,43 @@ discordChannelIdToChannelId channelId messageId guild =
                 (SeqDict.toList guild.channels)
 
 
+discordChannelIdToChannelIdNoMessage :
+    Discord.Id.Id Discord.Id.ChannelId
+    -> DiscordBackendGuild
+    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRoute )
+discordChannelIdToChannelIdNoMessage channelId guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            Just ( channelId, channel, NoThread )
+
+        Nothing ->
+            List.Extra.findMap
+                (\( channelId2, channel ) ->
+                    case
+                        List.Extra.findMap
+                            (\( threadId, thread ) ->
+                                case OneToOne.second threadId channel.linkedMessageIds of
+                                    Just discordThreadId ->
+                                        if Discord.Id.fromUInt64 (Discord.Id.toUInt64 discordThreadId) == channelId then
+                                            Just threadId
+
+                                        else
+                                            Nothing
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            (SeqDict.toList channel.threads)
+                    of
+                        Just threadId ->
+                            Just ( channelId2, channel, ViewThread threadId )
+
+                        Nothing ->
+                            Nothing
+                )
+                (SeqDict.toList guild.channels)
+
+
 handleDiscordGuildEditMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> DiscordBackendGuild
@@ -1231,6 +1268,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleChannelCreated channel model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_TypingStarted typingStart ->
+                            case typingStart.guildId of
+                                Included guildId ->
+                                    case SeqDict.get guildId model2.discordGuilds of
+                                        Just guild ->
+                                            discordChannelIdToChannelId typingStart.channelId guild
                 )
                 ( { model
                     | discordUsers =

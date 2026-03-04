@@ -6690,95 +6690,94 @@ updateLoadedFromBackend msg model =
                                 Nothing ->
                                     Command.none
 
-                        Local_CurrentlyViewing viewing ->
-                            case viewing of
-                                ViewChannel guildId channelId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDm otherUserId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
-                                            if otherUserId == otherUserIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewChannelThread guildId channelId threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDmThread otherUserId threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
-                                            if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                StopViewingChannel ->
-                                    Command.none
-
-                                ViewDiscordChannel guildId channelId userId2 _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordChannelThread guildId channelId userId2 threadId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
-                                            if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
-                                ViewDiscordDm _ channelId _ ->
-                                    case Route.toGuildOrDmId model.route of
-                                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
-                                            if channelId == data.channelId then
-                                                Scroll.toBottomOfChannel
-
-                                            else
-                                                Command.none
-
-                                        _ ->
-                                            Command.none
-
+                        --Local_CurrentlyViewing viewing ->
+                        --    case viewing of
+                        --        ViewChannel guildId channelId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), NoThread ) ->
+                        --                    if guildId == guildIdRoute && channelId == channelIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        ViewDm otherUserId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), NoThread ) ->
+                        --                    if otherUserId == otherUserIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        ViewChannelThread guildId channelId threadId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( GuildOrDmId (GuildOrDmId_Guild guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
+                        --                    if guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        ViewDmThread otherUserId threadId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdRoute), ViewThread threadIdRoute ) ->
+                        --                    if otherUserId == otherUserIdRoute && threadId == threadIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        StopViewingChannel ->
+                        --            Command.none
+                        --
+                        --        ViewDiscordChannel guildId channelId userId2 _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), NoThread ) ->
+                        --                    if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        ViewDiscordChannelThread guildId channelId userId2 threadId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildIdRoute channelIdRoute), ViewThread threadIdRoute ) ->
+                        --                    if userId2 == currentDiscordUserId && guildId == guildIdRoute && channelId == channelIdRoute && threadId == threadIdRoute then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
+                        --
+                        --        ViewDiscordDm _ channelId _ ->
+                        --            case Route.toGuildOrDmId model.route of
+                        --                Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), NoThread ) ->
+                        --                    if channelId == data.channelId then
+                        --                        Scroll.toBottomOfChannel
+                        --
+                        --                    else
+                        --                        Command.none
+                        --
+                        --                _ ->
+                        --                    Command.none
                         _ ->
                             Command.none
                     )
