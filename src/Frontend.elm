@@ -5,7 +5,6 @@ import Array exposing (Array)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation
 import ChannelName
-import Codec
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
@@ -17,7 +16,6 @@ import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.File as File exposing (File)
-import Effect.File.Download
 import Effect.File.Select
 import Effect.Http as Http
 import Effect.Lamdera as Lamdera
@@ -28,7 +26,6 @@ import Effect.Time as Time
 import Emoji exposing (Emoji)
 import FileName
 import FileStatus exposing (FileData, FileId, FileStatus(..))
-import GuildExport
 import GuildName
 import Html exposing (Html)
 import Html.Attributes

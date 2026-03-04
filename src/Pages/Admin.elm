@@ -900,7 +900,12 @@ update navigationKey time adminData localState msg model =
             ( model, Lamdera.sendToBackend ExportBackendRequest, NoOutMsg )
 
         PressedImportBackend ->
-            ( model, Effect.File.Select.file [ "application/octet-stream" ] ImportBackendFileSelected, NoOutMsg )
+            case model.importBackendStatus of
+                ImportingBackend ->
+                    ( model, Command.none, NoOutMsg )
+
+                _ ->
+                    ( model, Effect.File.Select.file [ "application/octet-stream" ] ImportBackendFileSelected, NoOutMsg )
 
         ImportBackendFileSelected file ->
             ( model
@@ -909,7 +914,10 @@ update navigationKey time adminData localState msg model =
             )
 
         GotImportBackendFileContent content ->
-            ( model, Lamdera.sendToBackend (ImportBackendRequest content), NoOutMsg )
+            ( { model | importBackendStatus = ImportingBackend }
+            , Lamdera.sendToBackend (ImportBackendRequest content)
+            , NoOutMsg
+            )
 
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable

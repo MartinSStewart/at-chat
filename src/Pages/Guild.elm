@@ -352,7 +352,6 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                     _ ->
                                         guildHasNotifications localUser.user guildId guild |> GuildIcon.Normal
                                 )
-                                False
                                 guild
                             )
                     )
@@ -408,7 +407,6 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                                             _ ->
                                                 discordGuildHasNotifications discordUserId localUser.user guildId guild |> GuildIcon.Normal
                                         )
-                                        True
                                         guild
                                     )
                                     |> Just
@@ -471,7 +469,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView local.localUser.user.isAdmin model form
+            newGuildFormView form
 
         ( Nothing, Nothing ) ->
             if MyUi.isMobile model then
@@ -760,7 +758,7 @@ guildView model guildId channelRoute loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView local.localUser.user.isAdmin model form
+            newGuildFormView form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get guildId local.guilds of
@@ -935,7 +933,7 @@ discordGuildView model routeData loggedIn local =
             FileStatus.imageInfoView PressedCloseImageInfo fileData
 
         ( Nothing, Just form ) ->
-            newGuildFormView local.localUser.user.isAdmin model form
+            newGuildFormView form
 
         ( Nothing, Nothing ) ->
             case SeqDict.get routeData.guildId local.discordGuilds of
@@ -1555,11 +1553,11 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView routeData.guildId (MyUi.isMobile model)
+            discordGuildSettingsView
 
 
-discordGuildSettingsView : Discord.Id.Id Discord.Id.GuildId -> Bool -> Element FrontendMsg
-discordGuildSettingsView guildId isMobile =
+discordGuildSettingsView : Element FrontendMsg
+discordGuildSettingsView =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -4959,7 +4957,7 @@ userTextMessageContent spoilerHtmlId containerWidth isBeingEdited isMobile maybe
 
 
 messageIdView : Id messageId -> Element msg
-messageIdView messageId =
+messageIdView _ =
     Ui.none
 
 
@@ -5654,7 +5652,21 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
             SeqDict.get routeData.guildId localUser.user.discordDirectMentions
     in
     channelColumnContainer
-        [ Ui.el [ MyUi.hoverText guildName ] (Ui.text guildName)
+        [ Ui.row
+            [ MyUi.hoverText guildName
+            , Ui.spacing 4
+            ]
+            [ Ui.el
+                [ Ui.background (Ui.rgb 88 101 242)
+                , Ui.rounded 99
+                , Ui.padding 3
+                , Ui.border 1
+                , Ui.borderColor MyUi.background1
+                , Ui.width Ui.shrink
+                ]
+                (Ui.html Icons.discord)
+            , Ui.text guildName
+            ]
         , elLinkButton
             (Dom.id "guild_inviteLinkCreatorRoute")
             (DiscordGuildRoute
@@ -6561,8 +6573,8 @@ channelNameInput form =
         ]
 
 
-newGuildFormView : Bool -> LoadedFrontend -> NewGuildForm -> Element FrontendMsg
-newGuildFormView isAdmin model form =
+newGuildFormView : NewGuildForm -> Element FrontendMsg
+newGuildFormView form =
     Ui.column
         [ Ui.Font.color MyUi.font1
         , Ui.paddingXY 0 16

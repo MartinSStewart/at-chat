@@ -70,7 +70,7 @@ createdAt message =
         UserTextMessage data ->
             data.createdAt
 
-        UserJoinedMessage time userId seqDict ->
+        UserJoinedMessage time _ _ ->
             time
 
         DeletedMessage time ->
