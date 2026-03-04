@@ -7,10 +7,7 @@ module Types exposing
     , DiscordAttachmentData
     , DiscordBasicUserData
     , DiscordFullUserData
-    , DiscordFullUserDataExport
-    , DiscordNeedsAuthAgainExport
     , DiscordUserData(..)
-    , DiscordUserDataExport(..)
     , Drag(..)
     , EditMessage
     , EmojiSelector(..)
@@ -335,29 +332,6 @@ type alias NeedsAuthAgainData =
 
 type alias DiscordBasicUserData =
     { user : Discord.PartialUser, icon : Maybe FileHash }
-
-
-type DiscordUserDataExport
-    = BasicDataExport DiscordBasicUserData
-    | FullDataExport DiscordFullUserDataExport
-    | NeedsAuthAgainExport DiscordNeedsAuthAgainExport
-
-
-type alias DiscordFullUserDataExport =
-    { auth : Discord.UserAuth
-    , user : Discord.User
-    , linkedTo : Id UserId
-    , icon : Maybe FileHash
-    , linkedAt : Time.Posix
-    }
-
-
-type alias DiscordNeedsAuthAgainExport =
-    { user : Discord.User
-    , linkedTo : Id UserId
-    , icon : Maybe FileHash
-    , linkedAt : Time.Posix
-    }
 
 
 type alias BackendFileData =
