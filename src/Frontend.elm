@@ -1281,19 +1281,16 @@ isPressMsg msg =
         PressedDiscordFriendLabel _ ->
             True
 
-        PressedExportGuild _ ->
+        PressedExportBackend ->
             True
 
-        PressedExportDiscordGuild _ ->
+        PressedImportBackend ->
             True
 
-        PressedImportGuild ->
-            True
-
-        GuildImportFileSelected _ ->
+        ImportBackendFileSelected _ ->
             False
 
-        GotGuildImportFileContent _ ->
+        GotImportBackendFileContent _ ->
             False
 
         PressedImportDiscordGuild ->
@@ -3927,48 +3924,6 @@ updateLoaded msg model =
                             ( model, Command.none )
 
                 NotLoggedIn _ ->
-                    ( model, Command.none )
-
-        PressedExportGuild guildId ->
-            ( model, Lamdera.sendToBackend (ExportGuildRequest guildId) )
-
-        PressedExportDiscordGuild guildId ->
-            ( model, Lamdera.sendToBackend (ExportDiscordGuildRequest guildId) )
-
-        PressedImportGuild ->
-            ( model, Effect.File.Select.file [ "application/json" ] GuildImportFileSelected )
-
-        GuildImportFileSelected file ->
-            ( model
-            , Task.perform GotGuildImportFileContent (File.toString file)
-            )
-
-        GotGuildImportFileContent content ->
-            case Codec.decodeString GuildExport.backendGuildCodec content of
-                Ok guild ->
-                    ( model, Lamdera.sendToBackend (ImportGuildRequest guild) )
-
-                Err _ ->
-                    -- Could show an error message to the user
-                    ( model, Command.none )
-
-        PressedImportDiscordGuild ->
-            ( model
-            , Effect.File.Select.file [ "application/json" ] DiscordGuildImportFileSelected
-            )
-
-        DiscordGuildImportFileSelected file ->
-            ( model
-            , Task.perform GotDiscordGuildImportFileContent (File.toString file)
-            )
-
-        GotDiscordGuildImportFileContent content ->
-            case Codec.decodeString GuildExport.discordExportCodec content of
-                Ok guild ->
-                    ( model, Lamdera.sendToBackend (ImportDiscordGuildRequest guild) )
-
-                Err _ ->
-                    -- Could show an error message to the user
                     ( model, Command.none )
 
         TypedDiscordLinkBookmarklet ->
@@ -7069,59 +7024,6 @@ updateLoadedFromBackend msg model =
                             ( { loggedIn | profilePictureEditor = ImageEditor.init }, Command.none )
                 )
                 model
-
-        ExportGuildResponse guildId guild ->
-            let
-                jsonString : String
-                jsonString =
-                    Codec.encodeToString 2 GuildExport.backendGuildCodec guild
-
-                filename : String
-                filename =
-                    "guild-" ++ Id.toString guildId ++ "-export.json"
-            in
-            ( model, Effect.File.Download.string filename "application/json" jsonString )
-
-        ExportDiscordGuildResponse export ->
-            let
-                jsonString : String
-                jsonString =
-                    Codec.encodeToString 2 GuildExport.discordExportCodec export
-
-                filename : String
-                filename =
-                    "discord-guild-" ++ Discord.Id.toString export.guildId ++ "-export.json"
-            in
-            ( model, Effect.File.Download.string filename "application/json" jsonString )
-
-        ImportGuildResponse result ->
-            case result of
-                Ok _ ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn | newGuildForm = Nothing }
-                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
-                            )
-                        )
-                        model
-
-                Err _ ->
-                    ( model, Command.none )
-
-        ImportDiscordGuildResponse result ->
-            case result of
-                Ok () ->
-                    updateLoggedIn
-                        (\loggedIn ->
-                            ( { loggedIn | newGuildForm = Nothing }
-                            , Lamdera.sendToBackend (ReloadDataRequest Nothing)
-                            )
-                        )
-                        model
-
-                Err _ ->
-                    -- Could show error message to user
-                    ( model, Command.none )
 
 
 logout : LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

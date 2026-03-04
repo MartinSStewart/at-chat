@@ -48,6 +48,7 @@ module Types exposing
 import AiChat
 import Array exposing (Array)
 import Browser exposing (UrlRequest)
+import Bytes exposing (Bytes)
 import ChannelName exposing (ChannelName)
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
@@ -521,14 +522,6 @@ type FrontendMsg
         , otherUserId : Discord.Id.Id Discord.Id.UserId
         }
     | PressedDiscordFriendLabel (Discord.Id.Id Discord.Id.PrivateChannelId)
-    | PressedExportGuild (Id GuildId)
-    | PressedExportDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
-    | PressedImportGuild
-    | GuildImportFileSelected File
-    | GotGuildImportFileContent String
-    | PressedImportDiscordGuild
-    | DiscordGuildImportFileSelected File
-    | GotDiscordGuildImportFileContent String
     | TypedDiscordLinkBookmarklet
 
 
@@ -566,10 +559,6 @@ type ToBackend
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
-    | ExportGuildRequest (Id GuildId)
-    | ExportDiscordGuildRequest (Discord.Id.Id Discord.Id.GuildId)
-    | ImportGuildRequest BackendGuild
-    | ImportDiscordGuildRequest DiscordExport
 
 
 type BackendMsg
@@ -658,10 +647,6 @@ type ToFrontend
     | ReloadDataResponse (Result () LoginData)
     | LinkDiscordResponse (Result Discord.HttpError ())
     | ProfilePictureEditorToFrontend ImageEditor.ToFrontend
-    | ExportGuildResponse (Id GuildId) BackendGuild
-    | ExportDiscordGuildResponse DiscordExport
-    | ImportGuildResponse (Result String (Id GuildId))
-    | ImportDiscordGuildResponse (Result String ())
 
 
 type alias LoginData =

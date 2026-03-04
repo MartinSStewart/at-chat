@@ -1555,11 +1555,11 @@ discordChannelView routeData guild loggedIn local model =
                     pageMissing "Channel does not exist"
 
         DiscordChannel_GuildSettingsRoute ->
-            discordGuildSettingsView local.localUser.user.isAdmin routeData.guildId (MyUi.isMobile model)
+            discordGuildSettingsView routeData.guildId (MyUi.isMobile model)
 
 
-discordGuildSettingsView : Bool -> Discord.Id.Id Discord.Id.GuildId -> Bool -> Element FrontendMsg
-discordGuildSettingsView isAdmin guildId isMobile =
+discordGuildSettingsView : Discord.Id.Id Discord.Id.GuildId -> Bool -> Element FrontendMsg
+discordGuildSettingsView guildId isMobile =
     Ui.el
         [ Ui.height Ui.fill ]
         (Ui.column
@@ -1569,19 +1569,6 @@ discordGuildSettingsView isAdmin guildId isMobile =
             , Ui.padding 16
             ]
             [ Ui.el [ Ui.Font.bold, Ui.Font.size 20 ] (Ui.text "Discord Guild Settings")
-            , if isAdmin then
-                MyUi.container
-                    MyUi.background3
-                    isMobile
-                    "Admin only"
-                    [ submitButton
-                        (Dom.id "discord_guild_exportButton")
-                        (PressedExportDiscordGuild guildId)
-                        "Export guild data"
-                    ]
-
-              else
-                Ui.none
             ]
         )
 
@@ -1647,16 +1634,6 @@ inviteLinkCreatorForm model local guildId guild =
                     , ( NotifyOnEveryMessage, "On every message" )
                     ]
                 )
-            , if local.localUser.session.userId == guild.owner then
-                MyUi.container
-                    MyUi.background3
-                    isMobile
-                    "Owner only"
-                    [ submitButton (Dom.id "guild_exportButton") (PressedExportGuild guildId) "Export guild data"
-                    ]
-
-              else
-                Ui.none
             ]
         )
 
@@ -6622,7 +6599,7 @@ newGuildFormView isAdmin model form =
                 "Admin only"
                 [ MyUi.elButton
                     (Dom.id "guild_importGuild")
-                    PressedImportGuild
+                    PressedImportBackend
                     [ Ui.paddingXY 16 8
                     , Ui.background MyUi.buttonBackground
                     , Ui.width Ui.shrink

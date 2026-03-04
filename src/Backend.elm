@@ -10,6 +10,8 @@ module Backend exposing
 import AiChat
 import Array exposing (Array)
 import Broadcast
+import Bytes.Decode
+import Bytes.Encode
 import Discord exposing (OptionalData(..))
 import Discord.Id
 import Discord.Markdown
@@ -4030,135 +4032,8 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        ExportGuildRequest guildId ->
-            asGuildOwner
-                model
-                sessionId
-                guildId
-                (\_ _ guild ->
-                    ( model, Lamdera.sendToFrontend clientId (ExportGuildResponse guildId guild) )
-                )
-
-        ExportDiscordGuildRequest guildId ->
-            asAdmin
-                model
-                sessionId
-                (\_ _ ->
-                    case SeqDict.get guildId model.discordGuilds of
-                        Just guild ->
-                            ( model
-                            , Lamdera.sendToFrontend
-                                clientId
-                                (ExportDiscordGuildResponse
-                                    { guildId = guildId
-                                    , guild = guild
-                                    , users =
-                                        SeqDict.map (\_ _ -> ()) guild.members
-                                            |> SeqDict.insert guild.owner ()
-                                            |> SeqDict.filterMap
-                                                (\userId () ->
-                                                    case SeqDict.get userId model.discordUsers of
-                                                        Just (BasicData data) ->
-                                                            BasicDataExport data |> Just
-
-                                                        Just (FullData data) ->
-                                                            { auth = data.auth
-                                                            , user = data.user
-                                                            , linkedTo = data.linkedTo
-                                                            , icon = data.icon
-                                                            , linkedAt = data.linkedAt
-                                                            }
-                                                                |> FullDataExport
-                                                                |> Just
-
-                                                        Just (NeedsAuthAgain data) ->
-                                                            { user = data.user
-                                                            , linkedTo = data.linkedTo
-                                                            , icon = data.icon
-                                                            , linkedAt = data.linkedAt
-                                                            }
-                                                                |> NeedsAuthAgainExport
-                                                                |> Just
-
-                                                        Nothing ->
-                                                            Nothing
-                                                )
-                                    }
-                                )
-                            )
-
-                        Nothing ->
-                            ( model, Command.none )
-                )
-
-        ImportGuildRequest importedGuild ->
-            asAdmin
-                model
-                sessionId
-                (\_ _ ->
-                    let
-                        newGuildId : Id GuildId
-                        newGuildId =
-                            Id.fromInt model.secretCounter
-                    in
-                    ( { model
-                        | guilds = SeqDict.insert newGuildId importedGuild model.guilds
-                        , secretCounter = model.secretCounter + 1
-                      }
-                    , Lamdera.sendToFrontend clientId (ImportGuildResponse (Ok newGuildId))
-                    )
-                )
-
-        ImportDiscordGuildRequest { guildId, guild, users } ->
-            asAdmin
-                model
-                sessionId
-                (\_ _ ->
-                    ( { model
-                        | discordGuilds = SeqDict.insert guildId guild model.discordGuilds
-                        , discordUsers =
-                            SeqDict.foldl
-                                (\userId discordUser dict ->
-                                    SeqDict.update userId
-                                        (\maybe ->
-                                            case maybe of
-                                                Just _ ->
-                                                    maybe
-
-                                                Nothing ->
-                                                    (case discordUser of
-                                                        BasicDataExport discordBasicUserData ->
-                                                            BasicData discordBasicUserData
-
-                                                        FullDataExport data ->
-                                                            FullData
-                                                                { auth = data.auth
-                                                                , user = data.user
-                                                                , connection = Discord.init
-                                                                , linkedTo = data.linkedTo
-                                                                , icon = data.icon
-                                                                , linkedAt = data.linkedAt
-                                                                , isLoadingData = DiscordUserLoadedSuccessfully
-                                                                }
-
-                                                        NeedsAuthAgainExport data ->
-                                                            NeedsAuthAgain
-                                                                { user = data.user
-                                                                , linkedTo = data.linkedTo
-                                                                , icon = data.icon
-                                                                , linkedAt = data.linkedAt
-                                                                }
-                                                    )
-                                                        |> Just
-                                        )
-                                        dict
-                                )
-                                model.discordUsers
-                                users
-                      }
-                    , Lamdera.sendToFrontend clientId (ImportDiscordGuildResponse (Ok ()))
-                    )
-                )
+        AdminToBackend adminToBackend ->
+            updateFromFrontendAdmin adminToBackend model
 
 
 threadRouteToDiscordMessageId :
@@ -5085,6 +4960,25 @@ updateFromFrontendAdmin clientId toBackend model =
                     (\toMsg -> Pages.Admin.LogPaginationToFrontend toMsg |> AdminToFrontend)
                     identity
             )
+
+        Pages.Admin.ExportBackendRequest ->
+            ( model
+            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (Types.w3_encode_BackendModel model))
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
+            )
+
+        Pages.Admin.ImportBackendRequest bytes ->
+            case Bytes.Decode.decode Types.w3_decode_BackendModel bytes of
+                Just model2 ->
+                    ( model2
+                    , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
+                    )
+
+                Nothing ->
+                    ( model
+                    , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Err ()) |> AdminToFrontend)
+                    )
 
 
 asUser :

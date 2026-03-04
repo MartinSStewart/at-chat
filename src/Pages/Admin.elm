@@ -2,6 +2,7 @@ module Pages.Admin exposing
     ( AdminChange(..)
     , EditedBackendUser
     , EditingCell
+    , ImportBackendStatus(..)
     , InitAdminData
     , Model
     , Msg(..)
@@ -24,6 +25,7 @@ module Pages.Admin exposing
 
 import Array exposing (Array)
 import Array.Extra
+import Bytes exposing (Bytes)
 import ChannelName
 import Discord
 import Discord.Id
@@ -31,6 +33,10 @@ import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
 import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
+import Effect.File as File exposing (File)
+import Effect.File.Download
+import Effect.File.Select
+import Effect.Lamdera as Lamdera
 import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
@@ -103,14 +109,22 @@ type Msg
     | PressedReloadDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedCopyText String
     | TypedInReadOnlyTextInput
+    | PressedExportBackend
+    | PressedImportBackend
+    | ImportBackendFileSelected File
+    | GotImportBackendFileContent Bytes
 
 
 type ToBackend
     = LogPaginationToBackend Pagination.ToBackend
+    | ExportBackendRequest
+    | ImportBackendRequest Bytes
 
 
 type ToFrontend
     = LogPaginationToFrontend (Pagination.ToFrontend LogWithTime)
+    | ExportBackendResponse Bytes
+    | ImportBackendResponse (Result () ())
 
 
 type alias Model =
@@ -123,7 +137,14 @@ type alias Model =
     , publicVapidKey : Editable.Model
     , privateVapidKey : Editable.Model
     , openRouterKey : Editable.Model
+    , importBackendStatus : ImportBackendStatus
     }
+
+
+type ImportBackendStatus
+    = NotImportingBackend
+    | ImportBackendFailed
+    | ImportingBackend
 
 
 type UserTableId
@@ -220,6 +241,7 @@ init logs { highlightLog } =
       , publicVapidKey = Editable.init
       , privateVapidKey = Editable.init
       , openRouterKey = Editable.init
+      , importBackendStatus = NotImportingBackend
       }
     , case highlightLog of
         Just index ->
@@ -873,6 +895,21 @@ update navigationKey time adminData localState msg model =
         TypedInReadOnlyTextInput ->
             ( model, Command.none, NoOutMsg )
 
+        PressedExportBackend ->
+            ( model, Lamdera.sendToBackend ExportBackendRequest, NoOutMsg )
+
+        PressedImportBackend ->
+            ( model, Effect.File.Select.file [ "application/octet-stream" ] ImportBackendFileSelected, NoOutMsg )
+
+        ImportBackendFileSelected file ->
+            ( model
+            , Task.perform GotImportBackendFileContent (File.toBytes file)
+            , NoOutMsg
+            )
+
+        GotImportBackendFileContent content ->
+            ( model, Lamdera.sendToBackend (ImportBackendRequest content), NoOutMsg )
+
 
 handleTogglingAdmin : UserTableId -> UserTable -> Bool -> AdminData -> UserTable
 handleTogglingAdmin userTableId userTableState isAdmin adminData =
@@ -1019,6 +1056,17 @@ updateFromBackend toFrontend model =
         LogPaginationToFrontend data ->
             ( { model | logs = Pagination.updateFromBackend data model.logs }, Command.none )
 
+        ExportBackendResponse bytes ->
+            ( model, Effect.File.Download.bytes "backend-export" "application/octet-stream" bytes )
+
+        ImportBackendResponse result ->
+            case result of
+                Ok () ->
+                    ( model, BrowserNavigation.reload )
+
+                Err () ->
+                    ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
+
 
 logSectionId : HtmlId
 logSectionId =
@@ -1121,8 +1169,20 @@ view local adminData user model =
             , discordUsersSection user adminData
             , logSection local.localUser.timezone user model
             , apiKeysSection local user adminData model
+            , exportSection user
             ]
         )
+
+
+exportSection user =
+    section
+        user.expandedSections
+        DiscordDmChannelsSection
+        [ MyUi.simpleButton
+            (Dom.id "admin_exportBackendButton")
+            PressedExportBackend
+            (Ui.text "Export backend")
+        ]
 
 
 apiKeysSection : LocalState -> BackendUser -> AdminData -> Model -> Element Msg
