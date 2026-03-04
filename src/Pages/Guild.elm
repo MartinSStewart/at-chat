@@ -361,8 +361,9 @@ guildColumn isMobile route localUser dmChannels guilds discordGuilds canScroll2 
                         let
                             maybeDiscordUserId : Maybe ( Discord.Id.Id Discord.Id.UserId, User.DiscordFrontendCurrentUser )
                             maybeDiscordUserId =
-                                --SeqDict.filter (\linkedUserId _ -> SeqDict.member linkedUserId guild.members) localUser.linkedDiscordUsers
-                                localUser.linkedDiscordUsers
+                                SeqDict.filter
+                                    (\linkedUserId _ -> SeqDict.member linkedUserId guild.members)
+                                    localUser.linkedDiscordUsers
                                     |> SeqDict.toList
                                     |> List.head
                         in
@@ -936,9 +937,18 @@ discordGuildView model routeData loggedIn local =
             newGuildFormView form
 
         ( Nothing, Nothing ) ->
-            case SeqDict.get routeData.guildId local.discordGuilds of
-                Just guild ->
-                    if MyUi.isMobile model then
+            case ( SeqDict.get routeData.guildId local.discordGuilds, SeqDict.get routeData.currentDiscordUserId local.localUser.linkedDiscordUsers ) of
+                ( Just guild, Just currentDiscordUser ) ->
+                    if not (SeqDict.member routeData.currentDiscordUserId guild.members) then
+                        guildErrorPage
+                            ("Selected Discord user ("
+                                ++ PersonName.toString currentDiscordUser.name
+                                ++ ") is not a member of this guild"
+                            )
+                            local
+                            model
+
+                    else if MyUi.isMobile model then
                         let
                             canScroll2 =
                                 canScroll model.drag
@@ -1060,44 +1070,52 @@ discordGuildView model routeData loggedIn local =
                                     ]
                             ]
 
-                Nothing ->
-                    if MyUi.isMobile model then
-                        Ui.column
-                            [ Ui.height Ui.fill
-                            , Ui.background MyUi.background1
-                            , Ui.heightMin 0
-                            , Ui.clip
-                            ]
-                            [ Ui.row
-                                [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                [ guildColumnLazy True model local
-                                , pageMissingMobile "Guild not found"
-                                ]
-                            , loggedInAsView local
-                            ]
+                ( Just _, Nothing ) ->
+                    guildErrorPage "Discord user not found" local model
 
-                    else
-                        Ui.row
-                            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
-                            [ Ui.column
-                                [ Ui.height Ui.fill
-                                , Ui.width (Ui.px 300)
-                                ]
-                                [ Ui.row
-                                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
-                                    [ guildColumnLazy False model local
-                                    , Ui.el
-                                        [ Ui.background MyUi.background2
-                                        , Ui.height Ui.fill
-                                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
-                                        , Ui.borderColor MyUi.border1
-                                        ]
-                                        Ui.none
-                                    ]
-                                , loggedInAsView local
-                                ]
-                            , pageMissing "Guild not found"
-                            ]
+                ( Nothing, _ ) ->
+                    guildErrorPage "Discord guild not found" local model
+
+
+guildErrorPage : String -> LocalState -> LoadedFrontend -> Element FrontendMsg
+guildErrorPage error local model =
+    if MyUi.isMobile model then
+        Ui.column
+            [ Ui.height Ui.fill
+            , Ui.background MyUi.background1
+            , Ui.heightMin 0
+            , Ui.clip
+            ]
+            [ Ui.row
+                [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                [ guildColumnLazy True model local
+                , pageMissingMobile error
+                ]
+            , loggedInAsView local
+            ]
+
+    else
+        Ui.row
+            [ Ui.height Ui.fill, Ui.background MyUi.background1 ]
+            [ Ui.column
+                [ Ui.height Ui.fill
+                , Ui.width (Ui.px 300)
+                ]
+                [ Ui.row
+                    [ Ui.height Ui.fill, Ui.heightMin 0 ]
+                    [ guildColumnLazy False model local
+                    , Ui.el
+                        [ Ui.background MyUi.background2
+                        , Ui.height Ui.fill
+                        , Ui.borderWith { left = 1, right = 0, top = 0, bottom = 0 }
+                        , Ui.borderColor MyUi.border1
+                        ]
+                        Ui.none
+                    ]
+                , loggedInAsView local
+                ]
+            , pageMissing error
+            ]
 
 
 memberColumnWidth : number
