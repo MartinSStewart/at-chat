@@ -479,7 +479,7 @@ isDiscordGuildChannelReloading channelId loadingDiscordChannels =
                     else
                         Nothing
 
-                LoadingDiscordDmChannel posix id loadingDiscordChannelStep ->
+                LoadingDiscordDmChannel _ _ _ ->
                     Nothing
         )
         (SeqDict.toList loadingDiscordChannels)
@@ -493,10 +493,10 @@ isDiscordDmChannelReloading channelId loadingDiscordChannels =
     List.Extra.findMap
         (\( _, loading ) ->
             case loading of
-                LoadingDiscordGuildChannel _ _ otherChannelId step ->
+                LoadingDiscordGuildChannel _ _ _ _ ->
                     Nothing
 
-                LoadingDiscordDmChannel posix otherChannelId step ->
+                LoadingDiscordDmChannel _ otherChannelId step ->
                     if channelId == otherChannelId then
                         Just step
 

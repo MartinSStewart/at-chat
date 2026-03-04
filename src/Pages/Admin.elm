@@ -35,7 +35,6 @@ import Effect.Task as Task
 import Effect.Time as Time
 import EmailAddress
 import Env
-import Evergreen.V125.DmChannel exposing (DiscordChannelReloadingStatus(..))
 import GuildName
 import Html.Attributes
 import Html.Events

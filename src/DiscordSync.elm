@@ -5,7 +5,6 @@ module DiscordSync exposing
     , backendSessionIdHash
     , discordUserToPartialUser
     , discordUserWebsocketMsg
-    , getChannelThreads
     , getManyMessages
     , handleDiscordCreateMessage
     , handleDiscordEditMessage
@@ -52,7 +51,7 @@ import RichText exposing (RichText)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import SessionIdHash exposing (SessionIdHash)
-import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordFullUserData, DiscordThreadReadyData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordFullUserData, DiscordUserData(..), LocalChange(..), LocalMsg(..), ServerChange(..), ToFrontend(..))
 import User
 
 
@@ -1590,16 +1589,6 @@ getDiscordGuildData model gatewayGuild =
                     Task.succeed Nothing
             )
             |> Just
-
-
-getChannelThreads :
-    Discord.Authentication
-    -> Discord.Id.Id Discord.Id.GuildId
-    -> Discord.Id.Id Discord.Id.ChannelId
-    -> BackendModel
-    -> Task BackendOnly x (List DiscordThreadReadyData)
-getChannelThreads _ _ _ _ =
-    Task.succeed []
 
 
 

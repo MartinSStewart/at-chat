@@ -20,9 +20,7 @@ module DmChannel exposing
     )
 
 import Array exposing (Array)
-import Discord
 import Discord.Id
-import Effect.Time as Time
 import Id exposing (ChannelMessageId, Id(..), ThreadMessageId, ThreadRoute(..), UserId)
 import Message exposing (Message, MessageState(..))
 import NonemptySet exposing (NonemptySet)

@@ -4,7 +4,6 @@ module CodecExtra exposing
     , nonemptySet
     , nonemptyString
     , oneToOne
-    , quantityFloat
     , quantityInt
     , seqDict
     , timePosix
@@ -25,11 +24,6 @@ import UInt64 exposing (UInt64)
 quantityInt : Codec (Quantity Int units)
 quantityInt =
     Codec.map Quantity.unsafe Quantity.unwrap Codec.int
-
-
-quantityFloat : Codec (Quantity Float units)
-quantityFloat =
-    Codec.map Quantity.unsafe Quantity.unwrap Codec.float
 
 
 timePosix : Codec Time.Posix

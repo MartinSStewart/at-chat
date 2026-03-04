@@ -27,7 +27,6 @@ module User exposing
     , setLastDiscordChannelViewed
     , setLastDmViewed
     , setName
-    , smallProfileImage
     , toString
     )
 
