@@ -5663,6 +5663,7 @@ discordChannelColumn isMobile localUser routeData guild channelNameHover canScro
                 , Ui.border 1
                 , Ui.borderColor MyUi.background1
                 , Ui.width Ui.shrink
+                , MyUi.noShrinking
                 ]
                 (Ui.html Icons.discord)
             , Ui.text guildName
