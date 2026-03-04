@@ -1,6 +1,5 @@
-module FileName exposing (FileName(..), codec, fromString, toString)
+module FileName exposing (FileName(..), fromString, toString)
 
-import Codec exposing (Codec)
 import String.Nonempty exposing (NonemptyString(..))
 
 
@@ -26,8 +25,3 @@ fromString text =
 toString : FileName -> String
 toString (FileName a) =
     String.Nonempty.toString a
-
-
-codec : Codec FileName
-codec =
-    Codec.map fromString toString Codec.string

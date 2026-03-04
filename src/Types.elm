@@ -6,7 +6,6 @@ module Types exposing
     , ChannelSidebarMode(..)
     , DiscordAttachmentData
     , DiscordBasicUserData
-    , DiscordExport
     , DiscordFullUserData
     , DiscordFullUserDataExport
     , DiscordNeedsAuthAgainExport
@@ -336,13 +335,6 @@ type alias NeedsAuthAgainData =
 
 type alias DiscordBasicUserData =
     { user : Discord.PartialUser, icon : Maybe FileHash }
-
-
-type alias DiscordExport =
-    { guildId : Discord.Id.Id Discord.Id.GuildId
-    , guild : DiscordBackendGuild
-    , users : SeqDict (Discord.Id.Id Discord.Id.UserId) DiscordUserDataExport
-    }
 
 
 type DiscordUserDataExport
