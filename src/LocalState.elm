@@ -87,6 +87,7 @@ module LocalState exposing
     , memberIsEditTypingFrontendHelperNoThread
     , memberIsTyping
     , memberIsTypingHelper
+    , messageDeleted
     , messageToString
     , removeReactionEmoji
     , removeReactionEmojiFrontend
@@ -332,7 +333,12 @@ messageToString allUsers3 message =
                 ++ " joined!"
 
         DeletedMessage _ ->
-            "Message deleted"
+            messageDeleted
+
+
+messageDeleted : String
+messageDeleted =
+    "Message deleted"
 
 
 channelToFrontend : Maybe ThreadRoute -> BackendChannel -> Maybe FrontendChannel

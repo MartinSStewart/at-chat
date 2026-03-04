@@ -514,7 +514,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy True model local
-                            , friendsColumn True maybeOtherUserId local
+                            , friendsColumn (canScroll model.drag) True maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -530,7 +530,7 @@ homePageLoggedInView maybeOtherUserId model loggedIn local =
                         [ Ui.row
                             [ Ui.height Ui.fill, Ui.heightMin 0 ]
                             [ guildColumnLazy False model local
-                            , friendsColumn False maybeOtherUserId local
+                            , friendsColumn (canScroll model.drag) False maybeOtherUserId local
                             ]
                         , loggedInAsView local
                         ]
@@ -5015,7 +5015,7 @@ deletedMessageContent highlight createdAt timezone =
                 UrlHighlight ->
                     Ui.background MyUi.hoverAndReplyToColor
             ]
-            (Ui.text "Message deleted")
+            (Ui.text LocalState.messageDeleted)
         , messageTimestamp createdAt timezone |> Ui.html
         ]
 
@@ -5062,7 +5062,7 @@ replyToHeaderAboveMessage isMobile maybeRepliedTo revealedSpoilers allUsers =
                 repliedToIndex
                 (Ui.el
                     [ Ui.Font.italic, Ui.Font.color MyUi.font3 ]
-                    (Ui.text "Message deleted")
+                    (Ui.text LocalState.messageDeleted)
                 )
 
         Nothing ->
@@ -5445,7 +5445,7 @@ previewThreadLastMessage timezone allUsers messageId thread =
                             DeletedMessage _ ->
                                 [ Html.i
                                     [ Html.Attributes.style "color" (MyUi.colorToStyle MyUi.font3) ]
-                                    [ Html.text "Message deleted" ]
+                                    [ Html.text LocalState.messageDeleted ]
                                 ]
 
                     _ ->
@@ -6207,8 +6207,8 @@ discordChannelColumnRow isMobile channelNameHover directMentions routeData local
         ]
 
 
-friendsColumn : Bool -> DmChannelSelection -> LocalState -> Element FrontendMsg
-friendsColumn isMobile openedOtherUserId local =
+friendsColumn : Bool -> Bool -> DmChannelSelection -> LocalState -> Element FrontendMsg
+friendsColumn canScroll2 isMobile openedOtherUserId local =
     let
         dmChannelsIncludingCurrentUser : SeqDict (Id UserId) FrontendDmChannel
         dmChannelsIncludingCurrentUser =
@@ -6220,6 +6220,10 @@ friendsColumn isMobile openedOtherUserId local =
         discordDmChannelsIncludingLinkedUsers : SeqDict (Discord.Id.Id Discord.Id.PrivateChannelId) DiscordFrontendDmChannel
         discordDmChannelsIncludingLinkedUsers =
             local.discordDmChannels
+
+        allUsers : SeqDict (Id UserId) FrontendUser
+        allUsers =
+            LocalState.allUsers2 local.localUser
     in
     channelColumnContainer
         [ Ui.el
@@ -6229,57 +6233,113 @@ friendsColumn isMobile openedOtherUserId local =
             ]
             (Ui.text "Direct messages")
         ]
-        (Ui.column
-            [ scrollable True ]
-            (List.filterMap
-                (\( otherUserId, _ ) ->
-                    case LocalState.getUser otherUserId local.localUser of
-                        Just otherUser ->
-                            Ui.Lazy.lazy5
-                                friendLabel
-                                isMobile
-                                (case openedOtherUserId of
-                                    SelectedDmChannel a _ ->
-                                        a == otherUserId
+        ((List.filterMap
+            (\( otherUserId, dmChannel ) ->
+                case LocalState.getUser otherUserId local.localUser of
+                    Just otherUser ->
+                        let
+                            message =
+                                Array.Extra.last dmChannel.messages |> Maybe.withDefault MessageUnloaded
+                        in
+                        ( case message of
+                            MessageLoaded message2 ->
+                                Message.createdAt message2
 
-                                    _ ->
-                                        False
-                                )
-                                otherUserId
-                                otherUser.name
-                                otherUser.icon
-                                |> Just
-
-                        Nothing ->
-                            Nothing
-                )
-                (SeqDict.toList dmChannelsIncludingCurrentUser)
-                ++ List.map
-                    (\( channelId, dmChannel ) ->
-                        Ui.Lazy.lazy5
-                            discordFriendLabel
+                            MessageUnloaded ->
+                                Time.millisToPosix 0
+                        , friendLabel
                             isMobile
                             (case openedOtherUserId of
-                                SelectedDiscordDmChannel routeData ->
-                                    routeData.channelId == channelId
+                                SelectedDmChannel a _ ->
+                                    a == otherUserId
 
                                 _ ->
                                     False
                             )
-                            channelId
-                            dmChannel.members
-                            local.localUser
-                    )
-                    (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
+                            local.localUser.session.userId
+                            otherUserId
+                            otherUser.name
+                            otherUser.icon
+                            allUsers
+                            message
+                        )
+                            |> Just
+
+                    Nothing ->
+                        Nothing
             )
+            (SeqDict.toList dmChannelsIncludingCurrentUser)
+            ++ List.map
+                (\( channelId, dmChannel ) ->
+                    let
+                        message =
+                            Array.Extra.last dmChannel.messages |> Maybe.withDefault MessageUnloaded
+                    in
+                    ( case message of
+                        MessageLoaded message2 ->
+                            Message.createdAt message2
+
+                        MessageUnloaded ->
+                            Time.millisToPosix 0
+                    , Ui.Lazy.lazy6
+                        discordFriendLabel
+                        isMobile
+                        (case openedOtherUserId of
+                            SelectedDiscordDmChannel routeData ->
+                                routeData.channelId == channelId
+
+                            _ ->
+                                False
+                        )
+                        channelId
+                        dmChannel.members
+                        local.localUser
+                        message
+                    )
+                )
+                (SeqDict.toList discordDmChannelsIncludingLinkedUsers)
+         )
+            |> List.sortBy (\( time, _ ) -> Time.posixToMillis time |> negate)
+            |> List.map Tuple.second
+            |> Ui.column [ scrollable canScroll2 ]
         )
 
 
-friendLabel : Bool -> Bool -> Id UserId -> PersonName -> Maybe FileHash -> Element FrontendMsg
-friendLabel isMobile isSelected otherUserId name icon =
+friendLabel :
+    Bool
+    -> Bool
+    -> Id UserId
+    -> Id UserId
+    -> PersonName
+    -> Maybe FileHash
+    -> SeqDict (Id UserId) { a | name : PersonName }
+    -> MessageState ChannelMessageId (Id UserId)
+    -> Element FrontendMsg
+friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers message =
     let
-        _ =
-            Debug.log "rerender friendLabel" ()
+        messagePreview : String
+        messagePreview =
+            case message of
+                MessageLoaded message2 ->
+                    case message2 of
+                        UserTextMessage a ->
+                            (if a.createdBy == currentUserId then
+                                "You: "
+
+                             else
+                                ""
+                            )
+                                ++ RichText.toString allUsers a.content
+
+                        UserJoinedMessage _ userId _ ->
+                            User.toString userId allUsers
+                                ++ " joined!"
+
+                        DeletedMessage _ ->
+                            LocalState.messageDeleted
+
+                MessageUnloaded ->
+                    ""
     in
     rowLinkButton
         (Dom.id ("guild_friendLabel_" ++ Id.toString otherUserId))
@@ -6287,6 +6347,7 @@ friendLabel isMobile isSelected otherUserId name icon =
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
         , Ui.padding 4
+        , MyUi.hoverText messagePreview
         , Ui.Font.color
             (if isSelected then
                 MyUi.font1
@@ -6298,7 +6359,11 @@ friendLabel isMobile isSelected otherUserId name icon =
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
         [ User.profileImage icon
-        , Ui.el [] (Ui.text (PersonName.toString name))
+        , Ui.column
+            [ Ui.spacing 2 ]
+            [ Ui.el [] (Ui.text (PersonName.toString name))
+            , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+            ]
         ]
 
 
@@ -6308,21 +6373,46 @@ discordFriendLabel :
     -> Discord.Id.Id Discord.Id.PrivateChannelId
     -> NonemptySet (Discord.Id.Id Discord.Id.UserId)
     -> LocalUser
+    -> MessageState ChannelMessageId (Discord.Id.Id Discord.Id.UserId)
     -> Element FrontendMsg
-discordFriendLabel isMobile isSelected dmChannelId members localUser =
+discordFriendLabel isMobile isSelected dmChannelId members localUser message =
     let
         _ =
             Debug.log "rerender discord friendLabel" ()
 
-        members2 : List (Discord.Id.Id Discord.Id.UserId)
+        members2 : List.Nonempty.Nonempty (Discord.Id.Id Discord.Id.UserId)
         members2 =
-            NonemptySet.toSeqSet members |> SeqSet.toList
+            NonemptySet.toNonemptyList members
+
+        messagePreview : String
+        messagePreview =
+            case message of
+                MessageLoaded message2 ->
+                    case message2 of
+                        UserTextMessage a ->
+                            (if SeqDict.member a.createdBy localUser.linkedDiscordUsers then
+                                "You: "
+
+                             else
+                                ""
+                            )
+                                ++ RichText.toString (LocalState.allDiscordUsers2 localUser) a.content
+
+                        UserJoinedMessage _ userId _ ->
+                            User.toString userId (LocalState.allDiscordUsers2 localUser) ++ " joined!"
+
+                        DeletedMessage _ ->
+                            LocalState.messageDeleted
+
+                MessageUnloaded ->
+                    ""
     in
     MyUi.rowButton
         ("guild_discordFriendLabel_" ++ Discord.Id.toString dmChannelId |> Dom.id)
         (PressedDiscordFriendLabel dmChannelId)
         [ Ui.clipWithEllipsis
         , Ui.spacing 8
+        , MyUi.hoverText messagePreview
         , Ui.padding 4
         , Ui.Font.color
             (if isSelected then
@@ -6334,20 +6424,42 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser =
         , MyUi.hover isMobile [ Ui.Anim.fontColor MyUi.font1 ]
         , Ui.attrIf isSelected (Ui.background (Ui.rgba 255 255 255 0.15))
         ]
-        (case members2 of
-            [ userId ] ->
-                case LocalState.getDiscordUser userId localUser of
+        (case List.Nonempty.tail members2 of
+            [] ->
+                case LocalState.getDiscordUser (List.Nonempty.head members2) localUser of
                     Just otherUser ->
                         [ User.profileImage otherUser.icon
-                        , Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+                        , Ui.column
+                            [ Ui.spacing 2 ]
+                            [ Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+                            , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+                            ]
                         ]
 
                     Nothing ->
                         []
 
-            many ->
-                [ User.multipleProfileImages
-                    (List.filterMap (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon) many)
+            rest ->
+                [ List.filterMap
+                    (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon)
+                    (List.Nonempty.toList members2)
+                    |> User.multipleProfileImages
+                , Ui.column
+                    [ Ui.spacing 2 ]
+                    [ List.filterMap
+                        (\userId ->
+                            case LocalState.getDiscordUser userId localUser of
+                                Just otherUser ->
+                                    PersonName.toString otherUser.name |> Just
+
+                                Nothing ->
+                                    Nothing
+                        )
+                        rest
+                        |> String.join ", "
+                        |> Ui.text
+                    , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
+                    ]
                 ]
         )
 

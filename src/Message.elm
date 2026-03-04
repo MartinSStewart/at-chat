@@ -6,6 +6,7 @@ module Message exposing
     , UserTextMessageData
     , UserTextMessageDataNoReply
     , addReactionEmoji
+    , createdAt
     , removeReactionEmoji
     )
 
@@ -61,6 +62,19 @@ type alias UserTextMessageDataNoReply userId =
     , editedAt : Maybe Time.Posix
     , attachedFiles : SeqDict (Id FileId) FileData
     }
+
+
+createdAt : Message messageId userId -> Time.Posix
+createdAt message =
+    case message of
+        UserTextMessage data ->
+            data.createdAt
+
+        UserJoinedMessage time userId seqDict ->
+            time
+
+        DeletedMessage time ->
+            time
 
 
 addReactionEmoji : userId -> Emoji -> Message messageId userId -> Message messageId userId
