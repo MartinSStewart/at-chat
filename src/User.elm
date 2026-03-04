@@ -17,6 +17,7 @@ module User exposing
     , discordCurrentUserToFrontend
     , init
     , linkDiscordDataCodec
+    , multipleProfileImages
     , profileImage
     , profileImageSize
     , sectionToString
@@ -26,6 +27,7 @@ module User exposing
     , setLastDiscordChannelViewed
     , setLastDmViewed
     , setName
+    , smallProfileImage
     , toString
     )
 
@@ -38,6 +40,7 @@ import EmailAddress exposing (EmailAddress)
 import FileStatus exposing (FileHash)
 import Id exposing (AnyGuildOrDmId, ChannelId, ChannelMessageId, GuildId, Id, ThreadMessageId, ThreadRoute, UserId)
 import Json.Decode
+import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import OneOrGreater exposing (OneOrGreater)
 import PersonName exposing (PersonName)
@@ -45,6 +48,7 @@ import SafeJson exposing (SafeJson)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Ui exposing (Element)
+import Ui.Font
 
 
 {-| Contains sensitive data that should only be accessible by admins, the backend, and the user themselves.
@@ -440,6 +444,11 @@ profileImageSize =
     40
 
 
+smallProfileImageSize : number
+smallProfileImageSize =
+    25
+
+
 profileImage : Maybe FileHash -> Element msg
 profileImage maybeFileHash =
     case maybeFileHash of
@@ -461,5 +470,96 @@ profileImage maybeFileHash =
                 , Ui.rounded 8
                 , Ui.width (Ui.px profileImageSize)
                 , Ui.height (Ui.px profileImageSize)
+                ]
+                Ui.none
+
+
+multipleProfileImages : List (Maybe FileHash) -> Element msg
+multipleProfileImages profileImages =
+    case profileImages of
+        [] ->
+            Ui.none
+
+        [ single ] ->
+            profileImage single
+
+        [ one, two ] ->
+            Ui.el
+                [ Ui.width (Ui.px 40)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+        [ one, two, three ] ->
+            Ui.el
+                [ Ui.width (Ui.px 55)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+        [ one, two, three, four ] ->
+            Ui.el
+                [ Ui.width (Ui.px 75)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront (Ui.el [ Ui.move { x = 50, y = 10, z = 0 } ] (smallProfileImage four))
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+        one :: two :: three :: rest ->
+            Ui.el
+                [ Ui.width (Ui.px 75)
+                , Ui.height (Ui.px 40)
+                , Ui.inFront (Ui.el [ Ui.move { x = 10, y = 10, z = 0 } ] (smallProfileImage two))
+                , Ui.inFront (Ui.el [ Ui.move { x = 30, y = 10, z = 0 } ] (smallProfileImage three))
+                , Ui.inFront
+                    (Ui.el
+                        [ Ui.move { x = 50, y = 10, z = 0 }
+                        , Ui.background MyUi.background1
+                        , Ui.width (Ui.px smallProfileImageSize)
+                        , Ui.height (Ui.px smallProfileImageSize)
+                        , Ui.Font.center
+                        , Ui.Font.bold
+                        , Ui.rounded 8
+                        , Ui.Font.color MyUi.font3
+                        , Ui.Font.size 12
+                        , Ui.contentCenterY
+                        , MyUi.htmlStyle "white-space" "pre"
+                        ]
+                        (Ui.text ("+" ++ String.fromInt (List.length rest)))
+                    )
+                , Ui.inFront (smallProfileImage one)
+                ]
+                Ui.none
+
+
+smallProfileImage : Maybe FileHash -> Element msg
+smallProfileImage maybeFileHash =
+    case maybeFileHash of
+        Just fileHash ->
+            Ui.image
+                [ Ui.rounded 8
+                , Ui.width (Ui.px smallProfileImageSize)
+                , Ui.height (Ui.px smallProfileImageSize)
+                , Ui.clip
+                ]
+                { source = FileStatus.fileUrl FileStatus.pngContent fileHash
+                , description = ""
+                , onLoad = Nothing
+                }
+
+        Nothing ->
+            Ui.el
+                [ Ui.background (Ui.rgb 100 100 100)
+                , Ui.rounded 8
+                , Ui.width (Ui.px smallProfileImageSize)
+                , Ui.height (Ui.px smallProfileImageSize)
                 ]
                 Ui.none

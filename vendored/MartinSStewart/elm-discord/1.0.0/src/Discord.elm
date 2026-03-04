@@ -3920,9 +3920,9 @@ type alias PrivateChannel =
     , recipientIds : List (Id UserId)
     , recipientFlags : Int
     , lastMessageId : Maybe (Id MessageId)
-    , isSpam : Bool
-    , isMessageRequestTimestamp : Maybe Time.Posix
-    , isMessageRequest : Bool
+    , isSpam : OptionalData Bool
+    , isMessageRequestTimestamp : OptionalData (Maybe Time.Posix)
+    , isMessageRequest : OptionalData Bool
     , id : Id PrivateChannelId
     , flags : Int
     }
@@ -3935,9 +3935,9 @@ decodePrivateChannel =
         |> JD.andMap (JD.field "recipient_ids" (JD.list Discord.Id.decodeId))
         |> JD.andMap (JD.field "recipient_flags" JD.int)
         |> JD.andMap (JD.field "last_message_id" (JD.nullable Discord.Id.decodeId))
-        |> JD.andMap (JD.field "is_spam" JD.bool)
-        |> JD.andMap (JD.field "is_message_request_timestamp" (JD.nullable Iso8601.decoder))
-        |> JD.andMap (JD.field "is_message_request" JD.bool)
+        |> JD.andMap (decodeOptionalData "is_spam" JD.bool)
+        |> JD.andMap (decodeOptionalData "is_message_request_timestamp" (JD.nullable Iso8601.decoder))
+        |> JD.andMap (decodeOptionalData "is_message_request" JD.bool)
         |> JD.andMap (JD.field "id" Discord.Id.decodeId)
         |> JD.andMap (JD.field "flags" JD.int)
 

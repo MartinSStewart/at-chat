@@ -6229,7 +6229,7 @@ friendsColumn isMobile openedOtherUserId local =
             (Ui.text "Direct messages")
         ]
         (Ui.column
-            []
+            [ scrollable True ]
             (List.filterMap
                 (\( otherUserId, _ ) ->
                     case LocalState.getUser otherUserId local.localUser of
@@ -6345,16 +6345,9 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser =
                         []
 
             many ->
-                List.filterMap
-                    (\userId ->
-                        case LocalState.getDiscordUser userId localUser of
-                            Just user ->
-                                User.profileImage user.icon |> Just
-
-                            Nothing ->
-                                Nothing
-                    )
-                    many
+                [ User.multipleProfileImages
+                    (List.filterMap (\userId -> LocalState.getDiscordUser userId localUser |> Maybe.map .icon) many)
+                ]
         )
 
 
