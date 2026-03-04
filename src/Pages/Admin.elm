@@ -145,6 +145,7 @@ type ImportBackendStatus
     = NotImportingBackend
     | ImportBackendFailed
     | ImportingBackend
+    | ImportedBackendSuccessfully
 
 
 type UserTableId
@@ -1057,12 +1058,12 @@ updateFromBackend toFrontend model =
             ( { model | logs = Pagination.updateFromBackend data model.logs }, Command.none )
 
         ExportBackendResponse bytes ->
-            ( model, Effect.File.Download.bytes "backend-export" "application/octet-stream" bytes )
+            ( model, Effect.File.Download.bytes "backend-export.bin" "application/octet-stream" bytes )
 
         ImportBackendResponse result ->
             case result of
                 Ok () ->
-                    ( model, BrowserNavigation.reload )
+                    ( { model | importBackendStatus = ImportedBackendSuccessfully }, Command.none )
 
                 Err () ->
                     ( { model | importBackendStatus = ImportBackendFailed }, Command.none )
@@ -1169,19 +1170,39 @@ view local adminData user model =
             , discordUsersSection user adminData
             , logSection local.localUser.timezone user model
             , apiKeysSection local user adminData model
-            , exportSection user
+            , exportSection user model
             ]
         )
 
 
-exportSection user =
+exportSection : BackendUser -> Model -> Element Msg
+exportSection user model =
     section
         user.expandedSections
-        DiscordDmChannelsSection
+        ExportSection
         [ MyUi.simpleButton
             (Dom.id "admin_exportBackendButton")
             PressedExportBackend
             (Ui.text "Export backend")
+        , Ui.row
+            [ Ui.spacing 8 ]
+            [ MyUi.simpleButton
+                (Dom.id "admin_importBackendButton")
+                PressedImportBackend
+                (Ui.text "Import backend")
+            , case model.importBackendStatus of
+                NotImportingBackend ->
+                    Ui.none
+
+                ImportBackendFailed ->
+                    Ui.text "Failed to import backend"
+
+                ImportingBackend ->
+                    Ui.text "Importing..."
+
+                ImportedBackendSuccessfully ->
+                    Ui.text "Imported!"
+            ]
         ]
 
 

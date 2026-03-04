@@ -4032,9 +4032,6 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                     )
                 )
 
-        AdminToBackend adminToBackend ->
-            updateFromFrontendAdmin adminToBackend model
-
 
 threadRouteToDiscordMessageId :
     Discord.Id.Id Discord.Id.ChannelId

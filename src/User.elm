@@ -311,6 +311,7 @@ type AdminUiSection
     | DiscordGuildsSection
     | GuildsSection
     | ApiKeysSection
+    | ExportSection
 
 
 sectionToString : AdminUiSection -> String
@@ -336,6 +337,9 @@ sectionToString section2 =
 
         ApiKeysSection ->
             "API keys"
+
+        ExportSection ->
+            "Export/Import"
 
 
 {-| User containing only publicly visible data

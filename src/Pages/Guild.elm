@@ -6592,39 +6592,6 @@ newGuildFormView isAdmin model form =
                 (Ui.text "Cancel")
             , submitButton (Dom.id "guild_createGuildSubmit") (PressedSubmitNewGuild form) "Create guild"
             ]
-        , if isAdmin then
-            MyUi.container
-                MyUi.background1
-                (MyUi.isMobile model)
-                "Admin only"
-                [ MyUi.elButton
-                    (Dom.id "guild_importGuild")
-                    PressedImportBackend
-                    [ Ui.paddingXY 16 8
-                    , Ui.background MyUi.buttonBackground
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 8
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    ]
-                    (Ui.text "Import guild")
-                , MyUi.elButton
-                    (Dom.id "discord_guild_importButton")
-                    PressedImportDiscordGuild
-                    [ Ui.paddingXY 16 8
-                    , Ui.background MyUi.buttonBackground
-                    , Ui.width Ui.shrink
-                    , Ui.rounded 8
-                    , Ui.Font.bold
-                    , Ui.borderColor MyUi.buttonBorder
-                    , Ui.border 1
-                    ]
-                    (Ui.text "Import Discord guild")
-                ]
-
-          else
-            Ui.none
         ]
 
 

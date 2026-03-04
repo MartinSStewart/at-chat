@@ -1281,27 +1281,6 @@ isPressMsg msg =
         PressedDiscordFriendLabel _ ->
             True
 
-        PressedExportBackend ->
-            True
-
-        PressedImportBackend ->
-            True
-
-        ImportBackendFileSelected _ ->
-            False
-
-        GotImportBackendFileContent _ ->
-            False
-
-        PressedImportDiscordGuild ->
-            True
-
-        DiscordGuildImportFileSelected _ ->
-            False
-
-        GotDiscordGuildImportFileContent _ ->
-            False
-
         TypedDiscordLinkBookmarklet ->
             False
 
