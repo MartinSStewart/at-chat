@@ -9,7 +9,7 @@ import Html.Attributes
 import Icons
 import Id exposing (AnyGuildOrDmId, ThreadRoute)
 import ImageEditor
-import LocalState exposing (LocalState)
+import LocalState exposing (AdminStatus(..), LocalState)
 import Log
 import MyUi
 import PersonName
@@ -128,6 +128,17 @@ viewConnectedDevice isCurrentSession session =
         ]
 
 
+gotoAdmin : Element FrontendMsg
+gotoAdmin =
+    Ui.el
+        [ Ui.paddingXY 32 0 ]
+        (MyUi.simpleButton
+            (Dom.id "userOptions_gotoAdmin")
+            (PressedLink (Route.AdminRoute { highlightLog = Nothing }))
+            (Ui.text "Go to Admin")
+        )
+
+
 view : Bool -> Time.Posix -> LocalState -> LoggedIn2 -> LoadedFrontend -> UserOptionsModel -> Element FrontendMsg
 view isMobile time local loggedIn loaded model =
     Ui.el
@@ -179,17 +190,14 @@ view isMobile time local loggedIn loaded model =
             , Ui.spacing 16
             , Ui.scrollable
             ]
-            [ case loggedIn.admin of
-                Just _ ->
-                    Ui.el
-                        [ Ui.paddingXY 32 0 ]
-                        (MyUi.simpleButton
-                            (Dom.id "userOptions_gotoAdmin")
-                            (PressedLink (Route.AdminRoute { highlightLog = Nothing }))
-                            (Ui.text "Go to Admin")
-                        )
+            [ case local.adminData of
+                IsAdmin _ ->
+                    gotoAdmin
 
-                Nothing ->
+                IsAdminButDataNotLoaded ->
+                    gotoAdmin
+
+                IsNotAdmin ->
                     Ui.none
             , TwoFactorAuthentication.view local.localUser.userAgent isMobile time loggedIn.twoFactor
                 |> Ui.map TwoFactorMsg

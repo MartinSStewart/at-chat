@@ -14,7 +14,8 @@ module Pages.Admin exposing
     , UserTableId(..)
     , UsersChangeError(..)
     , applyChangesToBackendUsers
-    , init
+    , initForAdmin
+    , initForUser
     , logSectionId
     , pendingChangesText
     , update
@@ -231,8 +232,29 @@ type UsersChangeError
     | InvalidNewUser
 
 
-init : Pagination LogWithTime -> { highlightLog : Maybe Int } -> ( Model, Maybe AdminChange )
-init logs { highlightLog } =
+initForUser : Model
+initForUser =
+    { highlightLog = Nothing
+    , copiedLogLink = Nothing
+    , userTable =
+        { table = Table.init 1
+        , changedUsers = SeqDict.empty
+        , editingCell = Nothing
+        , newUsers = Array.empty
+        , deletedUsers = SeqSet.empty
+        }
+    , submitError = Nothing
+    , logs = Pagination.init 0 |> Tuple.first
+    , slackClientSecret = Editable.init
+    , publicVapidKey = Editable.init
+    , privateVapidKey = Editable.init
+    , openRouterKey = Editable.init
+    , importBackendStatus = NotImportingBackend
+    }
+
+
+initForAdmin : Pagination LogWithTime -> { highlightLog : Maybe Int } -> ( Model, Maybe AdminChange )
+initForAdmin logs { highlightLog } =
     ( { highlightLog = highlightLog
       , copiedLogLink = Nothing
       , userTable =

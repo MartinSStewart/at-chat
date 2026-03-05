@@ -168,7 +168,7 @@ type GuildChannelNameHover
 
 type alias LoggedIn2 =
     { localState : Local LocalMsg LocalState
-    , admin : Maybe Pages.Admin.Model
+    , admin : Pages.Admin.Model
     , drafts : SeqDict ( AnyGuildOrDmId, ThreadRoute ) NonemptyString
     , newChannelForm : SeqDict (Id GuildId) NewChannelForm
     , editChannelForm : SeqDict ( Id GuildId, Id ChannelId ) NewChannelForm

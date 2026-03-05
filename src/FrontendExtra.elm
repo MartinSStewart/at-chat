@@ -505,18 +505,12 @@ routeRequest previousRoute newRoute model =
         AdminRoute { highlightLog } ->
             updateLoggedIn
                 (\loggedIn ->
-                    ( { loggedIn
-                        | admin =
-                            case loggedIn.admin of
-                                Just admin ->
-                                    Just { admin | highlightLog = highlightLog }
-
-                                Nothing ->
-                                    loggedIn.admin
-                        , userOptions = Nothing
-                      }
-                    , viewCmd
-                    )
+                    let
+                        admin : Pages.Admin.Model
+                        admin =
+                            loggedIn.admin
+                    in
+                    ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }, viewCmd )
                 )
                 model2
 
@@ -1275,6 +1269,9 @@ changeUpdate localMsg local =
                     case local.adminData of
                         IsAdmin adminData ->
                             Pages.Admin.updateAdmin changedBy adminChange adminData local
+
+                        IsAdminButDataNotLoaded ->
+                            local
 
                         IsNotAdmin ->
                             local
@@ -2803,6 +2800,9 @@ changeUpdate localMsg local =
                                     }
                                         |> IsAdmin
                             }
+
+                        IsAdminButDataNotLoaded ->
+                            local
 
                         IsNotAdmin ->
                             local

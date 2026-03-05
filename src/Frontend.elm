@@ -327,15 +327,14 @@ loadedInitHelper time timezone userAgent loginData loading =
         localState =
             loginDataToLocalState userAgent timezone loginData
 
-        maybeAdmin : Maybe ( Pages.Admin.Model, Maybe Pages.Admin.AdminChange, Command FrontendOnly ToBackend msg )
-        maybeAdmin =
+        ( adminModel, adminChange, adminCmd ) =
             case loginData.adminData of
                 IsAdminLoginData _ ->
                     let
                         ( logPagination, paginationCmd ) =
                             Pagination.init localState.localUser.user.lastLogPageViewed
                     in
-                    Pages.Admin.init
+                    Pages.Admin.initForAdmin
                         logPagination
                         (case loading.route of
                             AdminRoute params ->
@@ -353,15 +352,14 @@ loadedInitHelper time timezone userAgent loginData loading =
                                     paginationCmd
                                 )
                            )
-                        |> Just
 
                 IsNotAdminLoginData ->
-                    Nothing
+                    ( Pages.Admin.initForUser, Nothing, Command.none )
 
         loggedIn : LoggedIn2
         loggedIn =
             { localState = Local.init localState
-            , admin = Maybe.map (\( a, _, _ ) -> a) maybeAdmin
+            , admin = adminModel
             , drafts = SeqDict.empty
             , newChannelForm = SeqDict.empty
             , editChannelForm = SeqDict.empty
@@ -407,25 +405,10 @@ loadedInitHelper time timezone userAgent loginData loading =
 
                     _ ->
                         Command.none
-                , case maybeAdmin of
-                    Just ( _, _, cmd ) ->
-                        cmd
-
-                    Nothing ->
-                        Command.none
+                , adminCmd
                 ]
     in
-    FrontendExtra.handleLocalChange
-        time
-        (case maybeAdmin of
-            Just ( _, Just adminChange, _ ) ->
-                Local_Admin adminChange |> Just
-
-            _ ->
-                Nothing
-        )
-        loggedIn
-        cmds
+    FrontendExtra.handleLocalChange time (Maybe.map Local_Admin adminChange) loggedIn cmds
 
 
 loginDataToLocalState : UserAgent -> Time.Zone -> LoginData -> LocalState
@@ -580,8 +563,8 @@ updateLoaded msg model =
         AdminPageMsg adminPageMsg ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    case ( loggedIn.admin, (Local.model loggedIn.localState).adminData ) of
-                        ( Just admin, IsAdmin adminData ) ->
+                    case (Local.model loggedIn.localState).adminData of
+                        IsAdmin adminData ->
                             let
                                 ( newAdmin, cmd, outMsg ) =
                                     Pages.Admin.update
@@ -590,11 +573,11 @@ updateLoaded msg model =
                                         adminData
                                         (Local.model loggedIn.localState)
                                         adminPageMsg
-                                        admin
+                                        loggedIn.admin
 
                                 loggedIn2 : LoggedIn2
                                 loggedIn2 =
-                                    { loggedIn | admin = Just newAdmin }
+                                    { loggedIn | admin = newAdmin }
                             in
                             case outMsg of
                                 Pages.Admin.AdminChange adminChange ->
@@ -3928,18 +3911,13 @@ updateLoadedFromBackend msg model =
         AdminToFrontend adminToFrontend ->
             case model.loginStatus of
                 LoggedIn loggedIn ->
-                    case loggedIn.admin of
-                        Just admin ->
-                            let
-                                ( newAdmin, cmd ) =
-                                    Pages.Admin.updateFromBackend adminToFrontend admin
-                            in
-                            ( { model | loginStatus = LoggedIn { loggedIn | admin = Just newAdmin } }
-                            , Command.map AdminToBackend AdminPageMsg cmd
-                            )
-
-                        Nothing ->
-                            ( model, Command.none )
+                    let
+                        ( newAdmin, cmd ) =
+                            Pages.Admin.updateFromBackend adminToFrontend loggedIn.admin
+                    in
+                    ( { model | loginStatus = LoggedIn { loggedIn | admin = newAdmin } }
+                    , Command.map AdminToBackend AdminPageMsg cmd
+                    )
 
                 NotLoggedIn _ ->
                     ( model, Command.none )
@@ -4489,15 +4467,11 @@ view model =
                     AdminRoute _ ->
                         requiresLogin
                             (\loggedIn local ->
-                                case ( loggedIn.admin, local.adminData ) of
-                                    ( Just admin, IsAdmin adminData ) ->
+                                case local.adminData of
+                                    IsAdmin adminData ->
                                         case NonemptyDict.get local.localUser.session.userId adminData.users of
                                             Just user ->
-                                                Pages.Admin.view
-                                                    local
-                                                    adminData
-                                                    user
-                                                    admin
+                                                Pages.Admin.view local adminData user loggedIn.admin
                                                     |> Ui.map AdminPageMsg
 
                                             Nothing ->

@@ -405,6 +405,7 @@ type ChannelStatus
 
 type AdminStatus
     = IsAdmin AdminData
+    | IsAdminButDataNotLoaded
     | IsNotAdmin
 
 
