@@ -277,6 +277,43 @@ discordChannelIdToChannelId channelId messageId guild =
                 (SeqDict.toList guild.channels)
 
 
+discordChannelIdToChannelIdNoMessage :
+    Discord.Id.Id Discord.Id.ChannelId
+    -> DiscordBackendGuild
+    -> Maybe ( Discord.Id.Id Discord.Id.ChannelId, DiscordBackendChannel, ThreadRoute )
+discordChannelIdToChannelIdNoMessage channelId guild =
+    case SeqDict.get channelId guild.channels of
+        Just channel ->
+            Just ( channelId, channel, NoThread )
+
+        Nothing ->
+            List.Extra.findMap
+                (\( otherChannelId, channel ) ->
+                    case
+                        List.Extra.findMap
+                            (\( threadId, _ ) ->
+                                case OneToOne.first threadId channel.linkedMessageIds of
+                                    Just discordThreadId ->
+                                        if Discord.Id.fromUInt64 (Discord.Id.toUInt64 discordThreadId) == channelId then
+                                            Just threadId
+
+                                        else
+                                            Nothing
+
+                                    Nothing ->
+                                        Nothing
+                            )
+                            (SeqDict.toList channel.threads)
+                    of
+                        Just threadId ->
+                            Just ( otherChannelId, channel, ViewThread threadId )
+
+                        Nothing ->
+                            Nothing
+                )
+                (SeqDict.toList guild.channels)
+
+
 handleDiscordGuildEditMessage :
     Discord.Id.Id Discord.Id.GuildId
     -> DiscordBackendGuild
@@ -1231,6 +1268,13 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                     handleChannelCreated channel model2
                             in
                             ( model3, cmd2 :: cmds )
+
+                        Discord.UserOutMsg_TypingStarted typingStart ->
+                            let
+                                ( model3, cmd2 ) =
+                                    handleTypingStarted typingStart model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1246,6 +1290,84 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleTypingStarted : Discord.TypingStart -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
+handleTypingStarted typingStart model =
+    case typingStart.guildId of
+        Included guildId ->
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    case discordChannelIdToChannelIdNoMessage typingStart.channelId guild of
+                        Just ( channelId, channel, threadRoute ) ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert channelId
+                                                    { channel
+                                                        | lastTypedAt =
+                                                            SeqDict.insert
+                                                                typingStart.userId
+                                                                { time = typingStart.timestamp, messageIndex = Nothing }
+                                                                channel.lastTypedAt
+                                                    }
+                                                    guild.channels
+                                        }
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                (Server_DiscordGuildMemberTyping
+                                    typingStart.timestamp
+                                    typingStart.userId
+                                    guildId
+                                    channelId
+                                    threadRoute
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Missing ->
+            let
+                channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                channelId =
+                    Discord.Id.toUInt64 typingStart.channelId |> Discord.Id.fromUInt64
+            in
+            case SeqDict.get channelId model.discordDmChannels of
+                Just channel ->
+                    ( { model
+                        | discordDmChannels =
+                            SeqDict.insert
+                                channelId
+                                { channel
+                                    | lastTypedAt =
+                                        SeqDict.insert
+                                            typingStart.userId
+                                            { time = typingStart.timestamp, messageIndex = Nothing }
+                                            channel.lastTypedAt
+                                }
+                                model.discordDmChannels
+                      }
+                    , Broadcast.toDiscordDmChannel
+                        channelId
+                        (Server_DiscordDmMemberTyping typingStart.timestamp typingStart.userId channelId
+                            |> ServerChange
+                        )
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 handleDiscordEditMessage :

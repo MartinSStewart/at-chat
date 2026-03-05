@@ -659,7 +659,9 @@ type ServerChange
             , members : SeqDict (Id UserId) FrontendUser
             }
         )
-    | Server_MemberTyping Time.Posix (Id UserId) ( AnyGuildOrDmId, ThreadRoute )
+    | Server_MemberTyping Time.Posix (Id UserId) GuildOrDmId ThreadRoute
+    | Server_DiscordGuildMemberTyping Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRoute
+    | Server_DiscordDmMemberTyping Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId)
     | Server_AddReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
     | Server_RemoveReactionEmoji (Id UserId) GuildOrDmId ThreadRouteWithMessage Emoji
     | Server_DiscordAddReactionGuildEmoji (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMessage Emoji

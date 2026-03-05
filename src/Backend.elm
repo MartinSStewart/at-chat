@@ -69,6 +69,7 @@ import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUs
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
 import VisibleMessages
+import WireHelper
 
 
 app :
@@ -2203,7 +2204,13 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_MemberTyping time userId ( guildOrDmId, threadRoute ) |> ServerChange)
+                                            (Server_MemberTyping
+                                                time
+                                                userId
+                                                (GuildOrDmId_Guild guildId channelId)
+                                                threadRoute
+                                                |> ServerChange
+                                            )
                                             model
                                         ]
                                     )
@@ -2233,10 +2240,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                             (Just clientId)
                                             Nothing
                                             otherUserId
-                                            (Server_MemberTyping
-                                                time
-                                                userId
-                                                ( GuildOrDmId (GuildOrDmId_Dm userId), threadRoute )
+                                            (Server_MemberTyping time userId (GuildOrDmId_Dm userId) threadRoute
                                                 |> ServerChange
                                             )
                                             model
@@ -2250,7 +2254,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 sessionId
                                 guildId
                                 currentDiscordUserId
-                                (\session userData _ guild ->
+                                (\_ userData _ guild ->
                                     ( { model
                                         | discordGuilds =
                                             SeqDict.insert
@@ -2269,7 +2273,12 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toDiscordGuildExcludingOne
                                             clientId
                                             guildId
-                                            (Server_MemberTyping time session.userId ( guildOrDmId, threadRoute )
+                                            (Server_DiscordGuildMemberTyping
+                                                time
+                                                currentDiscordUserId
+                                                guildId
+                                                channelId
+                                                threadRoute
                                                 |> ServerChange
                                             )
                                             model
@@ -2287,7 +2296,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                 model
                                 sessionId
                                 data
-                                (\session userData _ dmChannel ->
+                                (\_ userData _ dmChannel ->
                                     ( { model
                                         | discordDmChannels =
                                             SeqDict.insert
@@ -2302,10 +2311,7 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                         , Broadcast.toDiscordDmChannelExcludingOne
                                             clientId
                                             data.channelId
-                                            (Server_MemberTyping
-                                                time
-                                                session.userId
-                                                ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), threadRoute )
+                                            (Server_DiscordDmMemberTyping time data.currentUserId data.channelId
                                                 |> ServerChange
                                             )
                                             model
@@ -4960,13 +4966,13 @@ updateFromFrontendAdmin clientId toBackend model =
 
         Pages.Admin.ExportBackendRequest ->
             ( model
-            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (Types.w3_encode_BackendModel model))
+            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel model))
                 |> AdminToFrontend
                 |> Lamdera.sendToFrontend clientId
             )
 
         Pages.Admin.ImportBackendRequest bytes ->
-            case Bytes.Decode.decode Types.w3_decode_BackendModel bytes of
+            case Bytes.Decode.decode WireHelper.decodeBackendModel bytes of
                 Just model2 ->
                     ( model2
                     , Lamdera.sendToFrontend clientId (Pages.Admin.ImportBackendResponse (Ok ()) |> AdminToFrontend)
