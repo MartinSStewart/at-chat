@@ -1593,13 +1593,15 @@ handleReadyData readyData model =
             case readyData.privateChannels of
                 Included privateChannels ->
                     List.map
-                        (\dmChannel ->
-                            { dmChannelId = dmChannel.id, members = dmChannel.recipientIds }
-                        )
+                        (\dmChannel -> { dmChannelId = dmChannel.id, members = dmChannel.recipientIds })
                         privateChannels
 
                 Missing ->
                     []
+
+        discordUsers : List Discord.PartialUser
+        discordUsers =
+            discordUserToPartialUser readyData.user :: readyData.users
     in
     ( { model
         | discordGuilds =
@@ -1625,10 +1627,10 @@ handleReadyData readyData model =
                 )
                 model.discordGuilds
                 readyData.guilds
-        , discordUsers = List.foldl addDiscordUserData model.discordUsers readyData.users
+        , discordUsers = List.foldl addDiscordUserData model.discordUsers discordUsers
       }
     , Command.batch
-        [ getUserAvatars model.discordUsers readyData.users
+        [ getUserAvatars model.discordUsers discordUsers
         , (List.filterMap (getDiscordGuildData model) readyData.guilds |> Task.sequence)
             |> Task.andThen
                 (\data ->
