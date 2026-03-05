@@ -1,4 +1,22 @@
-module BackendExtra exposing (addLog, addLogWithCmd, adminData, discordDmChannelToFrontend, discordFullDataUserToFrontendCurrentUser, discordGuildToFrontendForUser, getLinkedDiscordUsersAndOtherUsers, getLoginCode, getLoginData, invalidChangeResponse, isLoginTooOld, loginEmailContent, loginEmailSubject, loginWithToken, sendLoginEmail, shouldRateLimit, validateAttachedFiles)
+module BackendExtra exposing
+    ( addLog
+    , addLogWithCmd
+    , adminData
+    , discordDmChannelToFrontend
+    , discordFullDataUserToFrontendCurrentUser
+    , discordGuildToFrontendForUser
+    , getLinkedDiscordUsersAndOtherUsers
+    , getLoginCode
+    , getLoginData
+    , invalidChangeResponse
+    , isLoginTooOld
+    , loginEmailContent
+    , loginEmailSubject
+    , loginWithToken
+    , sendLoginEmail
+    , shouldRateLimit
+    , validateAttachedFiles
+    )
 
 {-| Backend.elm is getting to large and it's slowing down my IDE.
 Most of the stuff in there doesn't neatly fit into it's own module so instead I'm just moving lots of functions here instead.
