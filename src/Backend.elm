@@ -4325,7 +4325,7 @@ updateFromFrontendAdmin clientId toBackend model =
                     }
             in
             ( model
-            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel subsetModel))
+            , Pages.Admin.ExportSubsetBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel subsetModel))
                 |> AdminToFrontend
                 |> Lamdera.sendToFrontend clientId
             )

@@ -127,6 +127,7 @@ type ToBackend
 type ToFrontend
     = LogPaginationToFrontend (Pagination.ToFrontend LogWithTime)
     | ExportBackendResponse Bytes
+    | ExportSubsetBackendResponse Bytes
     | ImportBackendResponse (Result () ())
 
 
@@ -1081,6 +1082,9 @@ updateFromBackend toFrontend model =
 
         ExportBackendResponse bytes ->
             ( model, Effect.File.Download.bytes "backend-export.bin" "application/octet-stream" bytes )
+
+        ExportSubsetBackendResponse bytes ->
+            ( model, Effect.File.Download.bytes "backend-export-subset.bin" "application/octet-stream" bytes )
 
         ImportBackendResponse result ->
             case result of
