@@ -4917,8 +4917,18 @@ changeUpdate localMsg local =
                                         local.guilds
                             }
 
-                Local_MemberTyping time guildOrDmId ->
-                    memberTyping time local.localUser.session.userId guildOrDmId local
+                Local_MemberTyping time ( guildOrDmId, threadRoute ) ->
+                    case guildOrDmId of
+                        GuildOrDmId guildOrDmId2 ->
+                            memberTyping time local.localUser.session.userId guildOrDmId2 threadRoute local
+
+                        DiscordGuildOrDmId guildOrDmId2 ->
+                            case guildOrDmId2 of
+                                DiscordGuildOrDmId_Guild userId guildId channelId ->
+                                    discordGuildMemberTyping time userId guildId channelId threadRoute local
+
+                                DiscordGuildOrDmId_Dm data ->
+                                    discordDmMemberTyping time data.currentUserId data.channelId local
 
                 Local_AddReactionEmoji guildOrDmId threadRoute emoji ->
                     addReactionEmoji local.localUser.session.userId guildOrDmId threadRoute emoji local
@@ -5765,8 +5775,14 @@ changeUpdate localMsg local =
                         Err error ->
                             { local | joinGuildError = Just error }
 
-                Server_MemberTyping time userId guildOrDmId ->
-                    memberTyping time userId guildOrDmId local
+                Server_MemberTyping time userId guildOrDmId threadRoute ->
+                    memberTyping time userId guildOrDmId threadRoute local
+
+                Server_DiscordGuildMemberTyping time userId guildId channelId threadRoute ->
+                    discordGuildMemberTyping time userId guildId channelId threadRoute local
+
+                Server_DiscordDmMemberTyping time userId channelId ->
+                    discordDmMemberTyping time userId channelId local
 
                 Server_AddReactionEmoji userId guildOrDmId messageIndex emoji ->
                     addReactionEmoji userId (GuildOrDmId guildOrDmId) messageIndex emoji local
@@ -6154,10 +6170,10 @@ unlinkDiscordUser userId local =
     }
 
 
-memberTyping : Time.Posix -> Id UserId -> ( AnyGuildOrDmId, ThreadRoute ) -> LocalState -> LocalState
-memberTyping time userId ( guildOrDmId, threadRoute ) local =
+memberTyping : Time.Posix -> Id UserId -> GuildOrDmId -> ThreadRoute -> LocalState -> LocalState
+memberTyping time userId guildOrDmId threadRoute local =
     case guildOrDmId of
-        GuildOrDmId (GuildOrDmId_Guild guildId channelId) ->
+        GuildOrDmId_Guild guildId channelId ->
             { local
                 | guilds =
                     SeqDict.updateIfExists
@@ -6166,7 +6182,7 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.guilds
             }
 
-        GuildOrDmId (GuildOrDmId_Dm otherUserId) ->
+        GuildOrDmId_Dm otherUserId ->
             { local
                 | dmChannels =
                     SeqDict.updateIfExists
@@ -6175,26 +6191,36 @@ memberTyping time userId ( guildOrDmId, threadRoute ) local =
                         local.dmChannels
             }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Guild currentDiscordUserId guildId channelId) ->
-            { local
-                | discordGuilds =
-                    SeqDict.updateIfExists
-                        guildId
-                        (LocalState.updateChannel
-                            (LocalState.memberIsTyping currentDiscordUserId time threadRoute)
-                            channelId
-                        )
-                        local.discordGuilds
-            }
 
-        DiscordGuildOrDmId (DiscordGuildOrDmId_Dm { currentUserId, channelId }) ->
-            { local
-                | discordDmChannels =
-                    SeqDict.updateIfExists
-                        channelId
-                        (LocalState.memberIsTypingHelper currentUserId time)
-                        local.discordDmChannels
-            }
+discordGuildMemberTyping :
+    Time.Posix
+    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.GuildId
+    -> Discord.Id.Id Discord.Id.ChannelId
+    -> ThreadRoute
+    -> LocalState
+    -> LocalState
+discordGuildMemberTyping time userId guildId channelId threadRoute local =
+    { local
+        | discordGuilds =
+            SeqDict.updateIfExists
+                guildId
+                (LocalState.updateChannel (LocalState.memberIsTyping userId time threadRoute) channelId)
+                local.discordGuilds
+    }
+
+
+discordDmMemberTyping :
+    Time.Posix
+    -> Discord.Id.Id Discord.Id.UserId
+    -> Discord.Id.Id Discord.Id.PrivateChannelId
+    -> LocalState
+    -> LocalState
+discordDmMemberTyping time userId channelId local =
+    { local
+        | discordDmChannels =
+            SeqDict.updateIfExists channelId (LocalState.memberIsTypingHelper userId time) local.discordDmChannels
+    }
 
 
 addReactionEmoji : Id UserId -> AnyGuildOrDmId -> ThreadRouteWithMessage -> Emoji -> LocalState -> LocalState

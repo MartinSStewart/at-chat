@@ -288,11 +288,11 @@ discordChannelIdToChannelIdNoMessage channelId guild =
 
         Nothing ->
             List.Extra.findMap
-                (\( channelId2, channel ) ->
+                (\( otherChannelId, channel ) ->
                     case
                         List.Extra.findMap
-                            (\( threadId, thread ) ->
-                                case OneToOne.second threadId channel.linkedMessageIds of
+                            (\( threadId, _ ) ->
+                                case OneToOne.first threadId channel.linkedMessageIds of
                                     Just discordThreadId ->
                                         if Discord.Id.fromUInt64 (Discord.Id.toUInt64 discordThreadId) == channelId then
                                             Just threadId
@@ -306,7 +306,7 @@ discordChannelIdToChannelIdNoMessage channelId guild =
                             (SeqDict.toList channel.threads)
                     of
                         Just threadId ->
-                            Just ( channelId2, channel, ViewThread threadId )
+                            Just ( otherChannelId, channel, ViewThread threadId )
 
                         Nothing ->
                             Nothing
@@ -1270,11 +1270,11 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                             ( model3, cmd2 :: cmds )
 
                         Discord.UserOutMsg_TypingStarted typingStart ->
-                            case typingStart.guildId of
-                                Included guildId ->
-                                    case SeqDict.get guildId model2.discordGuilds of
-                                        Just guild ->
-                                            discordChannelIdToChannelId typingStart.channelId guild
+                            let
+                                ( model3, cmd2 ) =
+                                    handleTypingStarted typingStart model2
+                            in
+                            ( model3, cmd2 :: cmds )
                 )
                 ( { model
                     | discordUsers =
@@ -1290,6 +1290,84 @@ discordUserWebsocketMsg discordUserId discordMsg model =
 
         _ ->
             ( model, Command.none )
+
+
+handleTypingStarted : Discord.TypingStart -> BackendModel -> ( BackendModel, Command BackendOnly ToFrontend msg )
+handleTypingStarted typingStart model =
+    case typingStart.guildId of
+        Included guildId ->
+            case SeqDict.get guildId model.discordGuilds of
+                Just guild ->
+                    case discordChannelIdToChannelIdNoMessage typingStart.channelId guild of
+                        Just ( channelId, channel, threadRoute ) ->
+                            ( { model
+                                | discordGuilds =
+                                    SeqDict.insert
+                                        guildId
+                                        { guild
+                                            | channels =
+                                                SeqDict.insert channelId
+                                                    { channel
+                                                        | lastTypedAt =
+                                                            SeqDict.insert
+                                                                typingStart.userId
+                                                                { time = typingStart.timestamp, messageIndex = Nothing }
+                                                                channel.lastTypedAt
+                                                    }
+                                                    guild.channels
+                                        }
+                                        model.discordGuilds
+                              }
+                            , Broadcast.toDiscordGuild
+                                guildId
+                                (Server_DiscordGuildMemberTyping
+                                    typingStart.timestamp
+                                    typingStart.userId
+                                    guildId
+                                    channelId
+                                    threadRoute
+                                    |> ServerChange
+                                )
+                                model
+                            )
+
+                        Nothing ->
+                            ( model, Command.none )
+
+                Nothing ->
+                    ( model, Command.none )
+
+        Missing ->
+            let
+                channelId : Discord.Id.Id Discord.Id.PrivateChannelId
+                channelId =
+                    Discord.Id.toUInt64 typingStart.channelId |> Discord.Id.fromUInt64
+            in
+            case SeqDict.get channelId model.discordDmChannels of
+                Just channel ->
+                    ( { model
+                        | discordDmChannels =
+                            SeqDict.insert
+                                channelId
+                                { channel
+                                    | lastTypedAt =
+                                        SeqDict.insert
+                                            typingStart.userId
+                                            { time = typingStart.timestamp, messageIndex = Nothing }
+                                            channel.lastTypedAt
+                                }
+                                model.discordDmChannels
+                      }
+                    , Broadcast.toDiscordDmChannel
+                        channelId
+                        (Server_DiscordDmMemberTyping typingStart.timestamp typingStart.userId channelId
+                            |> ServerChange
+                        )
+                        model
+                    )
+
+                Nothing ->
+                    ( model, Command.none )
 
 
 handleDiscordEditMessage :

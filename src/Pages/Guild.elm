@@ -6368,8 +6368,8 @@ friendLabel isMobile isSelected currentUserId otherUserId name icon allUsers mes
         ]
         [ User.profileImage icon
         , Ui.column
-            [ Ui.spacing 2 ]
-            [ Ui.el [] (Ui.text (PersonName.toString name))
+            []
+            [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString name))
             , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
             ]
         ]
@@ -6438,8 +6438,8 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                     Just otherUser ->
                         [ User.profileImage otherUser.icon
                         , Ui.column
-                            [ Ui.spacing 2 ]
-                            [ Ui.el [] (Ui.text (PersonName.toString otherUser.name))
+                            []
+                            [ Ui.el [ Ui.Font.bold ] (Ui.text (PersonName.toString otherUser.name))
                             , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
                             ]
                         ]
@@ -6453,7 +6453,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                     (List.Nonempty.toList members2)
                     |> User.multipleProfileImages
                 , Ui.column
-                    [ Ui.spacing 2 ]
+                    []
                     [ List.filterMap
                         (\userId ->
                             case LocalState.getDiscordUser userId localUser of
@@ -6466,6 +6466,7 @@ discordFriendLabel isMobile isSelected dmChannelId members localUser message =
                         rest
                         |> String.join ", "
                         |> Ui.text
+                        |> Ui.el [ Ui.Font.bold ]
                     , Ui.el [ Ui.Font.size 13 ] (Ui.text messagePreview)
                     ]
                 ]
