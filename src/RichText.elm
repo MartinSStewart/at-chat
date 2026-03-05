@@ -469,7 +469,7 @@ urlParser =
                             if stop then
                                 state
 
-                            else if char == '.' || char == ')' || char == ',' then
+                            else if char == '.' || char == ')' || char == ',' || char == '"' then
                                 ( index2 - 1, False )
 
                             else
@@ -484,7 +484,7 @@ urlParser =
             [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
             , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
             ]
-        |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '"' && char /= '<' && char /= '>' && char /= '\\' && char /= '^' && char /= '`' && char /= '{' && char /= '|' && char /= '}')
+        |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '<')
                 |> Parser.getChompedString
            )
 
