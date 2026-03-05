@@ -4316,6 +4316,20 @@ updateFromFrontendAdmin clientId toBackend model =
                 |> Lamdera.sendToFrontend clientId
             )
 
+        Pages.Admin.ExportSubsetBackendRequest ->
+            let
+                subsetModel =
+                    { model
+                        | discordGuilds = SeqDict.toList model.discordGuilds |> List.take 2 |> SeqDict.fromList
+                        , discordDmChannels = SeqDict.toList model.discordDmChannels |> List.take 2 |> SeqDict.fromList
+                    }
+            in
+            ( model
+            , Pages.Admin.ExportBackendResponse (Bytes.Encode.encode (WireHelper.encodeBackendModel subsetModel))
+                |> AdminToFrontend
+                |> Lamdera.sendToFrontend clientId
+            )
+
         Pages.Admin.ImportBackendRequest bytes ->
             case Bytes.Decode.decode WireHelper.decodeBackendModel bytes of
                 Just model2 ->

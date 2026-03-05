@@ -111,6 +111,7 @@ type Msg
     | PressedCopyText String
     | TypedInReadOnlyTextInput
     | PressedExportBackend
+    | PressedExportSubsetBackend
     | PressedImportBackend
     | ImportBackendFileSelected File
     | GotImportBackendFileContent Bytes
@@ -119,6 +120,7 @@ type Msg
 type ToBackend
     = LogPaginationToBackend Pagination.ToBackend
     | ExportBackendRequest
+    | ExportSubsetBackendRequest
     | ImportBackendRequest Bytes
 
 
@@ -908,6 +910,9 @@ update navigationKey time adminData localState msg model =
         PressedExportBackend ->
             ( model, Lamdera.sendToBackend ExportBackendRequest, NoOutMsg )
 
+        PressedExportSubsetBackend ->
+            ( model, Lamdera.sendToBackend ExportSubsetBackendRequest, NoOutMsg )
+
         PressedImportBackend ->
             case model.importBackendStatus of
                 ImportingBackend ->
@@ -1211,6 +1216,10 @@ exportSection user model =
             (Dom.id "admin_exportBackendButton")
             PressedExportBackend
             (Ui.text "Export backend")
+        , MyUi.simpleButton
+            (Dom.id "admin_exportSubsetBackendButton")
+            PressedExportSubsetBackend
+            (Ui.text "Export subset")
         , Ui.row
             [ Ui.spacing 8 ]
             [ MyUi.simpleButton
