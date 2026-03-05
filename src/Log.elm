@@ -34,6 +34,7 @@ type Log
     | FailedToLoadDiscordUserData (Discord.Id.Id Discord.Id.UserId) Discord.HttpError
     | FailedToSendDiscordGuildMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
     | FailedToSendDiscordDmMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) Discord.HttpError
+    | FailedToGetDiscordUserAvatars Discord.HttpError
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -85,6 +86,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToSendDiscordDmMessage _ _ _ ->
+            Nothing
+
+        FailedToGetDiscordUserAvatars httpError ->
             Nothing
 
 
@@ -347,6 +351,13 @@ logContent log =
                 [ tag errorTag "Sending Discord DM message failed"
                 , fieldRow "User" (Ui.text (Discord.Id.toString discordUserId))
                 , fieldRow "Channel" (Ui.text (Discord.Id.toString channelId))
+                , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToGetDiscordUserAvatars httpError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Loading Discord user avatars failed"
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
                 ]
 

@@ -505,7 +505,7 @@ update msg model =
         AiChatBackendMsg aiChatMsg ->
             ( model, Command.map AiChatToFrontend AiChatBackendMsg (AiChat.backendUpdate aiChatMsg) )
 
-        GotDiscordUserAvatars result ->
+        GotDiscordUserAvatars result time ->
             case result of
                 Ok userAvatars ->
                     ( { model
@@ -533,8 +533,8 @@ update msg model =
                     , Command.none
                     )
 
-                Err _ ->
-                    ( model, Command.none )
+                Err error ->
+                    addLog time (Log.FailedToGetDiscordUserAvatars error) model
 
         SentNotification sessionId userId time result ->
             case result of

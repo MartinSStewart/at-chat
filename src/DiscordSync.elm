@@ -1611,8 +1611,12 @@ handleReadyData readyData model =
                         data.properties.id
                         (\maybe ->
                             case maybe of
-                                Just _ ->
-                                    maybe
+                                Just guild ->
+                                    { guild
+                                        | name = GuildName.fromStringLossy data.properties.name
+                                        , owner = data.properties.ownerId
+                                    }
+                                        |> Just
 
                                 Nothing ->
                                     { name = GuildName.fromStringLossy data.properties.name
@@ -1956,33 +1960,39 @@ getUserAvatars :
     -> List { a | id : Discord.Id.Id Discord.Id.UserId, avatar : Maybe (Discord.ImageHash Discord.AvatarHash) }
     -> Command restriction toMsg BackendMsg
 getUserAvatars existingUsers users =
-    List.filterMap
-        (\user ->
-            if SeqDict.member user.id existingUsers then
-                Nothing
+    Task.map2
+        GotDiscordUserAvatars
+        (List.filterMap
+            (\user ->
+                if SeqDict.member user.id existingUsers then
+                    Nothing
 
-            else
-                Task.map
-                    (\maybeAvatar -> ( user.id, maybeAvatar ))
-                    (case user.avatar of
-                        Just avatar ->
-                            loadImage
-                                (Discord.userAvatarUrl
-                                    { size = Discord.DefaultImageSize
-                                    , imageType = Discord.Choice1 Discord.Png
-                                    }
-                                    user.id
-                                    avatar
-                                )
+                else
+                    Task.map
+                        (\maybeAvatar -> ( user.id, maybeAvatar ))
+                        (case user.avatar of
+                            Just avatar ->
+                                loadImage
+                                    (Discord.userAvatarUrl
+                                        { size = Discord.DefaultImageSize
+                                        , imageType = Discord.Choice1 Discord.Png
+                                        }
+                                        user.id
+                                        avatar
+                                    )
 
-                        Nothing ->
-                            Task.succeed Nothing
-                    )
-                    |> Just
+                            Nothing ->
+                                Task.succeed Nothing
+                        )
+                        |> Just
+            )
+            users
+            |> Task.sequence
+            |> Task.map Ok
+            |> Task.onError (\error -> Task.succeed (Err error))
         )
-        users
-        |> Task.sequence
-        |> Task.attempt GotDiscordUserAvatars
+        Time.now
+        |> Task.perform identity
 
 
 loadImage : String -> Task restriction x (Maybe FileStatus.UploadResponse)

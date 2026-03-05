@@ -546,7 +546,7 @@ type BackendMsg
     | DiscordRemovedReactionToDmMessage Time.Posix (Discord.Id.Id Discord.Id.PrivateChannelId) (Id ChannelMessageId) (Discord.Id.Id Discord.Id.MessageId) Emoji (Result Discord.HttpError ())
     | DiscordTypingIndicatorSent
     | AiChatBackendMsg AiChat.BackendMsg
-    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse )))
+    | GotDiscordUserAvatars (Result Discord.HttpError (List ( Discord.Id.Id Discord.Id.UserId, Maybe FileStatus.UploadResponse ))) Time.Posix
     | SentNotification SessionId (Id UserId) Time.Posix (Result Http.Error ())
     | GotVapidKeys (Result Http.Error String)
     | GotSlackChannels
