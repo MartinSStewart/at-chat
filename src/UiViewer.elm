@@ -5,6 +5,7 @@ Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 -}
 
 import Backend
+import BackendExtra
 import Discord
 import Discord.Id
 import Effect.Http as Http
@@ -62,8 +63,8 @@ emailView subject content =
 loginEmail : Html msg
 loginEmail =
     emailView
-        Backend.loginEmailSubject
-        (Backend.loginEmailContent 12345678)
+        BackendExtra.loginEmailSubject
+        (BackendExtra.loginEmailContent 12345678)
 
 
 exampleEmail : EmailAddress
@@ -79,7 +80,7 @@ logExamples =
 
         logEntry : Log -> Ui.Element ()
         logEntry log =
-            Log.view Time.utc () False False { time = exampleTime, log = log }
+            Log.view Time.utc () (\_ -> ()) False False { time = exampleTime, log = log }
     in
     Ui.column
         [ Ui.spacing 24 ]
@@ -109,4 +110,6 @@ logExamples =
                 (Unsafe.uint64 "333444555666777888" |> Discord.Id.fromUInt64)
                 (Discord.NotFound404 Discord.UnknownMessage10008)
             )
+        , logEntry
+            (Log.FailedToParseDiscordWebsocket "Expecting STRING but instead got blah blah blah at blah in json[0].field")
         ]

@@ -2258,6 +2258,7 @@ logSection timezone user model =
                         Log.view
                             timezone
                             (PressedCopyLogLink logIndex)
+                            PressedCopyText
                             (Just logIndex == model.copiedLogLink)
                             (Just logIndex == model.highlightLog)
                             log

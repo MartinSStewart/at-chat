@@ -1057,6 +1057,9 @@ update msg model =
                 _ ->
                     ( model, Command.none )
 
+        GotTimeForFailedToParseDiscordWebsocket jsonError time ->
+            BackendExtra.addLog time (Log.FailedToParseDiscordWebsocket jsonError) model
+
 
 attachmentsUploadedHelper :
     BackendModel

@@ -43,6 +43,7 @@ import FileName
 import FileStatus exposing (FileData, FileHash, FileId)
 import GuildName
 import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildId, GuildOrDmId(..), Id, ThreadMessageId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Json.Decode
 import Json.Encode
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
@@ -1216,7 +1217,12 @@ discordUserWebsocketMsg discordUserId discordMsg model =
                                 _ =
                                     Debug.log "gateway error" error
                             in
-                            ( model2, cmds )
+                            ( model2
+                            , Task.perform
+                                (GotTimeForFailedToParseDiscordWebsocket (Json.Decode.errorToString error))
+                                Time.now
+                                :: cmds
+                            )
 
                         Discord.UserOutMsg_ThreadCreatedOrUserAddedToThread _ ->
                             ( model2, cmds )

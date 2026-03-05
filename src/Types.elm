@@ -592,6 +592,7 @@ type BackendMsg
     | ReloadedDiscordDmChannel (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (List (Result Http.Error ( DiscordAttachmentId, FileStatus.UploadResponse )))
     | GotDiscordGuildChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) (Result Discord.HttpError (List Discord.Message))
     | GotDiscordDmChannelMessages Time.Posix (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) (Result Discord.HttpError (List Discord.Message))
+    | GotTimeForFailedToParseDiscordWebsocket String Time.Posix
 
 
 type LoginResult

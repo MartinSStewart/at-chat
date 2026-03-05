@@ -3,6 +3,7 @@ module Log exposing (Log(..), addLog, httpErrorToString, shouldNotifyAdmin, time
 import Array exposing (Array)
 import Discord
 import Discord.Id
+import Effect.Browser.Dom as Dom
 import Effect.Http as Http
 import EmailAddress exposing (EmailAddress)
 import Emoji exposing (Emoji)
@@ -35,6 +36,7 @@ type Log
     | FailedToSendDiscordGuildMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.GuildId) (Discord.Id.Id Discord.Id.ChannelId) ThreadRouteWithMaybeMessage Discord.HttpError
     | FailedToSendDiscordDmMessage (Discord.Id.Id Discord.Id.UserId) (Discord.Id.Id Discord.Id.PrivateChannelId) Discord.HttpError
     | FailedToGetDiscordUserAvatars Discord.HttpError
+    | FailedToParseDiscordWebsocket String
 
 
 shouldNotifyAdmin : Log -> Maybe String
@@ -89,6 +91,9 @@ shouldNotifyAdmin log =
             Nothing
 
         FailedToGetDiscordUserAvatars httpError ->
+            Nothing
+
+        FailedToParseDiscordWebsocket string ->
             Nothing
 
 
@@ -158,8 +163,8 @@ timeToString timezone includeYear time =
            )
 
 
-view : Time.Zone -> msg -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
-view timezone onPressCopyLink isCopied isHighlighted { time, log } =
+view : Time.Zone -> msg -> (String -> msg) -> Bool -> Bool -> { time : Time.Posix, log : Log } -> Element msg
+view timezone onPressCopyLink onPressCopy isCopied isHighlighted { time, log } =
     Ui.row
         [ Ui.spacingWith { horizontal = 16, vertical = 2 }
         , Ui.attrIf isHighlighted (Ui.background (Ui.rgb 255 246 207))
@@ -188,12 +193,12 @@ view timezone onPressCopyLink isCopied isHighlighted { time, log } =
               else
                 Ui.none
             ]
-        , logContent log |> Ui.el [ Ui.widthMin 350 ]
+        , logContent onPressCopy log |> Ui.el [ Ui.widthMin 350 ]
         ]
 
 
-logContent : Log -> Element msg
-logContent log =
+logContent : (String -> msg) -> Log -> Element msg
+logContent onPressCopy log =
     case log of
         LoginEmail result emailAddress ->
             case result of
@@ -359,6 +364,13 @@ logContent log =
                 [ Ui.spacing 4 ]
                 [ tag errorTag "Loading Discord user avatars failed"
                 , fieldRow "Error" (Ui.text (Discord.httpErrorToString httpError))
+                ]
+
+        FailedToParseDiscordWebsocket jsonError ->
+            Ui.column
+                [ Ui.spacing 4 ]
+                [ tag errorTag "Loading Discord user avatars failed"
+                , MyUi.errorBox (Dom.id "admin_FailedToParseDiscordWebsocket") onPressCopy jsonError
                 ]
 
 
