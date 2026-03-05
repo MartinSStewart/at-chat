@@ -294,6 +294,7 @@ initLoadedFrontend loading time userAgent loginResult =
             , scrollbarWidth = loading.scrollbarWidth
             , userAgent = userAgent
             , pageHasFocus = True
+            , versionNumber = Nothing
             }
 
         ( model2, cmdA ) =
@@ -304,6 +305,13 @@ initLoadedFrontend loading time userAgent loginResult =
         [ cmdB
         , cmdA
         , Command.map AiChatToBackend AiChatMsg aiChatCmd
+        , Http.get
+            { url = "/_i"
+            , expect =
+                Http.expectJson
+                    GotVersionNumber
+                    (Json.Decode.field "v" Json.Decode.string)
+            }
         , case loginResult of
             Ok _ ->
                 Ports.registerServiceWorker
@@ -1280,6 +1288,9 @@ isPressMsg msg =
             True
 
         TypedDiscordLinkBookmarklet ->
+            False
+
+        GotVersionNumber _ ->
             False
 
 
@@ -3905,6 +3916,19 @@ updateLoaded msg model =
 
         TypedDiscordLinkBookmarklet ->
             ( model, Command.none )
+
+        GotVersionNumber result ->
+            ( { model
+                | versionNumber =
+                    case result of
+                        Ok version ->
+                            Just version
+
+                        Err _ ->
+                            model.versionNumber
+              }
+            , Command.none
+            )
 
 
 setShowMembers : ShowMembersTab -> LoadedFrontend -> ( LoadedFrontend, Command FrontendOnly ToBackend FrontendMsg )

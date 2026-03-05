@@ -421,6 +421,17 @@ view isMobile time local loggedIn loaded model =
                         ]
                     )
                 )
+            , case loaded.versionNumber of
+                Just version ->
+                    Ui.el
+                        [ Ui.paddingXY 16 0
+                        , Ui.Font.size 12
+                        , Ui.Font.color MyUi.font3
+                        ]
+                        (Ui.text ("Version " ++ version))
+
+                Nothing ->
+                    Ui.none
             ]
         )
 
