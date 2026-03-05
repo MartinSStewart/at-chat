@@ -55,7 +55,7 @@ import SecretId exposing (SecretId)
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), InitialLoadRequest(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserAgent exposing (UserAgent)
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -206,7 +206,7 @@ loginWithToken :
     -> SessionId
     -> ClientId
     -> Int
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+    -> InitialLoadRequest
     -> UserAgent
     -> BackendModel
     -> ( BackendModel, Command BackendOnly ToFrontend BackendMsg )
@@ -242,7 +242,20 @@ loginWithToken time sessionId clientId loginCode requestMessagesFor userAgent mo
                             let
                                 session : UserSession
                                 session =
-                                    UserSession.init sessionId pendingLogin.userId requestMessagesFor userAgent
+                                    UserSession.init
+                                        sessionId
+                                        pendingLogin.userId
+                                        (case requestMessagesFor of
+                                            InitialLoadRequested_None ->
+                                                Nothing
+
+                                            InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
+                                                Just ( anyGuildOrDmId, threadRoute )
+
+                                            InitialLoadRequested_Admin ->
+                                                Nothing
+                                        )
+                                        userAgent
                             in
                             ( { model
                                 | sessions = SeqDict.insert sessionId session model.sessions
@@ -373,7 +386,7 @@ getLoginData :
     SessionId
     -> UserSession
     -> BackendUser
-    -> Maybe ( AnyGuildOrDmId, ThreadRoute )
+    -> InitialLoadRequest
     -> BackendModel
     -> LoginData
 getLoginData sessionId session user requestMessagesFor model =
@@ -384,7 +397,15 @@ getLoginData sessionId session user requestMessagesFor model =
     { session = session
     , adminData =
         if user.isAdmin then
-            IsAdminLoginData (adminData model user.lastLogPageViewed)
+            case requestMessagesFor of
+                InitialLoadRequested_Admin ->
+                    IsAdminLoginData (adminData model user.lastLogPageViewed)
+
+                InitialLoadRequested_Channel _ _ ->
+                    IsAdminButNoData
+
+                InitialLoadRequested_None ->
+                    IsAdminButNoData
 
         else
             IsNotAdminLoginData
@@ -395,7 +416,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\guildId guild ->
                 LocalState.guildToFrontendForUser
                     (case requestMessagesFor of
-                        Just ( GuildOrDmId (GuildOrDmId_Guild guildIdB channelId), threadRoute ) ->
+                        InitialLoadRequested_Channel (GuildOrDmId (GuildOrDmId_Guild guildIdB channelId)) threadRoute ->
                             if guildId == guildIdB then
                                 Just ( channelId, threadRoute )
 
@@ -414,7 +435,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\guildId guild ->
                 discordGuildToFrontendForUser
                     (case requestMessagesFor of
-                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId), threadRoute ) ->
+                        InitialLoadRequested_Channel (DiscordGuildOrDmId (DiscordGuildOrDmId_Guild _ requestedGuildId requestChannelId)) threadRoute ->
                             if requestedGuildId == guildId then
                                 Just ( requestChannelId, threadRoute )
 
@@ -433,7 +454,7 @@ getLoginData sessionId session user requestMessagesFor model =
             (\dmChannelId dmChannel ->
                 discordDmChannelToFrontend
                     (case requestMessagesFor of
-                        Just ( DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data), _ ) ->
+                        InitialLoadRequested_Channel (DiscordGuildOrDmId (DiscordGuildOrDmId_Dm data)) _ ->
                             dmChannelId == data.channelId
 
                         _ ->
@@ -451,7 +472,7 @@ getLoginData sessionId session user requestMessagesFor model =
                         SeqDict.insert otherUserId
                             (DmChannel.toFrontend
                                 (case requestMessagesFor of
-                                    Just ( GuildOrDmId (GuildOrDmId_Dm otherUserIdB), threadRoute ) ->
+                                    InitialLoadRequested_Channel (GuildOrDmId (GuildOrDmId_Dm otherUserIdB)) threadRoute ->
                                         if otherUserId == otherUserIdB then
                                             Just threadRoute
 

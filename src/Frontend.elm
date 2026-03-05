@@ -36,7 +36,7 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
@@ -45,7 +45,7 @@ import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import Pages.Admin
+import Pages.Admin exposing (InitAdminData)
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -60,7 +60,7 @@ import TextEditor
 import Thread exposing (FrontendGenericThread)
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
@@ -237,7 +237,8 @@ init url key =
         [ Task.perform GotTime Time.now
         , BrowserNavigation.replaceUrl key (Route.encode route)
         , Task.perform (\{ viewport } -> GotWindowSize (round viewport.width) (round viewport.height)) Dom.getViewport
-        , Lamdera.sendToBackend (CheckLoginRequest (Route.toGuildOrDmId route))
+        , Lamdera.sendToBackend
+            (CheckLoginRequest (routeToInitialDataRequest route))
         , Ports.loadSounds
         , Ports.checkNotificationPermission
         , Ports.checkPwaStatus
@@ -314,6 +315,31 @@ initLoadedFrontend loading time userAgent loginResult =
     )
 
 
+initAdminModel localState loading =
+    let
+        ( logPagination, paginationCmd ) =
+            Pagination.init localState.localUser.user.lastLogPageViewed
+    in
+    Pages.Admin.initForAdmin
+        logPagination
+        (case loading.route of
+            AdminRoute params ->
+                params
+
+            _ ->
+                { highlightLog = Nothing }
+        )
+        |> (\( a, b ) ->
+                ( a
+                , b
+                , Command.map
+                    (\toMsg -> Pages.Admin.LogPaginationToBackend toMsg |> AdminToBackend)
+                    identity
+                    paginationCmd
+                )
+           )
+
+
 loadedInitHelper :
     Time.Posix
     -> Time.Zone
@@ -330,28 +356,10 @@ loadedInitHelper time timezone userAgent loginData loading =
         ( adminModel, adminChange, adminCmd ) =
             case loginData.adminData of
                 IsAdminLoginData _ ->
-                    let
-                        ( logPagination, paginationCmd ) =
-                            Pagination.init localState.localUser.user.lastLogPageViewed
-                    in
-                    Pages.Admin.initForAdmin
-                        logPagination
-                        (case loading.route of
-                            AdminRoute params ->
-                                params
+                    initAdminModel localState loading
 
-                            _ ->
-                                { highlightLog = Nothing }
-                        )
-                        |> (\( a, b ) ->
-                                ( a
-                                , b
-                                , Command.map
-                                    (\toMsg -> Pages.Admin.LogPaginationToBackend toMsg |> AdminToBackend)
-                                    identity
-                                    paginationCmd
-                                )
-                           )
+                IsAdminButNoData ->
+                    initAdminModel localState loading
 
                 IsNotAdminLoginData ->
                     ( Pages.Admin.initForUser, Nothing, Command.none )
@@ -416,23 +424,13 @@ loginDataToLocalState userAgent timezone loginData =
     { adminData =
         case loginData.adminData of
             IsAdminLoginData adminData ->
-                IsAdmin
-                    { users = adminData.users
-                    , emailNotificationsEnabled = adminData.emailNotificationsEnabled
-                    , twoFactorAuthentication = adminData.twoFactorAuthentication
-                    , privateVapidKey = adminData.privateVapidKey
-                    , slackClientSecret = adminData.slackClientSecret
-                    , openRouterKey = adminData.openRouterKey
-                    , discordDmChannels = adminData.discordDmChannels
-                    , discordUsers = adminData.discordUsers
-                    , discordGuilds = adminData.discordGuilds
-                    , guilds = adminData.guilds
-                    , loadingDiscordChannels = adminData.loadingDiscordChannels
-                    , signupsEnabled = adminData.signupsEnabled
-                    }
+                IsAdmin (FrontendExtra.initAdminData adminData)
 
             IsNotAdminLoginData ->
                 IsNotAdmin
+
+            IsAdminButNoData ->
+                IsAdminButDataNotLoaded
     , guilds = loginData.guilds
     , discordGuilds = loginData.discordGuilds
     , dmChannels = loginData.dmChannels
@@ -617,9 +615,9 @@ updateLoaded msg model =
 
                 NotLoggedIn notLoggedIn ->
                     let
-                        requestMessagesFor : Maybe ( AnyGuildOrDmId, ThreadRoute )
+                        requestMessagesFor : InitialLoadRequest
                         requestMessagesFor =
-                            Route.toGuildOrDmId model.route
+                            routeToInitialDataRequest model.route
                     in
                     case
                         LoginForm.update
@@ -4117,137 +4115,152 @@ updateLoadedFromBackend msg model =
                         local : LocalState
                         local =
                             Local.model localState
+
+                        loggedIn2 : LoggedIn2
+                        loggedIn2 =
+                            { loggedIn | localState = localState }
                     in
-                    ( { loggedIn | localState = localState }
-                    , case change of
-                        ServerChange (Server_TextEditor _) ->
-                            case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
-                                Just range ->
-                                    Ports.setCursorPosition TextEditor.inputId range
+                    case change of
+                        ServerChange serverChange ->
+                            case serverChange of
+                                Server_TextEditor _ ->
+                                    ( loggedIn2
+                                    , case SeqDict.get local.localUser.session.userId local.textEditor.cursorPosition of
+                                        Just range ->
+                                            Ports.setCursorPosition TextEditor.inputId range
 
-                                Nothing ->
-                                    Command.none
+                                        Nothing ->
+                                            Command.none
+                                    )
 
-                        ServerChange (Server_YouJoinedGuildByInvite (Ok { guildId, guild })) ->
-                            case model.route of
-                                GuildRoute inviteGuildId _ ->
-                                    if inviteGuildId == guildId then
-                                        FrontendExtra.routeReplace
-                                            model
-                                            (GuildRoute
-                                                guildId
-                                                (ChannelRoute
-                                                    (LocalState.announcementChannel guild)
-                                                    (NoThreadWithFriends Nothing HideMembersTab)
-                                                )
-                                            )
+                                Server_YouJoinedGuildByInvite (Ok { guildId, guild }) ->
+                                    ( loggedIn2
+                                    , case model.route of
+                                        GuildRoute inviteGuildId _ ->
+                                            if inviteGuildId == guildId then
+                                                FrontendExtra.routeReplace
+                                                    model
+                                                    (GuildRoute
+                                                        guildId
+                                                        (ChannelRoute
+                                                            (LocalState.announcementChannel guild)
+                                                            (NoThreadWithFriends Nothing HideMembersTab)
+                                                        )
+                                                    )
 
-                                    else
-                                        Command.none
+                                            else
+                                                Command.none
+
+                                        _ ->
+                                            Command.none
+                                    )
+
+                                Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _ ->
+                                    ( loggedIn2
+                                    , case guildOrDmId of
+                                        GuildOrDmId_Guild guildId channelId ->
+                                            case LocalState.getGuildAndChannel guildId channelId local of
+                                                Just ( _, channel ) ->
+                                                    Command.batch
+                                                        [ FrontendExtra.playNotificationSound
+                                                            senderId
+                                                            guildOrDmId
+                                                            maybeRepliedTo
+                                                            channel
+                                                            local
+                                                            content
+                                                            model
+                                                        , case loggedIn.channelScrollPosition of
+                                                            ScrolledToBottom ->
+                                                                if MyUi.isMobile model then
+                                                                    Scroll.toBottomOfChannelSmooth
+
+                                                                else
+                                                                    Scroll.toBottomOfChannel
+
+                                                            ScrolledToMiddle ->
+                                                                Command.none
+
+                                                            ScrolledToTop ->
+                                                                Command.none
+                                                        ]
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        GuildOrDmId_Dm _ ->
+                                            Command.none
+                                    )
+
+                                Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _ ->
+                                    ( loggedIn2
+                                    , case guildOrDmId of
+                                        DiscordGuildOrDmId_Guild senderId guildId channelId ->
+                                            case LocalState.getDiscordGuildAndChannel guildId channelId local of
+                                                Just ( _, channel ) ->
+                                                    Command.batch
+                                                        [ FrontendExtra.playNotificationSoundForDiscordMessage
+                                                            senderId
+                                                            guildOrDmId
+                                                            maybeRepliedTo
+                                                            channel
+                                                            local
+                                                            content
+                                                            model
+                                                        , case loggedIn.channelScrollPosition of
+                                                            ScrolledToBottom ->
+                                                                if MyUi.isMobile model then
+                                                                    Scroll.toBottomOfChannelSmooth
+
+                                                                else
+                                                                    Scroll.toBottomOfChannel
+
+                                                            ScrolledToMiddle ->
+                                                                Command.none
+
+                                                            ScrolledToTop ->
+                                                                Command.none
+                                                        ]
+
+                                                Nothing ->
+                                                    Command.none
+
+                                        DiscordGuildOrDmId_Dm data ->
+                                            case SeqDict.get data.channelId local.discordDmChannels of
+                                                Just channel ->
+                                                    Command.batch
+                                                        [ FrontendExtra.playNotificationSoundForDiscordMessage
+                                                            data.currentUserId
+                                                            guildOrDmId
+                                                            maybeRepliedTo
+                                                            { messages = channel.messages, threads = SeqDict.empty }
+                                                            local
+                                                            content
+                                                            model
+                                                        , case loggedIn.channelScrollPosition of
+                                                            ScrolledToBottom ->
+                                                                if MyUi.isMobile model then
+                                                                    Scroll.toBottomOfChannelSmooth
+
+                                                                else
+                                                                    Scroll.toBottomOfChannel
+
+                                                            ScrolledToMiddle ->
+                                                                Command.none
+
+                                                            ScrolledToTop ->
+                                                                Command.none
+                                                        ]
+
+                                                Nothing ->
+                                                    Command.none
+                                    )
 
                                 _ ->
-                                    Command.none
-
-                        ServerChange (Server_SendMessage senderId _ guildOrDmId content maybeRepliedTo _) ->
-                            case guildOrDmId of
-                                GuildOrDmId_Guild guildId channelId ->
-                                    case LocalState.getGuildAndChannel guildId channelId local of
-                                        Just ( _, channel ) ->
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSound
-                                                    senderId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    channel
-                                                    local
-                                                    content
-                                                    model
-                                                , case loggedIn.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth
-
-                                                        else
-                                                            Scroll.toBottomOfChannel
-
-                                                    ScrolledToMiddle ->
-                                                        Command.none
-
-                                                    ScrolledToTop ->
-                                                        Command.none
-                                                ]
-
-                                        Nothing ->
-                                            Command.none
-
-                                GuildOrDmId_Dm _ ->
-                                    Command.none
-
-                        ServerChange (Server_Discord_SendMessage _ guildOrDmId content maybeRepliedTo _) ->
-                            case guildOrDmId of
-                                DiscordGuildOrDmId_Guild senderId guildId channelId ->
-                                    case LocalState.getDiscordGuildAndChannel guildId channelId local of
-                                        Just ( _, channel ) ->
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSoundForDiscordMessage
-                                                    senderId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    channel
-                                                    local
-                                                    content
-                                                    model
-                                                , case loggedIn.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth
-
-                                                        else
-                                                            Scroll.toBottomOfChannel
-
-                                                    ScrolledToMiddle ->
-                                                        Command.none
-
-                                                    ScrolledToTop ->
-                                                        Command.none
-                                                ]
-
-                                        Nothing ->
-                                            Command.none
-
-                                DiscordGuildOrDmId_Dm data ->
-                                    case SeqDict.get data.channelId local.discordDmChannels of
-                                        Just channel ->
-                                            Command.batch
-                                                [ FrontendExtra.playNotificationSoundForDiscordMessage
-                                                    data.currentUserId
-                                                    guildOrDmId
-                                                    maybeRepliedTo
-                                                    { messages = channel.messages, threads = SeqDict.empty }
-                                                    local
-                                                    content
-                                                    model
-                                                , case loggedIn.channelScrollPosition of
-                                                    ScrolledToBottom ->
-                                                        if MyUi.isMobile model then
-                                                            Scroll.toBottomOfChannelSmooth
-
-                                                        else
-                                                            Scroll.toBottomOfChannel
-
-                                                    ScrolledToMiddle ->
-                                                        Command.none
-
-                                                    ScrolledToTop ->
-                                                        Command.none
-                                                ]
-
-                                        Nothing ->
-                                            Command.none
+                                    ( loggedIn2, Command.none )
 
                         _ ->
-                            Command.none
-                    )
+                            ( loggedIn2, Command.none )
                 )
                 model
 
@@ -4273,7 +4286,7 @@ updateLoadedFromBackend msg model =
             FrontendExtra.updateLoggedIn
                 (\loggedIn ->
                     ( { loggedIn | isReloading = True }
-                    , Lamdera.sendToBackend (ReloadDataRequest (Route.toGuildOrDmId model.route))
+                    , Lamdera.sendToBackend (ReloadDataRequest (routeToInitialDataRequest model.route))
                     )
                 )
                 model
@@ -4477,6 +4490,9 @@ view model =
                                             Nothing ->
                                                 Ui.text "User not found"
 
+                                    IsAdminButDataNotLoaded ->
+                                        Ui.text "Loading admin page..."
+
                                     _ ->
                                         errorPage loaded "Admin access required to view this page"
                             )
@@ -4600,3 +4616,58 @@ errorPage model text =
                 )
             ]
         )
+
+
+routeToInitialDataRequest : Route -> InitialLoadRequest
+routeToInitialDataRequest route =
+    case route of
+        GuildRoute guildId (ChannelRoute channelId threadRoute) ->
+            InitialLoadRequested_Channel
+                (GuildOrDmId_Guild guildId channelId |> GuildOrDmId)
+                (case threadRoute of
+                    ViewThreadWithFriends threadMessageId _ _ ->
+                        ViewThread threadMessageId
+
+                    NoThreadWithFriends _ _ ->
+                        NoThread
+                )
+
+        DmRoute otherUserId threadRoute ->
+            InitialLoadRequested_Channel
+                (GuildOrDmId_Dm otherUserId |> GuildOrDmId)
+                (case threadRoute of
+                    ViewThreadWithFriends threadMessageId _ _ ->
+                        ViewThread threadMessageId
+
+                    NoThreadWithFriends _ _ ->
+                        NoThread
+                )
+
+        DiscordGuildRoute data ->
+            case data.channelRoute of
+                DiscordChannel_ChannelRoute channelId threadRoute ->
+                    InitialLoadRequested_Channel
+                        (DiscordGuildOrDmId_Guild data.currentDiscordUserId data.guildId channelId |> DiscordGuildOrDmId)
+                        (case threadRoute of
+                            ViewThreadWithFriends threadMessageId _ _ ->
+                                ViewThread threadMessageId
+
+                            NoThreadWithFriends _ _ ->
+                                NoThread
+                        )
+
+                _ ->
+                    InitialLoadRequested_None
+
+        DiscordDmRoute data ->
+            InitialLoadRequested_Channel
+                (DiscordGuildOrDmId_Dm { currentUserId = data.currentDiscordUserId, channelId = data.channelId }
+                    |> DiscordGuildOrDmId
+                )
+                NoThread
+
+        AdminRoute _ ->
+            InitialLoadRequested_Admin
+
+        _ ->
+            InitialLoadRequested_None

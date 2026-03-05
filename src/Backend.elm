@@ -55,7 +55,7 @@ import TextEditor
 import Thread exposing (BackendThread, DiscordBackendThread)
 import Toop exposing (T4(..))
 import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), InitialLoadRequest(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
 import Unsafe
 import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
 import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
@@ -625,6 +625,7 @@ update msg model =
                                 guildDataDict =
                                     SeqDict.fromList guildData
 
+                                model2 : BackendModel
                                 model2 =
                                     { model
                                         | discordUsers =
@@ -1275,7 +1276,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
 
                             session : UserSession
                             session =
-                                UserSession.init sessionId userId requestMessagesFor userAgent
+                                UserSession.init
+                                    sessionId
+                                    userId
+                                    (case requestMessagesFor of
+                                        InitialLoadRequested_None ->
+                                            Nothing
+
+                                        InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
+                                            Just ( anyGuildOrDmId, threadRoute )
+
+                                        InitialLoadRequested_Admin ->
+                                            Nothing
+                                    )
+                                    userAgent
 
                             newUser : BackendUser
                             newUser =
@@ -1316,7 +1330,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                                     let
                                         session : UserSession
                                         session =
-                                            UserSession.init sessionId pendingLogin.userId requestMessagesFor userAgent
+                                            UserSession.init
+                                                sessionId
+                                                pendingLogin.userId
+                                                (case requestMessagesFor of
+                                                    InitialLoadRequested_None ->
+                                                        Nothing
+
+                                                    InitialLoadRequested_Channel anyGuildOrDmId threadRoute ->
+                                                        Just ( anyGuildOrDmId, threadRoute )
+
+                                                    InitialLoadRequested_Admin ->
+                                                        Nothing
+                                                )
+                                                userAgent
                                     in
                                     ( { model
                                         | sessions = SeqDict.insert sessionId session model.sessions
@@ -3676,6 +3703,20 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                             clientId
                             (ProfilePictureEditorToFrontend ImageEditor.ChangeUserAvatarResponse)
                         ]
+                    )
+                )
+
+        AdminDataRequest ->
+            asAdmin
+                model
+                sessionId
+                (\_ user ->
+                    ( model
+                    , BackendExtra.adminData model user.lastLogPageViewed
+                        |> Server_LoadAdminData
+                        |> ServerChange
+                        |> ChangeBroadcast
+                        |> Lamdera.sendToFrontend clientId
                     )
                 )
 

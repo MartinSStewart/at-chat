@@ -14,6 +14,7 @@ module Types exposing
     , FrontendModel(..)
     , FrontendMsg(..)
     , GuildChannelNameHover(..)
+    , InitialLoadRequest(..)
     , LastRequest(..)
     , LoadStatus(..)
     , LoadedFrontend
@@ -511,22 +512,29 @@ type alias NewGuildForm =
     }
 
 
+type InitialLoadRequest
+    = InitialLoadRequested_Channel AnyGuildOrDmId ThreadRoute
+    | InitialLoadRequested_Admin
+    | InitialLoadRequested_None
+
+
 type ToBackend
-    = CheckLoginRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
-    | LoginWithTokenRequest (Maybe ( AnyGuildOrDmId, ThreadRoute )) Int UserAgent
-    | LoginWithTwoFactorRequest (Maybe ( AnyGuildOrDmId, ThreadRoute )) Int UserAgent
+    = CheckLoginRequest InitialLoadRequest
+    | LoginWithTokenRequest InitialLoadRequest Int UserAgent
+    | LoginWithTwoFactorRequest InitialLoadRequest Int UserAgent
     | GetLoginTokenRequest EmailAddress
     | AdminToBackend Pages.Admin.ToBackend
     | LogOutRequest
     | LocalModelChangeRequest ChangeId LocalChange
     | TwoFactorToBackend TwoFactorAuthentication.ToBackend
     | JoinGuildByInviteRequest (Id GuildId) (SecretId InviteLinkId)
-    | FinishUserCreationRequest (Maybe ( AnyGuildOrDmId, ThreadRoute )) PersonName UserAgent
+    | FinishUserCreationRequest InitialLoadRequest PersonName UserAgent
     | AiChatToBackend AiChat.ToBackend
-    | ReloadDataRequest (Maybe ( AnyGuildOrDmId, ThreadRoute ))
+    | ReloadDataRequest InitialLoadRequest
     | LinkSlackOAuthCode Slack.OAuthCode SessionIdHash
     | LinkDiscordRequest Discord.UserAuth
     | ProfilePictureEditorToBackend ImageEditor.ToBackend
+    | AdminDataRequest
 
 
 type BackendMsg
@@ -639,6 +647,7 @@ type alias LoginData =
 
 type AdminStatusLoginData
     = IsAdminLoginData InitAdminData
+    | IsAdminButNoData
     | IsNotAdminLoginData
 
 
@@ -705,6 +714,7 @@ type ServerChange
         )
     | Server_StartReloadingDiscordUser Time.Posix (Discord.Id.Id Discord.Id.UserId)
     | Server_LoadingDiscordChannelChanged (Discord.Id.Id Discord.Id.UserId) (Maybe (LoadingDiscordChannel Int))
+    | Server_LoadAdminData InitAdminData
 
 
 type LocalChange

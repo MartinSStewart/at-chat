@@ -124,6 +124,16 @@ test =
                             , NormalText '.' " Click on the sign up."
                             ]
                         )
+        , Test.test "Parser spoilered url" <|
+            \_ ->
+                RichText.fromNonemptyString users (NonemptyString 'G' "o to ||https://abc.com/||. Click on the sign up.")
+                    |> Expect.equal
+                        (Nonempty
+                            (NormalText 'G' "o to ")
+                            [ Spoiler (Nonempty (Hyperlink Https "abc.com/") [])
+                            , NormalText '.' " Click on the sign up."
+                            ]
+                        )
 
         --, Test.test " ~~~~" <|
         --    \_ ->

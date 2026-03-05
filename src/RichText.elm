@@ -484,7 +484,17 @@ urlParser =
             [ Parser.symbol "http://" |> Parser.map (\_ -> Url.Http)
             , Parser.symbol "https://" |> Parser.map (\_ -> Url.Https)
             ]
-        |= (Parser.chompWhile (\char -> char /= ' ' && char /= '\n' && char /= '\t' && char /= '<')
+        |= (Parser.chompWhile
+                (\char ->
+                    (char /= ' ')
+                        && (char /= '\n')
+                        && (char /= '\t')
+                        && (char /= '<')
+                        {- The | char (along with _ and *) should be allowed in urls and only included in trailing if there's a modifier that uses them.
+                           That's complicated though so for now just having | to catch the common case of spoilering a url is good enough)
+                        -}
+                        && (char /= '|')
+                )
                 |> Parser.getChompedString
            )
 

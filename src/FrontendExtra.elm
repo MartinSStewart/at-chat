@@ -1,4 +1,4 @@
-module FrontendExtra exposing (changeUpdate, handleLocalChange, isPressMsg, isViewing, layout, logout, pendingChangesText, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, isPressMsg, isViewing, layout, logout, pendingChangesText, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
@@ -22,14 +22,14 @@ import ImageEditor
 import Json.Decode
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
 import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
 import MessageMenu
 import MessageView
 import MyUi
-import Pages.Admin
+import Pages.Admin exposing (InitAdminData)
 import Pages.Guild exposing (DmChannelSelection(..))
 import Ports exposing (PwaStatus(..))
 import RichText exposing (RichText)
@@ -510,7 +510,20 @@ routeRequest previousRoute newRoute model =
                         admin =
                             loggedIn.admin
                     in
-                    ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }, viewCmd )
+                    ( { loggedIn | admin = { admin | highlightLog = highlightLog }, userOptions = Nothing }
+                    , Command.batch
+                        [ viewCmd
+                        , case (Local.model loggedIn.localState).adminData of
+                            IsAdminButDataNotLoaded ->
+                                Lamdera.sendToBackend AdminDataRequest
+
+                            IsAdmin _ ->
+                                Command.none
+
+                            IsNotAdmin ->
+                                Command.none
+                        ]
+                    )
                 )
                 model2
 
@@ -2806,6 +2819,26 @@ changeUpdate localMsg local =
 
                         IsNotAdmin ->
                             local
+
+                Server_LoadAdminData adminData ->
+                    { local | adminData = initAdminData adminData |> IsAdmin }
+
+
+initAdminData : InitAdminData -> AdminData
+initAdminData adminData =
+    { users = adminData.users
+    , emailNotificationsEnabled = adminData.emailNotificationsEnabled
+    , twoFactorAuthentication = adminData.twoFactorAuthentication
+    , privateVapidKey = adminData.privateVapidKey
+    , slackClientSecret = adminData.slackClientSecret
+    , openRouterKey = adminData.openRouterKey
+    , discordDmChannels = adminData.discordDmChannels
+    , discordUsers = adminData.discordUsers
+    , discordGuilds = adminData.discordGuilds
+    , guilds = adminData.guilds
+    , loadingDiscordChannels = adminData.loadingDiscordChannels
+    , signupsEnabled = adminData.signupsEnabled
+    }
 
 
 startReloadingDiscordUser : Time.Posix -> Discord.Id.Id Discord.Id.UserId -> LocalState -> LocalState
