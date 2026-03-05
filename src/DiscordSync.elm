@@ -1974,27 +1974,27 @@ getUserAvatars existingUsers users =
         GotDiscordUserAvatars
         (List.filterMap
             (\user ->
-                --if SeqDict.member user.id existingUsers then
-                --    Nothing
-                --
-                --else
-                Task.map
-                    (\maybeAvatar -> ( user.id, maybeAvatar ))
-                    (case user.avatar of
-                        Just avatar ->
-                            loadImage
-                                (Discord.userAvatarUrl
-                                    { size = Discord.DefaultImageSize
-                                    , imageType = Discord.Choice1 Discord.Png
-                                    }
-                                    user.id
-                                    avatar
-                                )
+                if SeqDict.member user.id existingUsers then
+                    Nothing
 
-                        Nothing ->
-                            Task.succeed Nothing
-                    )
-                    |> Just
+                else
+                    Task.map
+                        (\maybeAvatar -> ( user.id, maybeAvatar ))
+                        (case user.avatar of
+                            Just avatar ->
+                                loadImage
+                                    (Discord.userAvatarUrl
+                                        { size = Discord.DefaultImageSize
+                                        , imageType = Discord.Choice1 Discord.Png
+                                        }
+                                        user.id
+                                        avatar
+                                    )
+
+                            Nothing ->
+                                Task.succeed Nothing
+                        )
+                        |> Just
             )
             users
             |> Task.sequence

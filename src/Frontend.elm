@@ -8,10 +8,10 @@ import ChannelName
 import Coord exposing (Coord)
 import CssPixels exposing (CssPixels)
 import Discord.Id
-import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
+import DmChannel exposing (FrontendDmChannel)
 import Duration exposing (Duration, Seconds)
 import Editable
-import Effect.Browser.Dom as Dom exposing (HtmlId)
+import Effect.Browser.Dom as Dom
 import Effect.Browser.Events
 import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
 import Effect.Command as Command exposing (Command, FrontendOnly)
@@ -36,16 +36,16 @@ import Lamdera as LamderaCore
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (Local)
-import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
+import LocalState exposing (AdminStatus(..), LocalState)
 import LoginForm
-import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (MessageNoReply(..), MessageStateNoReply(..), UserTextMessageDataNoReply)
 import MessageInput
 import MessageMenu
 import MessageView
 import MyUi
 import NonemptyDict exposing (NonemptyDict)
 import NonemptySet
-import Pages.Admin exposing (InitAdminData)
+import Pages.Admin exposing (AdminChange)
 import Pages.Guild exposing (DmChannelSelection(..))
 import Pages.Home
 import Pagination
@@ -57,7 +57,7 @@ import Scroll
 import SeqDict exposing (SeqDict)
 import String.Nonempty
 import TextEditor
-import Thread exposing (FrontendGenericThread)
+import Thread
 import Touch exposing (Touch)
 import TwoFactorAuthentication exposing (TwoFactorState(..))
 import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), InitialLoadRequest(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
@@ -66,12 +66,10 @@ import Ui.Anim
 import Ui.Font
 import Ui.Lazy
 import Url exposing (Url)
-import User exposing (DiscordUserLoadingData(..), FrontendCurrentUser, LastDmViewed(..), NotificationLevel(..))
 import UserAgent exposing (UserAgent)
 import UserOptions
-import UserSession exposing (NotificationMode(..), PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (NotificationMode(..), SetViewing(..), ToBeFilledInByBackend(..))
 import Vector2d
-import VisibleMessages
 
 
 app :
@@ -315,6 +313,10 @@ initLoadedFrontend loading time userAgent loginResult =
     )
 
 
+initAdminModel :
+    LocalState
+    -> { a | windowSize : Coord CssPixels, navigationKey : Key, route : Route }
+    -> ( Pages.Admin.Model, Maybe AdminChange, Command FrontendOnly ToBackend FrontendMsg )
 initAdminModel localState loading =
     let
         ( logPagination, paginationCmd ) =
@@ -4170,7 +4172,7 @@ updateLoadedFromBackend msg model =
                                                             local
                                                             content
                                                             model
-                                                        , case loggedIn.channelScrollPosition of
+                                                        , case loggedIn2.channelScrollPosition of
                                                             ScrolledToBottom ->
                                                                 if MyUi.isMobile model then
                                                                     Scroll.toBottomOfChannelSmooth
@@ -4207,7 +4209,7 @@ updateLoadedFromBackend msg model =
                                                             local
                                                             content
                                                             model
-                                                        , case loggedIn.channelScrollPosition of
+                                                        , case loggedIn2.channelScrollPosition of
                                                             ScrolledToBottom ->
                                                                 if MyUi.isMobile model then
                                                                     Scroll.toBottomOfChannelSmooth
@@ -4237,7 +4239,7 @@ updateLoadedFromBackend msg model =
                                                             local
                                                             content
                                                             model
-                                                        , case loggedIn.channelScrollPosition of
+                                                        , case loggedIn2.channelScrollPosition of
                                                             ScrolledToBottom ->
                                                                 if MyUi.isMobile model then
                                                                     Scroll.toBottomOfChannelSmooth

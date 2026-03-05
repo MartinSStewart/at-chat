@@ -90,10 +90,10 @@ shouldNotifyAdmin log =
         FailedToSendDiscordDmMessage _ _ _ ->
             Nothing
 
-        FailedToGetDiscordUserAvatars httpError ->
+        FailedToGetDiscordUserAvatars _ ->
             Nothing
 
-        FailedToParseDiscordWebsocket string ->
+        FailedToParseDiscordWebsocket _ ->
             Nothing
 
 

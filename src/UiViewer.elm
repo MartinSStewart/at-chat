@@ -4,7 +4,6 @@ module UiViewer exposing (main)
 Start `lamdera live` and go to localhost:8000/src/UiViewer.elm to use it.
 -}
 
-import Backend
 import BackendExtra
 import Discord
 import Discord.Id

@@ -9,7 +9,6 @@ module BackendExtra exposing
     , getLoginCode
     , getLoginData
     , invalidChangeResponse
-    , isLoginTooOld
     , loginEmailContent
     , loginEmailSubject
     , loginWithToken
@@ -22,15 +21,15 @@ module BackendExtra exposing
 Most of the stuff in there doesn't neatly fit into it's own module so instead I'm just moving lots of functions here instead.
 -}
 
-import Array exposing (Array)
+import Array
 import Broadcast
 import Discord exposing (OptionalData(..))
 import Discord.Id
-import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel, DmChannel, DmChannelId)
+import DmChannel exposing (DiscordDmChannel, DiscordFrontendDmChannel)
 import Duration
 import Effect.Command as Command exposing (BackendOnly, Command)
 import Effect.Lamdera as Lamdera exposing (ClientId, SessionId)
-import Effect.Task as Task exposing (Task)
+import Effect.Task as Task
 import Effect.Time as Time
 import Email.Html
 import Email.Html.Attributes
@@ -38,27 +37,26 @@ import EmailAddress exposing (EmailAddress)
 import Env
 import FileStatus exposing (FileData, FileHash, FileId)
 import Hex
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), DiscordGuildOrDmId_DmData, GuildId, GuildOrDmId(..), Id, InviteLinkId, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute, UserId)
 import List.Extra
 import List.Nonempty exposing (Nonempty(..))
 import Local exposing (ChangeId)
-import LocalState exposing (BackendChannel, BackendGuild, ChangeAttachments(..), ChannelStatus(..), DiscordBackendChannel, DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..), JoinGuildError(..), LoadingDiscordChannel(..), LoadingDiscordChannelStep(..), PrivateVapidKey(..))
+import LocalState exposing (DiscordBackendGuild, DiscordFrontendGuild, DiscordUserData_ForAdmin(..))
 import Log exposing (Log)
 import LoginForm
-import NonemptyDict exposing (NonemptyDict)
+import NonemptyDict
 import NonemptySet
 import Pages.Admin exposing (InitAdminData)
 import PersonName
 import Postmark
 import Quantity
-import SecretId exposing (SecretId)
+import SecretId
 import SeqDict exposing (SeqDict)
 import String.Nonempty exposing (NonemptyString(..))
-import TwoFactorAuthentication
-import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordAttachmentData, DiscordBasicUserData, DiscordFullUserData, DiscordUserData(..), InitialLoadRequest(..), LastRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), NeedsAuthAgainData, ServerChange(..), ToBackend(..), ToFrontend(..))
-import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..), LastDmViewed(..))
+import Types exposing (AdminStatusLoginData(..), BackendFileData, BackendModel, BackendMsg(..), DiscordUserData(..), InitialLoadRequest(..), LocalChange(..), LocalMsg(..), LoginData, LoginResult(..), LoginTokenData(..), ServerChange(..), ToFrontend(..))
+import User exposing (BackendUser, DiscordFrontendCurrentUser, DiscordFrontendUser, DiscordUserLoadingData(..))
 import UserAgent exposing (UserAgent)
-import UserSession exposing (PushSubscription(..), SetViewing(..), ToBeFilledInByBackend(..), UserSession)
+import UserSession exposing (UserSession)
 import VisibleMessages
 
 

@@ -41,7 +41,6 @@ import PersonName exposing (PersonName)
 import SeqDict exposing (SeqDict)
 import SeqSet exposing (SeqSet)
 import Slack
-import String.Extra
 import String.Nonempty exposing (NonemptyString(..))
 import UInt64
 import Url exposing (Protocol(..))

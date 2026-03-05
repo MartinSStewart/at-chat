@@ -1,47 +1,47 @@
-module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, isPressMsg, isViewing, layout, logout, pendingChangesText, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
+module FrontendExtra exposing (changeUpdate, handleLocalChange, initAdminData, isPressMsg, layout, logout, playNotificationSound, playNotificationSoundForDiscordMessage, routePush, routeReplace, routeRequest, setFocus, updateLoggedIn)
 
 import AiChat
 import Array exposing (Array)
 import Discord.Id
 import DmChannel exposing (DiscordFrontendDmChannel, FrontendDmChannel)
-import Duration exposing (Duration, Seconds)
+import Duration
 import Editable
 import Effect.Browser.Dom as Dom exposing (HtmlId)
-import Effect.Browser.Navigation as BrowserNavigation exposing (Key)
+import Effect.Browser.Navigation as BrowserNavigation
 import Effect.Command as Command exposing (Command, FrontendOnly)
 import Effect.Lamdera as Lamdera
 import Effect.Process as Process
 import Effect.Task as Task
 import Effect.Time as Time
 import Emoji exposing (Emoji)
-import FileStatus exposing (FileData, FileId, FileStatus(..))
+import FileStatus exposing (FileData, FileId)
 import Html exposing (Html)
 import Html.Events
-import Id exposing (AnyGuildOrDmId(..), ChannelId, ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
+import Id exposing (AnyGuildOrDmId(..), ChannelMessageId, DiscordGuildOrDmId(..), GuildOrDmId(..), Id, ThreadRoute(..), ThreadRouteWithMaybeMessage(..), ThreadRouteWithMessage(..), UserId)
 import ImageEditor
 import Json.Decode
-import List.Nonempty exposing (Nonempty(..))
-import Local exposing (Local)
+import List.Nonempty exposing (Nonempty)
+import Local
 import LocalState exposing (AdminData, AdminStatus(..), ChangeAttachments(..), FrontendChannel, LocalState, LocalUser)
 import LoginForm
-import Message exposing (Message(..), MessageNoReply(..), MessageState, MessageStateNoReply(..), UserTextMessageDataNoReply)
+import Message exposing (Message(..), MessageState)
 import MessageInput
 import MessageMenu
 import MessageView
 import MyUi
 import Pages.Admin exposing (InitAdminData)
-import Pages.Guild exposing (DmChannelSelection(..))
-import Ports exposing (PwaStatus(..))
+import Pages.Guild
+import Ports
 import RichText exposing (RichText)
-import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), LinkDiscordError(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
+import Route exposing (ChannelRoute(..), DiscordChannelRoute(..), Route(..), ShowMembersTab(..), ThreadRouteWithFriends(..))
 import Scroll
 import SeqDict exposing (SeqDict)
 import SeqSet
 import TextEditor
 import Thread exposing (FrontendGenericThread)
-import Touch exposing (Touch)
-import TwoFactorAuthentication exposing (TwoFactorState(..))
-import Types exposing (AdminStatusLoginData(..), ChannelSidebarMode(..), Drag(..), EmojiSelector(..), FrontendModel(..), FrontendMsg(..), GuildChannelNameHover(..), LoadStatus(..), LoadedFrontend, LoadingFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginData, LoginResult(..), LoginStatus(..), MessageHover(..), MessageHoverMobileMode(..), RevealedSpoilers, ScrollPosition(..), ServerChange(..), ToBackend(..), ToFrontend(..), UserOptionsModel)
+import Touch
+import TwoFactorAuthentication
+import Types exposing (ChannelSidebarMode(..), FrontendMsg(..), LoadedFrontend, LocalChange(..), LocalMsg(..), LoggedIn2, LoginStatus(..), MessageHover(..), ServerChange(..), ToBackend(..))
 import Ui exposing (Element)
 import Ui.Anim
 import Ui.Font
