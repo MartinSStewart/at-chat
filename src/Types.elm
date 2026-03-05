@@ -298,6 +298,7 @@ type alias BackendModel =
     , pendingDiscordCreateDmMessages : SeqDict DiscordGuildOrDmId_DmData ( ClientId, ChangeId )
     , discordAttachments : SeqDict DiscordAttachmentId DiscordAttachmentData
     , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel (List Discord.Message))
+    , signupsEnabled : Bool
     }
 
 
@@ -602,6 +603,7 @@ type ToFrontend
     = CheckLoginResponse (Result () LoginData)
     | LoginWithTokenResponse LoginResult
     | GetLoginTokenRateLimited
+    | SignupsDisabledResponse
     | LoggedOutSession
     | AdminToFrontend Pages.Admin.ToFrontend
     | LocalChangeResponse ChangeId LocalChange

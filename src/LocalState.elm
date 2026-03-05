@@ -427,6 +427,7 @@ type alias AdminData =
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
+    , signupsEnabled : Bool
     }
 
 

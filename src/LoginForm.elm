@@ -20,6 +20,7 @@ module LoginForm exposing
     , needsTwoFactor
     , needsUserData
     , rateLimited
+    , signupsDisabled
     , submitEmailButtonId
     , twoFactorCodeLength
     , typedCode
@@ -99,6 +100,7 @@ type alias EnterEmail2 =
     { email : String
     , pressedSubmitEmail : Bool
     , rateLimited : Bool
+    , signupsDisabled : Bool
     }
 
 
@@ -700,11 +702,34 @@ rateLimited loginForm =
                 { email = EmailAddress.toString enterLoginCode.sentTo
                 , pressedSubmitEmail = False
                 , rateLimited = True
+                , signupsDisabled = False
                 }
 
         EnterTwoFactorCode _ ->
             EnterEmail
-                { email = "", pressedSubmitEmail = False, rateLimited = True }
+                { email = "", pressedSubmitEmail = False, rateLimited = True, signupsDisabled = False }
+
+        EnterUserData _ ->
+            loginForm
+
+
+signupsDisabled : LoginForm -> LoginForm
+signupsDisabled loginForm =
+    case loginForm of
+        EnterEmail enterEmail ->
+            EnterEmail { enterEmail | signupsDisabled = True }
+
+        EnterLoginCode enterLoginCode ->
+            EnterEmail
+                { email = EmailAddress.toString enterLoginCode.sentTo
+                , pressedSubmitEmail = False
+                , rateLimited = False
+                , signupsDisabled = True
+                }
+
+        EnterTwoFactorCode _ ->
+            EnterEmail
+                { email = "", pressedSubmitEmail = False, rateLimited = False, signupsDisabled = True }
 
         EnterUserData _ ->
             loginForm
@@ -770,6 +795,9 @@ enterEmailView model =
         , if model.rateLimited then
             errorView "Too many login attempts have been made. Please try again later."
 
+          else if model.signupsDisabled then
+            errorView "New sign ups are currently disabled."
+
           else
             Ui.none
         ]
@@ -793,4 +821,5 @@ init =
         { email = ""
         , pressedSubmitEmail = False
         , rateLimited = False
+        , signupsDisabled = False
         }

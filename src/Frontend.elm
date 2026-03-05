@@ -445,6 +445,7 @@ loginDataToLocalState userAgent timezone loginData =
                     , discordGuilds = adminData.discordGuilds
                     , guilds = adminData.guilds
                     , loadingDiscordChannels = adminData.loadingDiscordChannels
+                    , signupsEnabled = adminData.signupsEnabled
                     }
 
             IsNotAdminLoginData ->
@@ -6662,6 +6663,28 @@ updateLoadedFromBackend msg model =
                                         case notLoggedIn.loginForm of
                                             Just loginForm ->
                                                 LoginForm.rateLimited loginForm |> Just
+
+                                            Nothing ->
+                                                Nothing
+                                }
+                      }
+                    , Command.none
+                    )
+
+        SignupsDisabledResponse ->
+            case model.loginStatus of
+                LoggedIn _ ->
+                    ( model, Command.none )
+
+                NotLoggedIn notLoggedIn ->
+                    ( { model
+                        | loginStatus =
+                            NotLoggedIn
+                                { notLoggedIn
+                                    | loginForm =
+                                        case notLoggedIn.loginForm of
+                                            Just loginForm ->
+                                                LoginForm.signupsDisabled loginForm |> Just
 
                                             Nothing ->
                                                 Nothing

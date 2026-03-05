@@ -94,6 +94,7 @@ type Msg
     | ScrolledToSection
     | UserTableMsg Table.Msg
     | ToggledEmailNotifications Bool
+    | ToggledSignupsEnabled Bool
     | ToggleIsAdmin UserTableId Bool
     | PressedDeleteDiscordDmChannel (Discord.Id.Id Discord.Id.PrivateChannelId)
     | PressedDeleteDiscordGuild (Discord.Id.Id Discord.Id.GuildId)
@@ -179,6 +180,7 @@ type alias InitAdminData =
     , discordGuilds : SeqDict (Discord.Id.Id Discord.Id.GuildId) AdminData_DiscordGuild
     , guilds : SeqDict (Id GuildId) AdminData_Guild
     , loadingDiscordChannels : SeqDict (Discord.Id.Id Discord.Id.UserId) (LoadingDiscordChannel Int)
+    , signupsEnabled : Bool
     }
 
 
@@ -193,6 +195,7 @@ type AdminChange
     | CollapseSection AdminUiSection
     | LogPageChanged Int
     | SetEmailNotificationsEnabled Bool
+    | SetSignupsEnabled Bool
     | SetPrivateVapidKey PrivateVapidKey
     | SetPublicVapidKey String
     | SetSlackClientSecret (Maybe Slack.ClientSecret)
@@ -307,6 +310,9 @@ updateAdmin changedBy change adminData local =
 
         SetEmailNotificationsEnabled isEnabled ->
             { local | adminData = IsAdmin { adminData | emailNotificationsEnabled = isEnabled } }
+
+        SetSignupsEnabled isEnabled ->
+            { local | adminData = IsAdmin { adminData | signupsEnabled = isEnabled } }
 
         SetPrivateVapidKey privateVapidKey ->
             { local | adminData = IsAdmin { adminData | privateVapidKey = privateVapidKey } }
@@ -797,6 +803,9 @@ update navigationKey time adminData localState msg model =
         ToggledEmailNotifications isChecked ->
             ( model, Command.none, AdminChange (SetEmailNotificationsEnabled isChecked) )
 
+        ToggledSignupsEnabled isChecked ->
+            ( model, Command.none, AdminChange (SetSignupsEnabled isChecked) )
+
         ToggleIsAdmin userTableId isAdmin ->
             updateUserTable
                 (\userTableState ->
@@ -1124,6 +1133,13 @@ pendingChangesText change =
             else
                 "Disabled email notifications"
 
+        SetSignupsEnabled isEnabled ->
+            if isEnabled then
+                "Enabled sign ups"
+
+            else
+                "Disabled sign ups"
+
         SetPrivateVapidKey _ ->
             "Set private vapid key"
 
@@ -1298,6 +1314,13 @@ userSection user adminData model =
                 (Dom.id "emailNotificationsId")
                 []
                 (Ui.text "Email notifications enabled (does not affect login emails)")
+
+        signupsEnabledLabel : { element : Element msg, id : Ui.Input.Label }
+        signupsEnabledLabel =
+            MyUi.label
+                (Dom.id "signupsEnabledId")
+                []
+                (Ui.text "New sign ups enabled")
     in
     section
         user.expandedSections
@@ -1312,6 +1335,17 @@ userSection user adminData model =
                 , label = emailNotificationsLabel.id
                 }
             , emailNotificationsLabel.element
+            ]
+        , Ui.row
+            [ Ui.spacing 4 ]
+            [ Ui.Input.checkbox
+                []
+                { onChange = ToggledSignupsEnabled
+                , checked = adminData.signupsEnabled
+                , icon = Nothing
+                , label = signupsEnabledLabel.id
+                }
+            , signupsEnabledLabel.element
             ]
         , Ui.Lazy.lazy3 userTableView model.userTable adminData.users adminData.twoFactorAuthentication
         , Ui.row

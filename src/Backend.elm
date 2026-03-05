@@ -185,6 +185,7 @@ init =
       , pendingDiscordCreateDmMessages = SeqDict.empty
       , discordAttachments = SeqDict.empty
       , loadingDiscordChannels = SeqDict.empty
+      , signupsEnabled = True
       }
     , Command.none
     )
@@ -195,6 +196,7 @@ adminData model lastLogPageViewed =
     { lastLogPageViewed = lastLogPageViewed
     , users = model.users
     , emailNotificationsEnabled = model.emailNotificationsEnabled
+    , signupsEnabled = model.signupsEnabled
     , twoFactorAuthentication = SeqDict.map (\_ a -> a.finishedAt) model.twoFactorAuthentication
     , privateVapidKey = model.privateVapidKey
     , slackClientSecret = model.slackClientSecret
@@ -1784,21 +1786,25 @@ updateFromFrontendWithTime time sessionId clientId msg model =
                         )
 
                 ( Nothing, Ok loginCode ) ->
-                    ( { model3
-                        | pendingLogins =
-                            SeqDict.insert
-                                sessionId
-                                (WaitingForLoginTokenForSignup
-                                    { creationTime = time
-                                    , loginAttempts = 0
-                                    , emailAddress = email
-                                    , loginCode = loginCode
-                                    }
-                                )
-                                model3.pendingLogins
-                      }
-                    , sendLoginEmail (SentLoginEmail time email) email loginCode
-                    )
+                    if model3.signupsEnabled then
+                        ( { model3
+                            | pendingLogins =
+                                SeqDict.insert
+                                    sessionId
+                                    (WaitingForLoginTokenForSignup
+                                        { creationTime = time
+                                        , loginAttempts = 0
+                                        , emailAddress = email
+                                        , loginCode = loginCode
+                                        }
+                                    )
+                                    model3.pendingLogins
+                          }
+                        , sendLoginEmail (SentLoginEmail time email) email loginCode
+                        )
+
+                    else
+                        ( model3, Lamdera.sendToFrontend clientId SignupsDisabledResponse )
 
                 ( _, Err () ) ->
                     ( model3, Command.none )
@@ -4422,6 +4428,18 @@ adminChangeUpdate clientId changeId adminChange model time userId user =
             let
                 model2 =
                     { model | emailNotificationsEnabled = isEnabled }
+            in
+            ( model2
+            , Command.batch
+                [ LocalChangeResponse changeId localMsg |> Lamdera.sendToFrontend clientId
+                , Broadcast.toOtherAdmins clientId model2 (LocalChange userId localMsg)
+                ]
+            )
+
+        Pages.Admin.SetSignupsEnabled isEnabled ->
+            let
+                model2 =
+                    { model | signupsEnabled = isEnabled }
             in
             ( model2
             , Command.batch
