@@ -1167,7 +1167,10 @@ pendingChangesText change =
 view : LocalState -> AdminData -> BackendUser -> Model -> Element Msg
 view local adminData user model =
     Ui.el
-        [ Ui.scrollable, Ui.background MyUi.background1 ]
+        [ Ui.scrollable
+        , Ui.background MyUi.background1
+        , MyUi.htmlStyle "padding" (MyUi.insetTop ++ " 0 " ++ MyUi.insetBottom ++ " 0")
+        ]
         (MyUi.column
             [ Ui.paddingWith { left = 8, right = 8, top = 16, bottom = 64 } ]
             [ MyUi.simpleButton (Dom.id "admin_goToHomepage") PressedHomepageLink (Ui.text "Go to homepage")
